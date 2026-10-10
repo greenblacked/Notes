@@ -1,0 +1,228 @@
+name: Deploy production
+
+# Production is tag-only, enforced here (the `guard` job) independently of any
+# environment rules. Triggers:
+#   - push of a v*.*.* tag
+#   - workflow_dispatch run from a tag ref (re-deploys that tag: roll forward/back)
+#   - workflow_call from release.yml with the tag it just created
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag to deploy (vX.Y.Z); must point at the calling commit.
+        required: true
+        type: string
+      cloudflare_account_id:
+        description: Cloudflare account id (falls back to the CLOUDFLARE_ACCOUNT_ID variable).
+        required: false
+        type: string
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Tag guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Verify the tag
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          semver='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          if [[ -n "$INPUT_TAG" ]]; then
+            # Called from release.yml: github.ref is main, the tag is an input.
+            tag="$INPUT_TAG"
+          else
+            # Tag push or dispatch: the run itself must be on a release tag.
+            if [[ ! "$REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Production deploys only run from release tags (vX.Y.Z); got $REF."
+              exit 1
+            fi
+            tag="$REF_NAME"
+          fi
+          if [[ ! "$tag" =~ $semver ]]; then
+            echo "::error::Tag must look like vX.Y.Z."
+            exit 1
+          fi
+
+          # Resolve the tag (annotated or lightweight) to its commit via the API.
+          ref_obj="$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq '.object | "\(.type) \(.sha)"')"
+          read -r obj_type obj_sha <<<"$ref_obj"
+          if [[ "$obj_type" == "tag" ]]; then
+            obj_sha="$(gh api "repos/$GH_REPO/git/tags/$obj_sha" --jq '.object.sha')"
+          fi
+          if [[ "$obj_sha" != "$SHA" ]]; then
+            echo "::error::Tag $tag points at $obj_sha, not at $SHA. Refusing to deploy."
+            exit 1
+          fi
+          echo "Tag $tag resolves to $SHA."
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >>"$GITHUB_OUTPUT"
+
+  build:
+    name: Build
+    needs: guard
+    runs-on: ubuntu-24.04
+    # A cold `quartz plugin restore` (no cache here on purpose) takes about 15 minutes.
+    timeout-minutes: 45
+    # Third-party plugin code runs here: no environment, no secrets.
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false # no npm cache outside CI (cache-poisoning)
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        env:
+          NOTES_VERSION: ${{ needs.guard.outputs.version }}
+          NOTES_SHA: ${{ github.sha }}
+          NOTES_BASE_URL: notes.szolotov.com
+        run: npm run build
+
+      - name: Check links
+        run: npm run check:links
+
+      - name: Upload build output
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site
+          path: |
+            public
+            worker/csp.generated.js
+          retention-days: 1
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy to production
+    needs: [guard, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    environment:
+      name: production
+      url: https://notes.szolotov.com
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+      TAG: ${{ needs.guard.outputs.tag }}
+      SHA: ${{ github.sha }}
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false # no npm cache outside CI (cache-poisoning)
+
+      # No lifecycle scripts: nothing from the dependency tree runs next to the token.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download build output
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site
+
+      - name: Require Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id || vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "::error::CLOUDFLARE_API_TOKEN (secret) and CLOUDFLARE_ACCOUNT_ID (variable) must be set."
+            exit 1
+          fi
+
+      # `--env=""` targets the top-level `notes` Worker explicitly (the config
+      # also defines the stage environment).
+      # `wrangler deployments status --json` prints the active deployment as
+      # {"versions":[{"version_id":...,"percentage":...}],...}; it errors when
+      # the Worker has no deployment yet (first deploy), which is not fatal.
+      - name: Record the live version
+        id: previous
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id || vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if out="$(npx wrangler deployments status --env="" --json 2>"$RUNNER_TEMP/previous.err")"; then
+            id="$(jq -r 'if (.versions | length) == 1 then .versions[0].version_id else "" end' <<<"$out" || true)"
+          else
+            id=""
+            echo "No previous deployment found (first deploy?):"
+            cat "$RUNNER_TEMP/previous.err"
+          fi
+          if [[ -n "$id" ]]; then
+            echo "Live version before deploy: $id"
+          else
+            echo "::notice::No single previous version recorded; automatic rollback is unavailable for this run."
+          fi
+          echo "version_id=$id" >>"$GITHUB_OUTPUT"
+
+      - name: Deploy to Cloudflare
+        id: wrangler
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id || vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --env=""
+
+      - name: Smoke test
+        run: scripts/smoke-test.sh https://notes.szolotov.com "$VERSION+$SHA" production
+
+      - name: Roll back to the previous version
+        id: rollback
+        if: failure() && steps.previous.outputs.version_id != '' && steps.wrangler.outcome != 'skipped'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id || vars.CLOUDFLARE_ACCOUNT_ID }}
+          PREVIOUS_VERSION_ID: ${{ steps.previous.outputs.version_id }}
+        run: |
+          npx wrangler rollback "$PREVIOUS_VERSION_ID" --env="" \
+            --message "Automatic rollback after failed deploy of $TAG ($SHA)" --yes
+
+      - name: Check the site responds after rollback
+        if: always() && steps.rollback.outcome == 'success'
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 30 -o /dev/null https://notes.szolotov.com/
+          echo "::error::Deploy of $TAG failed and was rolled back; the site is serving the previous version."
+          exit 1
