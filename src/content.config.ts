@@ -9,7 +9,10 @@ export const collections = {
 		schema: docsSchema({
 			extend: z.object({
 				tags: z.array(z.string()).default([]),
-				status: z.enum(['draft', 'proposed', 'accepted', 'superseded', 'deprecated']).optional(),
+				// ADRs only; see standards/writing-notes.md for the lifecycle.
+				status: z.enum(['proposed', 'accepted', 'rejected', 'deprecated', 'superseded']).optional(),
+				created: z.coerce.date().optional(),
+				modified: z.coerce.date().optional(),
 			}),
 		}),
 	}),

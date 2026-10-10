@@ -6,7 +6,7 @@ hero:
   tagline: Architecture decisions, platform patterns, and operational notes from running Kubernetes and cloud platforms in production.
   actions:
     - text: Architecture decisions
-      link: /adr/0001-gitops-with-argocd/
+      link: /adr/
       icon: right-arrow
     - text: Browse by tag
       link: /tags/
@@ -17,9 +17,9 @@ hero:
 
 | Section | What it holds |
 | --- | --- |
-| [[adr/0001-gitops-with-argocd\|Architecture decisions]] | ADRs: context, decision, consequences. One decision per record, never rewritten, only superseded. |
-| [[gke-workload-identity\|Patterns]] | Reusable, production-tested ways of solving a recurring platform problem. |
-| [[argocd-vs-flux\|Tools]] | Comparisons and evaluations, with the criteria that decided them. |
+| [[adr/index\|Architecture decisions]] | ADRs: context, decision, consequences. One decision per record, never rewritten, only superseded. |
+| [[patterns/index\|Patterns]] | Reusable, production-tested ways of solving a recurring platform problem. |
+| [[tools/index\|Tools]] | Comparisons and evaluations, with the criteria that decided them. |
 | [[standards/index\|Standards]] | Conventions these notes and the platform work follow. |
 
 ## Recently added

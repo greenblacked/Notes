@@ -3,6 +3,7 @@ title: 'ADR-0001: GitOps with Argo CD'
 description: Reconcile Kubernetes cluster state from Git using Argo CD instead of pushing from CI.
 status: accepted
 tags: [adr, gitops, kubernetes, argocd]
+created: 2026-10-10
 sidebar:
   label: 0001 GitOps with Argo CD
 ---

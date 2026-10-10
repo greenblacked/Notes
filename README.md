@@ -21,6 +21,8 @@ platform patterns, tool comparisons and operational notes, written in Markdown
 - Full-text search (Pagefind), table of contents, dark/light mode
 - Syntax highlighting with copy button (Expressive Code)
 - Tags in frontmatter, indexed on [`/tags/`](https://notes.szolotov.com/tags/)
+- Strict Content-Security-Policy: scripts are allowed only by the sha256 of each
+  inline script, computed at build time; inline event handlers fail the build
 
 Not included: backlinks and the graph view. They need a site-wide link index;
 add them later if the note count makes them worthwhile.
@@ -38,9 +40,10 @@ npm run dev             # http://localhost:4321, live reload
 Checks that CI runs:
 
 ```sh
-npm test                                   # plugin and build-config unit tests
+npm test                                   # plugin, build-config and link-checker tests
 npm run check                              # astro check (types, content schema)
 STRICT_LINKS=1 npm run build               # production build, fails on broken wikilinks
+npm run check:links                        # every internal href/src in dist/ resolves
 DEPLOY_ENV=stage STRICT_LINKS=1 npm run build
 ```
 
@@ -65,6 +68,10 @@ src/content/docs/
 └── standards/      # conventions
 ```
 
+The full conventions (naming, tags, callouts, ADR lifecycle) are in
+[`standards/writing-notes.md`](src/content/docs/standards/writing-notes.md);
+new ADRs start from [`adr/template.md`](src/content/docs/adr/template.md).
+
 Frontmatter:
 
 ```yaml
@@ -72,7 +79,8 @@ Frontmatter:
 title: GKE Workload Identity          # required
 description: One-sentence summary     # used for SEO and link previews
 tags: [gcp, gke, security]            # listed on the page and on /tags/
-status: accepted                      # ADRs only: proposed | accepted | superseded | deprecated
+status: accepted                      # ADRs only: proposed | accepted | rejected | deprecated | superseded
+created: 2026-10-10                   # optional ISO dates; modified: as well
 draft: true                           # optional: only visible in `npm run dev`, never deployed
 ---
 ```
@@ -112,10 +120,15 @@ flowchart LR
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `ci.yml` | PR into `main`, push to `main` | unit tests, `astro check`, strict build for both envs, `wrangler deploy --dry-run`, actionlint, shellcheck |
-| `deploy-stage.yml` | push to `main`, manual | build for stage → deploy `notes-stage` → smoke test → roll back on failure |
-| `release.yml` | manual, from `main` | creates `vX.Y.Z` tag + GitHub Release at the tip of `main`, then calls the production deploy |
-| `deploy-production.yml` | `v*` tag push, called by Release, manual | checks the tag is `vX.Y.Z` and on `main` → **waits for approval** → build → deploy `notes` → smoke test → roll back on failure |
+| `ci.yml` | PR into `main`, push to `main` | unit tests, `astro check`, strict build + link check + `wrangler deploy --dry-run` for both envs, actionlint, shellcheck, zizmor; aggregated into **`CI OK`** |
+| `deploy-stage.yml` | push to `main`, manual | skip if a newer commit is already on `main` → build (no secrets) → deploy `notes-stage` → smoke test → roll back on failure |
+| `release.yml` | manual, from `main` | version must be greater than the latest tag and CI green on the commit → annotated `vX.Y.Z` tag + GitHub Release → calls the production deploy |
+| `deploy-production.yml` | `v*` tag push, called by Release, manual | checks the tag is `vX.Y.Z` and on `main` → build (no secrets) → **waits for approval** → deploy `notes` → smoke test → roll back on failure |
+
+Deploy workflows build in a job that has no secrets and no environment, then
+hand the site to the deploy job as an artifact. The deploy job installs
+dependencies with `npm ci --ignore-scripts`, so no package code runs next to the
+Cloudflare token, and it uses no dependency cache.
 
 Every build writes `/build-info.json` (`env`, `commit`, `ref` and a unique
 `build` id). The smoke test waits until the new build id is live before
@@ -193,9 +206,9 @@ Done once by a repository admin; none of this is in code.
    Do **not** add the token as a repository secret: then only the gated
    environments can read it.
 
-2. **Branch ruleset for `main`:** require a pull request, require the `CI`
-   checks (*Test and build*, *Lint workflows and scripts*), block force pushes
-   and deletion.
+2. **Branch ruleset for `main`:** require a pull request, require the status
+   check **`CI OK`** (it fails if any CI job fails or is skipped), block force
+   pushes and deletion. `.github/CODEOWNERS` makes you the default reviewer.
 3. **Tag ruleset for `v*`:** restrict creation, update and deletion to admins,
    so nobody else can trigger a production deploy by pushing a tag. If the
    Release workflow is then refused when it creates the tag, add the GitHub
@@ -213,11 +226,15 @@ Done once by a repository admin; none of this is in code.
 | Deploy: authentication error `10000` | token missing permissions or scoped to the wrong zone | see Cloudflare step 2 |
 | Stage appears in search results | `X-Robots-Tag` missing | `curl -sI https://stage.notes.szolotov.com/ \| grep -i robots`, then check the stage build log for `noindex=true` |
 | Production run waits forever | nobody approved the `production` deployment | approve it in the run, or cancel it |
+| Browser console: `Refused to execute inline script` | an inline script changed after the CSP was generated, or a new inline `on…=` handler | rebuild; move handlers into a `<script>` in the component |
+| Release: `No successful CI run on main` | CI for that commit hasn't finished or failed | wait for `CI OK` on `main`, then rerun Release |
 
 ## Dependencies
 
-Versions are pinned exactly and updated by Dependabot weekly (`npm` and GitHub
-Actions, which are pinned by commit SHA). `npm audit` currently reports
+Versions are pinned exactly and updated by Dependabot weekly, after a 7-day
+cooldown: npm packages, GitHub Actions (pinned by commit SHA) and zizmor
+(pinned with a hash in `.github/requirements/zizmor.txt`). Record notable
+changes in `CHANGELOG.md`. `npm audit` currently reports
 moderate/low advisories in build-time-only transitive dependencies
 (`postcss-selector-parser` via Expressive Code, `katex` via Mermaid). Nothing in
 them runs on the deployed site's server, because there is no server. Recheck
