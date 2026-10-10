@@ -4,7 +4,7 @@
 // plugins passed to `satteri()` in astro.config.mjs.
 import { defineMdastPlugin } from 'satteri';
 
-const CALLOUT = /^\[!([a-z-]+)\][+-]?[ \t]*([^\n]*)\n?/i;
+const MARKER = /^\[!([a-z-]+)\][+-]?[ \t]*/i;
 
 const ASIDE_TYPE = {
 	note: 'note', info: 'note', abstract: 'note', summary: 'note', tldr: 'note', todo: 'note', quote: 'note', cite: 'note',
@@ -17,36 +17,46 @@ export function asideType(calloutType) {
 	return ASIDE_TYPE[calloutType.toLowerCase()] ?? 'note';
 }
 
+/**
+ * Split the first paragraph's inline nodes into the title line (everything
+ * up to the first line break, formatting included) and the body.
+ */
+export function splitTitle(inline) {
+	const title = [];
+	for (let i = 0; i < inline.length; i++) {
+		const node = inline[i];
+		if (node.type === 'break') return { title, body: inline.slice(i + 1) };
+		if (node.type === 'text' && node.value.includes('\n')) {
+			const at = node.value.indexOf('\n');
+			const before = node.value.slice(0, at);
+			const after = node.value.slice(at + 1);
+			if (before) title.push({ type: 'text', value: before });
+			return { title, body: [...(after ? [{ type: 'text', value: after }] : []), ...inline.slice(i + 1)] };
+		}
+		title.push(node);
+	}
+	return { title, body: [] };
+}
+
 export const callouts = defineMdastPlugin({
 	name: 'notes-callouts',
 	blockquote(node, ctx) {
 		const [first, ...rest] = node.children;
 		const lead = first?.type === 'paragraph' ? first.children[0] : undefined;
 		if (lead?.type !== 'text') return;
-		const match = CALLOUT.exec(lead.value);
+		const match = MARKER.exec(lead.value);
 		if (!match) return;
 
-		const [raw, type, title] = match;
-		const remainder = lead.value.slice(raw.length);
-		const leadRest = [
-			...(remainder ? [{ type: 'text', value: remainder }] : []),
-			...first.children.slice(1),
-		];
-		// A soft line break right after the marker line is not content.
-		if (leadRest[0]?.type === 'break') leadRest.shift();
+		const remainder = lead.value.slice(match[0].length);
+		const inline = [...(remainder ? [{ type: 'text', value: remainder }] : []), ...first.children.slice(1)];
+		const { title, body } = splitTitle(inline);
+		const hasTitle = title.some((n) => n.type !== 'text' || n.value.trim());
 
 		const children = [];
-		if (title.trim()) {
-			children.push({ type: 'paragraph', data: { directiveLabel: true }, children: [{ type: 'text', value: title.trim() }] });
-		}
-		if (leadRest.length) children.push({ type: 'paragraph', children: leadRest });
+		if (hasTitle) children.push({ type: 'paragraph', data: { directiveLabel: true }, children: title });
+		if (body.length) children.push({ type: 'paragraph', children: body });
 		children.push(...rest);
 
-		ctx.replaceNode(node, {
-			type: 'containerDirective',
-			name: asideType(type),
-			attributes: {},
-			children,
-		});
+		ctx.replaceNode(node, { type: 'containerDirective', name: asideType(match[1]), attributes: {}, children });
 	},
 });

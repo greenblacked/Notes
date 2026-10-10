@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Smoke-test a deployed environment.
 #
-#   scripts/smoke-test.sh <production|stage> [expected-commit-sha]
+#   scripts/smoke-test.sh <production|stage> [expected-build-id]
+#   scripts/smoke-test.sh <production|stage> --live-build
 #
-# With a commit SHA, waits until /build-info.json reports that commit, so the
-# checks run against the version that was just deployed, not the previous one.
+# With a build id (the "build" field of dist/build-info.json), waits until the
+# site serves exactly that build, so the checks run against the version that
+# was just deployed. --live-build prints the build id currently served.
 set -euo pipefail
 
-env_name="${1:?usage: smoke-test.sh <production|stage> [expected-commit-sha]}"
-expected_commit="${2:-}"
+env_name="${1:?usage: smoke-test.sh <production|stage> [expected-build-id|--live-build]}"
+expected_build="${2:-}"
 
 case "$env_name" in
   production) default_url="https://notes.szolotov.com" ;;
@@ -28,14 +30,24 @@ fail() { log "FAIL: $*"; failures=$((failures + 1)); }
 curl_opts=(--silent --show-error --max-time 15 --retry 2 --retry-all-errors)
 [[ -n "${SMOKE_BASE_URL:-}" ]] || curl_opts+=(--proto '=https')
 
-if [[ -n "$expected_commit" ]]; then
-  log "waiting for $base_url to serve commit $expected_commit"
+served_build() {
+  curl "${curl_opts[@]}" --fail "$base_url/build-info.json?ts=$(date +%s)" 2>/dev/null \
+    | jq -r '.build // empty' 2>/dev/null || true
+}
+
+if [[ "$expected_build" == "--live-build" ]]; then
+  served_build
+  exit 0
+fi
+
+if [[ -n "$expected_build" ]]; then
+  log "waiting for $base_url to serve build $expected_build"
   for ((i = 1; i <= attempts; i++)); do
-    served="$(curl "${curl_opts[@]}" "$base_url/build-info.json?ts=$(date +%s)" 2>/dev/null | jq -r '.commit // empty' 2>/dev/null || true)"
-    [[ "$served" == "$expected_commit" ]] && break
+    served="$(served_build)"
+    [[ "$served" == "$expected_build" ]] && break
     log "attempt $i/$attempts: serving '${served:-nothing}'"
     if ((i == attempts)); then
-      fail "new version never became live (still serving '${served:-nothing}')"
+      fail "build $expected_build never became live (still serving '${served:-nothing}')"
       exit 1
     fi
     sleep "$delay"
@@ -60,6 +72,7 @@ check_status / 200
 check_status /tags/ 200
 check_status /adr/0001-gitops-with-argocd/ 200
 check_status /pagefind/pagefind.js 200
+check_status /robots.txt 200
 check_status /this-page-does-not-exist/ 404
 
 home="$(curl "${curl_opts[@]}" "$base_url/")"
@@ -68,6 +81,7 @@ robots="$(curl "${curl_opts[@]}" "$base_url/robots.txt")"
 
 expect "home page has the site title" matches "$home" '<title>[^<]*Notes'
 expect "security headers are sent" matches "$headers" '^strict-transport-security:'
+expect "robots.txt is a robots file" matches "$robots" '^User-agent:'
 
 if [[ "$env_name" == "stage" ]]; then
   expect "stage sends X-Robots-Tag noindex" matches "$headers" '^x-robots-tag:.*noindex'

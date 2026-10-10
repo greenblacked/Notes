@@ -13,6 +13,8 @@ import { deployEnv, resolveDeployEnv } from './src/integrations/deploy-env.mjs';
 // Stage builds get a noindex meta tag, X-Robots-Tag header and a
 // disallow-all robots.txt; production builds get none of them.
 const env = resolveDeployEnv(process.env.DEPLOY_ENV);
+const strictLinks = process.env.STRICT_LINKS === '1';
+const missingLinks = new Set();
 const docsDir = fileURLToPath(new URL('./src/content/docs/', import.meta.url));
 
 export default defineConfig({
@@ -21,9 +23,13 @@ export default defineConfig({
 	markdown: {
 		processor: satteri({
 			mdastPlugins: [
-				// Broken wikilinks fail CI and deploy builds (STRICT_LINKS=1),
-				// but only warn while writing locally.
-				wikilinks({ index: buildNoteIndex(docsDir), strict: process.env.STRICT_LINKS === '1' }),
+				wikilinks({
+					index: buildNoteIndex(docsDir),
+					onMissing: (message) => {
+						missingLinks.add(message);
+						console.warn(`[notes-wikilinks] ${message}`);
+					},
+				}),
 				callouts,
 				mermaid,
 			],
@@ -50,5 +56,18 @@ export default defineConfig({
 			],
 		}),
 		deployEnv(env),
+		// Broken wikilinks fail CI and deploy builds (STRICT_LINKS=1) but only
+		// warn while writing locally. Failing here, not in the plugin, is what
+		// makes the build exit non-zero (see src/plugins/wikilinks.mjs).
+		{
+			name: 'notes-strict-links',
+			hooks: {
+				'astro:build:done': () => {
+					if (strictLinks && missingLinks.size > 0) {
+						throw new Error(`${missingLinks.size} unresolved wikilink(s):\n${[...missingLinks].join('\n')}`);
+					}
+				},
+			},
+		},
 	],
 });

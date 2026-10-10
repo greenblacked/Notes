@@ -40,15 +40,19 @@ export function headersFile(env) {
 	].join('\n\n') + '\n';
 }
 
-// Served at /build-info.json; the smoke test polls it to confirm the new
-// version is live. BUILD_COMMIT wins over GITHUB_SHA because GitHub ignores
+// Served at /build-info.json. The smoke test polls `build`, which is unique
+// per build, so redeploying a commit that is already live still waits for
+// the new upload. BUILD_COMMIT wins over GITHUB_SHA because GitHub ignores
 // attempts to override GITHUB_* variables, and a dispatched production deploy
 // builds a tag that is not the workflow's own commit.
-export function buildInfo(env, vars = process.env) {
+export function buildInfo(env, vars = process.env, now = Date.now()) {
+	const commit = vars.BUILD_COMMIT || vars.GITHUB_SHA || 'local';
+	const run = vars.GITHUB_RUN_ID ? `${vars.GITHUB_RUN_ID}.${vars.GITHUB_RUN_ATTEMPT || 1}` : 'local';
 	return {
 		env: env.name,
-		commit: vars.BUILD_COMMIT || vars.GITHUB_SHA || 'local',
+		commit,
 		ref: vars.BUILD_REF || vars.GITHUB_REF_NAME || 'local',
+		build: `${commit.slice(0, 12)}-${run}-${now}`,
 	};
 }
 

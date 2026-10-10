@@ -1,5 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
+import { slug } from 'github-slugger';
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 
 const docs = await getCollection('docs', ({ data }) => !data.draft);
@@ -15,12 +16,12 @@ const tags = [...byTag.entries()].sort(([a], [b]) => a.localeCompare(b));
 
 <StarlightPage
 	frontmatter={{ title: 'Tags', description: 'All notes grouped by tag', tableOfContents: false }}
-	headings={tags.map(([tag]) => ({ depth: 2, slug: tag, text: `#${tag}` }))}
+	headings={tags.map(([tag]) => ({ depth: 2, slug: slug(tag), text: `#${tag}` }))}
 >
 	{
 		tags.map(([tag, notes]) => (
 			<section>
-				<h2 id={tag}>#{tag}</h2>
+				<h2 id={slug(tag)}>#{tag}</h2>
 				<ul>
 					{notes
 						.sort((a, b) => a.title.localeCompare(b.title))

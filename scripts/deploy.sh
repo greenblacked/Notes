@@ -15,23 +15,35 @@ case "$env_name" in
   *) echo "unknown environment: $env_name" >&2; exit 2 ;;
 esac
 
-[[ -d dist ]] || { echo "dist/ not found: build before deploying" >&2; exit 2; }
-served_env="$(jq -r '.env' dist/build-info.json)"
-[[ "$served_env" == "$env_name" ]] || { echo "dist/ was built for '$served_env', not '$env_name'" >&2; exit 2; }
+[[ -f dist/build-info.json ]] || { echo "dist/ not found: build before deploying" >&2; exit 2; }
+built_env="$(jq -r '.env' dist/build-info.json)"
+new_build="$(jq -r '.build' dist/build-info.json)"
+[[ "$built_env" == "$env_name" ]] || { echo "dist/ was built for '$built_env', not '$env_name'" >&2; exit 2; }
 
 wrangler() { npx --no-install wrangler "$@"; }
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
-# The version currently taking 100% of traffic is the rollback target.
-# A first-ever deploy has none; then a failed smoke test cannot roll back.
-previous_version="$(wrangler deployments status --env "$env_name" --json 2>/dev/null \
-  | jq -r '[.versions[] | select(.percentage == 100)][0].version_id // empty' || true)"
-log "current $env_name version: ${previous_version:-none (first deploy)}"
+# The version taking 100% of traffic is the rollback target. Only a Worker
+# that has never been deployed may have none; any other error stops here,
+# so a deploy never runs with rollback silently disabled.
+status_err="$(mktemp)"
+trap 'rm -f "$status_err"' EXIT
+if status_json="$(wrangler deployments status --env "$env_name" --json 2>"$status_err")"; then
+  previous_version="$(jq -r '[.versions[] | select(.percentage == 100)][0].version_id // empty' <<<"$status_json")"
+elif grep -qiE 'has no deployments|not found|10007' "$status_err"; then
+  previous_version=""
+else
+  cat "$status_err" >&2
+  log "could not read the current $env_name deployment; aborting before deploy"
+  exit 1
+fi
+previous_build="$(scripts/smoke-test.sh "$env_name" --live-build)"
+log "current $env_name version: ${previous_version:-none (first deploy)}, build: ${previous_build:-unknown}"
 
-log "deploying $commit to $env_name"
+log "deploying $commit (build $new_build) to $env_name"
 wrangler deploy --env "$env_name" --tag "${commit:0:12}" --message "$message"
 
-if scripts/smoke-test.sh "$env_name" "$commit"; then
+if scripts/smoke-test.sh "$env_name" "$new_build"; then
   log "deploy to $env_name succeeded"
   exit 0
 fi
@@ -44,9 +56,9 @@ fi
 
 log "rolling back $env_name to $previous_version"
 wrangler rollback "$previous_version" --env "$env_name" --yes \
-  --message "Automatic rollback: smoke test failed for $commit"
-# Re-check without a commit pin: the old version must be healthy again.
-if scripts/smoke-test.sh "$env_name"; then
+  --message "Automatic rollback: smoke test failed for ${commit:0:12}"
+# Wait for the old build to be served again, then re-check it.
+if scripts/smoke-test.sh "$env_name" "$previous_build"; then
   log "rollback succeeded; $env_name is back on $previous_version"
 else
   log "rollback finished but smoke test still fails; investigate now"

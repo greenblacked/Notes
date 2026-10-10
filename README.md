@@ -13,7 +13,9 @@ platform patterns, tool comparisons and operational notes, written in Markdown
 
 ## Features
 
-- `[[wikilinks]]`, `[[note|alias]]`, `[[note#heading]]` — resolved at build time; broken links fail CI
+- `[[wikilinks]]`, `[[note|alias]]`, `[[note#heading]]` — resolved at build time; broken links
+  and links to drafts fail CI. Not supported yet: embeds (`![[...]]`) and same-page `[[#heading]]`;
+  use regular Markdown images and links for those
 - Obsidian callouts (`> [!warning] Title`) rendered as Starlight asides
 - Mermaid diagrams (` ```mermaid `), themed for light and dark mode
 - Full-text search (Pagefind), table of contents, dark/light mode
@@ -47,7 +49,7 @@ Preview a build with Cloudflare's own asset serving (honours `_headers`, 404 pag
 ```sh
 DEPLOY_ENV=stage npm run build
 npx wrangler dev --env stage
-SMOKE_BASE_URL=http://localhost:8787 scripts/smoke-test.sh stage local
+SMOKE_BASE_URL=http://localhost:8787 scripts/smoke-test.sh stage "$(jq -r .build dist/build-info.json)"
 ```
 
 ## Writing notes
@@ -115,9 +117,10 @@ flowchart LR
 | `release.yml` | manual, from `main` | creates `vX.Y.Z` tag + GitHub Release at the tip of `main`, then calls the production deploy |
 | `deploy-production.yml` | `v*` tag push, called by Release, manual | checks the tag is `vX.Y.Z` and on `main` → **waits for approval** → build → deploy `notes` → smoke test → roll back on failure |
 
-Every deploy writes `/build-info.json` (`env`, `commit`, `ref`). The smoke test
-waits until the new commit is live before checking pages, 404 handling,
-security headers and indexing rules, so a stale cache can't produce a false pass.
+Every build writes `/build-info.json` (`env`, `commit`, `ref` and a unique
+`build` id). The smoke test waits until the new build id is live before
+checking pages, 404 handling, security headers and indexing rules, so a stale
+edge or a redeploy of the same commit can't produce a false pass.
 
 ### Release to production
 
@@ -137,8 +140,10 @@ Then approve the `production` deployment in the Actions run.
 ### Rollback
 
 - **Automatic:** if the post-deploy smoke test fails, `scripts/deploy.sh` runs
-  `wrangler rollback` to the version that was live before, re-checks it, and
-  fails the job.
+  `wrangler rollback` to the version that was live before, waits for the old
+  build to be served again, re-checks it, and fails the job. If it can't read
+  the current deployment before deploying, it stops instead of deploying
+  without a rollback target.
 - **Manual, through Git:** Actions → Deploy production → Run workflow → enter the
   previous tag (e.g. `v1.1.0`). It goes through the same approval and smoke test.
 - **Manual, fastest (bypasses CI):**
@@ -176,7 +181,13 @@ Done once by a repository admin; none of this is in code.
    | Environment | Protection | Secrets / variables |
    | --- | --- | --- |
    | `stage` | Deployment branches: `main` only | secret `CLOUDFLARE_API_TOKEN`, variable `CLOUDFLARE_ACCOUNT_ID` |
-   | `production` | Required reviewers: you; deployment tags: `v*` only; optionally *prevent self-review* off for a solo repo | secret `CLOUDFLARE_API_TOKEN`, variable `CLOUDFLARE_ACCOUNT_ID` |
+   | `production` | Required reviewers: you (leave *prevent self-review* off in a solo repo); deployment branches and tags: branch `main` **and** tag `v*` | secret `CLOUDFLARE_API_TOKEN`, variable `CLOUDFLARE_ACCOUNT_ID` |
+
+   `production` must allow `main` as well as `v*`: when the Release workflow
+   calls the deploy, or you redeploy a tag through *Run workflow*, the run's ref
+   is `main`, not the tag. That doesn't open a side door, because the
+   *Verify release tag* job refuses anything that isn't a `vX.Y.Z` tag on `main`
+   before the gated job starts, and every run still needs your approval.
 
    Use a separate token per environment if you want to revoke them independently.
    Do **not** add the token as a repository secret: then only the gated
@@ -196,7 +207,8 @@ Done once by a repository admin; none of this is in code.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `Unresolved wikilink [[x]] in …` | link target doesn't exist, or the bare name matches two notes | fix the name, or link by path: `[[patterns/x]]` |
+| `Unresolved wikilink [[x]] in …` | link target doesn't exist, is a draft, or the bare name matches two notes | fix the name, publish the note, or link by path: `[[patterns/x]]` |
+| `Branch "main" is not allowed to deploy to production` | `production` environment allows only `v*` tags | allow branch `main` too (see GitHub step 1) |
 | Smoke test: `new version never became live` | custom domain not attached yet, or deploy hit a different Worker | check `npx wrangler deployments status --env <env>` and the domain under *Workers → notes → Settings → Domains* |
 | Deploy: authentication error `10000` | token missing permissions or scoped to the wrong zone | see Cloudflare step 2 |
 | Stage appears in search results | `X-Robots-Tag` missing | `curl -sI https://stage.notes.szolotov.com/ \| grep -i robots`, then check the stage build log for `noindex=true` |
