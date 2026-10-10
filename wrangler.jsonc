@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Production Worker. Static site is served from ./public (the Quartz build output) through
+  // worker/index.js, which adds security headers, serves /robots.txt and sets cache policy.
+  "name": "notes",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "notes.szolotov.com", "custom_domain": true }],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // The Worker runs for every request so headers are applied to assets and 404s alike.
+    "run_worker_first": true,
+    // Quartz emits foo.html and links to /foo; folders are foo/index.html linked as /foo/.
+    "html_handling": "auto-trailing-slash",
+    // Quartz emits 404.html; serve it (with a 404 status) for unknown paths.
+    "not_found_handling": "404-page",
+  },
+  "vars": { "ENVIRONMENT": "production" },
+
+  "env": {
+    // Stage is a separate Worker (notes-stage). vars, routes and assets are not inherited by
+    // environments, so everything environment-specific is repeated here.
+    "stage": {
+      "name": "notes-stage",
+      "main": "worker/index.js",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [{ "pattern": "stage.notes.szolotov.com", "custom_domain": true }],
+      "assets": {
+        "directory": "./public",
+        "binding": "ASSETS",
+        "run_worker_first": true,
+        "html_handling": "auto-trailing-slash",
+        "not_found_handling": "404-page",
+      },
+      "vars": { "ENVIRONMENT": "stage" },
+    },
+  },
+}
