@@ -112,16 +112,34 @@ jobs:
     needs: [build-and-check, workflow-lint]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    permissions: {}
+    permissions:
+      pull-requests: read # look up the PR's current head commit
     steps:
+      # Cancelled jobs fail this check, except when the run was cancelled because a
+      # newer commit superseded it on the PR: that commit is no longer the PR head,
+      # so its result never gates a merge. A cancelled run on the current head still
+      # fails (a skipped required check would count as passing).
       - name: Require all jobs to succeed
         env:
           RESULTS: ${{ toJSON(needs.*.result) }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           echo "Job results: $RESULTS"
           if jq -e 'all(. == "success")' <<<"$RESULTS" >/dev/null; then
             echo "All CI jobs succeeded."
-          else
-            echo "::error::At least one CI job did not succeed."
-            exit 1
+            exit 0
           fi
+          if [[ "$EVENT_NAME" == "pull_request" ]] &&
+            jq -e 'all(. == "success" or . == "cancelled")' <<<"$RESULTS" >/dev/null; then
+            head="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq '.head.sha')"
+            if [[ -n "$head" && "$head" != "$RUN_SHA" ]]; then
+              echo "::notice::Run superseded by $head on the PR; $RUN_SHA no longer gates the merge."
+              exit 0
+            fi
+          fi
+          echo "::error::At least one CI job did not succeed."
+          exit 1
