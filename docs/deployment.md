@@ -44,12 +44,12 @@ What is **not verified** (confirm in the dashboard, and tighten or loosen after 
 **Actions, General**
 
 - Workflow permissions: **Read repository contents and packages permissions** (default read-only). Every workflow declares its own permissions; `release.yml` requests `contents: write` and `actions: read` on its job only. "Allow GitHub Actions to create and approve pull requests" is not needed.
-- Allowed actions: optionally restrict to actions from this repository plus `actions/checkout` and `actions/setup-node`, and enable "Require actions to be pinned to a full-length commit SHA".
+- Allowed actions: optionally restrict to actions from this repository plus `actions/checkout`, `actions/setup-node`, `actions/cache`, `actions/upload-artifact` and `actions/download-artifact`, and enable "Require actions to be pinned to a full-length commit SHA".
 
 **Variables and secrets**
 
-- Variable (Settings, Secrets and variables, Actions, Variables): `CLOUDFLARE_ACCOUNT_ID` at repository level.
-- Secret `CLOUDFLARE_API_TOKEN` in **each environment** (below), not at repository level.
+- `CLOUDFLARE_ACCOUNT_ID` at repository level, as a variable (Settings, Secrets and variables, Actions, Variables) or as a secret. The workflows use the variable when it is set and fall back to the secret.
+- Secret `CLOUDFLARE_API_TOKEN`: preferably in **each environment** (below), so only jobs that passed the environment's rules can read it. A repository-level secret also works; an environment secret with the same name takes precedence over it.
 
 **Environments** (Settings, Environments)
 
@@ -143,7 +143,7 @@ Automatic rollback is skipped when no previous version could be recorded (first 
 | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Deploy fails: "A DNS record already exists" / custom domain conflict | A CNAME/A record for the hostname exists. Delete it in Cloudflare DNS, then redeploy. Custom Domains cannot be created over an existing CNAME.                                                                                                                        |
 | `Authentication error [code: 10000]`                                 | Token missing a permission or scoped to the wrong account or zone. Re-check the table above, the secret in the right environment, and that the zone is in the same account.                                                                                           |
-| `Could not route to /accounts/...` or wrong account                  | `CLOUDFLARE_ACCOUNT_ID` variable missing or from another account.                                                                                                                                                                                                     |
+| `Could not route to /accounts/...` or wrong account                  | `CLOUDFLARE_ACCOUNT_ID` (variable or secret) missing or from another account.                                                                                                                                                                                         |
 | Deploy job sits at "Waiting"                                         | The `production` environment requires approval; approve in the run. If it is rejected immediately: the branch/tag rules of the environment do not include `main` or `v*`.                                                                                             |
 | Stage run finishes in seconds with a notice "no longer the head"     | Expected: a newer commit reached `main`; its own run deploys. Nothing to fix.                                                                                                                                                                                         |
 | Smoke test: `/version.txt` does not match                            | Edge propagation or Custom Domain still provisioning (retried for about 2.5 minutes). If it persists, check `npx wrangler deployments status`, and that the build used the right `NOTES_VERSION` and `NOTES_SHA`. Stale caches are bypassed by a random query string. |
