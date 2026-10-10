@@ -3,8 +3,8 @@
  *
  * Responsibilities:
  *  - apply security headers (CSP, HSTS, nosniff, referrer and permissions policies) to every response
- *  - serve /robots.txt (stage: disallow everything; production: allow and point at the sitemap)
- *  - mark stage responses `X-Robots-Tag: noindex, nofollow`
+ *  - decide whether the host may be indexed (see `isIndexable`) and, if not, serve a disallow-all
+ *    /robots.txt and mark every response `X-Robots-Tag: noindex, nofollow`
  *  - keep /version.txt uncacheable so deploy verification always sees the live build
  *
  * No dependencies. The CSP is assembled in ./csp.js from hashes that the build writes to
@@ -14,14 +14,15 @@
  */
 
 import { CONTENT_SECURITY_POLICY } from "./csp.js"
+import { CANONICAL_HOST, isIndexable } from "./indexing.js"
 
 /**
  * @typedef {Object} Env
  * @property {{ fetch: (request: Request) => Promise<Response> }} ASSETS Static assets binding.
- * @property {string} [ENVIRONMENT] "production" or "stage".
+ * @property {string} [ENVIRONMENT] "production" (top-level vars) or "stage" (`previews.vars`).
  */
 
-const PRODUCTION_ORIGIN = "https://notes.szolotov.com"
+const PRODUCTION_ORIGIN = `https://${CANONICAL_HOST}`
 
 /** Headers applied to every response. */
 const SECURITY_HEADERS = {
@@ -47,19 +48,11 @@ const SECURITY_HEADERS = {
 }
 
 /**
- * @param {Env} env
- * @returns {boolean}
- */
-function isStage(env) {
-  return env.ENVIRONMENT === "stage"
-}
-
-/**
- * @param {Env} env
+ * @param {boolean} indexable
  * @returns {string}
  */
-function robotsTxt(env) {
-  if (isStage(env)) {
+function robotsTxt(indexable) {
+  if (!indexable) {
     return "User-agent: *\nDisallow: /\n"
   }
   return `User-agent: *\nAllow: /\n\nSitemap: ${PRODUCTION_ORIGIN}/sitemap.xml\n`
@@ -78,7 +71,7 @@ function withHeaders(response, env, url) {
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     out.headers.set(name, value)
   }
-  if (isStage(env)) {
+  if (!isIndexable(env, url)) {
     out.headers.set("X-Robots-Tag", "noindex, nofollow")
   }
   if (url.pathname === "/version.txt") {
@@ -109,7 +102,7 @@ export default {
 
     if (url.pathname === "/robots.txt") {
       return withHeaders(
-        new Response(request.method === "HEAD" ? null : robotsTxt(env), {
+        new Response(request.method === "HEAD" ? null : robotsTxt(isIndexable(env, url)), {
           headers: {
             "Content-Type": "text/plain; charset=utf-8",
             "Cache-Control": "public, max-age=300",

@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Post-deploy smoke test.
 #
-# Usage: scripts/smoke-test.sh <base_url> <expected_version> <stage|production>
+# Usage: scripts/smoke-test.sh <base_url> <expected_version> <indexable|noindex>
 #
 #   base_url          e.g. https://notes.szolotov.com (no trailing slash needed)
 #   expected_version  exact content of /version.txt (without the newline),
 #                     e.g. "1.2.3+<40-char sha>" or "main+<40-char sha>"
-#   stage|production  selects the indexing expectations (noindex vs. indexable)
+#   indexable|noindex what this host is expected to send: "indexable" (no noindex,
+#                     robots.txt allows crawling; only notes.szolotov.com in production) or
+#                     "noindex" (X-Robots-Tag noindex, robots.txt "Disallow: /"; the stage
+#                     Preview and every workers.dev URL)
 #
 # The version check is retried with a growing delay (custom domains and edge
 # propagation can lag a few minutes behind `wrangler deploy`). All other checks
@@ -14,7 +17,7 @@
 set -euo pipefail
 
 if [[ $# -ne 3 ]]; then
-  echo "usage: $0 <base_url> <expected_version> <stage|production>" >&2
+  echo "usage: $0 <base_url> <expected_version> <indexable|noindex>" >&2
   exit 2
 fi
 
@@ -23,9 +26,9 @@ EXPECTED="$2"
 MODE="$3"
 
 case "$MODE" in
-  stage | production) ;;
+  indexable | noindex) ;;
   *)
-    echo "error: mode must be 'stage' or 'production', got '$MODE'" >&2
+    echo "error: expectation must be 'indexable' or 'noindex', got '$MODE'" >&2
     exit 2
     ;;
 esac
@@ -183,25 +186,25 @@ if [[ "$code" != "200" ]]; then
 fi
 robots_body="$(tr -d '\r' <"$WORK/robots.b")"
 
-if [[ "$MODE" == "stage" ]]; then
+if [[ "$MODE" == "noindex" ]]; then
   if [[ "${robots_header,,}" == *noindex* ]]; then
     pass "X-Robots-Tag contains noindex ($robots_header)"
   else
-    fail_on home "stage must send X-Robots-Tag: noindex, got '$robots_header'"
+    fail_on home "this host must send X-Robots-Tag: noindex, got '$robots_header'"
   fi
   if grep -qiE '^[[:space:]]*Disallow:[[:space:]]*/[[:space:]]*$' <<<"$robots_body"; then
     pass "robots.txt disallows everything"
   else
-    fail_on robots "stage robots.txt must contain 'Disallow: /'"
+    fail_on robots "robots.txt of this host must contain 'Disallow: /'"
   fi
 else
   if [[ "${robots_header,,}" == *noindex* ]]; then
-    fail_on home "production must not send X-Robots-Tag noindex, got '$robots_header'"
+    fail_on home "an indexable host must not send X-Robots-Tag noindex, got '$robots_header'"
   else
     pass "no X-Robots-Tag noindex"
   fi
   if grep -qiE '^[[:space:]]*Disallow:[[:space:]]*/[[:space:]]*$' <<<"$robots_body"; then
-    fail_on robots "production robots.txt must not contain 'Disallow: /'"
+    fail_on robots "robots.txt of an indexable host must not contain 'Disallow: /'"
   else
     pass "robots.txt does not block the site"
   fi

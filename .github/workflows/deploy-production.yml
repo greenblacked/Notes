@@ -133,7 +133,8 @@ jobs:
     name: Deploy to production
     needs: [guard, build]
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # Room for approval-free deploy, smoke retries (about 2.5 minutes) and a rollback.
+    timeout-minutes: 30
     permissions:
       contents: read
     environment:
@@ -165,6 +166,24 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: site
+          path: ${{ runner.temp }}/site
+
+      # Only the two expected paths are accepted from the artifact (built by a job that ran
+      # third-party code); anything else at its root is rejected.
+      - name: Install build output
+        run: |
+          site="$RUNNER_TEMP/site"
+          test -d "$site/public" && test -f "$site/worker/csp.generated.js"
+          extra="$(find "$site" -mindepth 1 -maxdepth 1 ! -name public ! -name worker
+            find "$site/worker" -mindepth 1 ! -name csp.generated.js)"
+          if [[ -n "$extra" ]]; then
+            echo "::error::Unexpected files in the build artifact:"
+            echo "$extra"
+            exit 1
+          fi
+          rm -rf public worker/csp.generated.js
+          cp -R "$site/public" public
+          cp "$site/worker/csp.generated.js" worker/csp.generated.js
 
       - name: Require Cloudflare credentials
         env:
@@ -176,8 +195,6 @@ jobs:
             exit 1
           fi
 
-      # `--env=""` targets the top-level `notes` Worker explicitly (the config
-      # also defines the stage environment).
       # `wrangler deployments status --json` prints the active deployment as
       # {"versions":[{"version_id":...,"percentage":...}],...}; it errors when
       # the Worker has no deployment yet (first deploy), which is not fatal.
@@ -187,7 +204,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id || vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if out="$(npx wrangler deployments status --env="" --json 2>"$RUNNER_TEMP/previous.err")"; then
+          if out="$(npx wrangler deployments status --json 2>"$RUNNER_TEMP/previous.err")"; then
             id="$(jq -r 'if (.versions | length) == 1 then .versions[0].version_id else "" end' <<<"$out" || true)"
           else
             id=""
@@ -201,33 +218,107 @@ jobs:
           fi
           echo "version_id=$id" >>"$GITHUB_OUTPUT"
 
+      # `wrangler deploy` also applies the routes (Custom Domain, previews_enabled).
+      # Wrangler appends machine-readable entries to WRANGLER_OUTPUT_FILE_PATH.
       - name: Deploy to Cloudflare
         id: wrangler
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id || vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy --env=""
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-deploy.ndjson
+        run: |
+          npx wrangler deploy
+          out="$(node scripts/read-wrangler-output.mjs --deploy "$WRANGLER_OUTPUT_FILE_PATH")"
+          echo "$out"
+          echo "$out" >>"$GITHUB_OUTPUT"
 
-      - name: Smoke test
+      - name: Require the expected deploy targets
+        env:
+          CUSTOM_DOMAIN: ${{ steps.wrangler.outputs.custom_domain }}
+          WORKERS_DEV_URL: ${{ steps.wrangler.outputs.workers_dev_url }}
+        run: |
+          if [[ "$CUSTOM_DOMAIN" != "yes" ]]; then
+            echo "::error::Wrangler did not report notes.szolotov.com as a deploy target."
+            exit 1
+          fi
+          if [[ -z "$WORKERS_DEV_URL" ]]; then
+            echo "::error::Wrangler reported no workers.dev URL (workers_dev must be enabled in wrangler.jsonc)."
+            exit 1
+          fi
+
+      # Verified on workers.dev: Cloudflare Bot Fight Mode answers GitHub-hosted runners with
+      # 403 on the custom domain. workers.dev is not the canonical host, so it must be noindex.
+      - name: Smoke test (workers.dev)
         env:
           SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
-        run: scripts/smoke-test.sh https://notes.szolotov.com "$VERSION+$SHA" production
+          WORKERS_DEV_URL: ${{ steps.wrangler.outputs.workers_dev_url }}
+        run: scripts/smoke-test.sh "$WORKERS_DEV_URL" "$VERSION+$SHA" noindex
+
+      - name: Verify the new version serves 100%
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id || vars.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION_ID: ${{ steps.wrangler.outputs.version_id }}
+        run: |
+          out="$(npx wrangler deployments status --json)"
+          echo "$out"
+          if ! jq -e --arg id "$VERSION_ID" \
+            '(.versions | length) == 1 and .versions[0].version_id == $id and .versions[0].percentage == 100' \
+            <<<"$out" >/dev/null; then
+            echo "::error::Version $VERSION_ID is not the only active version at 100%."
+            exit 1
+          fi
+
+      # Informational only: never fails the run.
+      - name: Probe the custom domain
+        run: |
+          code="$(curl --proto '=https' --tlsv1.2 -s -D "$RUNNER_TEMP/probe.h" -o /dev/null -w '%{http_code}' --max-time 30 \
+            --user-agent 'notes-smoke-test/1 (+https://github.com/greenblacked/Notes)' \
+            https://notes.szolotov.com/ || true)"
+          if [[ "$code" == "403" ]]; then
+            echo "::notice::https://notes.szolotov.com answered 403 to this runner (Cloudflare Bot Fight Mode); expected, verification used workers.dev."
+          elif [[ "$code" == "200" ]] && grep -qi '^x-robots-tag:.*noindex' "$RUNNER_TEMP/probe.h"; then
+            echo "::warning::https://notes.szolotov.com sends X-Robots-Tag noindex; the canonical host must be indexable."
+          else
+            echo "https://notes.szolotov.com answered HTTP $code"
+          fi
 
       - name: Roll back to the previous version
         id: rollback
-        if: failure() && steps.previous.outputs.version_id != '' && steps.wrangler.outcome != 'skipped'
+        if: (failure() || cancelled()) && steps.previous.outputs.version_id != '' && steps.wrangler.outcome != 'skipped'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id || vars.CLOUDFLARE_ACCOUNT_ID }}
           PREVIOUS_VERSION_ID: ${{ steps.previous.outputs.version_id }}
         run: |
-          npx wrangler rollback "$PREVIOUS_VERSION_ID" --env="" \
+          # The failure may have happened before the new version went live.
+          if out="$(npx wrangler deployments status --json)" && jq -e --arg id "$PREVIOUS_VERSION_ID" \
+            '(.versions | length) == 1 and .versions[0].version_id == $id and .versions[0].percentage == 100' \
+            <<<"$out" >/dev/null; then
+            echo "::notice::Production still serves the previous version $PREVIOUS_VERSION_ID; no rollback needed."
+            echo "rolled_back=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npx wrangler rollback "$PREVIOUS_VERSION_ID" \
             --message "Automatic rollback after failed deploy of $TAG ($SHA)" --yes
+          echo "rolled_back=true" >>"$GITHUB_OUTPUT"
 
+      # Checked on workers.dev (Bot Fight Mode blocks the runner on the custom domain).
       - name: Check the site responds after rollback
-        if: always() && steps.rollback.outcome == 'success'
+        if: (failure() || cancelled()) && steps.rollback.outcome == 'success'
+        env:
+          WORKERS_DEV_URL: ${{ steps.wrangler.outputs.workers_dev_url }}
+          ROLLED_BACK: ${{ steps.rollback.outputs.rolled_back }}
         run: |
-          curl --proto '=https' --tlsv1.2 -fsS --retry 5 --retry-delay 5 --retry-all-errors \
-            --max-time 30 -o /dev/null https://notes.szolotov.com/
-          echo "::error::Deploy of $TAG failed and was rolled back; the site is serving the previous version."
+          if [[ -n "$WORKERS_DEV_URL" ]]; then
+            curl --proto '=https' --tlsv1.2 -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+              --max-time 30 -o /dev/null "$WORKERS_DEV_URL/"
+          else
+            echo "::warning::No workers.dev URL was recorded; the site was not probed afterwards."
+          fi
+          if [[ "$ROLLED_BACK" == "true" ]]; then
+            echo "::error::Deploy of $TAG failed and was rolled back; the site is serving the previous version."
+          else
+            echo "::error::Deploy of $TAG failed before it went live; the site still serves the previous version."
+          fi
           exit 1
