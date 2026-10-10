@@ -12,12 +12,13 @@
     "dev": "node ./quartz/bootstrap-cli.mjs plugin restore && node ./quartz/bootstrap-cli.mjs build --serve",
     "build": "node ./quartz/bootstrap-cli.mjs plugin restore && node ./quartz/bootstrap-cli.mjs build && node scripts/postprocess-build.mjs && node scripts/build-csp.mjs && node scripts/write-version.mjs",
     "preview": "wrangler dev --port 8787",
-    "preview:stage": "wrangler dev --env stage --port 8788",
+    "preview:stage": "wrangler dev --var ENVIRONMENT:stage --port 8788",
     "check": "node ./quartz/bootstrap-cli.mjs plugin restore && tsc --noEmit",
     "check:links": "node scripts/check-links.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "deploy:dry-run": "wrangler deploy --dry-run --env=\"\" --outdir .wrangler/dry-run-prod && wrangler deploy --dry-run --env stage --outdir .wrangler/dry-run-stage"
+    "test:scripts": "node --test \"scripts/*.test.mjs\" \"worker/*.test.mjs\"",
+    "deploy:dry-run": "wrangler deploy --dry-run --outdir .wrangler/dry-run"
   },
   "engines": {
     "npm": ">=10.9.2",

@@ -53,6 +53,9 @@ jobs:
       - name: Check links
         run: npm run check:links
 
+      - name: Test scripts and Worker policy
+        run: npm run test:scripts
+
       - name: Check formatting
         run: npm run format:check
 
