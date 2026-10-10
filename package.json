@@ -13,7 +13,7 @@
     "build": "node ./quartz/bootstrap-cli.mjs plugin restore && node ./quartz/bootstrap-cli.mjs build && node scripts/postprocess-build.mjs && node scripts/build-csp.mjs && node scripts/write-version.mjs",
     "preview": "wrangler dev --port 8787",
     "preview:stage": "wrangler dev --env stage --port 8788",
-    "check": "tsc --noEmit",
+    "check": "node ./quartz/bootstrap-cli.mjs plugin restore && tsc --noEmit",
     "check:links": "node scripts/check-links.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
