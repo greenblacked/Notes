@@ -81,6 +81,7 @@ robots="$(curl "${curl_opts[@]}" "$base_url/robots.txt")"
 
 expect "home page has the site title" matches "$home" '<title>[^<]*Notes'
 expect "security headers are sent" matches "$headers" '^strict-transport-security:'
+expect "a hash-only script CSP is sent" matches "$headers" "^content-security-policy:.*script-src 'self' 'wasm-unsafe-eval' 'sha256-"
 expect "robots.txt is a robots file" matches "$robots" '^User-agent:'
 
 if [[ "$env_name" == "stage" ]]; then
