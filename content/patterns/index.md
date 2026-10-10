@@ -21,5 +21,6 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 2. The steps, with commands that can be copied.
 3. A way to verify it worked.
 4. Troubleshooting for the failures you actually hit.
+5. Rollback, when the change is not trivially reversible.
 
 Patterns that embody a significant choice link to the [[adr/index|ADR]] that made it.

@@ -10,7 +10,7 @@ draft: false
 ---
 
 > [!note] This is a template
-> Copy this file to `content/adr/NNNN-short-kebab-title.md`, replace the placeholders, and set `status`. Pick the next unused number from [[adr/index|the ADR index]].
+> Copy this file to `content/adr/NNNN-short-kebab-title.md`, replace the placeholders, and set `status`. Pick the next unused number from [[adr/index|the ADR index]], and add the new record to the table there.
 
 Frontmatter to use in the copy:
 
@@ -21,7 +21,7 @@ description: One sentence stating the decision.
 tags:
   - adr
   - <topic tag>
-status: Proposed
+status: Proposed # Proposed | Accepted | Rejected | Deprecated | Superseded
 created: YYYY-MM-DD
 modified: YYYY-MM-DD
 draft: false

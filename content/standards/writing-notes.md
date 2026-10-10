@@ -60,9 +60,10 @@ Add a new tag by adding it to this table in the same change that first uses it. 
 
 ## Wikilinks
 
-- Link with `[[note-name]]` using the file name without extension; Quartz resolves the shortest unambiguous path.
+- Link with `[[note-name]]` using the file name without extension; Quartz resolves the shortest unambiguous path. Include the folder (`[[adr/index]]`) when the bare name is ambiguous, as with the `index.md` pages.
 - Use `[[note-name|display text]]` when the text should differ, and `[[note-name#Heading]]` to link to a section.
 - Inside tables, escape the pipe: `[[note-name\|display text]]`.
+- A link that doesn't resolve fails CI (`npm run check:links`), so a note can't ship with a dead link.
 - Link generously: every note should link to at least one other note, and every decision should link to the notes that explain it.
 - External links use normal Markdown links and always `https://`.
 
@@ -76,6 +77,7 @@ Use callouts sparingly, for things a skimming reader must not miss:
 | `> [!info]`    | Scope, assumptions, versions checked.                   |
 | `> [!tip]`     | A shortcut or recommended practice.                     |
 | `> [!warning]` | Something that causes outages, data loss or insecurity. |
+| `> [!danger]`  | Irreversible actions.                                   |
 
 Add a title after the type (`> [!warning] Records are immutable`). More than two callouts in a screenful is a sign the prose needs work.
 
