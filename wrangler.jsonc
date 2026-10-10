@@ -1,13 +1,24 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // Production Worker. Static site is served from ./public (the Quartz build output) through
-  // worker/index.js, which adds security headers, serves /robots.txt and sets cache policy.
+  // One Worker serves everything. Static site is served from ./public (the Quartz build output)
+  // through worker/index.js, which adds security headers, serves /robots.txt and sets cache policy.
+  //   - production: `wrangler deploy` (tag releases) at https://notes.szolotov.com
+  //   - stage: a Worker Preview named `stage` (`wrangler preview`, every merge to main) at
+  //     https://stage.notes.szolotov.com. See docs/deployment.md#stage-preview.
   "name": "notes",
   "main": "worker/index.js",
   "compatibility_date": "2026-10-01",
-  "workers_dev": false,
-  "preview_urls": false,
-  "routes": [{ "pattern": "notes.szolotov.com", "custom_domain": true }],
+  // The workers.dev URLs stay on although the site is served from the custom domain: CI verifies
+  // every deploy through them, because Cloudflare Bot Fight Mode answers GitHub-hosted runners
+  // with 403 on the custom domains. They are never indexable (worker/indexing.js).
+  "workers_dev": true,
+  "preview_urls": true,
+  "routes": [
+    // previews_enabled serves production AND Previews: the Preview `stage` is then reachable at
+    // stage.notes.szolotov.com through a Cloudflare-managed wildcard. Applied by `wrangler deploy`
+    // (or the dashboard), not by `wrangler preview`.
+    { "pattern": "notes.szolotov.com", "custom_domain": true, "previews_enabled": true },
+  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -19,24 +30,8 @@
     "not_found_handling": "404-page",
   },
   "vars": { "ENVIRONMENT": "production" },
-
-  "env": {
-    // Stage is a separate Worker (notes-stage). vars, routes and assets are not inherited by
-    // environments, so everything environment-specific is repeated here.
-    "stage": {
-      "name": "notes-stage",
-      "main": "worker/index.js",
-      "workers_dev": false,
-      "preview_urls": false,
-      "routes": [{ "pattern": "stage.notes.szolotov.com", "custom_domain": true }],
-      "assets": {
-        "directory": "./public",
-        "binding": "ASSETS",
-        "run_worker_first": true,
-        "html_handling": "auto-trailing-slash",
-        "not_found_handling": "404-page",
-      },
-      "vars": { "ENVIRONMENT": "stage" },
-    },
+  // Preview settings are not inherited from the top level.
+  "previews": {
+    "vars": { "ENVIRONMENT": "stage" },
   },
 }

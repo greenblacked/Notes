@@ -3,7 +3,7 @@
 # Site configuration for Notes. Only deviations from upstream's quartz.config.default.yaml are
 # commented. baseUrl comes from the NOTES_BASE_URL environment variable (see quartz.ts).
 configuration:
-  pageTitle: "Notes — Serhii Zolotov"
+  pageTitle: "Notes"
   pageTitleSuffix: ""
   enableSPA: true
   enablePopovers: true
