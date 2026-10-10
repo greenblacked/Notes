@@ -131,4 +131,6 @@ jobs:
 
       - name: Smoke test
         if: steps.fresh.outputs.current == 'true'
+        env:
+          SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
         run: scripts/smoke-test.sh https://stage.notes.szolotov.com "main+$SHA" stage

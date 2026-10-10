@@ -35,6 +35,9 @@ MAX_DELAY="${SMOKE_MAX_DELAY:-20}"
 # Identifiable User-Agent, so a Cloudflare WAF rule can recognise these requests
 # (see docs/deployment.md, Troubleshooting).
 USER_AGENT="${SMOKE_USER_AGENT:-notes-smoke-test/1 (+https://github.com/greenblacked/Notes)}"
+# Optional shared secret sent as X-Notes-Smoke-Test, for a WAF skip rule that a
+# spoofed User-Agent cannot satisfy. Unset means the header is not sent.
+SMOKE_TEST_TOKEN="${SMOKE_TEST_TOKEN:-}"
 
 CURL_OPTS=(--silent --show-error --location --max-redirs 3 --connect-timeout 10 --max-time 30
   --user-agent "$USER_AGENT")
@@ -44,6 +47,12 @@ fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+
+if [[ -n "$SMOKE_TEST_TOKEN" ]]; then
+  # Passed through a file so the token never appears in the process list.
+  printf 'X-Notes-Smoke-Test: %s\n' "$SMOKE_TEST_TOKEN" >"$WORK/request-headers"
+  CURL_OPTS+=(--header "@$WORK/request-headers")
+fi
 
 FAILURES=0
 pass() { echo "  PASS  $*"; }
@@ -55,7 +64,12 @@ fail() {
 # describe <name>: print what came back for a response, to show who answered
 # (our Worker, a Cloudflare challenge or block, a redirect).
 describe() {
-  local name="$1" h
+  local name="$1" h mitigated
+  mitigated="$(header_value "$name" cf-mitigated)"
+  if [[ -n "$mitigated" ]]; then
+    echo "        => blocked by Cloudflare (cf-mitigated: $mitigated) before reaching the Worker;"
+    echo "           see docs/deployment.md#cloudflare-blocks-the-smoke-test"
+  fi
   echo "        status: $(grep -E '^HTTP/' "$WORK/$name.h" | tr -d '\r' | paste -sd '>' - || true)"
   for h in server cf-ray cf-mitigated location content-type x-robots-tag; do
     echo "        $h: $(header_value "$name" "$h")"
