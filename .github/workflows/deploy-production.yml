@@ -24,6 +24,8 @@ on:
         required: false
       CLOUDFLARE_ACCOUNT_ID:
         required: false
+      SMOKE_TEST_TOKEN:
+        required: false
 
 permissions: {}
 
@@ -209,6 +211,8 @@ jobs:
         run: npx wrangler deploy --env=""
 
       - name: Smoke test
+        env:
+          SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
         run: scripts/smoke-test.sh https://notes.szolotov.com "$VERSION+$SHA" production
 
       - name: Roll back to the previous version
