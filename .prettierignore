@@ -1,0 +1,19 @@
+# Vendored Quartz engine and upstream-owned files (see QUARTZ_VERSION)
+/quartz/
+/quartz.config.default.yaml
+/quartz.lock.json
+/globals.d.ts
+/index.d.ts
+/tsconfig.json
+/LICENSE-QUARTZ
+/.quartz/
+/.quartz-cache/
+
+# Build output, dependencies, tooling state
+/public/
+/node_modules/
+/package-lock.json
+/.wrangler/
+
+# Generated files
+/worker/csp.generated.js
