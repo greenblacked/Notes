@@ -1,0 +1,23 @@
+/* Calm technical palette; Starlight handles light/dark switching. */
+:root {
+	--sl-color-accent-low: #0b2a33;
+	--sl-color-accent: #1f8aa8;
+	--sl-color-accent-high: #b8e6f2;
+	--sl-content-width: 50rem;
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #d3eff7;
+	--sl-color-accent: #0f6d87;
+	--sl-color-accent-high: #0a3a48;
+}
+
+pre.mermaid {
+	display: flex;
+	justify-content: center;
+	background: transparent;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.5rem;
+	padding: 1rem;
+	overflow-x: auto;
+}

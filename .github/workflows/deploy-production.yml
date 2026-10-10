@@ -1,0 +1,113 @@
+name: Deploy production
+
+# Production only ever runs from a vX.Y.Z tag whose commit is on main:
+# - a tag pushed by hand (git push origin vX.Y.Z) triggers it directly;
+# - the Release workflow calls it after creating the tag and release
+#   (tags created with GITHUB_TOKEN do not trigger workflows on their own);
+# - workflow_dispatch redeploys an existing tag, which is also how to roll
+#   back to an earlier release.
+on:
+  push:
+    tags: ['v*']
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to deploy (vX.Y.Z)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to deploy (vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      sha: ${{ steps.tag.outputs.sha }}
+    steps:
+      - name: Resolve tag
+        id: resolve
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$tag' is not a vX.Y.Z release tag"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ steps.resolve.outputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the tag points at a commit on main
+        id: tag
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          sha="$(git rev-parse "refs/tags/${TAG}^{commit}")"
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::${TAG} (${sha}) is not on main; refusing to deploy"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy ${{ needs.verify.outputs.tag }} to production
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Required reviewers and the v* tag rule are configured on this
+    # environment in the repository settings; see README.
+    environment:
+      name: production
+      url: https://notes.szolotov.com
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          # No dependency cache in deploy jobs: a cache written by another
+          # workflow must not be able to change what ships.
+          package-manager-cache: false
+
+      - run: npm ci
+      - run: npm test
+
+      - name: Build
+        env:
+          DEPLOY_ENV: production
+          STRICT_LINKS: '1'
+          BUILD_COMMIT: ${{ needs.verify.outputs.sha }}
+          BUILD_REF: ${{ needs.verify.outputs.tag }}
+        run: npm run build
+
+      - name: Deploy, smoke test, roll back on failure
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          SHA: ${{ needs.verify.outputs.sha }}
+          TAG: ${{ needs.verify.outputs.tag }}
+        run: |
+          scripts/deploy.sh production "$SHA" "production ${TAG} (run ${GITHUB_RUN_ID})"

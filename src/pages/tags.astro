@@ -1,0 +1,36 @@
+---
+import { getCollection } from 'astro:content';
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+
+const docs = await getCollection('docs', ({ data }) => !data.draft);
+const byTag = new Map<string, { title: string; href: string }[]>();
+for (const doc of docs) {
+	for (const tag of doc.data.tags) {
+		const href = doc.id === 'index' ? '/' : `/${doc.id}/`;
+		byTag.set(tag, [...(byTag.get(tag) ?? []), { title: doc.data.title, href }]);
+	}
+}
+const tags = [...byTag.entries()].sort(([a], [b]) => a.localeCompare(b));
+---
+
+<StarlightPage
+	frontmatter={{ title: 'Tags', description: 'All notes grouped by tag', tableOfContents: false }}
+	headings={tags.map(([tag]) => ({ depth: 2, slug: tag, text: `#${tag}` }))}
+>
+	{
+		tags.map(([tag, notes]) => (
+			<section>
+				<h2 id={tag}>#{tag}</h2>
+				<ul>
+					{notes
+						.sort((a, b) => a.title.localeCompare(b.title))
+						.map((note) => (
+							<li>
+								<a href={note.href}>{note.title}</a>
+							</li>
+						))}
+				</ul>
+			</section>
+		))
+	}
+</StarlightPage>

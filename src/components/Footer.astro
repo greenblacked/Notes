@@ -1,0 +1,50 @@
+---
+import Default from '@astrojs/starlight/components/Footer.astro';
+const tags = Astro.locals.starlightRoute.entry.data.tags ?? [];
+---
+
+{
+	tags.length > 0 && (
+		<p class="note-tags">
+			Tags:{' '}
+			{tags.map((tag) => (
+				<a href={`/tags/#${tag}`} class="note-tag">
+					#{tag}
+				</a>
+			))}
+		</p>
+	)
+}
+<Default />
+
+<script>
+	// Load Mermaid only on pages that contain a diagram, and re-render when
+	// the reader switches between light and dark theme.
+	const blocks = [...document.querySelectorAll<HTMLElement>('pre.mermaid')];
+	if (blocks.length > 0) {
+		const sources = blocks.map((el) => el.textContent ?? '');
+		const { default: mermaid } = await import('mermaid');
+		const render = async () => {
+			const dark = document.documentElement.dataset.theme === 'dark';
+			mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'default' });
+			blocks.forEach((el, i) => {
+				el.removeAttribute('data-processed');
+				el.textContent = sources[i];
+			});
+			await mermaid.run({ nodes: blocks });
+		};
+		await render();
+		new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+	}
+</script>
+
+<style>
+	.note-tags {
+		margin-block-end: 1rem;
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-3);
+	}
+	.note-tag {
+		margin-inline-end: 0.5rem;
+	}
+</style>

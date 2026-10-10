@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.astro/
+.wrangler/
+.dev.vars*
+.env
+.env.*
+.DS_Store
+# Obsidian per-device state; shared settings in .obsidian/ may be committed later
+src/content/docs/.obsidian/workspace*.json
+src/content/docs/.trash/

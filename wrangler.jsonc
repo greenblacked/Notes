@@ -1,0 +1,27 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	// Static-assets-only Worker: no script, Cloudflare serves ./dist directly.
+	// Always deploy with an explicit --env (production or stage). The top-level
+	// name is deliberately neither environment's Worker, so a bare
+	// `wrangler deploy` can never overwrite production.
+	"name": "notes-unscoped",
+	"compatibility_date": "2026-10-01",
+	"assets": {
+		"directory": "./dist",
+		"html_handling": "auto-trailing-slash",
+		"not_found_handling": "404-page"
+	},
+	"workers_dev": false,
+	"preview_urls": false,
+	"observability": { "enabled": true },
+	"env": {
+		"production": {
+			"name": "notes",
+			"routes": [{ "pattern": "notes.szolotov.com", "custom_domain": true }]
+		},
+		"stage": {
+			"name": "notes-stage",
+			"routes": [{ "pattern": "stage.notes.szolotov.com", "custom_domain": true }]
+		}
+	}
+}
