@@ -22,8 +22,7 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: deploy-production
@@ -34,6 +33,8 @@ jobs:
     name: Verify release tag
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       sha: ${{ steps.tag.outputs.sha }}
@@ -69,16 +70,14 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-  deploy:
-    name: Deploy ${{ needs.verify.outputs.tag }} to production
+  build:
+    name: Build ${{ needs.verify.outputs.tag }}
     needs: verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    # Required reviewers and the v* tag rule are configured on this
-    # environment in the repository settings; see README.
-    environment:
-      name: production
-      url: https://notes.szolotov.com
+    timeout-minutes: 15
+    # The dependency tree's code runs here: no environment, no secrets.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -88,7 +87,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-          # No dependency cache in deploy jobs: a cache written by another
+          # No dependency cache in deploy workflows: a cache written by another
           # workflow must not be able to change what ships.
           package-manager-cache: false
 
@@ -102,6 +101,49 @@ jobs:
           BUILD_COMMIT: ${{ needs.verify.outputs.sha }}
           BUILD_REF: ${{ needs.verify.outputs.tag }}
         run: npm run build
+
+      - name: Check links
+        run: npm run check:links
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-production
+          path: dist
+          retention-days: 1
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy ${{ needs.verify.outputs.tag }} to production
+    needs: [verify, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    # Required reviewers and the allowed refs are configured on this
+    # environment in the repository settings; see README.
+    environment:
+      name: production
+      url: https://notes.szolotov.com
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      # No lifecycle scripts: nothing from the dependency tree runs next to the token.
+      - run: npm ci --ignore-scripts
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site-production
+          path: dist
 
       - name: Deploy, smoke test, roll back on failure
         env:

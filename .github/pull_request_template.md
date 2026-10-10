@@ -9,3 +9,4 @@
 - [ ] `npm test` and `STRICT_LINKS=1 npm run build` pass locally
 - [ ] New notes have `title`, `description` and `tags`
 - [ ] Commit subjects follow Conventional Commits (≤ 72 characters)
+- [ ] Notable changes are in `CHANGELOG.md` under Unreleased

@@ -6,18 +6,19 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
     name: Test and build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,20 +33,28 @@ jobs:
       - run: npm test
       - run: npm run check
 
-      - name: Build production and stage
+      - name: Build, check links and dry-run each environment
         env:
           STRICT_LINKS: '1'
+          WRANGLER_SEND_METRICS: 'false'
         run: |
-          DEPLOY_ENV=production npm run build
-          npx --no-install wrangler deploy --dry-run --env production
-          DEPLOY_ENV=stage npm run build
-          npx --no-install wrangler deploy --dry-run --env stage
+          for env in production stage; do
+            echo "::group::$env"
+            DEPLOY_ENV="$env" npm run build
+            npm run check:links
+            npx --no-install wrangler deploy --dry-run --env "$env"
+            echo "::endgroup::"
+          done
 
   lint:
     name: Lint workflows and scripts
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
+    permissions:
+      contents: read
     env:
+      # rhysd/actionlint release binary, checked against the sha256 in the
+      # release's checksums file.
       ACTIONLINT_VERSION: 1.7.12
       ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
     steps:
@@ -53,12 +62,49 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install actionlint (checksum-verified)
+      - name: Install actionlint
         run: |
-          curl -sSfLo actionlint.tgz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          echo "${ACTIONLINT_SHA256}  actionlint.tgz" | sha256sum -c -
-          tar xzf actionlint.tgz actionlint
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/actionlint.tgz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tgz" | sha256sum --check --strict
+          mkdir "$RUNNER_TEMP/actionlint"
+          tar -xzf "$RUNNER_TEMP/actionlint.tgz" -C "$RUNNER_TEMP/actionlint" actionlint
 
       # actionlint also runs shellcheck (preinstalled on the runner) on run: blocks.
-      - run: ./actionlint -color
-      - run: shellcheck scripts/*.sh
+      - name: Run actionlint
+        run: '"$RUNNER_TEMP/actionlint/actionlint" -color'
+
+      - name: Run shellcheck
+        run: shellcheck scripts/*.sh .github/scripts/*.sh
+
+      # Pinned version and sha256 (.github/requirements/zizmor.txt) instead of
+      # a third-party action; Dependabot proposes bumps.
+      - name: Install zizmor
+        run: |
+          python3 -m venv "$RUNNER_TEMP/zizmor-venv"
+          "$RUNNER_TEMP/zizmor-venv/bin/pip" install --require-hashes --only-binary :all: \
+            -r .github/requirements/zizmor.txt
+
+      - name: Run zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: '"$RUNNER_TEMP/zizmor-venv/bin/zizmor" --format=github .github'
+
+  # The one check to require in the main branch ruleset.
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [build, lint]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require all jobs to succeed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "Job results: $RESULTS"
+          if ! jq -e 'all(. == "success")' <<<"$RESULTS" >/dev/null; then
+            echo "::error::At least one CI job did not succeed."
+            exit 1
+          fi

@@ -1,26 +1,92 @@
 name: Deploy stage
 
 # Every merge into main ships to stage.notes.szolotov.com.
+#
+# Two jobs: `build` runs the dependency tree's code with no secrets and no
+# environment; `deploy` holds the Cloudflare token, installs dependencies
+# without lifecycle scripts and only receives the built site as an artifact.
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
+# Runs queue (a deploy in flight is never cancelled); GitHub replaces older
+# pending runs, so only the newest queued commit waits.
 concurrency:
   group: deploy-stage
   cancel-in-progress: false
 
 jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      current: ${{ steps.fresh.outputs.current }}
+    env:
+      SHA: ${{ github.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check this commit is still the head of main
+        id: fresh
+        run: .github/scripts/is-main-head.sh
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.fresh.outputs.current == 'true'
+        with:
+          node-version-file: .nvmrc
+          # No dependency cache in deploy workflows: a cache written by another
+          # workflow must not be able to change what ships.
+          package-manager-cache: false
+
+      - if: steps.fresh.outputs.current == 'true'
+        run: npm ci
+
+      - if: steps.fresh.outputs.current == 'true'
+        run: npm test
+
+      - name: Build
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          DEPLOY_ENV: stage
+          STRICT_LINKS: '1'
+        run: npm run build
+
+      - name: Check links
+        if: steps.fresh.outputs.current == 'true'
+        run: npm run check:links
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.fresh.outputs.current == 'true'
+        with:
+          name: site-stage
+          path: dist
+          retention-days: 1
+          if-no-files-found: error
+
   deploy:
     name: Deploy to stage
+    needs: build
+    if: needs.build.outputs.current == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
     environment:
       name: stage
       url: https://stage.notes.szolotov.com
+    env:
+      SHA: ${{ github.sha }}
+      GH_TOKEN: ${{ github.token }}
+      WRANGLER_SEND_METRICS: 'false'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,22 +95,24 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-          # No dependency cache in deploy jobs: a cache written by another
-          # workflow must not be able to change what ships.
           package-manager-cache: false
 
-      - run: npm ci
-      - run: npm test
+      # No lifecycle scripts: nothing from the dependency tree runs next to the token.
+      - run: npm ci --ignore-scripts
 
-      - name: Build
-        env:
-          DEPLOY_ENV: stage
-          STRICT_LINKS: '1'
-        run: npm run build
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site-stage
+          path: dist
+
+      - name: Re-check this commit is still the head of main
+        id: fresh
+        run: .github/scripts/is-main-head.sh
 
       - name: Deploy, smoke test, roll back on failure
+        if: steps.fresh.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          scripts/deploy.sh stage "$GITHUB_SHA" "stage ${GITHUB_SHA:0:12} (run ${GITHUB_RUN_ID})"
+          scripts/deploy.sh stage "$SHA" "stage ${SHA:0:12} (run ${GITHUB_RUN_ID})"

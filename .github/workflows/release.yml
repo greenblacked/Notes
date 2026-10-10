@@ -6,12 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version to release, without the leading v (e.g. 1.2.0)
+        description: Version to release, X.Y.Z without the leading v. Must be greater than the latest tag.
         required: true
         type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: release
@@ -19,50 +18,77 @@ concurrency:
 
 jobs:
   release:
-    name: Create tag and release
+    name: Tag and publish
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
-      contents: write
+      contents: write # create the tag and the GitHub Release
+      actions: read # find the CI run for this commit
     outputs:
-      tag: ${{ steps.release.outputs.tag }}
+      tag: ${{ steps.validate.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+      REF: ${{ github.ref }}
+      VERSION: ${{ inputs.version }}
     steps:
       - name: Validate input
-        env:
-          VERSION: ${{ inputs.version }}
+        id: validate
         run: |
-          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "::error::Releases are cut from main only (got $GITHUB_REF)"
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "::error::Releases are cut from main only (got $REF)"
             exit 1
           fi
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::'$VERSION' is not X.Y.Z"
             exit 1
           fi
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Create tag and GitHub Release
-        id: release
+      - name: Require a version greater than the latest tag
         env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ inputs.version }}
+          TAG: ${{ steps.validate.outputs.tag }}
         run: |
-          tag="v${VERSION}"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-             || gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
-            echo "::error::${tag} already exists"
+          latest="$(gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/v" --jq '.[].ref' \
+            | sed 's#^refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          echo "Latest release tag: ${latest:-none}"
+          if [[ -n "$latest" ]] && [[ "$TAG" == "$latest" || "$(printf '%s\n%s\n' "$latest" "$TAG" | sort -V | tail -n 1)" != "$TAG" ]]; then
+            echo "::error::$TAG must be greater than the latest tag $latest"
             exit 1
           fi
-          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "$tag" --generate-notes
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+      - name: Require green CI on this commit
+        run: |
+          count="$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=push&status=success&per_page=100" \
+            --jq '[.workflow_runs[] | select(.head_branch == "main")] | length')"
+          if [[ "$count" -lt 1 ]]; then
+            echo "::error::No successful CI run on main for $SHA yet. Wait for CI to finish (or fix it) and retry."
+            exit 1
+          fi
+
+      - name: Create annotated tag and GitHub Release
+        env:
+          TAG: ${{ steps.validate.outputs.tag }}
+        run: |
+          tag_object="$(gh api "repos/$GH_REPO/git/tags" \
+            -f tag="$TAG" -f message="Release $TAG" -f object="$SHA" -f type=commit \
+            -f "tagger[name]=github-actions[bot]" \
+            -f "tagger[email]=41898282+github-actions[bot]@users.noreply.github.com" \
+            --jq '.sha')"
+          gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$tag_object" --silent
+          gh release create "$TAG" --verify-tag --generate-notes --title "$TAG"
+
+  # Tags created with GITHUB_TOKEN don't trigger workflows, so the deploy is
+  # called explicitly. No secrets are passed: the called deploy job reads
+  # CLOUDFLARE_API_TOKEN from the production environment, which only it can
+  # access, and the environment's approval rule applies.
   deploy:
     name: Deploy
     needs: release
     permissions:
       contents: read
-    uses: ./.github/workflows/deploy-production.yml
+    # actionlint doesn't understand the `$/` form zizmor suggests.
+    uses: ./.github/workflows/deploy-production.yml # zizmor: ignore[self-repository]
     with:
       tag: ${{ needs.release.outputs.tag }}
-    # No secrets are passed: the called deploy job reads CLOUDFLARE_API_TOKEN
-    # from the production environment, which only it can access.

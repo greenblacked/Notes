@@ -1,0 +1,4 @@
+# Pinned, hash-verified install for the workflow-lint job (pip install --require-hashes).
+# Update version and hash together; dependabot (pip ecosystem) proposes bumps.
+zizmor==1.30.1 \
+    --hash=sha256:eee12266b793cb87ad4a7e3af2e72404f8a63e3de5eb099b80bf7b1cfd232a8e

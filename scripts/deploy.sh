@@ -15,6 +15,11 @@ case "$env_name" in
   *) echo "unknown environment: $env_name" >&2; exit 2 ;;
 esac
 
+if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+  echo "CLOUDFLARE_API_TOKEN (environment secret) and CLOUDFLARE_ACCOUNT_ID (variable) must be set" >&2
+  exit 2
+fi
+
 [[ -f dist/build-info.json ]] || { echo "dist/ not found: build before deploying" >&2; exit 2; }
 built_env="$(jq -r '.env' dist/build-info.json)"
 new_build="$(jq -r '.build' dist/build-info.json)"

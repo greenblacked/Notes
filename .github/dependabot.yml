@@ -4,14 +4,42 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # Let new releases age before they are proposed (supply-chain safety).
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     groups:
       astro:
         patterns: ['astro', '@astrojs/*', 'satteri']
+      npm-minor-and-patch:
+        update-types: [minor, patch]
     commit-message:
       prefix: 'chore(deps)'
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns: ['*']
+    commit-message:
+      prefix: 'ci(deps)'
+
+  # zizmor, pinned with a hash in .github/requirements/zizmor.txt.
+  - package-ecosystem: pip
+    directory: /.github/requirements
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: 'ci(deps)'
