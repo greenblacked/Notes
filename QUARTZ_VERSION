@@ -1,0 +1,4 @@
+# Vendored Quartz engine. Maintained by scripts/update-quartz.sh
+tag: v5.0.0
+commit: ab346fa66a895e12d63a308e70ce330ba795822a
+upstream: https://github.com/jackyzha0/quartz
