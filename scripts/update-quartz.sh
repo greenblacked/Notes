@@ -21,8 +21,12 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
-if [[ -n "$(git status --porcelain -- quartz quartz.lock.json 2>/dev/null)" ]]; then
-  echo "error: uncommitted changes in the vendored engine paths; commit or stash them first" >&2
+# Every path this script overwrites; refuse to run if any has uncommitted changes.
+REPLACED=(quartz globals.d.ts index.d.ts quartz.config.default.yaml quartz.lock.json tsconfig.json
+  LICENSE-QUARTZ QUARTZ_VERSION)
+if [[ -n "$(git status --porcelain -- "${REPLACED[@]}")" ]]; then
+  echo "error: uncommitted changes in paths this script replaces; commit or stash them first:" >&2
+  git status --short -- "${REPLACED[@]}" >&2
   exit 1
 fi
 
