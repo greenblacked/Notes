@@ -16,7 +16,7 @@ function fail(message) {
 }
 
 const version = (process.env.NOTES_VERSION || "main").trim()
-if (version !== "main" && !/^\d+\.\d+\.\d+$/.test(version)) {
+if (version !== "main" && !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
   fail(`NOTES_VERSION must be X.Y.Z without a "v" prefix (got "${version}")`)
 }
 
