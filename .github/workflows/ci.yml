@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-and-check:
+    name: Build and check
+    runs-on: ubuntu-24.04
+    # A cold `quartz plugin restore` takes about 15 minutes.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Plugins are cloned at the commits in quartz.lock.json. No restore-keys: a
+      # changed lock file never reuses stale plugin directories (restore skips
+      # directories that already exist).
+      - name: Cache Quartz plugins
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .quartz/plugins
+          key: quartz-plugins-${{ runner.os }}-${{ hashFiles('quartz.lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Check links
+        run: npm run check:links
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Deploy dry run (no credentials)
+        run: npm run deploy:dry-run
+
+  workflow-lint:
+    name: Lint workflows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      # actionlint: release binary, verified against the sha256 published in the
+      # release's checksums file (rhysd/actionlint v1.7.12, linux_amd64).
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/actionlint.tgz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tgz" | sha256sum --check --strict
+          mkdir "$RUNNER_TEMP/actionlint"
+          tar -xzf "$RUNNER_TEMP/actionlint.tgz" -C "$RUNNER_TEMP/actionlint" actionlint
+
+      # The runner image ships shellcheck, which actionlint uses for run: blocks.
+      - name: Run actionlint
+        run: |
+          "$RUNNER_TEMP/actionlint/actionlint" -color
+
+      - name: Run shellcheck on scripts
+        run: shellcheck scripts/smoke-test.sh .github/scripts/*.sh
+
+      # zizmor is installed from PyPI with a pinned version and sha256 hash
+      # (.github/requirements/zizmor.txt) instead of the zizmor-action, which
+      # keeps the whole toolchain reproducible and avoids another third-party action.
+      - name: Install zizmor
+        run: |
+          python3 -m venv "$RUNNER_TEMP/zizmor-venv"
+          "$RUNNER_TEMP/zizmor-venv/bin/pip" install --require-hashes --only-binary :all: \
+            -r .github/requirements/zizmor.txt
+
+      - name: Run zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: '"$RUNNER_TEMP/zizmor-venv/bin/zizmor" --format=github .github'
+
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [build-and-check, workflow-lint]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require all jobs to succeed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "Job results: $RESULTS"
+          if jq -e 'all(. == "success")' <<<"$RESULTS" >/dev/null; then
+            echo "All CI jobs succeeded."
+          else
+            echo "::error::At least one CI job did not succeed."
+            exit 1
+          fi
