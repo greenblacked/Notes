@@ -32,14 +32,27 @@ esac
 
 MAX_ATTEMPTS="${SMOKE_MAX_ATTEMPTS:-10}"
 MAX_DELAY="${SMOKE_MAX_DELAY:-20}"
+# Identifiable User-Agent, so a Cloudflare WAF rule can recognise these requests
+# (see docs/deployment.md, Troubleshooting).
+USER_AGENT="${SMOKE_USER_AGENT:-notes-smoke-test/1 (+https://github.com/greenblacked/Notes)}"
+# Optional shared secret sent as X-Notes-Smoke-Test, for a WAF skip rule that a
+# spoofed User-Agent cannot satisfy. Unset means the header is not sent.
+SMOKE_TEST_TOKEN="${SMOKE_TEST_TOKEN:-}"
 
-CURL_OPTS=(--silent --show-error --location --max-redirs 3 --connect-timeout 10 --max-time 30)
+CURL_OPTS=(--silent --show-error --location --max-redirs 3 --connect-timeout 10 --max-time 30
+  --user-agent "$USER_AGENT")
 if [[ "$BASE_URL" == https://* ]]; then
   CURL_OPTS+=(--proto '=https' --proto-redir '=https')
 fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+
+if [[ -n "$SMOKE_TEST_TOKEN" ]]; then
+  # Passed through a file so the token never appears in the process list.
+  printf 'X-Notes-Smoke-Test: %s\n' "$SMOKE_TEST_TOKEN" >"$WORK/request-headers"
+  CURL_OPTS+=(--header "@$WORK/request-headers")
+fi
 
 FAILURES=0
 pass() { echo "  PASS  $*"; }
@@ -48,10 +61,42 @@ fail() {
   FAILURES=$((FAILURES + 1))
 }
 
+# describe <name>: print what came back for a response, to show who answered
+# (our Worker, a Cloudflare challenge or block, a redirect).
+describe() {
+  local name="$1" h mitigated
+  mitigated="$(header_value "$name" cf-mitigated)"
+  if [[ -n "$mitigated" ]]; then
+    echo "        => blocked by Cloudflare (cf-mitigated: $mitigated) before reaching the Worker;"
+    echo "           see docs/deployment.md#cloudflare-blocks-the-smoke-test"
+  fi
+  echo "        status: $(grep -E '^HTTP/' "$WORK/$name.h" | tr -d '\r' | paste -sd '>' - || true)"
+  for h in server cf-ray cf-mitigated location content-type x-robots-tag; do
+    echo "        $h: $(header_value "$name" "$h")"
+  done
+  echo "        body: $(head -c 300 "$WORK/$name.b" | tr -c '[:print:]' ' ')"
+  if [[ -s "$WORK/$name.err" ]]; then
+    echo "        curl: $(tr -d '\r' <"$WORK/$name.err" | head -n 3 | paste -sd ' ' -)"
+  fi
+}
+
+# fail_on <name> <message>: record a failure and describe the response behind it.
+fail_on() {
+  local name="$1"
+  shift
+  fail "$@"
+  describe "$name"
+}
+
 # fetch <path> <name>: stores headers in $WORK/<name>.h, body in $WORK/<name>.b
 # and prints the HTTP status code (000 when the request itself failed).
 fetch() {
   local path="$1" name="$2" code
+  # Start from empty files so a request that fails outright (DNS, TLS, timeout)
+  # still leaves something to read.
+  : >"$WORK/$name.h"
+  : >"$WORK/$name.b"
+  : >"$WORK/$name.err"
   code="$(curl "${CURL_OPTS[@]}" --dump-header "$WORK/$name.h" --output "$WORK/$name.b" \
     --write-out '%{http_code}' "$BASE_URL$path" 2>"$WORK/$name.err")" || code="000"
   echo "$code"
@@ -76,7 +121,7 @@ attempt=1
 while true; do
   cb="$RANDOM$RANDOM"
   code="$(fetch "/version.txt?cb=$cb" version)"
-  body="$(tr -d '\r\n' <"$WORK/version.b" 2>/dev/null || true)"
+  body="$(tr -d '\r\n' <"$WORK/version.b")"
   if [[ "$code" == "200" && "$body" == "$EXPECTED" ]]; then
     live="yes"
     echo "  attempt $attempt: HTTP $code, version '$body' matches"
@@ -96,14 +141,14 @@ echo "Checks"
 if [[ -n "$live" ]]; then
   pass "/version.txt serves '$EXPECTED'"
 else
-  fail "/version.txt did not serve '$EXPECTED' after $MAX_ATTEMPTS attempts (last HTTP $code, body '${body:0:100}')"
+  fail_on version "/version.txt did not serve '$EXPECTED' after $MAX_ATTEMPTS attempts (last HTTP $code)"
 fi
 
 cc="$(header_value version cache-control)"
 if [[ "$cc" == *no-store* ]]; then
   pass "/version.txt Cache-Control contains no-store ($cc)"
 else
-  fail "/version.txt Cache-Control should contain no-store, got '$cc'"
+  fail_on version "/version.txt Cache-Control should contain no-store, got '$cc'"
 fi
 
 # 2. Home page and security headers.
@@ -111,7 +156,7 @@ code="$(fetch "/?cb=$RANDOM$RANDOM" home)"
 if [[ "$code" == "200" ]]; then
   pass "GET / returned 200"
 else
-  fail "GET / returned HTTP $code"
+  fail_on home "GET / returned HTTP $code"
 fi
 
 for h in strict-transport-security content-security-policy x-content-type-options referrer-policy permissions-policy; do
@@ -119,7 +164,7 @@ for h in strict-transport-security content-security-policy x-content-type-option
   if [[ -n "$v" ]]; then
     pass "header $h present"
   else
-    fail "header $h missing on /"
+    fail_on home "header $h missing on /"
   fi
 done
 
@@ -127,36 +172,36 @@ v="$(header_value home x-content-type-options)"
 if [[ "${v,,}" == "nosniff" ]]; then
   pass "X-Content-Type-Options is nosniff"
 else
-  fail "X-Content-Type-Options should be nosniff, got '$v'"
+  fail_on home "X-Content-Type-Options should be nosniff, got '$v'"
 fi
 
 # 3. Indexing policy.
 robots_header="$(header_value home x-robots-tag)"
 code="$(fetch "/robots.txt?cb=$RANDOM$RANDOM" robots)"
 if [[ "$code" != "200" ]]; then
-  fail "GET /robots.txt returned HTTP $code"
+  fail_on robots "GET /robots.txt returned HTTP $code"
 fi
-robots_body="$(tr -d '\r' <"$WORK/robots.b" 2>/dev/null || true)"
+robots_body="$(tr -d '\r' <"$WORK/robots.b")"
 
 if [[ "$MODE" == "stage" ]]; then
   if [[ "${robots_header,,}" == *noindex* ]]; then
     pass "X-Robots-Tag contains noindex ($robots_header)"
   else
-    fail "stage must send X-Robots-Tag: noindex, got '$robots_header'"
+    fail_on home "stage must send X-Robots-Tag: noindex, got '$robots_header'"
   fi
   if grep -qiE '^[[:space:]]*Disallow:[[:space:]]*/[[:space:]]*$' <<<"$robots_body"; then
     pass "robots.txt disallows everything"
   else
-    fail "stage robots.txt must contain 'Disallow: /'"
+    fail_on robots "stage robots.txt must contain 'Disallow: /'"
   fi
 else
   if [[ "${robots_header,,}" == *noindex* ]]; then
-    fail "production must not send X-Robots-Tag noindex, got '$robots_header'"
+    fail_on home "production must not send X-Robots-Tag noindex, got '$robots_header'"
   else
     pass "no X-Robots-Tag noindex"
   fi
   if grep -qiE '^[[:space:]]*Disallow:[[:space:]]*/[[:space:]]*$' <<<"$robots_body"; then
-    fail "production robots.txt must not contain 'Disallow: /'"
+    fail_on robots "production robots.txt must not contain 'Disallow: /'"
   else
     pass "robots.txt does not block the site"
   fi

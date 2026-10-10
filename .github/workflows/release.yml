@@ -111,3 +111,4 @@ jobs:
       cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
