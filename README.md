@@ -1,6 +1,6 @@
 # Notes
 
-Architecture decision records, platform patterns, tool notes and engineering standards, published as a static site at <https://notes.szolotov.com> (staging: <https://stage.notes.szolotov.com>).
+Architecture decision records, platform patterns, tool notes and engineering standards, published as a static site at <https://notes.szolotov.com> (staging: <https://stage.notes.szolotov.com>, a Preview of the same Worker).
 
 The site is built with [Quartz](https://quartz.jzhao.xyz/) and served by a Cloudflare Worker. The Markdown is Obsidian-friendly (wikilinks, frontmatter, callouts), see [docs/obsidian.md](docs/obsidian.md).
 
@@ -26,7 +26,7 @@ npm run build    # production build into public/ (also writes public/version.txt
 npm run preview  # serve public/ through the Worker locally (wrangler dev, port 8787)
 ```
 
-`npm run preview:stage` previews the stage variant (noindex headers, `Disallow: /`).
+`npm run preview:stage` previews the stage variant (`ENVIRONMENT=stage`: noindex headers, `Disallow: /`). `wrangler dev` presents requests with the route's host (`notes.szolotov.com`), so `npm run preview` shows the indexable production behaviour; add `--local-upstream localhost:8787` to see the non-canonical (noindex) behaviour. Only production on `notes.szolotov.com` is indexable.
 
 Checks (the same ones CI runs):
 
@@ -34,7 +34,8 @@ Checks (the same ones CI runs):
 npm run check            # TypeScript
 npm run check:links      # broken internal links (needs a build)
 npm run format:check     # Prettier (npm run format to fix)
-npm run deploy:dry-run   # wrangler deploy --dry-run for production and stage
+npm run test:scripts     # unit tests for scripts/ and the Worker's indexing policy
+npm run deploy:dry-run   # wrangler deploy --dry-run (the single Worker `notes`)
 ```
 
 Build-time variables: `NOTES_BASE_URL` (default `notes.szolotov.com`), `NOTES_VERSION` (`X.Y.Z`), `NOTES_SHA`.
@@ -51,22 +52,22 @@ Obsidian workflow: open `content/` as a vault, or publish selected notes with th
 flowchart LR
     A[Branch] --> B[Pull request]
     B -->|CI OK required| C[Merge to main]
-    C --> D[Deploy stage]
+    C --> D[Update stage Preview]
     D --> E[Release workflow: tag vX.Y.Z]
     E -->|approval| F[Deploy production]
 ```
 
 1. Work on a branch and open a pull request. CI must pass (`CI OK`).
-2. Merging to `main` deploys to staging automatically.
+2. Merging to `main` updates the Preview `stage` of the Worker `notes` automatically (served at https://stage.notes.szolotov.com; production traffic is untouched).
 3. To release: Actions, **Release**, **Run workflow** on `main`, enter the version as `X.Y.Z`. The workflow checks that CI passed for that commit and that the version is higher than the latest tag, creates the tag and GitHub Release, and starts the production deployment.
-4. Approve the deployment in the `production` environment. A smoke test runs after the deploy; on failure the previous version is restored automatically.
+4. Approve the deployment in the `production` environment. A smoke test runs against the Worker's workers.dev URL after the deploy; on failure the previous version is restored automatically.
 
-Production only ever deploys from a `vX.Y.Z` tag. Deploy workflows build in a job without secrets and deploy from a second job, because `npm run build` fetches and builds third-party Quartz plugins (pinned in `quartz.lock.json`, whose changes deserve review). Deploy builds are cold and take about 15 minutes; CI caches the plugins. Builds need access to github.com and npm. Details: [docs/deployment.md](docs/deployment.md#build-and-deploy-are-separate-jobs). Setup (Cloudflare token, GitHub environments, rulesets) is in [docs/deployment.md](docs/deployment.md).
+Production only ever deploys from a `vX.Y.Z` tag. Deploy workflows build in a job without secrets and deploy from a second job, because `npm run build` fetches and builds third-party Quartz plugins (pinned in `quartz.lock.json`, whose changes deserve review). Deploy builds are cold and take about 15 minutes; CI caches the plugins. Builds need access to github.com and npm. Details: [docs/deployment.md](docs/deployment.md#build-and-deploy-are-separate-jobs). Setup (Cloudflare token, GitHub environments, rulesets) and the one-time migration from the former separate stage Worker are in [docs/deployment.md](docs/deployment.md).
 
 ## Rolling back
 
 - Re-deploy an older release: Actions, **Deploy production**, Run workflow with an older **tag** selected as the ref, then approve. This rebuilds and deploys that tag.
-- Fast path: `npx wrangler rollback <version-id> --message "reason"` (list ids with `npx wrangler deployments list`). See [docs/deployment.md](docs/deployment.md#rollback).
+- Fast path: `npx wrangler rollback <version-id> --message "reason"` (list ids with `npx wrangler deployments list`). Production only: stage is a Preview and has no rollback, so merge or re-run **Deploy stage** instead. See [docs/deployment.md](docs/deployment.md#rollback).
 
 ## Quartz
 
