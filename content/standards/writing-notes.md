@@ -5,7 +5,7 @@ tags:
   - standards
   - meta
 created: 2026-10-10
-modified: 2026-10-10
+modified: 2026-10-11
 draft: false
 ---
 
@@ -50,11 +50,11 @@ draft: false
 
 Tags are lowercase and hyphen-separated. Use the existing ones before inventing new ones.
 
-| Kind     | Tags                                                     |
-| -------- | -------------------------------------------------------- |
-| Type     | `adr`, `patterns`, `tools`, `standards`, `meta`          |
-| Platform | `kubernetes`, `gitops`, `gke`, `gcp`                     |
-| Concern  | `security`, `networking`, `observability`, `reliability` |
+| Kind     | Tags                                                        |
+| -------- | ----------------------------------------------------------- |
+| Type     | `adr`, `patterns`, `tools`, `standards`, `runbooks`, `meta` |
+| Platform | `kubernetes`, `gitops`, `gke`, `gcp`                        |
+| Concern  | `security`, `networking`, `observability`, `reliability`    |
 
 Add a new tag by adding it to this table in the same change that first uses it. See [[tags|the tags page]] for browsing.
 

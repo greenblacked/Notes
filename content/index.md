@@ -4,7 +4,7 @@ description: Architecture decisions, platform patterns, and operational notes
 tags:
   - meta
 created: 2026-10-10
-modified: 2026-10-10
+modified: 2026-10-11
 draft: false
 ---
 
@@ -20,6 +20,7 @@ Architecture decisions, platform patterns, and operational notes. These are work
 | [[adr/index\|Architecture decisions]] | Numbered, immutable records of significant decisions and their context.     |
 | [[patterns/index\|Patterns]]          | Reusable, tested ways of building things on the platform.                   |
 | [[tools/index\|Tools]]                | Comparisons and evaluations of tools, with the reasoning behind the choice. |
+| [[runbooks/index\|Runbooks]]          | Step-by-step operational procedures: release, roll back, recover.           |
 | [[standards/index\|Standards]]        | How notes themselves are written, named, tagged and reviewed.               |
 
 Start with these:
