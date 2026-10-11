@@ -11,10 +11,12 @@ The site is built with [Quartz](https://quartz.jzhao.xyz/) and served by a Cloud
 | `content/`                     | The notes: `adr/`, `patterns/`, `tools/`, `standards/`, `index.md`   |
 | `quartz/`                      | Vendored Quartz engine (do not edit; see "Quartz" below)             |
 | `quartz.config.*`, `quartz.ts` | Site configuration and layout (our customisations)                   |
+| `local-plugins/`               | Local Quartz plugins: metadata strip, section tabs, sidenotes        |
 | `worker/`, `wrangler.jsonc`    | Cloudflare Worker (headers, robots) and its configuration            |
 | `scripts/`                     | Build helpers, `smoke-test.sh`, `update-quartz.sh`                   |
 | `.github/`                     | Workflows, Dependabot, CODEOWNERS                                    |
 | `docs/`                        | [deployment.md](docs/deployment.md), [obsidian.md](docs/obsidian.md) |
+| `docs/screenshots/`            | Screenshots shown in this README                                     |
 
 ## Local development
 
@@ -38,6 +40,8 @@ npm run test:scripts     # unit tests for scripts/ and the Worker's indexing pol
 npm run deploy:dry-run   # wrangler deploy --dry-run (the single Worker `notes`)
 ```
 
+Also `npm run check:contrast`: WCAG AA contrast of the palette in both themes (not part of CI; run it after changing a colour).
+
 Build-time variables: `NOTES_BASE_URL` (default `notes.szolotov.com`), `NOTES_VERSION` (`X.Y.Z`), `NOTES_SHA`.
 
 ## Writing notes
@@ -45,6 +49,14 @@ Build-time variables: `NOTES_BASE_URL` (default `notes.szolotov.com`), `NOTES_VE
 Keep notes short and link generously. Put a note in the section it belongs to (`content/adr`, `content/patterns`, `content/tools`, `content/standards`); the conventions, frontmatter and templates are described in `content/standards`. Use `[[wikilinks]]` for internal links and add tags in frontmatter.
 
 Obsidian workflow: open `content/` as a vault, or publish selected notes with the Quartz Syncer plugin. Details and recommended settings: [docs/obsidian.md](docs/obsidian.md).
+
+## Design
+
+Dark by default (a saved toggle choice wins), with a light theme. IBM Plex for the interface and Literata for article text, all self-hosted: the woff2 files come from the `@fontsource` devDependencies and are copied to `public/static/fonts/` by `scripts/postprocess-build.mjs`, so the Worker's CSP needs no extra origin. All custom CSS is in `quartz/styles/custom.scss`; the colour keys are in `quartz.config.yaml`. Notes show a metadata strip (`type`, `status`, `verified`, `decided`), section tabs, and sidenotes from 1200px up; the fields are described in `content/standards/writing-notes.md`.
+
+![Dark theme](docs/screenshots/dark-desktop.png)
+
+![Light theme](docs/screenshots/light-desktop.png)
 
 ## Delivery flow
 
