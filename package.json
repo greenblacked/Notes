@@ -72,7 +72,7 @@
     "remark-rehype": "^11.1.2",
     "remark-smartypants": "^3.0.3",
     "rfdc": "^1.4.1",
-    "satori": "^0.35.2",
+    "satori": "^0.19.3",
     "serve-handler": "^6.1.7",
     "sharp": "^0.35.5",
     "source-map-support": "^0.5.21",
