@@ -110,7 +110,6 @@ $unicode-ranges: (
 :focus-visible {
   outline: 2px solid var(--secondary) !important;
   outline-offset: 2px;
-  border-radius: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -463,6 +462,19 @@ blockquote {
 
   .footnotes[data-sidenotes] {
     display: none;
+  }
+
+  // Link previews are narrow: keep normal footnotes there.
+  .popover-inner {
+    & article:has(.sidenote) {
+      padding-right: 0;
+    }
+    & .sidenote {
+      display: none;
+    }
+    & .footnotes[data-sidenotes] {
+      display: block;
+    }
   }
 
   sup:has(+ .sidenote) > a[data-footnote-ref] {

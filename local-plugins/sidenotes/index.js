@@ -4,8 +4,10 @@
 // and hides the footnotes section from 1200px up, and does the opposite below that, so the page
 // needs no script.
 //
-// A footnote is only converted when its body is plain paragraphs. Anything else (lists, code
-// blocks, tables) stays a normal footnote and keeps the section visible at every width.
+// A page is converted only as a whole: every footnote must be plain paragraphs (no lists, code
+// blocks, tables or nested footnote references) and every reference must sit in running text
+// (not in a callout, table, heading or link). Otherwise the page keeps normal footnotes at every
+// width. Each reference, including a repeated one, gets its own copy of the note.
 import { visit } from "unist-util-visit"
 
 const BLOCKS_THAT_STAY_FOOTNOTES = new Set([
@@ -61,6 +63,37 @@ function inlineContent(li) {
   return out.length > 0 ? out : undefined
 }
 
+// Places where a margin note cannot sit: it would be clipped (callouts and tables hide their
+// overflow), nested inside a link, or sit in a heading that is also copied into the ToC.
+const NO_SIDENOTE_INSIDE = new Set(["a", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"])
+const isCallout = (node) =>
+  node.type === "element" &&
+  []
+    .concat(node.properties?.className ?? [])
+    .some((c) => c === "callout" || c === "callout-content")
+
+/** Footnote references outside the footnotes section, each with its parent and index. */
+function collectRefs(tree, section) {
+  const refs = []
+  const walk = (node, ancestors) => {
+    if (node === section || !node.children) return
+    node.children.forEach((child, index) => {
+      if (child.type !== "element") return
+      if (child.tagName === "sup") {
+        const a = child.children.find((c) => isElement(c, "a") && hasDataProp(c, "dataFootnoteRef"))
+        if (a) {
+          const blocked = ancestors.some((n) => NO_SIDENOTE_INSIDE.has(n.tagName) || isCallout(n))
+          refs.push({ sup: child, a, parent: node, index, blocked })
+          return
+        }
+      }
+      walk(child, [...ancestors, child])
+    })
+  }
+  walk(tree, [])
+  return refs
+}
+
 function rehypeSidenotes() {
   return (tree) => {
     let section
@@ -73,29 +106,40 @@ function rehypeSidenotes() {
     })
     if (!section) return
 
-    const converted = new Set()
-    let failed = false
-    visit(tree, "element", (node, index, parent) => {
-      if (node.tagName !== "sup" || !parent || index === undefined) return
-      const ref = node.children.find((c) => isElement(c, "a") && hasDataProp(c, "dataFootnoteRef"))
-      const href = ref?.properties?.href
+    // All or nothing: the footnotes section is hidden on wide screens only when every reference
+    // gets its own sidenote. One footnote that cannot be shown in the margin (a list or code in
+    // it, a footnote that cites another, a reference inside a callout, table, heading or link)
+    // keeps the whole page on normal footnotes, so no note is ever shown twice or lost.
+    const refs = collectRefs(tree, section)
+    if (refs.length === 0 || refs.some((r) => r.blocked)) return
+    const contents = new Map()
+    for (const { a } of refs) {
+      const href = a.properties?.href
       if (typeof href !== "string" || !href.startsWith("#")) return
       const id = decodeURIComponent(href.slice(1))
+      if (contents.has(id)) continue
       const li = items.get(id)
-      if (!li || converted.has(id)) return
+      const content = li && inlineContent(li)
+      if (!content) return
+      let nested = false
+      visit({ type: "root", children: content }, "element", (n) => {
+        if (hasDataProp(n, "dataFootnoteRef")) nested = true
+      })
+      if (nested) return
+      contents.set(id, content)
+    }
 
-      const content = inlineContent(li)
-      if (!content) {
-        failed = true
-        return
-      }
-      converted.add(id)
-      const label = node.children
-        .flatMap((c) => (isElement(c, "a") ? c.children : [c]))
+    // Insert from the last reference backwards, so earlier indexes stay valid.
+    for (const { a, parent, index } of refs.reverse()) {
+      const id = decodeURIComponent(a.properties.href.slice(1))
+      const label = a.children
         .filter((c) => c.type === "text")
         .map((c) => c.value)
         .join("")
-      const sidenote = {
+      // The reference points at the hidden footnotes section on wide screens; keep it out of the
+      // tab order there. Screen readers still reach it, and the sidenote next to it is a note.
+      a.properties.tabIndex = -1
+      parent.children.splice(index + 1, 0, {
         type: "element",
         tagName: "span",
         properties: { className: ["sidenote"], role: "note" },
@@ -106,14 +150,11 @@ function rehypeSidenotes() {
             properties: { className: ["sidenote-num"], ariaHidden: "true" },
             children: [{ type: "text", value: label }],
           },
-          ...content,
+          ...structuredClone(contents.get(id)),
         ],
-      }
-      parent.children.splice(index + 1, 0, sidenote)
-      return index + 2
-    })
-
-    if (converted.size > 0 && !failed) section.properties.dataSidenotes = ""
+      })
+    }
+    section.properties.dataSidenotes = ""
   }
 }
 
