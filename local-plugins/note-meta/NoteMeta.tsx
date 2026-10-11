@@ -39,7 +39,13 @@ function dateParts(value: unknown): DateParts | undefined {
     iso = value.trim()
   }
   const m = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null
-  return m ? { year: m[1], month: m[2], day: m[3] } : undefined
+  if (!m) return undefined
+  // Reject impossible dates such as 2026-13-45 or 2026-02-30 instead of showing them as written.
+  const check = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  if (check.getUTCMonth() !== Number(m[2]) - 1 || check.getUTCDate() !== Number(m[3])) {
+    return undefined
+  }
+  return { year: m[1], month: m[2], day: m[3] }
 }
 
 const asLowerString = (value: unknown): string | undefined =>
