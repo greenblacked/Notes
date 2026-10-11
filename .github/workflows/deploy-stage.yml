@@ -166,13 +166,16 @@ jobs:
           fi
 
       # Bot Fight Mode answers GitHub-hosted runners with 403 on the custom domains, so the
-      # deploy is verified on the Preview's workers.dev URL. Set the repository or environment
-      # variable STAGE_SMOKE_TEST to "false" to skip this when stage sits behind Cloudflare Access.
+      # deploy is verified on the Preview's workers.dev URL. When the account protects Previews
+      # with Cloudflare Access, that URL redirects to the Access login: SMOKE_ALLOW_ACCESS turns
+      # that into a notice, and Wrangler reporting the stage URL above is the verification.
+      # Set the repository or environment variable STAGE_SMOKE_TEST to "false" to skip entirely.
       - name: Smoke test (workers.dev)
         if: steps.fresh.outputs.current == 'true' && vars.STAGE_SMOKE_TEST != 'false'
         env:
           SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
           WORKERS_DEV_URL: ${{ steps.preview.outputs.workers_dev_url }}
+          SMOKE_ALLOW_ACCESS: "1"
         run: |
           if [[ -z "$WORKERS_DEV_URL" ]]; then
             echo "::error::Wrangler reported no workers.dev URL for the Preview; enable preview_urls and workers_dev in wrangler.jsonc, or set STAGE_SMOKE_TEST to false."
