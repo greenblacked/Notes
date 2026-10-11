@@ -1,13 +1,15 @@
 ---
 title: GitOps with Argo CD
 description: Cluster and application state is declared in Git and reconciled by Argo CD.
+type: adr
 tags:
   - adr
   - gitops
   - kubernetes
-status: Accepted
+status: accepted
 created: 2026-10-10
 modified: 2026-10-10
+decided: 2026-10-10
 draft: false
 aliases:
   - ADR-0001
