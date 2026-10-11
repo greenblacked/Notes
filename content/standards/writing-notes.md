@@ -34,7 +34,6 @@ tags:
   - topic-tag
 created: 2026-10-10
 modified: 2026-10-10
-verified: 2026-10-10
 draft: false
 ---
 ```
@@ -66,7 +65,7 @@ Home, section index and tags pages are not notes in this sense: they take no `ty
 ## Reading aids
 
 - **Section tabs.** A note with three or more `##` sections gets a row of anchor-link tabs under its title on wide screens. They come from the headings, so there is nothing to write.
-- **Sidenotes.** Use normal Markdown footnotes (`text.[^name]`, then `[^name]: The note.` anywhere in the file). From 1200px up they appear in the margin next to the text that cites them; on narrower screens they stay a numbered list at the end. A footnote that contains a list, code block or table stays at the end on every screen, so keep footnotes to a sentence or two of plain text.
+- **Sidenotes.** Use normal Markdown footnotes (`text.[^name]`, then `[^name]: The note.` anywhere in the file). From 1200px up they appear in the margin next to the text that cites them; on narrower screens they stay a numbered list at the end. Margin notes are all or nothing per page: if any footnote contains a list, code block or table, cites another footnote, or is referenced from a callout, table, heading or link, the whole page keeps its footnotes at the end on every screen. Keep footnotes to a sentence or two of plain text, referenced from running text.
 
 ## Tagging taxonomy
 
