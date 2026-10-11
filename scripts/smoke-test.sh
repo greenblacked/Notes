@@ -35,6 +35,11 @@ esac
 
 MAX_ATTEMPTS="${SMOKE_MAX_ATTEMPTS:-10}"
 MAX_DELAY="${SMOKE_MAX_DELAY:-20}"
+CHECK_ROUNDS="${SMOKE_CHECK_ROUNDS:-6}"
+CHECK_DELAY="${SMOKE_CHECK_DELAY:-10}"
+# SMOKE_ALLOW_ACCESS=1: a host behind Cloudflare Access (redirect to its login) passes with a
+# notice instead of failing. Only for stage, whose Previews the account protects with Access.
+ALLOW_ACCESS="${SMOKE_ALLOW_ACCESS:-}"
 # Identifiable User-Agent, so a Cloudflare WAF rule can recognise these requests
 # (see docs/deployment.md, Troubleshooting).
 USER_AGENT="${SMOKE_USER_AGENT:-notes-smoke-test/1 (+https://github.com/greenblacked/Notes)}"
@@ -117,6 +122,11 @@ header_value() {
 
 echo "Smoke test: $BASE_URL ($MODE), expecting version '$EXPECTED'"
 
+# behind_access <name>: true when the response was redirected to a Cloudflare Access login.
+behind_access() {
+  grep -qiE '^location:[[:space:]]*https://[^/[:space:]]+\.cloudflareaccess\.com/' "$WORK/$1.h"
+}
+
 # 1. Wait until the expected version is live.
 echo "Waiting for /version.txt to match (max $MAX_ATTEMPTS attempts)"
 live=""
@@ -125,6 +135,16 @@ while true; do
   cb="$RANDOM$RANDOM"
   code="$(fetch "/version.txt?cb=$cb" version)"
   body="$(tr -d '\r\n' <"$WORK/version.b")"
+  if behind_access version; then
+    if [[ "$ALLOW_ACCESS" == "1" ]]; then
+      echo "::notice::$BASE_URL is behind Cloudflare Access (redirected to its login page), so its content cannot be checked from CI. Skipping the content checks."
+      exit 0
+    fi
+    fail_on version "$BASE_URL redirects to a Cloudflare Access login, so the deploy cannot be verified here"
+    echo
+    echo "Smoke test FAILED ($FAILURES check(s) failed)"
+    exit 1
+  fi
   if [[ "$code" == "200" && "$body" == "$EXPECTED" ]]; then
     live="yes"
     echo "  attempt $attempt: HTTP $code, version '$body' matches"
@@ -140,76 +160,91 @@ while true; do
   attempt=$((attempt + 1))
 done
 
-echo "Checks"
-if [[ -n "$live" ]]; then
-  pass "/version.txt serves '$EXPECTED'"
-else
-  fail_on version "/version.txt did not serve '$EXPECTED' after $MAX_ATTEMPTS attempts (last HTTP $code)"
-fi
-
-cc="$(header_value version cache-control)"
-if [[ "$cc" == *no-store* ]]; then
-  pass "/version.txt Cache-Control contains no-store ($cc)"
-else
-  fail_on version "/version.txt Cache-Control should contain no-store, got '$cc'"
-fi
-
-# 2. Home page and security headers.
-code="$(fetch "/?cb=$RANDOM$RANDOM" home)"
-if [[ "$code" == "200" ]]; then
-  pass "GET / returned 200"
-else
-  fail_on home "GET / returned HTTP $code"
-fi
-
-for h in strict-transport-security content-security-policy x-content-type-options referrer-policy permissions-policy; do
-  v="$(header_value home "$h")"
-  if [[ -n "$v" ]]; then
-    pass "header $h present"
+# 2. Content, header and indexing checks. A new route or custom domain can take a moment
+# to reach every edge, so the whole set is retried a few times once the version is live.
+run_checks() {
+  FAILURES=0
+  if [[ -n "$live" ]]; then
+    pass "/version.txt serves '$EXPECTED'"
   else
-    fail_on home "header $h missing on /"
+    fail_on version "/version.txt did not serve '$EXPECTED' after $MAX_ATTEMPTS attempts (last HTTP $code)"
   fi
+
+  cc="$(header_value version cache-control)"
+  if [[ "$cc" == *no-store* ]]; then
+    pass "/version.txt Cache-Control contains no-store ($cc)"
+  else
+    fail_on version "/version.txt Cache-Control should contain no-store, got '$cc'"
+  fi
+
+  # 2. Home page and security headers.
+  code="$(fetch "/?cb=$RANDOM$RANDOM" home)"
+  if [[ "$code" == "200" ]]; then
+    pass "GET / returned 200"
+  else
+    fail_on home "GET / returned HTTP $code"
+  fi
+
+  for h in strict-transport-security content-security-policy x-content-type-options referrer-policy permissions-policy; do
+    v="$(header_value home "$h")"
+    if [[ -n "$v" ]]; then
+      pass "header $h present"
+    else
+      fail_on home "header $h missing on /"
+    fi
+  done
+
+  v="$(header_value home x-content-type-options)"
+  if [[ "${v,,}" == "nosniff" ]]; then
+    pass "X-Content-Type-Options is nosniff"
+  else
+    fail_on home "X-Content-Type-Options should be nosniff, got '$v'"
+  fi
+
+  # 3. Indexing policy.
+  robots_header="$(header_value home x-robots-tag)"
+  code="$(fetch "/robots.txt?cb=$RANDOM$RANDOM" robots)"
+  if [[ "$code" != "200" ]]; then
+    fail_on robots "GET /robots.txt returned HTTP $code"
+  fi
+  robots_body="$(tr -d '\r' <"$WORK/robots.b")"
+
+  if [[ "$MODE" == "noindex" ]]; then
+    if [[ "${robots_header,,}" == *noindex* ]]; then
+      pass "X-Robots-Tag contains noindex ($robots_header)"
+    else
+      fail_on home "this host must send X-Robots-Tag: noindex, got '$robots_header'"
+    fi
+    if grep -qiE '^[[:space:]]*Disallow:[[:space:]]*/[[:space:]]*$' <<<"$robots_body"; then
+      pass "robots.txt disallows everything"
+    else
+      fail_on robots "robots.txt of this host must contain 'Disallow: /'"
+    fi
+  else
+    if [[ "${robots_header,,}" == *noindex* ]]; then
+      fail_on home "an indexable host must not send X-Robots-Tag noindex, got '$robots_header'"
+    else
+      pass "no X-Robots-Tag noindex"
+    fi
+    if grep -qiE '^[[:space:]]*Disallow:[[:space:]]*/[[:space:]]*$' <<<"$robots_body"; then
+      fail_on robots "robots.txt of an indexable host must not contain 'Disallow: /'"
+    else
+      pass "robots.txt does not block the site"
+    fi
+  fi
+}
+
+round=1
+while true; do
+  echo "Checks (round $round of $CHECK_ROUNDS)"
+  run_checks
+  if ((FAILURES == 0)) || [[ -z "$live" ]] || ((round >= CHECK_ROUNDS)); then
+    break
+  fi
+  echo "  $FAILURES check(s) failed; retrying in ${CHECK_DELAY}s"
+  sleep "$CHECK_DELAY"
+  round=$((round + 1))
 done
-
-v="$(header_value home x-content-type-options)"
-if [[ "${v,,}" == "nosniff" ]]; then
-  pass "X-Content-Type-Options is nosniff"
-else
-  fail_on home "X-Content-Type-Options should be nosniff, got '$v'"
-fi
-
-# 3. Indexing policy.
-robots_header="$(header_value home x-robots-tag)"
-code="$(fetch "/robots.txt?cb=$RANDOM$RANDOM" robots)"
-if [[ "$code" != "200" ]]; then
-  fail_on robots "GET /robots.txt returned HTTP $code"
-fi
-robots_body="$(tr -d '\r' <"$WORK/robots.b")"
-
-if [[ "$MODE" == "noindex" ]]; then
-  if [[ "${robots_header,,}" == *noindex* ]]; then
-    pass "X-Robots-Tag contains noindex ($robots_header)"
-  else
-    fail_on home "this host must send X-Robots-Tag: noindex, got '$robots_header'"
-  fi
-  if grep -qiE '^[[:space:]]*Disallow:[[:space:]]*/[[:space:]]*$' <<<"$robots_body"; then
-    pass "robots.txt disallows everything"
-  else
-    fail_on robots "robots.txt of this host must contain 'Disallow: /'"
-  fi
-else
-  if [[ "${robots_header,,}" == *noindex* ]]; then
-    fail_on home "an indexable host must not send X-Robots-Tag noindex, got '$robots_header'"
-  else
-    pass "no X-Robots-Tag noindex"
-  fi
-  if grep -qiE '^[[:space:]]*Disallow:[[:space:]]*/[[:space:]]*$' <<<"$robots_body"; then
-    fail_on robots "robots.txt of an indexable host must not contain 'Disallow: /'"
-  else
-    pass "robots.txt does not block the site"
-  fi
-fi
-
 echo
 if ((FAILURES > 0)); then
   echo "Smoke test FAILED ($FAILURES check(s) failed)"
