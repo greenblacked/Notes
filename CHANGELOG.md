@@ -9,11 +9,11 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 ### Added
 
 - Metadata strip above the title, from the frontmatter fields `type`, `status`, `verified` and `decided` (plus reading time), as a local plugin (`local-plugins/note-meta`). It renders nothing on pages without those fields. The fields are documented in `content/standards/writing-notes.md` and the ADR template, and set on all existing notes.
-- Section tabs: anchor links to the `##` sections under the title of notes with three or more of them, on desktop widths (`local-plugins/section-tabs`, from the table of contents data).
-- Sidenotes: from 1200px up, Markdown footnotes appear in the margin next to their reference, with no script and no CSP change (`local-plugins/sidenotes`); narrower screens keep the normal footnotes.
+- Section tabs: anchor links to the `##` sections under the title of notes with three or more of them, from 800px up (`local-plugins/section-tabs`, from the table of contents data).
+- Sidenotes: from 1200px up, Markdown footnotes appear in the margin next to their reference, with no script and no CSP change (`local-plugins/sidenotes`); narrower screens, link previews and pages with a footnote that cannot sit in the margin keep the normal footnotes.
 - Self-hosted IBM Plex Sans, Plex Sans Condensed, Plex Mono and Literata (woff2 from `@fontsource`, latin, latin-ext and cyrillic subsets, `font-display: swap`), copied to `/static/fonts` by `scripts/postprocess-build.mjs`.
 - Code block filename captions (`title="..."` on a fence) and a restyled copy button, which also shows on keyboard focus and on touch screens.
-- `npm run check:contrast` (`scripts/check-contrast.mjs`): WCAG AA contrast of all text and background pairs in both themes, as a Markdown table; exits 1 on failure. Not wired into CI.
+- `npm run check:contrast` (`scripts/check-contrast.mjs`): WCAG AA contrast of all text and background pairs in both themes, as a Markdown table; exits 1 on failure. Runs in CI.
 - `scripts/sidenotes.test.mjs`, run by `npm run test:scripts`.
 - Screenshots of both themes and the phone layout in `docs/screenshots/`.
 
