@@ -203,8 +203,19 @@ plugins:
     enabled: true
     options:
       links: {}
+  # Home page only (condition `home`). quartz.ts registers the component, because the pinned plugin
+  # does not declare it in its manifest, and adds the filter that leaves out section index pages
+  # and the tags page. Sorted by defaultDateType (modified).
   - source: github:quartz-community/recent-notes
-    enabled: false
+    enabled: true
+    options:
+      title: Recently updated
+      limit: 5
+      showTags: true
+    layout:
+      position: afterBody
+      priority: 10
+      condition: home
   - source: github:quartz-community/spacer
     enabled: true
     options: {}
