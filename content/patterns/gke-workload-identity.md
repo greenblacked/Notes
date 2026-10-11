@@ -1,6 +1,7 @@
 ---
 title: Workload Identity Federation for GKE
 description: Give Pods access to Google Cloud APIs without service account keys, using a direct IAM principal or GSA impersonation.
+type: pattern
 tags:
   - patterns
   - gcp

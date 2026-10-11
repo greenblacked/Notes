@@ -1,6 +1,7 @@
 ---
 title: Argo CD vs Flux
 description: A practical comparison of Argo CD and Flux for GitOps delivery to Kubernetes, with guidance on when to choose each.
+type: tool
 tags:
   - tools
   - gitops

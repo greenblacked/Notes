@@ -12,6 +12,15 @@
 // serialised functions are identical to the defaults hard-coded in the explorer script, so the
 // attribute is dropped and the script falls back to those defaults.
 //
+// Two more adjustments for the site's own design:
+//   fonts      IBM Plex and Literata are self-hosted. quartz/styles/custom.scss declares the
+//              @font-face rules for /static/fonts/*.woff2; the files come from the @fontsource
+//              devDependencies and are copied to public/static/fonts/ here.
+//   dark mode  the site is dark on the first visit. The darkmode plugin picks the first-visit theme
+//              from prefers-color-scheme and re-applies the system theme whenever it changes; both
+//              are rewritten so that dark is the default and only a saved toggle choice
+//              (localStorage "theme") changes it.
+//
 // This script copies exact, npm-pinned builds of those libraries (see package.json devDependencies)
 // to public/static/vendor/ and rewrites the URLs in the built output, so the site only talks to its
 // own origin and the CSP can be 'self'-only. It fails loudly if an expected URL is not found, so a
@@ -31,6 +40,7 @@ import { fileURLToPath } from "node:url"
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const pub = join(root, "public")
 const vendor = join(pub, "static", "vendor")
+const fonts = join(pub, "static", "fonts")
 const nm = (...p) => join(root, "node_modules", ...p)
 
 function fail(msg) {
@@ -119,7 +129,41 @@ rewrites.forEach((r, i) => {
   if (counts[i] === 0) fail(`expected CDN URL not found in build output: ${r.re}`)
 })
 
-// 3. Guard: no remaining references to known third-party CDNs / font hosts.
+// 3. Self-hosted fonts: copy every woff2 file that index.css refers to.
+const fontPackages = ["ibm-plex-sans-condensed", "ibm-plex-sans", "ibm-plex-mono", "literata"].map(
+  (name) => nm("@fontsource", name, "files"),
+)
+const indexCss = readFileSync(join(pub, "index.css"), "utf8")
+const fontFiles = [
+  ...new Set([...indexCss.matchAll(/\/static\/fonts\/([a-z0-9-]+\.woff2)/g)].map((m) => m[1])),
+]
+if (fontFiles.length === 0) fail("index.css declares no /static/fonts/*.woff2 files")
+mkdirSync(fonts, { recursive: true })
+let fontBytes = 0
+for (const name of fontFiles) {
+  const dir = fontPackages.find((d) => existsSync(join(d, name)))
+  if (!dir) fail(`font file ${name} not found in the @fontsource packages; run npm ci`)
+  cpSync(join(dir, name), join(fonts, name))
+  fontBytes += statSync(join(dir, name)).size
+}
+
+// 4. Dark by default (see the header comment).
+const prescriptPath = join(pub, "prescript.js")
+let prescript = readFileSync(prescriptPath, "utf8")
+const firstVisit =
+  /window\.matchMedia\("\(prefers-color-scheme: light\)"\)\.matches\?"light":"dark"/
+const systemChange =
+  /let (\w+)=window\.matchMedia\("\(prefers-color-scheme: dark\)"\);\1\.addEventListener\("change",(\w+)\),window\.addCleanup\(\(\)=>\1\.removeEventListener\("change",\2\)\)/
+const count = (re) => (prescript.match(new RegExp(re.source, "g")) ?? []).length
+if (count(firstVisit) !== 1 || count(systemChange) !== 1) {
+  fail(
+    "darkmode script not recognised in prescript.js; update the rewrite in postprocess-build.mjs",
+  )
+}
+prescript = prescript.replace(firstVisit, '"dark"').replace(systemChange, "")
+writeFileSync(prescriptPath, prescript)
+
+// 5. Guard: no remaining references to known third-party CDNs / font hosts.
 const forbidden =
   /https?:\/\/(?:[a-z0-9-]+\.)*(?:jsdelivr\.net|cdnjs\.cloudflare\.com|unpkg\.com|esm\.sh|googleapis\.com|gstatic\.com|googletagmanager\.com|plausible\.io)/i
 const leftovers = []
@@ -132,5 +176,5 @@ for (const file of walk(pub)) {
 if (leftovers.length > 0) fail(`third-party origins remain:\n  ${leftovers.join("\n  ")}`)
 
 console.log(
-  `postprocess-build: rewrote d3=${counts[0]} pixi=${counts[1]} mermaid=${counts[2]} urls, removed ${preconnects} preconnect hint(s) and ${dataFnsRemoved} data-data-fns attribute(s)`,
+  `postprocess-build: rewrote d3=${counts[0]} pixi=${counts[1]} mermaid=${counts[2]} urls, removed ${preconnects} preconnect hint(s) and ${dataFnsRemoved} data-data-fns attribute(s), copied ${fontFiles.length} font files (${fontBytes} bytes), dark theme by default`,
 )

@@ -18,34 +18,40 @@ configuration:
     - .obsidian
   defaultDateType: modified
   theme:
-    # "local": do not link to Google Fonts. The names below are used if installed on the viewer's
-    # machine and fall back to the system font stacks defined in quartz/util/theme.ts.
+    # "local": do not link to Google Fonts. The fonts are self-hosted: @fontsource woff2 files are
+    # copied to /static/fonts by scripts/postprocess-build.mjs and declared in
+    # quartz/styles/custom.scss (which also sets the article prose font, Literata). The names
+    # below fall back to the system font stacks defined in quartz/util/theme.ts.
     fontOrigin: local
     cdnCaching: false
     typography:
-      header: Inter
-      body: Inter
-      code: JetBrains Mono
+      header: IBM Plex Sans Condensed
+      body: IBM Plex Sans
+      code: IBM Plex Mono
+    # Mapping: light = page background, lightgray = borders, gray = muted text, darkgray = body
+    # text, dark = headings, secondary = accent and links, tertiary = link hover. Surfaces and the
+    # status colours are CSS variables in quartz/styles/custom.scss; scripts/check-contrast.mjs
+    # checks both files.
     colors:
       lightMode:
-        light: "#fbfbfa"
-        lightgray: "#e3e4e1"
-        gray: "#a3a7a4"
-        darkgray: "#43484a"
-        dark: "#1b1f21"
-        secondary: "#1d5f8f"
-        tertiary: "#1f8a73"
-        highlight: rgba(29, 95, 143, 0.1)
+        light: "#f4f6f8"
+        lightgray: "#d3d9e1"
+        gray: "#566172"
+        darkgray: "#1b2330"
+        dark: "#111823"
+        secondary: "#1b66db"
+        tertiary: "#1450ad"
+        highlight: rgba(27, 102, 219, 0.05)
         textHighlight: "#ffe56688"
       darkMode:
-        light: "#14181b"
-        lightgray: "#2a3036"
-        gray: "#5b6670"
-        darkgray: "#c6ced6"
-        dark: "#eef2f5"
-        secondary: "#6db3ea"
-        tertiary: "#4fcfae"
-        highlight: rgba(109, 179, 234, 0.12)
+        light: "#11151a"
+        lightgray: "#2a323d"
+        gray: "#9aa5b4"
+        darkgray: "#d9dee5"
+        dark: "#eef2f6"
+        secondary: "#5a9cff"
+        tertiary: "#8dbbff"
+        highlight: rgba(90, 156, 255, 0.14)
         textHighlight: "#b3aa0288"
 plugins:
   - source: github:quartz-community/created-modified-date
@@ -59,9 +65,10 @@ plugins:
   - source: github:quartz-community/syntax-highlighting
     enabled: true
     options:
+      # The high-contrast themes keep every token above WCAG AA on the code surface.
       theme:
-        light: github-light
-        dark: github-dark
+        light: github-light-high-contrast
+        dark: github-dark-high-contrast
       keepBackground: false
     order: 20
   - source: github:quartz-community/obsidian-flavored-markdown
@@ -158,8 +165,11 @@ plugins:
     layout:
       position: beforeBody
       priority: 10
+  # Reading time is shown by the metadata strip (note-meta), so only the date stays here.
   - source: github:quartz-community/content-meta
     enabled: true
+    options:
+      showReadingTime: false
     layout:
       position: beforeBody
       priority: 20
@@ -216,6 +226,24 @@ plugins:
       position: afterBody
       priority: 10
       condition: home
+  # Local plugins (local-plugins/). The components are registered in quartz.ts, like recent-notes.
+  # Metadata strip above the title, from the type, status, verified and decided frontmatter.
+  - source: ./local-plugins/note-meta
+    enabled: true
+    layout:
+      position: beforeBody
+      priority: 8
+  # Anchor-link tabs for the h2 sections, under the title; from 800px up (Quartz desktop-only).
+  - source: ./local-plugins/section-tabs
+    enabled: true
+    layout:
+      position: beforeBody
+      priority: 12
+      display: desktop-only
+  # Markdown footnotes become margin sidenotes from 1200px up (see custom.scss).
+  - source: ./local-plugins/sidenotes
+    enabled: true
+    order: 95
   - source: github:quartz-community/spacer
     enabled: true
     options: {}

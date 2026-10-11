@@ -15,6 +15,7 @@
     "preview:stage": "wrangler dev --var ENVIRONMENT:stage --port 8788",
     "check": "node ./quartz/bootstrap-cli.mjs plugin restore && tsc --noEmit",
     "check:links": "node scripts/check-links.mjs",
+    "check:contrast": "node scripts/check-contrast.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:scripts": "node --test \"scripts/*.test.mjs\" \"worker/*.test.mjs\"",
@@ -87,6 +88,10 @@
     "yargs": "^18.2.0"
   },
   "devDependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@fontsource/ibm-plex-sans-condensed": "^5.3.0",
+    "@fontsource/literata": "^5.3.0",
     "@quartz-community/types": "github:quartz-community/types",
     "@quartz-community/utils": "github:quartz-community/utils",
     "@types/hast": "^3.0.4",
