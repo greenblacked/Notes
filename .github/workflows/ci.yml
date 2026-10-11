@@ -59,6 +59,9 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
+      - name: Check colour contrast (WCAG AA)
+        run: npm run check:contrast
+
       - name: Deploy dry run (no credentials)
         run: npm run deploy:dry-run
 
