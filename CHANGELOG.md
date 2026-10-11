@@ -6,11 +6,20 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-11
+
+### Added
+
+- Runbooks section with a runbook for deploying to and rolling back on Cloudflare Workers, and the `runbooks` tag.
+- "Recently updated" list on the home page: the five most recently modified notes (section index pages and the tags page excluded), from the `recent-notes` plugin.
+
 ### Fixed
 
 - Release notes list each change as `* <PR title> (#N)`, without `by @user` mentions or the New Contributors block.
 - Smoke test retries the content, header and indexing checks after `/version.txt` matches, so a route that is still propagating (Cloudflare error 1042 on a fresh workers.dev route) no longer fails a deploy or triggers a rollback.
 - Stage smoke test passes with a notice when the Preview sits behind Cloudflare Access; production still fails on an Access redirect.
+
+## [0.1.0] - 2026-10-11
 
 ### Changed
 
