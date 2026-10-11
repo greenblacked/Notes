@@ -1,11 +1,12 @@
 ---
 title: ADR template
 description: Template for new Architecture Decision Records. Copy it, do not edit it in place.
+type: standard
 tags:
   - adr
   - meta
 created: 2026-10-10
-modified: 2026-10-10
+modified: 2026-10-11
 draft: false
 ---
 
@@ -14,21 +15,25 @@ draft: false
 
 Frontmatter to use in the copy:
 
-```yaml
+```yaml title="content/adr/NNNN-short-kebab-title.md"
 ---
 title: Short decision title
 description: One sentence stating the decision.
+type: adr
 tags:
   - adr
   - <topic tag>
-status: Proposed # Proposed | Accepted | Rejected | Deprecated | Superseded
+status: proposed # proposed | accepted | rejected | deprecated | superseded
 created: YYYY-MM-DD
 modified: YYYY-MM-DD
+decided: YYYY-MM-DD # the day it was accepted; leave out while proposed
 draft: false
 aliases:
   - ADR-NNNN
 ---
 ```
+
+`type`, `status` and `decided` feed the metadata strip above the title (see [[writing-notes#Metadata strip|writing notes]]). Add `verified: YYYY-MM-DD` only after checking the claims against their sources.
 
 Body structure:
 

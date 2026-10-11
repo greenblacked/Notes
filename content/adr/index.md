@@ -20,18 +20,18 @@ An Architecture Decision Record (ADR) captures one significant decision: the con
 
 ## Lifecycle
 
-An ADR has exactly one status at a time:
+An ADR has exactly one status at a time, written in lowercase in the `status` frontmatter field and shown as a chip above the title:
 
 | Status       | Meaning                                                                |
 | ------------ | ---------------------------------------------------------------------- |
-| `Proposed`   | Open for discussion; not yet binding.                                  |
-| `Accepted`   | Agreed and in force.                                                   |
-| `Rejected`   | Considered and declined. Kept for the record.                          |
-| `Deprecated` | No longer relevant, with no replacement.                               |
-| `Superseded` | Replaced by a newer ADR. Add `superseded_by` and link both directions. |
+| `proposed`   | Open for discussion; not yet binding.                                  |
+| `accepted`   | Agreed and in force.                                                   |
+| `rejected`   | Considered and declined. Kept for the record.                          |
+| `deprecated` | No longer relevant, with no replacement.                               |
+| `superseded` | Replaced by a newer ADR. Add `superseded_by` and link both directions. |
 
 > [!warning] Records are immutable
-> Once an ADR is `Accepted`, only its status and links may change. If the decision changes, write a new ADR that supersedes the old one. Fixing typos is fine; rewriting history is not.
+> Once an ADR is `accepted`, only its status and links may change. If the decision changes, write a new ADR that supersedes the old one. Fixing typos is fine; rewriting history is not.
 
 ## Records
 

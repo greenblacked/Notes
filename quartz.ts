@@ -5,6 +5,8 @@ import { loadQuartzConfig, loadQuartzLayout } from "./quartz/plugins/loader/conf
 import { componentRegistry } from "./quartz/components/registry"
 import { registerCondition } from "./quartz/plugins/loader/conditions"
 import { RecentNotes } from "./.quartz/plugins/recent-notes"
+import NoteMeta from "./local-plugins/note-meta/NoteMeta"
+import SectionTabs from "./local-plugins/section-tabs/SectionTabs"
 import type { QuartzComponentConstructor } from "./quartz/components/types"
 
 // Host only: no protocol, no trailing slash (what Quartz expects for baseUrl).
@@ -36,6 +38,16 @@ componentRegistry.register(
   "recent-notes",
   ((opts) => RecentNotes({ filter: isNote, ...opts })) as QuartzComponentConstructor<any>,
   "recent-notes",
+)
+
+// Metadata strip and section tabs (local-plugins/, laid out in quartz.config.yaml). Registered here
+// for the same reason: the plugin loader only registers components a plugin's manifest declares,
+// and these have none. The sidenotes transformer in local-plugins/sidenotes needs no registration.
+componentRegistry.register("note-meta", NoteMeta as QuartzComponentConstructor<any>, "note-meta")
+componentRegistry.register(
+  "section-tabs",
+  SectionTabs as QuartzComponentConstructor<any>,
+  "section-tabs",
 )
 
 const config = await loadQuartzConfig({ baseUrl })
