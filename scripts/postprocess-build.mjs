@@ -154,7 +154,8 @@ const firstVisit =
   /window\.matchMedia\("\(prefers-color-scheme: light\)"\)\.matches\?"light":"dark"/
 const systemChange =
   /let (\w+)=window\.matchMedia\("\(prefers-color-scheme: dark\)"\);\1\.addEventListener\("change",(\w+)\),window\.addCleanup\(\(\)=>\1\.removeEventListener\("change",\2\)\)/
-if (!firstVisit.test(prescript) || !systemChange.test(prescript)) {
+const count = (re) => (prescript.match(new RegExp(re.source, "g")) ?? []).length
+if (count(firstVisit) !== 1 || count(systemChange) !== 1) {
   fail(
     "darkmode script not recognised in prescript.js; update the rewrite in postprocess-build.mjs",
   )
