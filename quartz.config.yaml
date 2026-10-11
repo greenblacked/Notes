@@ -233,7 +233,7 @@ plugins:
     layout:
       position: beforeBody
       priority: 8
-  # Anchor-link tabs for the h2 sections, under the title; desktop only.
+  # Anchor-link tabs for the h2 sections, under the title; from 800px up (Quartz desktop-only).
   - source: ./local-plugins/section-tabs
     enabled: true
     layout:

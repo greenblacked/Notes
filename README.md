@@ -40,7 +40,9 @@ npm run test:scripts     # unit tests for scripts/ and the Worker's indexing pol
 npm run deploy:dry-run   # wrangler deploy --dry-run (the single Worker `notes`)
 ```
 
-Also `npm run check:contrast`: WCAG AA contrast of the palette in both themes (not part of CI; run it after changing a colour).
+Also `npm run check:contrast`: WCAG AA contrast of the palette in both themes (CI runs it after the build; run it after changing a colour).
+
+`npm run dev` skips `scripts/postprocess-build.mjs`, so the dev server has no self-hosted fonts and follows the system theme. Use `npm run build` and `npm run preview` to see the site as deployed.
 
 Build-time variables: `NOTES_BASE_URL` (default `notes.szolotov.com`), `NOTES_VERSION` (`X.Y.Z`), `NOTES_SHA`.
 
