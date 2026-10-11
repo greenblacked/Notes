@@ -31,7 +31,7 @@ An ADR has exactly one status at a time, written in lowercase in the `status` fr
 | `superseded` | Replaced by a newer ADR. Add `superseded_by` and link both directions. |
 
 > [!warning] Records are immutable
-> Once an ADR is `Accepted`, only its status and links may change. If the decision changes, write a new ADR that supersedes the old one. Fixing typos is fine; rewriting history is not.
+> Once an ADR is `accepted`, only its status and links may change. If the decision changes, write a new ADR that supersedes the old one. Fixing typos is fine; rewriting history is not.
 
 ## Records
 
