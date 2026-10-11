@@ -91,7 +91,19 @@ jobs:
       - name: Create GitHub Release
         env:
           TAG: ${{ steps.validate.outputs.tag }}
-        run: gh release create "$TAG" --verify-tag --generate-notes --title "$TAG"
+        # GitHub's generated notes, without the "by @user in <url>" mentions and the
+        # "New Contributors" block: each change is listed as "* <PR title> (#N)".
+        run: |
+          set -o pipefail
+          gh api "repos/$GH_REPO/releases/generate-notes" -f tag_name="$TAG" --jq '.body' |
+            awk '/^## New Contributors/ { skip = 1; next }
+                 skip && /^[[:space:]]*$/ { skip = 0; next }
+                 skip { next }
+                 { print }' |
+            sed -E 's#^\* (.*) by @[^ ]+ in https://github\.com/[^ ]+/pull/([0-9]+)[[:space:]]*$#* \1 (\#\2)#' \
+            >"$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-notes.md"
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
 
   # Tags created with GITHUB_TOKEN do not trigger other workflows, so the
   # tag-push trigger of deploy-production.yml never fires for this tag. The
