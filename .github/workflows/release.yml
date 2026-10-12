@@ -33,6 +33,12 @@ jobs:
       REF: ${{ github.ref }}
       INPUT_VERSION: ${{ inputs.version }}
     steps:
+      - name: Check out the helper scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Require main
         run: |
           if [[ "$REF" != "refs/heads/main" ]]; then
@@ -67,14 +73,7 @@ jobs:
           fi
 
       - name: Require a successful CI run for this commit
-        run: |
-          count="$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=push&status=completed&per_page=100" \
-            --jq '[.workflow_runs[] | select(.conclusion == "success" and .head_branch == "main")] | length')"
-          if [[ "$count" -lt 1 ]]; then
-            echo "::error::No successful ci.yml push run found for $SHA. Wait for CI on main to finish (or fix it) and retry."
-            exit 1
-          fi
-          echo "Found $count successful CI run(s) for $SHA."
+        run: .github/scripts/require-ci-success.sh
 
       - name: Create annotated tag
         env:
@@ -116,6 +115,7 @@ jobs:
     needs: release
     permissions:
       contents: read
+      actions: read # the called guard job looks up the CI run for the commit
     # The `$/` shorthand zizmor suggests is not understood by actionlint, so the long-established `./` form is kept.
     uses: ./.github/workflows/deploy-production.yml # zizmor: ignore[self-repository]
     with:
