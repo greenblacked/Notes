@@ -122,13 +122,14 @@ header_value() {
 
 echo "Smoke test: $BASE_URL ($MODE), expecting version '$EXPECTED'"
 
-# behind_access <name>: true when the response was redirected to a Cloudflare Access login.
-behind_access() {
-  grep -qiE '^location:[[:space:]]*https://[^/[:space:]]+\.cloudflareaccess\.com/' "$WORK/$1.h"
-}
-
 # is_redirect <code>: true for any 3xx status.
 is_redirect() { [[ "$1" =~ ^3[0-9][0-9]$ ]]; }
+
+# behind_access <name> <code>: true when the response is a 3xx to a Cloudflare Access login. A
+# Location header on any other status (a 200 from the Worker) is not Access.
+behind_access() {
+  is_redirect "$2" && grep -qiE '^location:[[:space:]]*https://[^/[:space:]]+\.cloudflareaccess\.com/' "$WORK/$1.h"
+}
 
 # fail_redirect <name> <path> <code>: a redirect is a failure, not something to follow.
 fail_redirect() {
@@ -143,7 +144,7 @@ while true; do
   cb="$RANDOM$RANDOM"
   code="$(fetch "/version.txt?cb=$cb" version)"
   body="$(tr -d '\r\n' <"$WORK/version.b")"
-  if behind_access version; then
+  if behind_access version "$code"; then
     if [[ "$ALLOW_ACCESS" == "1" ]]; then
       echo "::notice::$BASE_URL is behind Cloudflare Access (redirected to its login page), so its content cannot be checked from CI. Skipping the content checks."
       exit 0
