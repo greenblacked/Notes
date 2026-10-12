@@ -47,10 +47,11 @@ USER_AGENT="${SMOKE_USER_AGENT:-notes-smoke-test/1 (+https://github.com/greenbla
 # spoofed User-Agent cannot satisfy. Unset means the header is not sent.
 SMOKE_TEST_TOKEN="${SMOKE_TEST_TOKEN:-}"
 
-CURL_OPTS=(--silent --show-error --location --max-redirs 3 --connect-timeout 10 --max-time 30
-  --user-agent "$USER_AGENT")
+# Redirects are never followed: a 3xx from the deployed host is a failure (see is_redirect), so a
+# misrouted or hijacked host cannot hand the checks to another origin.
+CURL_OPTS=(--silent --show-error --connect-timeout 10 --max-time 30 --user-agent "$USER_AGENT")
 if [[ "$BASE_URL" == https://* ]]; then
-  CURL_OPTS+=(--proto '=https' --proto-redir '=https')
+  CURL_OPTS+=(--proto '=https')
 fi
 
 WORK="$(mktemp -d)"
@@ -111,7 +112,6 @@ fetch() {
 }
 
 # header_value <name> <header>: last value of a response header, case-insensitive.
-# Redirect hops are included in the dump, so the final response wins.
 header_value() {
   local line
   line="$(grep -i "^$2:" "$WORK/$1.h" | tail -n 1 || true)"
@@ -125,6 +125,14 @@ echo "Smoke test: $BASE_URL ($MODE), expecting version '$EXPECTED'"
 # behind_access <name>: true when the response was redirected to a Cloudflare Access login.
 behind_access() {
   grep -qiE '^location:[[:space:]]*https://[^/[:space:]]+\.cloudflareaccess\.com/' "$WORK/$1.h"
+}
+
+# is_redirect <code>: true for any 3xx status.
+is_redirect() { [[ "$1" =~ ^3[0-9][0-9]$ ]]; }
+
+# fail_redirect <name> <path> <code>: a redirect is a failure, not something to follow.
+fail_redirect() {
+  fail_on "$1" "GET $2 answered HTTP $3 redirecting to '$(header_value "$1" location)'; redirects are not followed and count as failures"
 }
 
 # 1. Wait until the expected version is live.
@@ -141,6 +149,12 @@ while true; do
       exit 0
     fi
     fail_on version "$BASE_URL redirects to a Cloudflare Access login, so the deploy cannot be verified here"
+    echo
+    echo "Smoke test FAILED ($FAILURES check(s) failed)"
+    exit 1
+  fi
+  if is_redirect "$code"; then
+    fail_redirect version /version.txt "$code"
     echo
     echo "Smoke test FAILED ($FAILURES check(s) failed)"
     exit 1
@@ -181,6 +195,8 @@ run_checks() {
   code="$(fetch "/?cb=$RANDOM$RANDOM" home)"
   if [[ "$code" == "200" ]]; then
     pass "GET / returned 200"
+  elif is_redirect "$code"; then
+    fail_redirect home / "$code"
   else
     fail_on home "GET / returned HTTP $code"
   fi
@@ -204,7 +220,9 @@ run_checks() {
   # 3. Indexing policy.
   robots_header="$(header_value home x-robots-tag)"
   code="$(fetch "/robots.txt?cb=$RANDOM$RANDOM" robots)"
-  if [[ "$code" != "200" ]]; then
+  if is_redirect "$code"; then
+    fail_redirect robots /robots.txt "$code"
+  elif [[ "$code" != "200" ]]; then
     fail_on robots "GET /robots.txt returned HTTP $code"
   fi
   robots_body="$(tr -d '\r' <"$WORK/robots.b")"
