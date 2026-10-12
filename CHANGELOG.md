@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Security
+
+- The build jobs of `ci.yml`, `deploy-stage.yml` and `deploy-production.yml` run with `NPM_CONFIG_IGNORE_SCRIPTS=true`: no install script of our dependencies or of the third-party plugins' npm dependencies runs. The output is identical to a build with scripts.
+- `scripts/check-artifact.mjs` (tested by `scripts/check-artifact.test.mjs`) replaces the inline artifact check of the deploy workflows. Besides the expected layout it rejects `public/_redirects`, `public/_headers`, symlinks and any file extension outside an allowlist. It also runs after the build in CI and in both build jobs.
+- Deploy production now requires, for tag pushes, manual runs and the call from `release.yml`, a successful `ci.yml` push run for the exact commit and that the commit is on `main` (`compare/main...<sha>` is `identical` or `behind`). The check is shared with `release.yml` (`.github/scripts/require-ci-success.sh`); the guard job has `actions: read` and `contents: read`.
+- `deploy-stage.yml`: `GH_TOKEN` is set on the one step that needs it instead of on the whole build job.
+- `npm audit fix` (no `--force`): fflate, js-yaml (gray-matter's copy), immutable, picomatch and source-map-js updated within their ranges; 19 advisories before, 16 after. What remains needs a breaking change (`globby`, `gray-matter`, `mermaid`, `rehype-katex`, `remark-math`) or an upstream release (`@xmldom/xmldom` pinned by `speech-rule-engine`, `esbuild` pinned by `tsup`).
+
+### Fixed
+
+- `scripts/smoke-test.sh` no longer follows redirects: any 3xx is a failure with the status and `Location`. A Cloudflare Access redirect is still detected from the response headers (a notice with `SMOKE_ALLOW_ACCESS=1`, a failure otherwise). Tested by `scripts/smoke-test.test.mjs`.
+
+### Changed
+
+- `docs/deployment.md`: "Repository settings you must apply" (rulesets for `main` and `v*` tags, environment branch policies, optional separate stage token) and a one-time `wrangler rollback` drill.
+
 ## [0.3.0] - 2026-10-11
 
 ### Added
