@@ -109,5 +109,10 @@
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "wrangler": "4.149.0"
+  },
+  "overrides": {
+    "satori": {
+      "fflate": "0.7.5"
+    }
   }
 }
