@@ -20,6 +20,9 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+    env:
+      # Same as the deploy builds: no install scripts from our dependencies or the plugins'.
+      NPM_CONFIG_IGNORE_SCRIPTS: "true"
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,6 +55,9 @@ jobs:
 
       - name: Check links
         run: npm run check:links
+
+      - name: Check the build output
+        run: node scripts/check-artifact.mjs --public public
 
       - name: Test scripts and Worker policy
         run: npm run test:scripts
