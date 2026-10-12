@@ -57,7 +57,10 @@ for f in globals.d.ts index.d.ts quartz.config.default.yaml quartz.lock.json tsc
 done
 cp "${WORK}/src/LICENSE.txt" LICENSE-QUARTZ
 
-# Local patches to the engine are none today (see QUARTZ_VERSION); re-apply them here if added.
+# `rm -rf quartz` above discards local patches to the engine. There is one, which the script
+# does not re-apply: quartz/cli/plugin-git-handlers.js, handlePluginRestore, sets
+# process.exitCode = 1 when a plugin fails to restore or build (marked "Local patch"). The Done
+# message below reminds you to check it.
 
 echo "Comparing upstream dependencies with package.json ..."
 node --input-type=module - "${WORK}/src/package.json" <<'NODE'
@@ -85,5 +88,6 @@ cat <<'MSG'
 Done. Next steps:
   1. Update package.json dependencies for any differences listed above, then `npm install`.
   2. npm run build && npm run check:links
-  3. Review `git diff --stat`, then commit.
+  3. Review `git diff --stat`: check that quartz/cli/plugin-git-handlers.js still sets
+     process.exitCode = 1 when plugins fail to restore (local patch, see this script), then commit.
 MSG
