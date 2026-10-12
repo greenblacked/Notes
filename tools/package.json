@@ -1,0 +1,13 @@
+{
+  "name": "notes-deploy-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wrangler only, for the deploy jobs that hold the Cloudflare token (see docs/deployment.md)",
+  "engines": {
+    "npm": ">=10.9.2",
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  }
+}

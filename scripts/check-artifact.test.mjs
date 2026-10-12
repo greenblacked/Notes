@@ -72,22 +72,35 @@ test("public: an empty directory is rejected", () => {
   assert.deepEqual(checkPublic(tree([])).length, 1)
 })
 
-const layout = ["public/index.html", "worker/csp.generated.js"]
+const layout = ["public/index.html"]
 
-test("layout: public and worker/csp.generated.js pass", () => {
+test("layout: only public passes", () => {
   assert.deepEqual(checkLayout(tree(layout)), [])
 })
 
-test("layout: missing parts are rejected", () => {
-  assert.equal(checkLayout(tree(["worker/csp.generated.js"])).length, 1)
-  assert.equal(checkLayout(tree(["public/index.html"])).length, 1)
+test("layout: a missing or non-directory public is rejected", () => {
+  assert.equal(checkLayout(tree([])).length, 1)
+  assert.equal(checkLayout(tree(["public"])).length, 1)
 })
 
-test("layout: extra files at the root or in worker/ are rejected", () => {
-  for (const extra of ["package.json", "worker/index.js", "evil/x.js"]) {
+test("layout: a worker directory is rejected, csp.generated.js included", () => {
+  for (const extra of ["worker/csp.generated.js", "worker/index.js"]) {
     const problems = checkLayout(tree([...layout, extra]))
-    assert.equal(problems.length, 1, extra)
-    assert.match(problems[0], /unexpected file/)
+    assert.ok(problems.length >= 1, extra)
+    assert.ok(
+      problems.every((p) => /worker code is not accepted/.test(p)),
+      extra,
+    )
+  }
+})
+
+test("layout: extra files at the root are rejected", () => {
+  for (const extra of ["package.json", "evil/x.js"]) {
+    const problems = checkLayout(tree([...layout, extra]))
+    assert.ok(
+      problems.some((p) => /unexpected file/.test(p)),
+      extra,
+    )
   }
 })
 

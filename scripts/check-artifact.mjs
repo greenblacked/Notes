@@ -5,8 +5,10 @@
  * output as an artifact from a job that ran third-party plugin code.
  *
  *   node scripts/check-artifact.mjs --root <dir>    an extracted artifact: <dir> holds exactly
- *                                                   `public/` and `worker/csp.generated.js`,
- *                                                   and `public/` passes the check below
+ *                                                   `public/` (a `worker/` directory is a
+ *                                                   failure: the deploy jobs regenerate
+ *                                                   worker/csp.generated.js themselves), and
+ *                                                   `public/` passes the check below
  *   node scripts/check-artifact.mjs --public <dir>  only the `public/` check (CI, after build)
  *
  * `public/` may contain only regular files with an extension from ALLOWED_EXTENSIONS (the set
@@ -88,29 +90,26 @@ export function checkPublic(dir) {
 }
 
 /**
- * Problems found in an extracted artifact: only `public/` and `worker/csp.generated.js`.
+ * Problems found in an extracted artifact: only `public/`. Worker code never comes from the
+ * artifact, so `worker/` (e.g. a csp.generated.js) is rejected like any other extra path.
  *
  * @param {string} root
  * @returns {string[]}
  */
 export function checkLayout(root) {
   const problems = []
-  const kind = (path) => {
-    try {
-      const stat = lstatSync(path)
-      return stat.isDirectory() ? "dir" : stat.isFile() ? "file" : "other"
-    } catch {
-      return "missing"
-    }
+  try {
+    if (!lstatSync(join(root, "public")).isDirectory()) throw new Error("not a directory")
+  } catch {
+    return [`${root}/public is not a directory`]
   }
-  if (kind(join(root, "public")) !== "dir") problems.push(`${root}/public is not a directory`)
-  if (kind(join(root, "worker", "csp.generated.js")) !== "file") {
-    problems.push(`${root}/worker/csp.generated.js is not a regular file`)
-  }
-  if (problems.length > 0) return problems
   for (const { path, type } of walk(root)) {
-    if (type === "dir" || path.startsWith("public/") || path === "worker/csp.generated.js") continue
-    problems.push(`${root}/${path}: unexpected file in the build artifact`)
+    if (path.startsWith("public/") || (type === "dir" && path === "public")) continue
+    problems.push(
+      path === "worker" || path.startsWith("worker/")
+        ? `${root}/${path}: worker code is not accepted from the build artifact`
+        : `${root}/${path}: unexpected file in the build artifact`,
+    )
   }
   return [...problems, ...checkPublic(join(root, "public"))]
 }
