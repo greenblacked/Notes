@@ -40,10 +40,18 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read # look up the CI run for this commit
     outputs:
       tag: ${{ steps.check.outputs.tag }}
       version: ${{ steps.check.outputs.version }}
     steps:
+      - name: Check out the helper scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Verify the tag
         id: check
         env:
@@ -86,6 +94,15 @@ jobs:
           echo "tag=$tag" >>"$GITHUB_OUTPUT"
           echo "version=${tag#v}" >>"$GITHUB_OUTPUT"
 
+      # Whatever started the run (tag push, dispatch, release.yml), the commit must have passed
+      # CI on main and be on main: a tag on an unreviewed or failing commit is not deployed.
+      - name: Require a successful CI run on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: .github/scripts/require-ci-success.sh
+
   build:
     name: Build
     needs: guard
@@ -95,6 +112,10 @@ jobs:
     # Third-party plugin code runs here: no environment, no secrets.
     permissions:
       contents: read
+    env:
+      # Neither our dependencies nor the plugins' (npm-installed by `quartz plugin restore`) may
+      # run install scripts next to this job's checkout; the build needs none of them.
+      NPM_CONFIG_IGNORE_SCRIPTS: "true"
     steps:
       - name: Check out the tagged commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -120,6 +141,9 @@ jobs:
 
       - name: Check links
         run: npm run check:links
+
+      - name: Check the build output
+        run: node scripts/check-artifact.mjs --public public
 
       - name: Upload build output
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -171,18 +195,11 @@ jobs:
           path: ${{ runner.temp }}/site
 
       # Only the two expected paths are accepted from the artifact (built by a job that ran
-      # third-party code); anything else at its root is rejected.
+      # third-party code), and public/ must pass the extension allowlist (scripts/check-artifact.mjs).
       - name: Install build output
         run: |
           site="$RUNNER_TEMP/site"
-          test -d "$site/public" && test -f "$site/worker/csp.generated.js"
-          extra="$(find "$site" -mindepth 1 -maxdepth 1 ! -name public ! -name worker
-            find "$site/worker" -mindepth 1 ! -name csp.generated.js)"
-          if [[ -n "$extra" ]]; then
-            echo "::error::Unexpected files in the build artifact:"
-            echo "$extra"
-            exit 1
-          fi
+          node scripts/check-artifact.mjs --root "$site"
           rm -rf public worker/csp.generated.js
           cp -R "$site/public" public
           cp "$site/worker/csp.generated.js" worker/csp.generated.js
