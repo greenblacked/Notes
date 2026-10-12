@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - `scripts/check-artifact.mjs` (tested by `scripts/check-artifact.test.mjs`) replaces the inline artifact check of the deploy workflows. Besides the expected layout it rejects `public/_redirects`, `public/_headers`, symlinks and any file extension outside an allowlist. It also runs after the build in CI and in both build jobs.
 - Deploy production now requires, for tag pushes, manual runs and the call from `release.yml`, a successful `ci.yml` push run for the exact commit and that the commit is on `main` (`compare/main...<sha>` is `identical` or `behind`). The check is shared with `release.yml` (`.github/scripts/require-ci-success.sh`); the guard job has `actions: read` and `contents: read`.
 - `deploy-stage.yml`: `GH_TOKEN` is set on the one step that needs it instead of on the whole build job.
-- `npm audit fix` (no `--force`): fflate, js-yaml (gray-matter's copy), immutable, picomatch and source-map-js updated within their ranges; 19 advisories before, 16 after. What remains needs a breaking change (`globby`, `gray-matter`, `mermaid`, `rehype-katex`, `remark-math`) or an upstream release (`@xmldom/xmldom` pinned by `speech-rule-engine`, `esbuild` pinned by `tsup`).
+- `npm audit fix` (no `--force`): fflate, js-yaml (gray-matter's copy), immutable, picomatch and source-map-js updated within their ranges; 19 advisories before, 16 after. An `overrides` entry lifts `satori`'s exact pin of `fflate` 0.7.3 (unzipSync DoS) to 0.7.5. What remains needs a breaking change (`globby`, `gray-matter`, `mermaid`, `rehype-katex`, `remark-math`) or an upstream release (`@xmldom/xmldom` pinned by `speech-rule-engine`, `esbuild` pinned by `tsup`).
 
 ### Fixed
 
