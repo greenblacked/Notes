@@ -124,6 +124,19 @@ test("a Cloudflare Access redirect is a notice with SMOKE_ALLOW_ACCESS=1", async
   assert.match(out, /::notice::.*behind Cloudflare Access/)
 })
 
+test("a 200 carrying an Access Location is not treated as Access", async () => {
+  const s = await start({
+    "/version.txt": (res) =>
+      res
+        .writeHead(200, { location: "https://team.cloudflareaccess.com/cdn-cgi/access/login/x" })
+        .end("other\n"),
+  })
+  const { code, out } = await run(s.url, { SMOKE_ALLOW_ACCESS: "1" })
+  assert.equal(code, 1, out)
+  assert.doesNotMatch(out, /behind Cloudflare Access/)
+  assert.match(out, /did not serve/)
+})
+
 test("another redirect still fails with SMOKE_ALLOW_ACCESS=1", async () => {
   const s = await start({ "/version.txt": redirect("https://example.com/") })
   const { code, out } = await run(s.url, { SMOKE_ALLOW_ACCESS: "1" })
