@@ -19,6 +19,22 @@ updates:
       - dependency-name: "@types/hast"
     labels: [dependencies]
 
+  # Wrangler for the deploy jobs (tools/ has its own lockfile; see docs/deployment.md). Keep it
+  # in step with the wrangler version in the root package.json.
+  - package-ecosystem: npm
+    directory: /tools
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    labels: [dependencies]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

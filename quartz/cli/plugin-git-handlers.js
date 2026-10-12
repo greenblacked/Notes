@@ -819,6 +819,9 @@ export async function handlePluginRestore() {
     console.log(styleText("green", `✓ Restored ${installed} plugin(s)`))
   } else {
     console.log(styleText("yellow", `⚠ Restored ${installed} plugin(s), ${failed} failed`))
+    // Local patch (see scripts/update-quartz.sh): a partial restore must fail the build.
+    console.error(styleText("red", `✗ ${failed} plugin(s) failed to restore or build`))
+    process.exitCode = 1
   }
 }
 
