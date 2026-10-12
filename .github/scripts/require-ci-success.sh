@@ -18,11 +18,19 @@ if [[ "$count" -lt 1 ]]; then
 fi
 echo "Found $count successful CI run(s) for $SHA."
 
+# Resolve main to a commit first, then compare against that SHA: the ref name in a compare
+# path is ambiguous (a tag or branch with the same name), a commit id is not.
+main_sha="$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq '.object.sha')"
+if [[ ! "$main_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "::error::Could not resolve the head of main to a commit id, got '$main_sha'."
+  exit 1
+fi
+
 # "identical" (the head of main) or "behind" (an ancestor of main); "ahead" and "diverged" are
 # commits that are not on main.
-status="$(gh api "repos/$GH_REPO/compare/main...$SHA?per_page=1" --jq '.status')"
+status="$(gh api "repos/$GH_REPO/compare/$main_sha...$SHA?per_page=1" --jq '.status')"
 if [[ "$status" != "identical" && "$status" != "behind" ]]; then
-  echo "::error::$SHA is not on main (compare main...$SHA: $status)."
+  echo "::error::$SHA is not on main (compare $main_sha...$SHA: $status)."
   exit 1
 fi
 echo "$SHA is on main (compare status: $status)."
