@@ -11,10 +11,10 @@ Both are also reachable on the Worker's workers.dev URLs, which CI uses for veri
 
 Workflows (all in `.github/workflows/`):
 
-- `ci.yml`: build, type check, link check, script and Worker-policy tests (`npm run test:scripts`), format check, `wrangler deploy --dry-run`, actionlint and zizmor. The aggregate job `CI OK` is the required status check.
+- `ci.yml`: build, type check, link check, build-output check (`scripts/check-artifact.mjs`), script and Worker-policy tests (`npm run test:scripts`), format check, `wrangler deploy --dry-run`, actionlint and zizmor. The aggregate job `CI OK` is the required status check.
 - `deploy-stage.yml`: a `build` job builds the exact commit, then an `upload` job (environment `staging`) runs `wrangler preview --name stage` and smoke-tests the Preview's workers.dev URL. If the commit is no longer the head of `main` (a newer push landed), checked at the start of `build` and again right before the upload, the run skips with a notice and succeeds.
-- `release.yml`: manual. Validates the version, requires a successful CI run for the commit, creates an annotated tag and a GitHub Release, then calls `deploy-production.yml`.
-- `deploy-production.yml`: `guard` (tag check), `build`, then `deploy` (environment approval, record the live version, `wrangler deploy`, smoke test on workers.dev, check that the new version serves 100%, automatic rollback on failure).
+- `release.yml`: manual. Validates the version, requires a successful CI run for the commit (`.github/scripts/require-ci-success.sh`), creates an annotated tag and a GitHub Release, then calls `deploy-production.yml`.
+- `deploy-production.yml`: `guard` (tag check, successful CI run for the commit, commit on `main`), `build`, then `deploy` (environment approval, record the live version, `wrangler deploy`, smoke test on workers.dev, check that the new version serves 100%, automatic rollback on failure).
 
 ## Stage Preview
 
@@ -103,17 +103,11 @@ The secret passed from `release.yml` (`secrets: CLOUDFLARE_API_TOKEN: ${{ secret
 
 **Production is tag-only, enforced in the workflow.** The `guard` job in `deploy-production.yml` runs before the environment approval and refuses everything that is not a release tag: for push and manual runs `github.ref` must be `refs/tags/vX.Y.Z`; for the call from `release.yml` the `tag` input must be `vX.Y.Z` and the tag must resolve to exactly `github.sha`. The deploy job then checks out `github.sha`. This does not depend on the `production` environment rules; those additionally allow `main` only so the call from `release.yml` can run.
 
-**Branch ruleset for `main`** (Settings, Rules, Rulesets)
+**The guard only catches mistakes.** On a tag push or a manual run from a tag, GitHub runs the workflow file and the guard script from the tagged commit, so whoever can create a tag controls the code that checks it. The controls that decide who can deploy production are the tag ruleset (who may create `v*` tags) and the required reviewers of the `production` environment (with "Prevent self-review" enabled when more than one person has access), both under [Repository settings you must apply](#repository-settings-you-must-apply). Without them the guard does not stop a malicious tag.
 
-- Require a pull request before merging.
-- Require status checks to pass: `CI OK` (the aggregate job name), branch up to date optional.
-- Block force pushes. Restrict deletions.
-- Require linear history (optional; works with squash or rebase merges).
+The guard also requires, for every path (tag push, manual run and the call from `release.yml`), a successful `ci.yml` run for the exact commit (event `push`, branch `main`) and that the commit is on `main` (`compare/main...<sha>` reports `identical` or `behind`), both in `.github/scripts/require-ci-success.sh`, which `release.yml` uses too. A tag on a commit that never passed CI on `main`, or on a branch that was never merged, is therefore not deployed even if someone manages to create it. The guard job has `contents: read` and `actions: read` only; because the call from `release.yml` caps the called job's permissions, `release.yml`'s `deploy` job grants `actions: read` as well. The script is read from the tagged commit, so this protects against mistakes (a tag on the wrong commit), not against someone who can create tags.
 
-**Tag ruleset for `v*`**
-
-- Restrict updates and deletions of `v*` tags (tags are immutable releases).
-- Restricting **creation** is the part to be careful with: `release.yml` creates the tag with `GITHUB_TOKEN` (the GitHub Actions app). I could not verify whether the GitHub Actions app can be added as a bypass actor in a ruleset. If it cannot, a creation restriction would make every release fail. Safe options: do not restrict creation, or restrict it with the repository admin role as a bypass actor and test one release (a failure is clear: the `Create annotated tag` step fails with a 403 or ruleset error, nothing is deployed).
+Rulesets, the environment branch and tag policies and the optional separate Cloudflare token are listed in [Repository settings you must apply](#repository-settings-you-must-apply).
 
 ### 3. First deploy order
 
@@ -125,14 +119,15 @@ Existing setups: follow the [migration](#migration-from-the-separate-notes-stage
 
 ## Production is tag-only
 
-See "Production is tag-only, enforced in the workflow" above. In short: a branch run of `deploy-production.yml` cannot deploy, whatever the environment settings say.
+See "Production is tag-only, enforced in the workflow" above. In short: a branch run of `deploy-production.yml` cannot deploy, whatever the environment settings say. On a tag push or tag dispatch the workflow file and the guard script come from the tagged commit, so the guard only catches mistakes. The real controls for who can create a production tag are the `v*` tag ruleset and required reviewers on the `production` environment (see [Repository settings you must apply](#repository-settings-you-must-apply)).
 
 ## Build and deploy are separate jobs
 
 `npm run build` runs `quartz plugin restore`, which at build time clones about 40 third-party Quartz plugins (`github.com/quartz-community/*`) at the commits pinned in `quartz.lock.json`, then runs `npm install` and `npm run build` inside each. That is third-party code, and the plugins' transitive npm dependencies are not pinned by any lockfile of ours. This is a known supply-chain risk. It is mitigated by isolating secrets and by reviewing every change to `quartz.lock.json`.
 
-- The `build` job has no environment, no secrets and `contents: read` only. It builds, checks links and uploads an artifact (`public/` and the generated `worker/csp.generated.js`, retention 1 day).
-- The `upload` and `deploy` jobs (the ones with the `staging` or `production` environment and the Cloudflare token) checks out the commit fresh, runs `npm ci --ignore-scripts` (tested: wrangler dry-runs work without lifecycle scripts), downloads the artifact, and only then runs wrangler. The token is set on the individual wrangler steps, never job-wide, so no plugin code ever runs next to it.
+- The `build` job has no environment, no secrets and `contents: read` only. It builds, checks links, checks the output with `scripts/check-artifact.mjs --public public` and uploads an artifact (`public/` only, retention 1 day). It runs with `NPM_CONFIG_IGNORE_SCRIPTS=true`, in `ci.yml` too: no install script of our dependencies or of the plugins' npm dependencies (`npm install` inside each plugin honours the variable) runs. The build does not need any: the plugins are compiled by their `npm run build`, which is run explicitly and still works.
+- The `upload` and `deploy` jobs (the ones with the `staging` or `production` environment and the Cloudflare token) check out the commit fresh and install **only wrangler**, from `tools/` (`npm ci --ignore-scripts --prefix tools`; `tools/package.json` pins wrangler to the same version as the root `package.json`, with its own lockfile). They do not install the root dependencies: `@quartz-community/types` and `@quartz-community/utils` are git dependencies with a `prepare` script, which npm runs even with `--ignore-scripts`, so a root install would run third-party code next to the token. The other scripts these jobs run (`check-artifact.mjs`, `build-csp.mjs`, `read-wrangler-output.mjs`, `smoke-test.sh`) use only Node built-ins, and the Worker imports no npm package, so wrangler bundles it from `tools/`. The jobs download the artifact, validate it with `scripts/check-artifact.mjs --root`, regenerate `worker/csp.generated.js` from the checked `public/` with `node scripts/build-csp.mjs`, and only then run wrangler (`tools/node_modules/.bin/wrangler`). The token is set on the individual wrangler steps, never job-wide. Keep `tools/` and the root wrangler version in step (Dependabot has an entry for each).
+- The artifact check accepts only `public/` (a `worker/` directory fails it: no Worker code comes from the build, the CSP hashes are recomputed from the checked `public/`), and in `public/` only regular files whose extension is in the allowlist of `scripts/check-artifact.mjs` (`.css .html .ico .js .json .map .mjs .png .txt .woff2 .xml`, the set a build produces) and never `_redirects` or `_headers` (Cloudflare would apply them to the site; routing and headers belong to the Worker). A new kind of file in the site fails the build until the allowlist is extended on purpose.
 - Build jobs need network access to github.com and the npm registry.
 - No dependency cache is used in the deploy and release workflows (cache-poisoning risk), so every deploy build restores plugins cold: expect about 15 minutes (the build job timeout is 45 minutes). CI caches `.quartz/plugins` keyed on `quartz.lock.json`, so a warm CI build takes seconds.
 - Production approval happens at the `deploy` job, after the build has finished.
@@ -176,22 +171,23 @@ Automatic rollback is skipped when no previous version could be recorded (first 
 
 ## Troubleshooting
 
-| Symptom                                                                                   | Likely cause and fix                                                                                                                                                                                                                                                                            |
-| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deploy fails: "A DNS record already exists" / custom domain conflict                      | A CNAME/A record for the hostname exists. Delete it in Cloudflare DNS, then redeploy. Custom Domains cannot be created over an existing CNAME.                                                                                                                                                  |
-| `Authentication error [code: 10000]`                                                      | Token missing a permission or scoped to the wrong account or zone. Re-check the table above, the secret in the right environment, and that the zone is in the same account.                                                                                                                     |
-| `Could not route to /accounts/...` or wrong account                                       | `CLOUDFLARE_ACCOUNT_ID` (variable or secret) missing or from another account.                                                                                                                                                                                                                   |
-| Deploy job sits at "Waiting"                                                              | The `production` environment requires approval; approve in the run. If it is rejected immediately: the branch/tag rules of the environment do not include `main` or `v*`.                                                                                                                       |
-| Stage run finishes in seconds with a notice "no longer the head"                          | Expected: a newer commit reached `main`; its own run deploys. Nothing to fix.                                                                                                                                                                                                                   |
-| Smoke test: `/version.txt` does not match                                                 | Edge propagation or Custom Domain still provisioning (retried for about 2.5 minutes). If it persists, check `npx wrangler deployments status`, and that the build used the right `NOTES_VERSION` and `NOTES_SHA`. Stale caches are bypassed by a random query string.                           |
-| Smoke test: `GET /` returns 403 without `X-Robots-Tag`, while `/version.txt` passes       | A Cloudflare security feature answered instead of the Worker (the Worker sets its headers on every response, errors included). The smoke test prints `server`, `cf-ray` and `cf-mitigated` for the failing response; see [Cloudflare blocks the smoke test](#cloudflare-blocks-the-smoke-test). |
-| Deploy stage fails: "The stage Preview is not served at https://stage.notes.szolotov.com" | `notes.szolotov.com` is not enabled for Production and Preview yet (first release not done, or the toggle is off), or the Preview wildcard is still provisioning. Run the first release or enable it in the dashboard, then re-run **Deploy stage**. See [Stage Preview](#stage-preview).       |
-| Deploy stage: custom domain preview URL missing, `stage.notes` has a DNS record           | A manual `stage.notes` DNS record or the old `notes-stage` Custom Domain shadows the Preview wildcard. Remove it ([migration](#migration-from-the-separate-notes-stage-worker-one-time)).                                                                                                       |
-| `curl https://notes.szolotov.com` works from your machine but CI sees 403                 | Bot Fight Mode on the zone blocks GitHub-hosted runners on the custom domains. Expected: CI verifies on workers.dev and only logs a notice for the custom domain. See [below](#cloudflare-blocks-the-smoke-test).                                                                               |
-| Stage smoke test cannot pass (stage behind Cloudflare Access)                             | Expected when Access protects Previews: the smoke test logs a notice and passes. To skip it entirely, set the variable `STAGE_SMOKE_TEST` to `false` (repository or `staging` environment); the Preview is still uploaded.                                                                      |
-| Release: "No successful ci.yml push run found"                                            | CI on `main` for that commit has not finished or failed. Wait or fix, then re-run Release.                                                                                                                                                                                                      |
-| Release: tag step fails with a ruleset error                                              | The tag ruleset blocks creation by the Actions app. See the tag ruleset notes above.                                                                                                                                                                                                            |
-| Release: "must be strictly greater than the latest tag"                                   | Pick a higher X.Y.Z. A failed release after the tag step needs a new version number (tags are never reused); re-run only the deploy via Deploy production on that tag.                                                                                                                          |
+| Symptom                                                                                       | Likely cause and fix                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deploy fails: "A DNS record already exists" / custom domain conflict                          | A CNAME/A record for the hostname exists. Delete it in Cloudflare DNS, then redeploy. Custom Domains cannot be created over an existing CNAME.                                                                                                                                                  |
+| `Authentication error [code: 10000]`                                                          | Token missing a permission or scoped to the wrong account or zone. Re-check the table above, the secret in the right environment, and that the zone is in the same account.                                                                                                                     |
+| `Could not route to /accounts/...` or wrong account                                           | `CLOUDFLARE_ACCOUNT_ID` (variable or secret) missing or from another account.                                                                                                                                                                                                                   |
+| Deploy job sits at "Waiting"                                                                  | The `production` environment requires approval; approve in the run. If it is rejected immediately: the branch/tag rules of the environment do not include `main` or `v*`.                                                                                                                       |
+| Stage run finishes in seconds with a notice "no longer the head"                              | Expected: a newer commit reached `main`; its own run deploys. Nothing to fix.                                                                                                                                                                                                                   |
+| Smoke test: `/version.txt` does not match                                                     | Edge propagation or Custom Domain still provisioning (retried for about 2.5 minutes). If it persists, check `npx wrangler deployments status`, and that the build used the right `NOTES_VERSION` and `NOTES_SHA`. Stale caches are bypassed by a random query string.                           |
+| Smoke test: `GET /` returns 403 without `X-Robots-Tag`, while `/version.txt` passes           | A Cloudflare security feature answered instead of the Worker (the Worker sets its headers on every response, errors included). The smoke test prints `server`, `cf-ray` and `cf-mitigated` for the failing response; see [Cloudflare blocks the smoke test](#cloudflare-blocks-the-smoke-test). |
+| Deploy stage fails: "The stage Preview is not served at https://stage.notes.szolotov.com"     | `notes.szolotov.com` is not enabled for Production and Preview yet (first release not done, or the toggle is off), or the Preview wildcard is still provisioning. Run the first release or enable it in the dashboard, then re-run **Deploy stage**. See [Stage Preview](#stage-preview).       |
+| Deploy stage: custom domain preview URL missing, `stage.notes` has a DNS record               | A manual `stage.notes` DNS record or the old `notes-stage` Custom Domain shadows the Preview wildcard. Remove it ([migration](#migration-from-the-separate-notes-stage-worker-one-time)).                                                                                                       |
+| `curl https://notes.szolotov.com` works from your machine but CI sees 403                     | Bot Fight Mode on the zone blocks GitHub-hosted runners on the custom domains. Expected: CI verifies on workers.dev and only logs a notice for the custom domain. See [below](#cloudflare-blocks-the-smoke-test).                                                                               |
+| Stage smoke test cannot pass (stage behind Cloudflare Access)                                 | Expected when Access protects Previews: the smoke test logs a notice and passes. To skip it entirely, set the variable `STAGE_SMOKE_TEST` to `false` (repository or `staging` environment); the Preview is still uploaded.                                                                      |
+| Deploy production: guard fails with "No successful ci.yml push run found" or "is not on main" | The tagged commit has no successful CI push run on `main`, or is not reachable from `main`. Merge it through a pull request and let CI finish on `main`, then tag a commit from `main`.                                                                                                         |
+| Release: "No successful ci.yml push run found"                                                | CI on `main` for that commit has not finished or failed. Wait or fix, then re-run Release.                                                                                                                                                                                                      |
+| Release: tag step fails with a ruleset error                                                  | The tag ruleset blocks creation by the Actions app. See the tag ruleset notes above.                                                                                                                                                                                                            |
+| Release: "must be strictly greater than the latest tag"                                       | Pick a higher X.Y.Z. A failed release after the tag step needs a new version number (tags are never reused); re-run only the deploy via Deploy production on that tag.                                                                                                                          |
 
 ### Cloudflare blocks the smoke test
 
@@ -212,6 +208,78 @@ Symptom: `/version.txt` and `/robots.txt` pass, but `GET /` (HTML) fails with 40
 
 The smoke test also sends the User-Agent `notes-smoke-test/1 (+https://github.com/greenblacked/Notes)` (override with `SMOKE_USER_AGENT`), which makes its requests easy to find in Security Events.
 
+## Repository settings you must apply
+
+These cannot be set from the repository. The pipeline assumes them: without them anyone with write access can bypass its checks.
+
+**Ruleset for `main`** (Settings, Rules, Rulesets, target branch `main`)
+
+- Enforcement: Active. Bypass list: empty (no bypass for admins, apps or roles).
+- Require a pull request before merging.
+- Require status checks to pass: `CI OK` (the aggregate job of `ci.yml`).
+- Block force pushes. Restrict deletions.
+- Optional: require linear history, require branches to be up to date.
+
+**Ruleset for `v*` tags** (target tag, pattern `v*`)
+
+- Restrict creations, updates and deletions. Bypass list: the repository **admin** role and the **GitHub Actions** app, which is the actor that creates the tag in `release.yml` (`GITHUB_TOKEN`).
+- Not verified: whether the GitHub Actions app can be added to a ruleset's bypass list. If it is not offered, a creation restriction makes `release.yml` fail at "Create annotated tag" (403 or ruleset error; nothing is deployed). Then restrict only updates and deletions, so a published tag can never be moved or removed, and accept that creations are limited only by the required reviewers on the `production` environment: the `guard` job is not a control for creations, because a tag push runs the workflow and guard script of the tagged commit ([Production is tag-only](#production-is-tag-only)). Use "Prevent self-review" on that environment when more than one person has access.
+- With the ruleset in place, the real controls for production are this ruleset (who can create `v*` tags) **and** required reviewers on the `production` environment (with "Prevent self-review" when more than one person has access). The guard only catches mistakes.
+
+**Environments** (Settings, Environments; details in the [table above](#2-github-repository-settings))
+
+- `staging`: deployment branches limited to `main` (a deployment branch policy, "Selected branches and tags", rule `main`). Only code that went through the `main` ruleset can reach the job that holds the Cloudflare token.
+- `production`: deployment branches and tags limited to the tag rule `v*` and the branch rule `main` (`main` for the call from `release.yml`), plus required reviewers.
+
+**Optional: a separate Cloudflare account or token for stage.** Stage is a Preview of the same Worker, so the stage token can also deploy production. If that matters, deploy the stage from a separate Cloudflare account (its own `CLOUDFLARE_ACCOUNT_ID` and token in the `staging` environment, and a Worker named `notes` there) so a compromised stage job cannot touch production. This costs a second zone or hostname for the stage URL; the single-Worker setup in this guide does not do it.
+
+### Rollback drill (once, after the first two releases)
+
+Run this once in a quiet moment to know that rollback works before you need it. It needs two released versions; the site serves the older build for a few minutes.
+
+1. Set the credentials (the same token and account as the production environment) and note the live version:
+
+   ```sh
+   export CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=...
+   npx wrangler deployments status
+   curl -s https://notes.szolotov.com/version.txt     # e.g. 0.2.0+<40-char sha>
+   ```
+
+   Expected: one version at 100% and the newest release in `version.txt`.
+
+2. List the deployments and pick the version id of the previous release (not the live one):
+
+   ```sh
+   npx wrangler deployments list
+   npx wrangler versions list
+   ```
+
+   Expected: a table of deployments with the version id, source and message; the earlier release's deploy is in it.
+
+3. Roll back:
+
+   ```sh
+   npx wrangler rollback <version-id> --message "Rollback drill" --yes
+   ```
+
+   Expected: Wrangler reports the rollback to that version and a new deployment. The exact wording differs between Wrangler versions; a non-zero exit code is the failure signal.
+
+4. Validate:
+
+   ```sh
+   npx wrangler deployments status                    # the older version id, 100%
+   curl -s https://notes.szolotov.com/version.txt     # the older release: <older X.Y.Z>+<its sha>
+   curl -sI https://notes.szolotov.com | head -n 1     # HTTP/2 200
+   ```
+
+   Expected: `version.txt` shows the previous release immediately (it is served with `no-store`).
+
+5. Roll forward through the pipeline (never leave a manual rollback in place): Actions, **Deploy production**, Run workflow, select the **tag** of the newest release as the ref (for example `v0.3.0`), approve the `production` environment. For a tag created after this change the guard re-checks the tag, CI and `main`; tags created before it (for example `v0.1.0` to `v0.3.0`) run their own workflow file, which has no CI check, so only their own checks apply. The deploy smoke-tests workers.dev. Redeploying a very old tag also needs the `ci.yml` run record for its commit to still exist; run records expire with the retention period. If it is gone, the guard of a newer tag fails closed ("No successful ci.yml push run found") and the manual `wrangler rollback` from step 3 is the path.
+
+6. Validate again: `curl -s https://notes.szolotov.com/version.txt` shows `0.3.0+<sha>` again and `npx wrangler deployments status` lists the new version at 100%.
+
+Record the date of the drill and any surprise (for example a missing token permission) in the pull request or release notes.
+
 ## Dependency updates
 
-Dependabot (`.github/dependabot.yml`) updates npm, GitHub Actions and the pinned zizmor requirement weekly with a cooldown. The vendored Quartz engine is not updated by Dependabot; use `scripts/update-quartz.sh <tag>` (see the README).
+Dependabot (`.github/dependabot.yml`) updates npm (the root and `tools/`), GitHub Actions and the pinned zizmor requirement weekly with a cooldown. The vendored Quartz engine is not updated by Dependabot; use `scripts/update-quartz.sh <tag>` (see the README).
