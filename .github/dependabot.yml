@@ -12,6 +12,11 @@ updates:
     groups:
       npm-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # The Quartz plugins in .quartz/plugins install their own @types/hast (pinned by their
+      # lockfiles). A root version that differs makes the two hast types incompatible and fails
+      # `npm run check` (see #18). Bump it by hand together with the plugins.
+      - dependency-name: "@types/hast"
     labels: [dependencies]
 
   - package-ecosystem: github-actions
