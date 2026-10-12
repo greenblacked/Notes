@@ -92,7 +92,7 @@ scripts/update-quartz.sh <tag>   # re-imports the engine and updates QUARTZ_VERS
 npm install && npm run build && npm run check
 ```
 
-Then open a pull request. Dependabot does not manage the vendored engine. Customise through the configuration and layout files rather than editing `quartz/`. Quartz is MIT licensed; its license text is kept in `LICENSE-QUARTZ`.
+Then open a pull request. Dependabot does not manage the vendored engine. Customise through the configuration and layout files rather than editing `quartz/`. The one local patch (`quartz/cli/plugin-git-handlers.js` exits non-zero when a plugin fails to restore or build) is overwritten by the script: re-apply it from the git history if the script's final message says it is gone. Quartz is MIT licensed; its license text is kept in `LICENSE-QUARTZ`.
 
 ## License
 

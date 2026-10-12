@@ -13,6 +13,7 @@
 /public/
 /node_modules/
 /package-lock.json
+/tools/package-lock.json
 /.wrangler/
 
 # Generated files

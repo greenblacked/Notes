@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Security
+
+- The build jobs of `ci.yml`, `deploy-stage.yml` and `deploy-production.yml` run with `NPM_CONFIG_IGNORE_SCRIPTS=true`: no install script of our dependencies or of the third-party plugins' npm dependencies runs. The output is identical to a build with scripts.
+- `scripts/check-artifact.mjs` (tested by `scripts/check-artifact.test.mjs`) replaces the inline artifact check of the deploy workflows. Besides the expected layout it rejects `public/_redirects`, `public/_headers`, symlinks and any file extension outside an allowlist. It also runs after the build in CI and in both build jobs.
+- Deploy production now requires, for tag pushes, manual runs and the call from `release.yml`, a successful `ci.yml` push run for the exact commit and that the commit is on `main` (`compare/main...<sha>` is `identical` or `behind`). The check is shared with `release.yml` (`.github/scripts/require-ci-success.sh`); the guard job has `actions: read` and `contents: read`.
+- `deploy-stage.yml`: `GH_TOKEN` is set on the one step that needs it (the re-check of the head of `main` in the `upload` job) instead of on the whole job.
+- The `upload` and `deploy` jobs that hold the Cloudflare token no longer install the root dependencies. `--ignore-scripts` alone did not keep third-party code out: `@quartz-community/types` and `@quartz-community/utils` are git dependencies whose `prepare` script npm runs anyway. They now run `npm ci --ignore-scripts --prefix tools` (`tools/package.json` pins only wrangler, with its own lockfile and a Dependabot entry) and call `tools/node_modules/.bin/wrangler`; the scripts they run use only Node built-ins. The build jobs, which hold no secrets, keep the root install.
+- The build artifact is `public/` only. `worker/csp.generated.js` is no longer taken from it: the `upload` and `deploy` jobs regenerate it with `scripts/build-csp.mjs` from the checked `public/`, and `check-artifact.mjs --root` fails on a `worker/` directory.
+- `require-ci-success.sh` resolves the SHA of `main` first and compares `<main sha>...<commit>` instead of the ambiguous name `main`.
+- `npm audit fix` (no `--force`): fflate, js-yaml (gray-matter's copy), immutable, picomatch and source-map-js updated within their ranges; 19 advisories before, 16 after. An `overrides` entry lifts `satori`'s exact pin of `fflate` 0.7.3 (unzipSync DoS) to 0.7.5. What remains needs a breaking change (`globby`, `gray-matter`, `mermaid`, `rehype-katex`, `remark-math`) or an upstream release (`@xmldom/xmldom` pinned by `speech-rule-engine`, `esbuild` pinned by `tsup`).
+
+### Fixed
+
+- `scripts/smoke-test.sh` no longer follows redirects: any 3xx is a failure with the status and `Location`. A Cloudflare Access redirect is still detected from the response headers (a notice with `SMOKE_ALLOW_ACCESS=1`, a failure otherwise), but only on a 3xx response: a `Location` header on a 200 is not Access. Tested by `scripts/smoke-test.test.mjs`.
+
+### Changed
+
+- `quartz plugin restore` exits non-zero when a plugin fails to build or install, instead of continuing with a partial set. The vendored `quartz/cli/plugin-git-handlers.js` is patched locally; `scripts/update-quartz.sh` notes this.
+- `docs/deployment.md` states that on a tag push or tag dispatch the workflow file and guard script come from the tagged commit, so the guard only catches mistakes; the controls for creating production tags are the `v*` tag ruleset and required reviewers on the `production` environment ("Prevent self-review" when more than one person has access). The "rely on the guard for creations" fallback is removed. The rollback drill notes that tags from before the CI check have no such step and that a very old tag needs its `ci.yml` run record to still exist.
+
+- `docs/deployment.md`: "Repository settings you must apply" (rulesets for `main` and `v*` tags, environment branch policies, optional separate stage token) and a one-time `wrangler rollback` drill.
+
 ## [0.3.0] - 2026-10-11
 
 ### Added
