@@ -54,7 +54,7 @@ Obsidian workflow: open `content/` as a vault, or publish selected notes with th
 
 ## Design
 
-A sheet of paper on a desk, light by default (a saved toggle choice wins, and the OS theme is not followed after that). The article sits on a warm paper sheet with a faint grain (an SVG `feTurbulence` noise tile as a data URI, so no image file and nothing for the Worker's CSP to allow), a soft layered shadow and a hairline margin rule; the sidebars sit on the desk like the margin of a notebook, with no panels. The dark theme is the same page at night: a warm charcoal sheet with off-white ink and a salmon accent, never pure black or white.
+A sheet of paper on a desk, light by default, whatever the OS theme (a saved toggle choice wins). The article sits on a warm paper sheet with a faint grain (an SVG `feTurbulence` noise tile as a data URI, so no image file; it uses the CSP's existing `img-src data:`), a soft layered shadow and a hairline margin rule; the sidebars sit on the desk like the margin of a notebook, with no panels. The dark theme is the same page at night: a warm charcoal sheet with off-white ink and a salmon accent, never pure black or white.
 
 Source Serif 4 sets all text (400, 600 and italic; old-style numerals in prose, lining and tabular ones in tables, dates and labels) and IBM Plex Mono the code. Both are self-hosted: the woff2 files come from the `@fontsource` devDependencies and are copied to `public/static/fonts/` by `scripts/postprocess-build.mjs`, so the Worker's CSP needs no extra origin. Small labels are letter-spaced capitals in the same serif.
 
