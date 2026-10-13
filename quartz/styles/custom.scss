@@ -75,7 +75,7 @@ $unicode-ranges: (
 
   // The grain is a tile of feTurbulence noise, brown at up to 9% opacity (GRAIN_MAX in
   // scripts/check-contrast.mjs), so the contrast check can allow for it.
-  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .27 0 0 0 0 .16 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n' color-interpolation-filters='sRGB' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .27 0 0 0 0 .16 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --grain-color: #594529;
   --sheet-shadow:
     0 1px 1px rgba(70, 50, 20, 0.1), 0 2px 5px rgba(70, 50, 20, 0.06),
@@ -100,7 +100,7 @@ $unicode-ranges: (
   --chip-warning-fg: #e8c070;
 
   // Pale specks instead of dark ones, at up to 5% opacity.
-  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .88 0 0 0 0 .75 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n' color-interpolation-filters='sRGB' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .88 0 0 0 0 .75 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --grain-color: #f2e0bf;
   --sheet-shadow:
     0 1px 1px rgba(0, 0, 0, 0.5), 0 2px 5px rgba(0, 0, 0, 0.3), 0 16px 30px -10px rgba(0, 0, 0, 0.55),
@@ -1034,7 +1034,9 @@ body[data-slug="index"] {
   }
 }
 
-@container (max-width: 40rem) {
+// Card layout of the home index on a narrow sheet. Container queries where supported, the
+// mobile breakpoint otherwise.
+@mixin note-index-cards {
   .note-index {
     & .note-index-head {
       display: none;
@@ -1085,6 +1087,16 @@ body[data-slug="index"] {
     & .note-index-status:empty {
       display: none;
     }
+  }
+}
+
+@container (max-width: 40rem) {
+  @include note-index-cards;
+}
+
+@supports not (container-type: inline-size) {
+  @media all and ($mobile) {
+    @include note-index-cards;
   }
 }
 
@@ -1495,6 +1507,16 @@ pre:focus-within > .clipboard-button {
     --tertiary: #7a2416;
     --desk: #ffffff;
     --surface: #f3efe6;
+    --accepted: #1f6b3a;
+    --warning: #7a4a00;
+    --chip-neutral-bg: #efe6d2;
+    --chip-neutral-fg: #4a3f2c;
+    --chip-accepted-bg: #e1eddc;
+    --chip-accepted-fg: #1d5a33;
+    --chip-proposed-bg: #e3e9f1;
+    --chip-proposed-fg: #2a4a72;
+    --chip-warning-bg: #f4e6c6;
+    --chip-warning-fg: #6e4300;
   }
 
   html,
