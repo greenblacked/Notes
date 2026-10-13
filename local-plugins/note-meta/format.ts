@@ -1,4 +1,4 @@
-/** Display helpers shared by the metadata strip (note-meta) and the home page index (note-index). */
+/** Display helpers shared by the spec sheet (note-meta) and the home page index (note-index). */
 
 export const TYPE_LABELS: Record<string, string> = {
   adr: "ADR",
@@ -17,6 +17,16 @@ export const STATUS_TONES: Record<string, "accepted" | "proposed" | "warning"> =
   superseded: "warning",
   rejected: "warning",
 }
+
+const own = (map: object, key: string) => Object.prototype.hasOwnProperty.call(map, key)
+
+/** Label for a `type` value; unknown values (including `constructor` and the like) as written. */
+export const typeLabel = (type: string): string =>
+  own(TYPE_LABELS, type) ? TYPE_LABELS[type] : type
+
+/** Chip tone for a `status` value; unknown values are neutral. */
+export const statusTone = (status: string): string =>
+  own(STATUS_TONES, status) ? STATUS_TONES[status] : "neutral"
 
 /**
  * YAML turns an unquoted `2026-10-11` into a Date (midnight UTC), while a quoted one stays a
