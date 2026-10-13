@@ -2,12 +2,15 @@
 @use "sass:map";
 @use "./variables.scss" as *;
 
-// Site design: IBM Plex UI with Literata article prose, surface panels, dark by default.
-// Everything custom lives in this file. The Quartz colour keys (--light, --lightgray, --gray,
-// --darkgray, --dark, --secondary, --tertiary, --highlight) come from quartz.config.yaml; the
-// variables in the two token blocks below add what Quartz has no key for. scripts/check-contrast.mjs
+// Site design: a sheet of paper on a desk. Warm paper with a faint grain and a soft shadow carries
+// the article; the sidebars sit on the desk like the margin of a notebook. Source Serif 4 for all
+// text, IBM Plex Mono for code, light by default and "paper at night" in the dark theme.
+// Everything custom lives in this file. The Quartz colour keys (--light is the sheet, --lightgray,
+// --gray, --darkgray, --dark, --secondary, --tertiary, --highlight) come from quartz.config.yaml;
+// the variables in the two token blocks below add what Quartz has no key for. scripts/check-contrast.mjs
 // reads both and fails when a text/background pair drops below WCAG AA, so keep the token blocks
-// to plain `--name: #rrggbb;` lines.
+// to plain `--name: #rrggbb;` lines for colours (other values, such as the grain and the shadow,
+// go on lines that do not start with a hex colour).
 //
 // Do not name a variable --bg, --border or --color: the callout styles set those per callout.
 
@@ -39,68 +42,71 @@ $unicode-ranges: (
   }
 }
 
-// The condensed family has no basic Cyrillic in fontsource; headings fall back to IBM Plex Sans
-// there (see --headerFont below).
-@include font-faces(
-  "IBM Plex Sans Condensed",
-  "ibm-plex-sans-condensed",
-  600,
-  normal,
-  ("latin", "latin-ext")
-);
-@include font-faces("IBM Plex Sans", "ibm-plex-sans", 400);
-@include font-faces("IBM Plex Sans", "ibm-plex-sans", 600);
+@include font-faces("Source Serif 4", "source-serif-4", 400);
+@include font-faces("Source Serif 4", "source-serif-4", 400, italic);
+@include font-faces("Source Serif 4", "source-serif-4", 600);
 @include font-faces("IBM Plex Mono", "ibm-plex-mono", 400);
-@include font-faces("Literata", "literata", 400);
-@include font-faces("Literata", "literata", 400, italic);
-@include font-faces("Literata", "literata", 600);
 
 // ============================================================================
 // Tokens
 // ============================================================================
 
 :root {
-  --titleFont: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
-  --headerFont: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
-  --proseFont: "Literata", Georgia, "Times New Roman", serif;
-  --measure: 68ch;
-  --radius: 8px;
+  --serif: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --measure: 66ch;
   --sidenote-gap: 1.25rem;
 
-  --surface: #ffffff;
-  --surface-2: #f1f4f7;
-  --muted: #566172;
-  --accent: #1b66db;
-  --accepted: #1a7f37;
-  --warning: #9a6700;
+  // The desk behind the sheet, and the tint of callouts, code and cards on the sheet.
+  --desk: #e6dece;
+  --surface: #f1eadb;
+  --accepted: #1f6b3a;
+  --warning: #7a4a00;
 
   // Chips: text on a tint of the status colour, darker than the status colour where AA needs it.
-  --chip-neutral-bg: #f1f4f7;
-  --chip-neutral-fg: #3c4658;
-  --chip-accepted-bg: #e2f4e8;
-  --chip-accepted-fg: #146028;
-  --chip-proposed-bg: #e3edfc;
-  --chip-proposed-fg: #1456b8;
-  --chip-warning-bg: #fbefd2;
-  --chip-warning-fg: #7d5400;
+  --chip-neutral-bg: #efe6d2;
+  --chip-neutral-fg: #4a3f2c;
+  --chip-accepted-bg: #e1eddc;
+  --chip-accepted-fg: #1d5a33;
+  --chip-proposed-bg: #e3e9f1;
+  --chip-proposed-fg: #2a4a72;
+  --chip-warning-bg: #f4e6c6;
+  --chip-warning-fg: #6e4300;
+
+  // The grain is a tile of feTurbulence noise, brown at up to 9% opacity (GRAIN_MAX in
+  // scripts/check-contrast.mjs), so the contrast check can allow for it.
+  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .27 0 0 0 0 .16 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-color: #594529;
+  --sheet-shadow:
+    0 1px 1px rgba(70, 50, 20, 0.1), 0 2px 5px rgba(70, 50, 20, 0.06),
+    0 14px 26px -10px rgba(70, 50, 20, 0.2), 0 34px 50px -26px rgba(70, 50, 20, 0.26),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4), inset 0 0 90px rgba(150, 115, 60, 0.07);
+  --margin-rule: rgba(138, 42, 26, 0.2);
 }
 
 :root[saved-theme="dark"] {
-  --surface: #181d24;
-  --surface-2: #1f2630;
-  --muted: #9aa5b4;
-  --accent: #5a9cff;
-  --accepted: #3fb950;
-  --warning: #d29922;
+  --desk: #100d0a;
+  --surface: #241e17;
+  --accepted: #8fd0a0;
+  --warning: #e2b565;
 
-  --chip-neutral-bg: #1f2630;
-  --chip-neutral-fg: #c3ccd8;
-  --chip-accepted-bg: #1a2e22;
-  --chip-accepted-fg: #3fb950;
-  --chip-proposed-bg: #1b2a42;
-  --chip-proposed-fg: #6ca7ff;
-  --chip-warning-bg: #33281a;
-  --chip-warning-fg: #d9a62e;
+  --chip-neutral-bg: #2c261d;
+  --chip-neutral-fg: #d6caae;
+  --chip-accepted-bg: #1d2c21;
+  --chip-accepted-fg: #9bd6aa;
+  --chip-proposed-bg: #1f2a38;
+  --chip-proposed-fg: #a9c3e4;
+  --chip-warning-bg: #35291a;
+  --chip-warning-fg: #e8c070;
+
+  // Pale specks instead of dark ones, at up to 5% opacity.
+  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .88 0 0 0 0 .75 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-color: #f2e0bf;
+  --sheet-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.5), 0 2px 5px rgba(0, 0, 0, 0.3), 0 16px 30px -10px rgba(0, 0, 0, 0.55),
+    0 38px 56px -28px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 235, 200, 0.05),
+    inset 0 0 90px rgba(0, 0, 0, 0.18);
+  --margin-rule: rgba(232, 162, 131, 0.22);
 }
 
 // ============================================================================
@@ -123,61 +129,69 @@ $unicode-ranges: (
 }
 
 // ============================================================================
-// Layout: sidebars and article on surface panels
+// The desk, the sheet and the margins
 // ============================================================================
 
 html {
-  background-color: var(--light);
+  background-color: var(--desk);
+}
+
+body {
+  background-color: var(--desk);
+  font-family: var(--serif);
 }
 
 .page > #quartz-body {
   padding: 0 1rem;
-  column-gap: 1rem;
+  column-gap: 1.25rem;
   row-gap: 0.75rem;
 
   @media all and ($desktop) {
-    grid-template-columns: clamp(14rem, 17vw, 17rem) minmax(0, 1fr) clamp(14rem, 17vw, 17rem);
+    grid-template-columns: clamp(11.5rem, 15vw, 16rem) minmax(0, 1fr) clamp(11.5rem, 15vw, 16rem);
     row-gap: 0;
   }
   @media all and ($tablet) {
-    grid-template-columns: 17rem minmax(0, 1fr);
+    grid-template-columns: 15rem minmax(0, 1fr);
   }
 
+  // Sidebars: no panel, just text on the desk with a short rule over each block.
   & .sidebar {
-    background: var(--surface);
-    border: 1px solid var(--lightgray);
-    border-radius: var(--radius);
     box-sizing: border-box;
 
     @media all and ($desktop) {
-      top: 1rem;
-      height: calc(100vh - 2rem);
-      margin: 1rem 0;
-      padding: 1.25rem;
+      top: 0;
+      height: 100vh;
+      padding: 2.25rem 0.25rem 2rem 0;
+      overflow-y: auto;
+      scrollbar-width: thin;
     }
     @media all and ($tablet) {
-      top: 1rem;
-      height: calc(100vh - 2rem);
-      margin: 1rem 0 0;
-      padding: 1.25rem;
+      top: 0;
+      height: 100vh;
+      padding: 2.25rem 0 2rem;
+      overflow-y: auto;
+      scrollbar-width: thin;
     }
   }
 
   & .sidebar.left {
     @media all and ($mobile) {
-      margin-top: 0.75rem;
-      padding: 0.75rem 1rem;
+      padding: 1.25rem 0 0.5rem;
     }
   }
 
   & .sidebar.right {
+    @media all and ($desktop) {
+      padding-left: 0.25rem;
+      padding-right: 0;
+    }
     @media all and not ($desktop) {
-      padding: 1rem;
+      padding: 0.5rem 0 0;
       gap: 1rem;
     }
     @media all and ($tablet) {
       height: unset;
-      margin-top: 0;
+      overflow: visible;
     }
   }
 
@@ -186,25 +200,46 @@ html {
     padding: 0;
   }
 
+  // The sheet.
   & .center {
-    background: var(--surface);
-    border: 1px solid var(--lightgray);
-    border-radius: var(--radius);
+    position: relative;
     box-sizing: border-box;
-    margin-top: 1rem;
-    padding: 1.5rem clamp(1rem, 3vw, 2.25rem) 2rem;
+    margin: 1.5rem 0 1rem;
+    padding: clamp(1.75rem, 4vw, 3.25rem) clamp(1.25rem, 4vw, 3.25rem) clamp(2rem, 4vw, 3.5rem);
+    background-color: var(--light);
+    background-image: var(--grain-image);
+    border-radius: 2px;
+    box-shadow: var(--sheet-shadow);
 
     @media all and ($tablet) {
       margin-right: 0;
     }
     @media all and ($mobile) {
-      margin-top: 0;
-      padding: 1rem 1rem 1.5rem;
+      margin: 0.5rem 0 0.5rem;
+      padding: 1.25rem 1.1rem 1.75rem;
+    }
+
+    // The margin rule of a ruled page.
+    @media all and not ($mobile) {
+      &::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: clamp(0.75rem, 1.8vw, 1.6rem);
+        width: 1px;
+        background: var(--margin-rule);
+        pointer-events: none;
+      }
     }
   }
 
+  & .page-footer {
+    margin-top: 0;
+  }
+
   & footer {
-    margin: 1rem 0 2rem;
+    margin: 0.5rem 0 2.5rem;
     padding: 0 0.25rem;
     color: var(--gray);
     font-size: 0.85rem;
@@ -225,14 +260,259 @@ html {
 @media all and ($mobile) {
   .explorer .explorer-content {
     position: fixed;
+    box-sizing: border-box;
+    padding: 4.5rem 1.5rem 2rem;
+    background-color: var(--light);
+    background-image: var(--grain-image);
   }
 }
 
-.page-title {
-  font-family: var(--titleFont);
+hr {
+  border: 0;
+  border-top: 1px solid var(--lightgray);
+  margin: 2.5rem 0;
+}
+
+// Small labels: capitals with letter-spacing, in the serif. One recipe for every tiny UI label.
+%label {
+  font-family: var(--serif);
+  font-size: 0.72rem;
   font-weight: 600;
-  font-size: 1.5rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  color: var(--gray);
+}
+
+.page-title {
   margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+
+  &::before {
+    content: "";
+    display: block;
+    width: 2.25rem;
+    height: 3px;
+    margin-bottom: 0.7rem;
+    background: var(--secondary);
+  }
+
+  & a,
+  .sidebar & a {
+    color: var(--dark);
+    font-size: inherit;
+    text-decoration: none;
+  }
+}
+
+// ---- sidebar blocks --------------------------------------------------------
+
+.sidebar {
+  & h2:not(.page-title),
+  & h3 {
+    @extend %label;
+    margin: 0;
+  }
+
+  // Every block under the page title gets the same short rule and label.
+  & .explorer,
+  & .toc,
+  & .graph,
+  & .backlinks {
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--lightgray);
+  }
+
+  & .toolbar,
+  & .flex-component {
+    align-items: center;
+  }
+
+  & .search-button,
+  & .darkmode,
+  & .readermode {
+    color: var(--gray);
+    background: none;
+    border: 0;
+    border-radius: 2px;
+  }
+
+  & .search-button {
+    border-bottom: 1px solid var(--lightgray);
+    border-radius: 0;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 0.95rem;
+
+    & p {
+      color: var(--gray);
+    }
+    & svg {
+      fill: var(--gray);
+    }
+    &:hover {
+      border-bottom-color: var(--secondary);
+    }
+  }
+
+  & .darkmode svg,
+  & .readermode svg {
+    fill: var(--gray);
+    stroke: var(--gray);
+  }
+  & .darkmode:hover svg,
+  & .readermode:hover svg {
+    fill: var(--secondary);
+    stroke: var(--secondary);
+  }
+
+  & li,
+  & a {
+    font-size: 0.92rem;
+    line-height: 1.4;
+  }
+
+  & .backlinks li {
+    margin: 0.2rem 0;
+  }
+
+  & .graph-outer {
+    border: 1px solid var(--lightgray);
+    border-radius: 2px;
+    background: var(--light);
+  }
+}
+
+// Explorer: an outline of the sections, the open note in italic.
+.explorer {
+  & .title-button h2 {
+    @extend %label;
+  }
+
+  & li > a,
+  & .folder-title,
+  & .folder-button {
+    font-family: var(--serif);
+    font-size: 0.95rem;
+    color: var(--darkgray);
+  }
+
+  & .folder-title {
+    font-weight: 600;
+  }
+
+  & li > a.active,
+  & a[aria-current="page"] {
+    color: var(--secondary);
+    font-style: italic;
+  }
+
+  & li > a:hover,
+  & .folder-button:hover .folder-title {
+    color: var(--secondary);
+  }
+}
+
+// Table of contents with the numbering of the h2 sections (see "Numbered sections" below).
+.toc {
+  counter-reset: toc;
+
+  & .toc-header {
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  & li.depth-0 {
+    counter-increment: toc;
+    margin-top: 0.35rem;
+
+    & > a {
+      font-weight: 400;
+      color: var(--darkgray);
+    }
+    & > a::before {
+      content: counter(toc, decimal-leading-zero);
+      display: inline-block;
+      min-width: 1.7rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      font-variant-numeric: lining-nums tabular-nums;
+      color: var(--secondary);
+    }
+  }
+
+  & li.depth-1,
+  & li.depth-2 {
+    margin: 0.1rem 0;
+    & > a {
+      font-size: 0.85rem;
+      font-style: italic;
+      color: var(--gray);
+    }
+  }
+
+  & ul.toc-content.overflow {
+    & .depth-0 {
+      padding-left: 0;
+    }
+    & .depth-1 {
+      padding-left: 1.7rem;
+    }
+    & .depth-2 {
+      padding-left: 2.4rem;
+    }
+
+    // Quartz fades the entries that are out of view; the text stays at full strength here and the
+    // entry in view turns to the accent.
+    & > li > a {
+      opacity: 1;
+      text-decoration: none;
+
+      &:hover,
+      &.in-view {
+        color: var(--secondary);
+      }
+    }
+  }
+
+  & .toc-header h3 {
+    font-size: 0.72rem;
+  }
+}
+
+// Breadcrumbs above the title.
+.breadcrumb-container {
+  margin: 0 0 1.25rem;
+  gap: 0.35rem;
+
+  & .breadcrumb-element {
+    @extend %label;
+    letter-spacing: 0.1em;
+
+    & p {
+      margin: 0;
+      color: var(--lightgray);
+      font-size: 0.6rem;
+    }
+    & a {
+      color: var(--gray);
+      text-decoration: none;
+      background: none;
+      font-size: inherit;
+      font-weight: 600;
+
+      &:hover {
+        color: var(--secondary);
+      }
+    }
+  }
 }
 
 // ============================================================================
@@ -245,35 +525,37 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: var(--headerFont);
+  font-family: var(--serif);
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.2;
+  color: var(--dark);
 }
 
 h1.article-title {
-  font-size: 2.1rem;
-  margin: 0.5rem 0 0;
-}
-
-h2 {
-  font-size: 1.6rem;
-  margin-top: 2.25rem;
-}
-
-h3 {
-  font-size: 1.25rem;
-  margin-top: 1.75rem;
+  margin: 0;
+  font-size: clamp(2.15rem, 5vw, 3.1rem);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
 }
 
 article {
-  font-family: var(--proseFont);
-  font-size: 1.0625rem;
-  line-height: 1.7;
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  line-height: 1.65;
+  font-kerning: normal;
+  font-variant-numeric: oldstyle-nums proportional-nums;
+  font-feature-settings:
+    "kern",
+    "liga",
+    "onum";
 
   & p,
   & li,
   & tbody {
-    line-height: 1.7;
+    line-height: 1.65;
+    font-variant-numeric: inherit;
   }
 
   & > p,
@@ -284,8 +566,25 @@ article {
     max-width: var(--measure);
   }
 
+  & p {
+    margin: 0 0 1em;
+  }
+
   & li {
-    margin: 0.25rem 0;
+    margin: 0.3rem 0;
+  }
+
+  & li::marker {
+    color: var(--secondary);
+  }
+  & ol > li::marker {
+    font-weight: 600;
+    font-variant-numeric: lining-nums;
+  }
+
+  & strong {
+    font-weight: 600;
+    color: var(--dark);
   }
 
   & a:not([role="anchor"]) {
@@ -301,109 +600,572 @@ article {
 
   & .table-container table,
   & .callout-title {
-    font-family: var(--bodyFont);
-  }
-  & .table-container table {
-    font-size: 0.92rem;
+    font-family: var(--serif);
   }
 }
 
-blockquote {
-  border-left-color: var(--lightgray);
-  color: var(--muted);
+// ---- Numbered sections ----------------------------------------------------
+// h2 headings count 01, 02, ... with a CSS counter. The table of contents counts its depth-0
+// entries the same way, so the numbers agree as long as the note's top-level headings are h2.
+
+article {
+  counter-reset: section;
+
+  & > h2 {
+    counter-increment: section;
+    position: relative;
+    margin: 3.25rem 0 1rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--lightgray);
+    font-size: 1.65rem;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+
+    // The short accent rule on the sheet's hairline, like a section tab on an index card.
+    &::after {
+      content: "";
+      position: absolute;
+      top: -1px;
+      left: 0;
+      width: 2.5rem;
+      height: 3px;
+      background: var(--secondary);
+    }
+
+    &::before {
+      content: counter(section, decimal-leading-zero);
+      display: block;
+      margin-bottom: 0.35rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      font-variant-numeric: lining-nums tabular-nums;
+      color: var(--secondary);
+    }
+  }
+
+  & > h2.sr-only {
+    counter-increment: none;
+    border: 0;
+    &::before,
+    &::after {
+      content: none;
+    }
+  }
+
+  & > h2:first-child {
+    margin-top: 0;
+  }
+
+  & h3 {
+    margin: 2.25rem 0 0.6rem;
+    font-size: 1.25rem;
+    font-weight: 400;
+    font-style: italic;
+    letter-spacing: 0;
+  }
+
+  & h4,
+  & h5,
+  & h6 {
+    margin: 1.75rem 0 0.5rem;
+    @extend %label;
+    color: var(--darkgray);
+  }
+
+  // The "#" anchor link beside a heading.
+  & a[role="anchor"] {
+    color: var(--gray);
+    font-weight: 400;
+    font-style: normal;
+  }
+}
+
+blockquote:not(.callout) {
+  margin: 1.25rem 0;
+  padding: 0 0 0 1.25rem;
+  border-left: 2px solid var(--lightgray);
+  font-style: italic;
+  color: var(--gray);
+
+  & p {
+    color: var(--gray);
+  }
+}
+
+// On the home page the lede repeats the first paragraph, and the index follows without a rule.
+body[data-slug="index"] {
+  & .note-properties .note-properties-row:first-child .note-properties-text,
+  & hr {
+    display: none;
+  }
 }
 
 // ============================================================================
-// Metadata strip and section tabs
+// Spec sheet and the head of a note
 // ============================================================================
+// Under the title: the metadata as a ruled sheet of label/value pairs, then the description as the
+// lede and the tags (both from the note-properties plugin).
 
 .note-meta {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 0.75rem;
-  margin: 1rem 0 0;
-  font-family: var(--bodyFont);
-  font-size: 0.8rem;
-  line-height: 1.5;
-  color: var(--muted);
+  align-items: flex-end;
+  gap: 0.75rem 2rem;
+  margin: 1.4rem 0 0;
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--dark);
+  border-bottom: 1px solid var(--lightgray);
+  font-variant-numeric: lining-nums tabular-nums;
+
+  & .note-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0;
+  }
+
+  & dt {
+    @extend %label;
+    font-size: 0.66rem;
+  }
+
+  & dd {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    color: var(--darkgray);
+  }
 
   & .chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.05rem 0.6rem;
-    border: 1px solid transparent;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    white-space: nowrap;
+    display: inline-block;
+  }
+}
+
+// Where the spec sheet shows the modified date, the plain date line of content-meta is redundant.
+.note-meta ~ .content-meta {
+  display: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.55rem;
+  border: 1px solid var(--lightgray);
+  border-radius: 2px;
+  font-family: var(--serif);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  line-height: 1.35;
+  text-transform: uppercase;
+  white-space: nowrap;
+  font-variant-numeric: lining-nums;
+}
+
+.chip-type {
+  background: transparent;
+  border-color: var(--dark);
+  color: var(--dark);
+}
+
+.chip-status {
+  background: var(--chip-neutral-bg);
+  color: var(--chip-neutral-fg);
+
+  &[data-tone="accepted"] {
+    background: var(--chip-accepted-bg);
+    border-color: var(--accepted);
+    color: var(--chip-accepted-fg);
+  }
+  &[data-tone="proposed"] {
+    background: var(--chip-proposed-bg);
+    border-color: var(--chip-proposed-fg);
+    color: var(--chip-proposed-fg);
+  }
+  &[data-tone="warning"] {
+    background: var(--chip-warning-bg);
+    border-color: var(--warning);
+    color: var(--chip-warning-fg);
+  }
+}
+
+// note-properties: the description is the lede, the tags a line of #tags; the "Properties" header
+// and the other rows are not shown.
+.note-properties {
+  margin: 0 0 1.75rem;
+  border: 0;
+  background: none;
+
+  & > .note-properties-header {
+    display: none;
   }
 
-  & .chip-type {
-    background: var(--chip-neutral-bg);
-    border-color: var(--lightgray);
-    color: var(--chip-neutral-fg);
+  & .note-properties-table,
+  & tbody {
+    display: block;
+    width: 100%;
+    margin: 0;
+    border: 0;
   }
 
-  & .chip-status {
-    background: var(--chip-neutral-bg);
-    border-color: var(--lightgray);
-    color: var(--chip-neutral-fg);
+  & .note-properties-row {
+    display: block;
+    border: 0;
+    background: none;
+  }
 
-    &[data-tone="accepted"] {
-      background: var(--chip-accepted-bg);
-      border-color: var(--accepted);
-      color: var(--chip-accepted-fg);
+  & .note-properties-key,
+  & .note-properties-value {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+  & .note-properties-key {
+    display: none;
+  }
+
+  & .note-properties-row:first-child .note-properties-text {
+    display: block;
+    max-width: var(--measure);
+    margin-top: 1.1rem;
+    font-size: 1.3rem;
+    font-style: italic;
+    line-height: 1.45;
+    color: var(--gray);
+  }
+
+  // Aliases (and any other text value) as a small line of their own.
+  & .note-properties-row:not(:first-child) .note-properties-text {
+    @extend %label;
+    display: block;
+    margin-top: 0.7rem;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+  }
+
+  & .note-properties-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.9rem;
+    margin-top: 0.9rem;
+  }
+
+  & .note-properties-separator {
+    display: none;
+  }
+
+  & .tag-link {
+    @extend %label;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    background: none;
+    color: var(--secondary);
+
+    &::before {
+      content: "#";
     }
-    &[data-tone="proposed"] {
-      background: var(--chip-proposed-bg);
-      border-color: var(--accent);
-      color: var(--chip-proposed-fg);
-    }
-    &[data-tone="warning"] {
-      background: var(--chip-warning-bg);
-      border-color: var(--warning);
-      color: var(--chip-warning-fg);
+    &:hover {
+      color: var(--tertiary);
+      text-decoration: underline;
     }
   }
 }
 
-.section-tabs {
-  margin: 0.9rem 0 0.25rem;
-  border-bottom: 1px solid var(--lightgray);
+// The date line on pages without a spec sheet (home, section indexes, tags).
+.content-meta {
+  margin: 0.75rem 0 1.5rem;
+  @extend %label;
+  font-weight: 400;
+  font-variant-numeric: lining-nums;
 
-  & ul {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 0.25rem;
+  &::before {
+    content: "Modified ";
+  }
+}
+
+// ============================================================================
+// Home page: the index of notes
+// ============================================================================
+// local-plugins/note-index. A ruled table on the sheet; below 40rem of width (a container query,
+// so it follows the sheet and not the screen) every row becomes a card.
+
+.note-index {
+  --ni-cols: 3.6rem minmax(0, 1fr) 5.5rem 6.75rem 9.25rem;
+  container-type: inline-size;
+  margin-top: 1rem;
+  font-variant-numeric: lining-nums tabular-nums;
+
+  & .note-index-title {
+    @extend %label;
+    margin: 0 0 0.6rem;
+    padding-top: 0.9rem;
+    border-top: 2px solid var(--dark);
+  }
+
+  & .note-index-head,
+  & .note-index-row {
+    display: grid;
+    grid-template-columns: var(--ni-cols);
+    column-gap: 1rem;
+    align-items: baseline;
+  }
+
+  & .note-index-head {
+    @extend %label;
+    font-size: 0.66rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--lightgray);
+  }
+
+  & .note-index-section {
+    margin-top: 1.9rem;
+
+    & > header {
+      display: grid;
+      grid-template-columns: 3.6rem minmax(0, 1fr);
+      column-gap: 1rem;
+      align-items: baseline;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--dark);
+
+      & h3 {
+        margin: 0;
+        font-size: 1.35rem;
+        font-weight: 600;
+        letter-spacing: 0;
+        text-transform: none;
+        color: var(--dark);
+      }
+
+      & h3 a {
+        color: inherit;
+        text-decoration: none;
+        background: none;
+
+        &:hover {
+          color: var(--secondary);
+        }
+      }
+
+      & p {
+        grid-column: 2;
+        margin: 0.15rem 0 0;
+        font-size: 0.92rem;
+        font-style: italic;
+        color: var(--gray);
+      }
+    }
+  }
+
+  & .note-index-num {
+    @extend %label;
+    color: var(--secondary);
+    letter-spacing: 0.08em;
+  }
+
+  & ol {
     margin: 0;
     padding: 0;
     list-style: none;
   }
 
-  & li {
+  & .note-index-row {
     margin: 0;
-    line-height: 1;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--lightgray);
+    line-height: 1.35;
   }
 
-  & a {
-    display: block;
-    padding: 0.45rem 0.7rem;
-    margin-bottom: -1px;
-    border-bottom: 2px solid transparent;
+  & .note-index-no {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--gray);
+  }
+
+  & .note-index-name {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+
+    & a {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--dark);
+      text-decoration: none;
+      background: none;
+      overflow-wrap: anywhere;
+
+      &:hover {
+        color: var(--secondary);
+        text-decoration: underline;
+        text-underline-offset: 0.2em;
+      }
+    }
+  }
+
+  & .note-index-slug {
+    padding: 0;
+    border: 0;
     background: none;
-    font-family: var(--bodyFont);
-    font-size: 0.8rem;
-    font-weight: 600;
-    line-height: 1.2;
-    color: var(--muted);
+    font-size: 0.74rem;
+    color: var(--gray);
+    overflow-wrap: anywhere;
+  }
+
+  // An empty type or status cell shows a dash.
+  & .note-index-type:empty::before,
+  & .note-index-status:empty::before {
+    content: "\2014";
+    color: var(--gray);
+  }
+
+  & .note-index-date {
+    font-size: 0.88rem;
+    color: var(--darkgray);
+  }
+
+  & .note-index-date-label {
+    @extend %label;
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+  }
+}
+
+@container (max-width: 40rem) {
+  .note-index {
+    & .note-index-head {
+      display: none;
+    }
+
+    & .note-index-section > header {
+      grid-template-columns: 2.2rem minmax(0, 1fr);
+    }
+
+    & .note-index-section > ol {
+      display: grid;
+      gap: 0.65rem;
+      margin-top: 0.75rem;
+    }
+
+    // A card: number, type and status on the first line, the title, then the date.
+    & .note-index-row {
+      grid-template-columns: auto auto minmax(0, 1fr);
+      grid-template-areas:
+        "type status no"
+        "name name name"
+        "date date date";
+      gap: 0.4rem 0.6rem;
+      align-items: center;
+      padding: 0.8rem 0.9rem;
+      border: 1px solid var(--lightgray);
+      border-radius: 3px;
+      background: var(--surface);
+    }
+
+    & .note-index-no {
+      grid-area: no;
+      text-align: right;
+    }
+    & .note-index-name {
+      grid-area: name;
+    }
+    & .note-index-type {
+      grid-area: type;
+    }
+    & .note-index-status {
+      grid-area: status;
+    }
+    & .note-index-date {
+      grid-area: date;
+    }
+    & .note-index-type:empty,
+    & .note-index-status:empty {
+      display: none;
+    }
+  }
+}
+
+// ============================================================================
+// Folder and tag pages
+// ============================================================================
+
+.page-listing {
+  & ul.section-ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  & .section-li {
+    margin: 0;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid var(--lightgray);
+  }
+
+  & .section {
+    display: grid;
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+    column-gap: 1rem;
+    align-items: baseline;
+
+    @media all and ($mobile) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  & .meta {
+    margin: 0;
+    @extend %label;
+    font-weight: 400;
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+
+  & h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--dark);
+  }
+
+  & h3 a,
+  & .desc a {
+    background: none;
+    color: var(--dark);
     text-decoration: none;
 
     &:hover {
       color: var(--secondary);
-      border-bottom-color: var(--secondary);
+      text-decoration: underline;
+    }
+  }
+
+  & ul.tags {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.1rem 0.8rem;
+    margin: 0.2rem 0 0;
+    padding: 0;
+    list-style: none;
+
+    @media all and ($mobile) {
+      grid-column: 1;
+    }
+  }
+
+  & .tag-link {
+    @extend %label;
+    letter-spacing: 0.08em;
+    background: none;
+    text-decoration: none;
+    color: var(--secondary);
+
+    &::before {
+      content: "#";
     }
   }
 }
@@ -412,8 +1174,8 @@ blockquote {
 // Sidenotes
 // ============================================================================
 // The sidenotes transformer (local-plugins/sidenotes) puts a .sidenote after every footnote
-// reference and marks the footnotes section with data-sidenotes. Below the desktop breakpoint the
-// sidenotes stay hidden and the normal footnotes are used.
+// reference and marks the footnotes section with data-sidenotes. In the margin of the sheet from
+// the desktop breakpoint; below it the sidenotes stay hidden and the normal footnotes are used.
 
 .sidenote {
   display: none;
@@ -421,7 +1183,7 @@ blockquote {
 
 @media all and ($desktop) {
   :root {
-    --sidenote-w: 12rem;
+    --sidenote-w: 11.5rem;
   }
 
   article:has(.sidenote) {
@@ -434,25 +1196,28 @@ blockquote {
     clear: right;
     width: var(--sidenote-w);
     margin: 0.1rem calc(-1 * (var(--sidenote-w) + var(--sidenote-gap))) 0.75rem 0;
-    font-family: var(--bodyFont);
-    font-size: 0.8rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--lightgray);
+    font-size: 0.84rem;
     font-weight: 400;
     font-style: normal;
+    font-variant-numeric: oldstyle-nums;
     line-height: 1.5;
     text-align: left;
-    color: var(--muted);
+    color: var(--gray);
 
     & a {
       color: var(--secondary);
     }
     & code {
-      font-size: 0.85em;
+      font-size: 0.82em;
     }
   }
 
   .sidenote-num {
     margin-right: 0.35em;
     font-weight: 600;
+    font-variant-numeric: lining-nums;
     color: var(--secondary);
 
     &::after {
@@ -490,33 +1255,59 @@ blockquote {
 }
 
 .footnotes {
-  font-size: 0.9rem;
-  border-top-color: var(--lightgray);
+  margin-top: 2.5rem;
+  font-size: 0.95rem;
+  border-top: 1px solid var(--lightgray);
+}
+
+sup a[data-footnote-ref] {
+  font-weight: 600;
+  font-variant-numeric: lining-nums;
+  text-decoration: none;
+  background: none;
+  color: var(--secondary);
 }
 
 // ============================================================================
 // Callouts
 // ============================================================================
-// An accent left border on a surface background. Each callout keeps its own icon; warning-like
-// types use the warning colour instead of the accent.
+// A tinted slip pinned to the page: an ink rule on top and a small-caps title. The icon keeps the
+// callout's own symbol; warning-like types use the warning colour for the rule and the icon.
 
 .callout[data-callout] {
-  --color: var(--secondary);
+  --color: var(--dark);
   --border: var(--lightgray);
   --bg: var(--surface);
 
-  border-left: 3px solid var(--color);
-  border-radius: 0 var(--radius) var(--radius) 0;
-  padding: 0 1rem;
-  margin: 1.25rem 0;
+  border: 0;
+  border-top: 2px solid var(--color);
+  border-radius: 0;
+  padding: 0 1.1rem 0.25rem;
+  margin: 1.5rem 0;
 
   & .callout-title {
+    @extend %label;
+    gap: 0.5rem;
+    padding: 0.85rem 0 0.15rem;
     color: var(--dark);
-    font-weight: 600;
 
     & .callout-icon {
       color: var(--color);
+      width: 16px;
+      height: 16px;
+      flex: 0 0 16px;
     }
+
+    & .callout-title-inner p {
+      margin: 0;
+      font-weight: 600;
+      color: var(--dark);
+    }
+  }
+
+  & .callout-content p {
+    font-size: 1rem;
+    line-height: 1.6;
   }
 }
 
@@ -528,23 +1319,72 @@ blockquote {
   --color: var(--warning);
 }
 
+.callout[data-callout="tip"],
+.callout[data-callout="success"] {
+  --color: var(--accepted);
+}
+
 // ============================================================================
-// Code blocks
+// Tables
+// ============================================================================
+// Ruled like a printed table: heavy rules above and below, a hairline between rows, no columns.
+
+.table-container {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  border-top: 2px solid var(--dark);
+  border-bottom: 2px solid var(--dark);
+  font-size: 0.95rem;
+  font-variant-numeric: lining-nums tabular-nums;
+
+  & th,
+  & td {
+    padding: 0.55rem 0.9rem 0.55rem 0;
+    border: 0;
+    border-bottom: 1px solid var(--lightgray);
+    text-align: left;
+    vertical-align: top;
+    line-height: 1.5;
+  }
+
+  & thead th {
+    @extend %label;
+    border-bottom: 1px solid var(--dark);
+    padding-top: 0.7rem;
+  }
+
+  & tbody tr:last-child td {
+    border-bottom: 0;
+  }
+}
+
+// ============================================================================
+// Code
 // ============================================================================
 
 code {
-  background: var(--surface-2);
-  border: 1px solid var(--lightgray);
+  padding: 0.08em 0.3em;
+  border: 0;
+  border-radius: 2px;
+  background: var(--surface);
   color: var(--dark);
-  padding: 0.05rem 0.3rem;
-  font-size: 0.88em;
+  font-family: var(--mono);
+  font-size: 0.82em;
+  line-height: 1.2;
+  font-variant-numeric: lining-nums;
 }
 
 figure[data-rehype-pretty-code-figure] {
-  margin: 1.25rem 0;
+  margin: 1.5rem 0;
   border: 1px solid var(--lightgray);
-  border-radius: 6px;
-  background: var(--surface-2);
+  border-top: 2px solid var(--dark);
+  border-radius: 0;
+  background: var(--surface);
   overflow: hidden;
 
   // Filename caption, from ```lang title="file.ext"
@@ -556,10 +1396,10 @@ figure[data-rehype-pretty-code-figure] {
     border: 0;
     border-bottom: 1px solid var(--lightgray);
     border-radius: 0;
-    background: var(--surface-2);
-    font-family: var(--codeFont);
-    font-size: 0.8rem;
-    color: var(--muted);
+    background: none;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--gray);
   }
 
   & > pre {
@@ -570,15 +1410,19 @@ figure[data-rehype-pretty-code-figure] {
 }
 
 pre {
-  background: var(--surface-2);
-  border-color: var(--lightgray);
-  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--lightgray);
+  border-top: 2px solid var(--dark);
+  border-radius: 0;
+  padding: 0.9rem 1rem;
 
   & > code {
+    display: block;
+    padding: 0;
     background: none;
     border: 0;
     color: var(--darkgray);
-    font-size: 0.85rem;
+    font-size: 0.84rem;
     line-height: 1.6;
   }
 
@@ -587,15 +1431,22 @@ pre {
   }
 }
 
+// The comment colour of the light syntax theme (github-light-high-contrast, #66707b) is 4.2:1 on the
+// surface tint. A slightly darker grey keeps comments at AA; scripts/check-contrast.mjs reads this
+// override and reports the colour that is actually shown.
+code[data-theme*=" "] span[style*="--shiki-light:#66707b" i] {
+  --shiki-light: #59626c !important;
+}
+
 .clipboard-button {
   top: 0.4rem;
   right: 0.4rem;
   margin: 0;
   padding: 0.35rem;
   border: 1px solid var(--lightgray);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--muted);
+  border-radius: 2px;
+  background: var(--light);
+  color: var(--gray);
   line-height: 0;
 
   & > svg {
@@ -619,5 +1470,122 @@ pre:focus-within > .clipboard-button {
 @media (hover: none) {
   .clipboard-button {
     opacity: 1;
+  }
+}
+
+// ============================================================================
+// Print
+// ============================================================================
+// Plain paper: the page's own white, ink in a dark neutral, no desk, sidebars, buttons or shadow.
+// External links show their address, sidenotes become the ordinary footnotes again.
+
+@media print {
+  @page {
+    margin: 2cm 2.2cm;
+  }
+
+  html:root,
+  html:root[saved-theme="dark"] {
+    --light: #ffffff;
+    --lightgray: #c8c0b0;
+    --gray: #4d463a;
+    --darkgray: #1c1914;
+    --dark: #14110d;
+    --secondary: #7a2416;
+    --tertiary: #7a2416;
+    --desk: #ffffff;
+    --surface: #f3efe6;
+  }
+
+  html,
+  body {
+    background: #ffffff;
+    width: auto;
+    overflow: visible;
+  }
+
+  .left.sidebar,
+  .right.sidebar,
+  footer,
+  .breadcrumb-container,
+  .clipboard-button,
+  .expand-button,
+  .page > #quartz-body .center::before {
+    display: none !important;
+  }
+
+  .page {
+    max-width: none;
+  }
+
+  .page > #quartz-body {
+    display: block;
+    padding: 0;
+  }
+
+  .page > #quartz-body .center {
+    margin: 0;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  article {
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+
+  h1.article-title {
+    font-size: 26pt;
+  }
+
+  article > h2 {
+    font-size: 15pt;
+    break-after: avoid;
+  }
+
+  article > h3 {
+    break-after: avoid;
+  }
+
+  pre,
+  .callout,
+  figure,
+  table,
+  .note-meta,
+  blockquote {
+    break-inside: avoid;
+  }
+
+  // A mermaid diagram can be taller than a page.
+  pre:has(code.mermaid) {
+    break-inside: auto;
+  }
+
+  code[data-theme*=" "],
+  code[data-theme*=" "] span {
+    color: var(--shiki-light) !important;
+    background-color: transparent !important;
+  }
+
+  article a.external::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: var(--gray);
+    word-break: break-all;
+  }
+
+  // Sidenotes are the footnotes again.
+  article:has(.sidenote) {
+    padding-right: 0;
+  }
+  .sidenote {
+    display: none !important;
+  }
+  .footnotes[data-sidenotes] {
+    display: block !important;
+  }
+  .footnotes {
+    break-inside: avoid;
   }
 }
