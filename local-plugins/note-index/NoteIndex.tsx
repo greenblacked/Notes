@@ -1,7 +1,7 @@
 import { classNames } from "../../quartz/util/lang"
 import { resolveRelative, type FullSlug } from "../../quartz/util/path"
 import type { QuartzComponent, QuartzComponentProps } from "../../quartz/components/types"
-import { STATUS_TONES, TYPE_LABELS, asLowerString, isoDay } from "../note-meta/format"
+import { asLowerString, isoDay, statusTone, typeLabel } from "../note-meta/format"
 
 /** Sections in reading order: the first folder of a note's slug, and a one-line description. */
 const SECTIONS: { folder: string; title: string; description: string }[] = [
@@ -41,6 +41,9 @@ const isNote = (slug: string) =>
   !slug.endsWith("/index") &&
   !slug.endsWith("/template")
 
+/** First folder of a slug; "" for a note at the top level of content/. */
+const folderOf = (slug: string) => (slug.includes("/") ? slug.split("/")[0] : "")
+
 const pad = (n: number) => String(n).padStart(2, "0")
 
 /**
@@ -57,14 +60,14 @@ export default (() => {
     displayClass,
   }: QuartzComponentProps) => {
     const from = fileData.slug!
-    const pages = allFiles.filter((f) => f.slug && isNote(f.slug) && f.slug.includes("/"))
+    const pages = allFiles.filter((f) => f.slug && isNote(f.slug))
 
-    const folders = [...new Set(pages.map((f) => f.slug!.split("/")[0]))]
+    const folders = [...new Set(pages.map((f) => folderOf(f.slug!)))]
     const known = SECTIONS.map((s) => s.folder)
     const order = [
       ...SECTIONS.filter((s) => folders.includes(s.folder)),
       ...folders
-        .filter((f) => !known.includes(f))
+        .filter((f) => f !== "" && !known.includes(f))
         .sort()
         .map((folder) => {
           const index = allFiles.find((f) => f.slug === `${folder}/index`)
@@ -74,6 +77,10 @@ export default (() => {
             description: (index?.frontmatter?.description as string | undefined) ?? "",
           }
         }),
+      // Notes at the top level of content/, if any, come last.
+      ...(folders.includes("")
+        ? [{ folder: "", title: "Other notes", description: "Notes outside the sections." }]
+        : []),
     ]
 
     return (
@@ -90,18 +97,25 @@ export default (() => {
         </div>
         {order.map((section, s) => {
           const notes = pages
-            .filter((f) => f.slug!.split("/")[0] === section.folder)
+            .filter((f) => folderOf(f.slug!) === section.folder)
             .sort((a, b) => a.slug!.localeCompare(b.slug!))
           return (
-            <section class="note-index-section" aria-labelledby={`note-index-${section.folder}`}>
+            <section
+              class="note-index-section"
+              aria-labelledby={`note-index-${section.folder || "other"}`}
+            >
               <header>
                 <span class="note-index-num" aria-hidden="true">
                   {pad(s + 1)}
                 </span>
-                <h3 id={`note-index-${section.folder}`}>
-                  <a href={resolveRelative(from, `${section.folder}/index` as FullSlug)}>
-                    {section.title}
-                  </a>
+                <h3 id={`note-index-${section.folder || "other"}`}>
+                  {section.folder ? (
+                    <a href={resolveRelative(from, `${section.folder}/index` as FullSlug)}>
+                      {section.title}
+                    </a>
+                  ) : (
+                    section.title
+                  )}
                 </h3>
                 <p>{section.description}</p>
               </header>
@@ -128,16 +142,13 @@ export default (() => {
                       <span class="note-index-type">
                         {type && (
                           <span class="chip chip-type" data-type={type}>
-                            {TYPE_LABELS[type] ?? type}
+                            {typeLabel(type)}
                           </span>
                         )}
                       </span>
                       <span class="note-index-status">
                         {status && (
-                          <span
-                            class="chip chip-status"
-                            data-tone={STATUS_TONES[status] ?? "neutral"}
-                          >
+                          <span class="chip chip-status" data-tone={statusTone(status)}>
                             {status}
                           </span>
                         )}

@@ -2,7 +2,7 @@ import readingTime from "reading-time"
 import type { ComponentChildren } from "preact"
 import { classNames } from "../../quartz/util/lang"
 import type { QuartzComponent, QuartzComponentProps } from "../../quartz/components/types"
-import { STATUS_TONES, TYPE_LABELS, asLowerString, isoDay } from "./format"
+import { asLowerString, isoDay, statusTone, typeLabel } from "./format"
 
 /**
  * Spec sheet under the title, driven by the frontmatter fields `type`, `status`, `verified` and
@@ -40,13 +40,13 @@ export default (() => {
           item(
             "Type",
             <span class="chip chip-type" data-type={type}>
-              {TYPE_LABELS[type] ?? type}
+              {typeLabel(type)}
             </span>,
           )}
         {status &&
           item(
             "Status",
-            <span class="chip chip-status" data-tone={STATUS_TONES[status] ?? "neutral"}>
+            <span class="chip chip-status" data-tone={statusTone(status)}>
               {status}
             </span>,
           )}
