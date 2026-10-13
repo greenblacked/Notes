@@ -3,13 +3,14 @@
 // pair is below its minimum (4.5:1 for text, 3:1 for the focus ring). Prints a Markdown table.
 //
 // Colours come from the two places that define them:
-//   quartz.config.yaml          the Quartz colour keys (light, lightgray, gray, darkgray, dark,
-//                               secondary, tertiary, highlight) per theme
-//   quartz/styles/custom.scss   the --surface, --surface-2, --muted, --accent, --accepted,
-//                               --warning and --chip-* tokens, in the `:root` block (light) and
-//                               the `:root[saved-theme="dark"]` block (dark)
-// If public/ holds a build, the colours of the code syntax tokens found in its HTML are checked
-// against the code surface as well.
+//   quartz.config.yaml          the Quartz colour keys (light = the sheet of paper, lightgray,
+//                               gray, darkgray, dark, secondary, tertiary, highlight) per theme
+//   quartz/styles/custom.scss   the --desk, --surface, --accepted, --warning, --grain-color and
+//                               --chip-* tokens, in the `:root` block (light) and the
+//                               `:root[saved-theme="dark"]` block (dark)
+// Text sits on the sheet (with the paper grain, checked at its maximum strength), on the desk (the
+// sidebars) and on the surface tint (callouts, code, cards). If public/ holds a build, the colours
+// of the code syntax tokens found in its HTML are checked against the code surface as well.
 //
 // Usage: node scripts/check-contrast.mjs [--out <file>]   (also saved to <file> as Markdown)
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs"
@@ -23,6 +24,8 @@ const outFile = outIndex > 0 ? process.argv[outIndex + 1] : undefined
 
 const TEXT = 4.5
 const UI = 3
+// Strongest opacity of the grain (the alpha row of the feColorMatrix in custom.scss).
+const GRAIN_MAX = { light: 0.09, dark: 0.05 }
 
 function parseColor(value) {
   const v = value.trim().toLowerCase()
@@ -95,6 +98,14 @@ function* walk(dir) {
     else yield full
   }
 }
+// custom.scss darkens a syntax colour that is below AA on the surface tint (light theme only).
+const syntaxOverrides = new Map(
+  [
+    ...scss.matchAll(
+      /--shiki-light:(#[0-9a-fA-F]{6})" i\]\s*\{\s*--shiki-light:\s*(#[0-9a-fA-F]{6})\s*!important/g,
+    ),
+  ].map((m) => [m[1].toLowerCase(), m[2].toLowerCase()]),
+)
 const syntax = { light: new Set(), dark: new Set() }
 const pub = join(root, "public")
 if (existsSync(pub)) {
@@ -102,7 +113,8 @@ if (existsSync(pub)) {
     if (!file.endsWith(".html")) continue
     const html = readFileSync(file, "utf8")
     for (const m of html.matchAll(/--shiki-(light|dark):\s*(#[0-9a-fA-F]{6})/g)) {
-      syntax[m[1]].add(m[2].toLowerCase())
+      const color = m[2].toLowerCase()
+      syntax[m[1]].add(m[1] === "light" ? (syntaxOverrides.get(color) ?? color) : color)
     }
   }
 }
@@ -119,45 +131,43 @@ for (const theme of ["light", "dark"]) {
   const q = quartzColors[theme]
   const t = customTokens[theme]
   const c = (name) => parseColor(name in t ? t[name] : q[name])
-  const bg = parseColor(q.light)
+  const sheet = parseColor(q.light)
+  const grainy = over({ ...c("grain-color"), a: GRAIN_MAX[theme] }, sheet)
+  const desk = c("desk")
   const surface = c("surface")
-  const surface2 = c("surface-2")
   const highlight = parseColor(q.highlight)
 
   const surfaces = [
-    ["page background", bg],
-    ["surface", surface],
-    ["surface-2", surface2],
+    ["sheet", sheet],
+    ["sheet with grain", grainy],
+    ["desk", desk],
+    ["surface tint", surface],
   ]
+  const sheetOnly = surfaces.filter(([name]) => name.startsWith("sheet"))
 
   for (const [name, back] of surfaces) {
     check(theme, `Body text on ${name}`, parseColor(q.darkgray), back)
   }
-  check(theme, "Headings on page background", parseColor(q.dark), bg)
-  check(theme, "Headings on surface", parseColor(q.dark), surface)
   for (const [name, back] of surfaces) {
-    check(theme, `Muted text on ${name}`, c("muted"), back)
+    check(theme, `Headings and ink on ${name}`, parseColor(q.dark), back)
   }
-  check(theme, "Gray (secondary text) on page background", parseColor(q.gray), bg)
-  check(theme, "Gray (secondary text) on surface", parseColor(q.gray), surface)
   for (const [name, back] of surfaces) {
-    check(theme, `Accent links on ${name}`, c("accent"), back)
+    check(theme, `Muted text on ${name}`, parseColor(q.gray), back)
+  }
+  for (const [name, back] of surfaces) {
+    check(theme, `Links and accent on ${name}`, parseColor(q.secondary), back)
   }
   check(
     theme,
-    "Accent link on internal-link highlight (surface)",
-    c("accent"),
-    over(highlight, surface),
+    "Link on internal-link highlight (sheet)",
+    parseColor(q.secondary),
+    over(highlight, sheet),
   )
-  check(
-    theme,
-    "Accent link on internal-link highlight (page background)",
-    c("accent"),
-    over(highlight, bg),
-  )
-  check(theme, "Link hover (tertiary) on surface", parseColor(q.tertiary), surface)
-  check(theme, "Accepted green as text on surface", c("accepted"), surface)
-  check(theme, "Warning amber as text on surface", c("warning"), surface)
+  for (const [name, back] of [...sheetOnly, ["desk", desk]]) {
+    check(theme, `Link hover (tertiary) on ${name}`, parseColor(q.tertiary), back)
+  }
+  check(theme, "Accepted green as text on surface tint", c("accepted"), surface)
+  check(theme, "Warning amber as text on surface tint", c("warning"), surface)
 
   for (const kind of ["neutral", "accepted", "proposed", "warning"]) {
     check(
@@ -167,21 +177,25 @@ for (const theme of ["light", "dark"]) {
       c(`chip-${kind}-bg`),
     )
   }
+  // The outlined type chip is ink on whatever it sits on.
+  check(theme, "Type chip (ink) on sheet with grain", parseColor(q.dark), grainy)
+  check(theme, "Type chip (ink) on surface tint (phone cards)", parseColor(q.dark), surface)
 
-  check(theme, "Code text on surface-2", parseColor(q.darkgray), surface2)
-  check(theme, "Inline code text (headings colour) on surface-2", parseColor(q.dark), surface2)
-  check(theme, "Filename caption (muted) on surface-2", c("muted"), surface2)
+  check(theme, "Callout title (ink) on surface tint", parseColor(q.dark), surface)
+  check(theme, "Code text on surface tint", parseColor(q.darkgray), surface)
+  check(theme, "Inline code (ink) on surface tint", parseColor(q.dark), surface)
+  check(theme, "Filename caption (muted) on surface tint", parseColor(q.gray), surface)
 
   const tokenColors = [...syntax[theme]]
   if (tokenColors.length > 0) {
     const worst = tokenColors
-      .map((h) => ({ h, r: ratio(parseColor(h), surface2) }))
+      .map((h) => ({ h, r: ratio(parseColor(h), surface) }))
       .sort((a, b) => a.r - b.r)[0]
     check(
       theme,
-      `Code syntax tokens on surface-2 (worst of ${tokenColors.length} colours)`,
+      `Code syntax tokens on surface tint (worst of ${tokenColors.length} colours)`,
       parseColor(worst.h),
-      surface2,
+      surface,
     )
   }
 
