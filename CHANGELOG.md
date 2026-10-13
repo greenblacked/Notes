@@ -21,12 +21,34 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 - `scripts/smoke-test.sh` no longer follows redirects: any 3xx is a failure with the status and `Location`. A Cloudflare Access redirect is still detected from the response headers (a notice with `SMOKE_ALLOW_ACCESS=1`, a failure otherwise), but only on a 3xx response: a `Location` header on a 200 is not Access. Tested by `scripts/smoke-test.test.mjs`.
 
+### Added
+
+- Paper design: the article is a sheet of warm paper on a desk-coloured page, with a subtle grain (an SVG noise tile as a data URI in `quartz/styles/custom.scss`), a layered shadow and a faint margin rule. The sidebars have no panels. The dark theme is "paper at night" (warm charcoal sheet, off-white ink, salmon accent). All text pairs, in both themes, pass WCAG AA.
+- `local-plugins/note-index`: the home page shows an index of every note grouped by section, with number and file name, title, type and status chips and the verified (or modified) date, as a table that turns into cards on a phone. Section indexes, the tags pages, 404 and `template.md` files are left out.
+- Numbered `##` sections (01, 02, ...) in notes, by CSS counter, with the same numbers in the table of contents.
+- Print stylesheet: plain paper without sidebars, buttons and shadow, the address after external links, sidenotes as footnotes, and the light colours in both themes.
+
 ### Changed
+
+- Light by default: `scripts/postprocess-build.mjs` now makes the first visit light (it was dark). A saved toggle choice still wins, and the OS theme is still not followed after the first visit. It still fails when it does not recognise the darkmode script.
+- Fonts: Source Serif 4 (400, 600, italic; latin, latin-ext and cyrillic) for all text and IBM Plex Mono for code, replacing IBM Plex Sans, Plex Sans Condensed and Literata. A page loads 76 KB of fonts for Latin text: three Source Serif 4 files (62 KB) and IBM Plex Mono (15 KB). Body text is 1.125rem with a 66ch measure and old-style numerals.
+- The metadata strip above the title is now a spec sheet under it: a ruled list of label and value pairs (type, status, decided, verified, modified, reading time). It is a definition list, and `verified` is shown as a full date. The date line of the content-meta plugin is hidden where the sheet has the modified date.
+- `quartz/styles/custom.scss` is rewritten for the paper design (callouts, code blocks, tables, graph, search, explorer, backlinks, table of contents, sidenotes), with `:focus-visible`, `prefers-reduced-motion` and a 390px single-column layout. The table of contents comes first in the right sidebar.
+- `scripts/check-contrast.mjs` checks the new tokens: body, muted, link, hover, chip, code, callout title and focus-ring pairs on the sheet (including the strongest grain), the desk and the surface tint, in both themes. The light syntax theme's comment colour is darkened in CSS to stay above AA.
+- `content/index.md` keeps its introduction and drops the section table and the "Start with these" list, which the index replaces. `content/standards/writing-notes.md` describes the metadata sheet, the numbered sections and the home index.
+- `docs/screenshots/` holds new screenshots (home, runbook in light and dark, phone).
 
 - `quartz plugin restore` exits non-zero when a plugin fails to build or install, instead of continuing with a partial set. The vendored `quartz/cli/plugin-git-handlers.js` is patched locally; `scripts/update-quartz.sh` notes this.
 - `docs/deployment.md` states that on a tag push or tag dispatch the workflow file and guard script come from the tagged commit, so the guard only catches mistakes; the controls for creating production tags are the `v*` tag ruleset and required reviewers on the `production` environment ("Prevent self-review" when more than one person has access). The "rely on the guard for creations" fallback is removed. The rollback drill notes that tags from before the CI check have no such step and that a very old tag needs its `ci.yml` run record to still exist.
 
 - `docs/deployment.md`: "Repository settings you must apply" (rulesets for `main` and `v*` tags, environment branch policies, optional separate stage token) and a one-time `wrangler rollback` drill.
+
+### Removed
+
+- Section tabs (`local-plugins/section-tabs`): the numbered table of contents makes them redundant.
+- The "Recently updated" list and the `recent-notes` plugin (also from `quartz.lock.json`): the index shows every note with its date.
+- `@fontsource/ibm-plex-sans`, `@fontsource/ibm-plex-sans-condensed` and `@fontsource/literata`.
+- The previous screenshots in `docs/screenshots/` (`phone-dark.png` and the old light and dark ones).
 
 ## [0.3.0] - 2026-10-11
 

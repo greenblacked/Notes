@@ -11,7 +11,7 @@ The site is built with [Quartz](https://quartz.jzhao.xyz/) and served by a Cloud
 | `content/`                     | The notes: `adr/`, `patterns/`, `tools/`, `standards/`, `index.md`   |
 | `quartz/`                      | Vendored Quartz engine (do not edit; see "Quartz" below)             |
 | `quartz.config.*`, `quartz.ts` | Site configuration and layout (our customisations)                   |
-| `local-plugins/`               | Local Quartz plugins: metadata strip, section tabs, sidenotes        |
+| `local-plugins/`               | Local Quartz plugins: metadata sheet, note index, sidenotes          |
 | `worker/`, `wrangler.jsonc`    | Cloudflare Worker (headers, robots) and its configuration            |
 | `scripts/`                     | Build helpers, `smoke-test.sh`, `update-quartz.sh`                   |
 | `.github/`                     | Workflows, Dependabot, CODEOWNERS                                    |
@@ -54,11 +54,25 @@ Obsidian workflow: open `content/` as a vault, or publish selected notes with th
 
 ## Design
 
-Dark by default (a saved toggle choice wins), with a light theme. IBM Plex for the interface and Literata for article text, all self-hosted: the woff2 files come from the `@fontsource` devDependencies and are copied to `public/static/fonts/` by `scripts/postprocess-build.mjs`, so the Worker's CSP needs no extra origin. All custom CSS is in `quartz/styles/custom.scss`; the colour keys are in `quartz.config.yaml`. Notes show a metadata strip (`type`, `status`, `verified`, `decided`), section tabs, and sidenotes from 1200px up; the fields are described in `content/standards/writing-notes.md`.
+A sheet of paper on a desk, light by default (a saved toggle choice wins, and the OS theme is not followed after that). The article sits on a warm paper sheet with a faint grain (an SVG `feTurbulence` noise tile as a data URI, so no image file and nothing for the Worker's CSP to allow), a soft layered shadow and a hairline margin rule; the sidebars sit on the desk like the margin of a notebook, with no panels. The dark theme is the same page at night: a warm charcoal sheet with off-white ink and a salmon accent, never pure black or white.
 
-![Dark theme](docs/screenshots/dark-desktop.png)
+Source Serif 4 sets all text (400, 600 and italic; old-style numerals in prose, lining and tabular ones in tables, dates and labels) and IBM Plex Mono the code. Both are self-hosted: the woff2 files come from the `@fontsource` devDependencies and are copied to `public/static/fonts/` by `scripts/postprocess-build.mjs`, so the Worker's CSP needs no extra origin. Small labels are letter-spaced capitals in the same serif.
 
-![Light theme](docs/screenshots/light-desktop.png)
+The structure comes from an index:
+
+- The home page lists every note in a table grouped by section (number, title and file name, type, status, verified or modified date), which becomes a stack of cards on a phone. It is built from the notes' frontmatter by `local-plugins/note-index`, so a new note appears there without any edit to the home page.
+- Notes show a spec sheet under the title (`type`, `status`, `decided`, `verified`, modified date, reading time; `local-plugins/note-meta`), numbered `##` sections (01, 02, ...) that the table of contents on the right repeats, and sidenotes in the margin of the sheet from 1200px up.
+- Printing gives plain paper: no sidebars, external links with their address, sidenotes as footnotes.
+
+All custom CSS is in `quartz/styles/custom.scss` and the colour keys are in `quartz.config.yaml`; `npm run check:contrast` checks both themes. The frontmatter fields are described in `content/standards/writing-notes.md`.
+
+![Home page, light theme](docs/screenshots/home-desktop.png)
+
+![A runbook, light theme](docs/screenshots/light-desktop.png)
+
+![A runbook, dark theme](docs/screenshots/dark-desktop.png)
+
+![A note on a phone](docs/screenshots/phone-light.png)
 
 ## Delivery flow
 
