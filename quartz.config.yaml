@@ -20,39 +20,39 @@ configuration:
   theme:
     # "local": do not link to Google Fonts. The fonts are self-hosted: @fontsource woff2 files are
     # copied to /static/fonts by scripts/postprocess-build.mjs and declared in
-    # quartz/styles/custom.scss (which also sets the article prose font, Literata). The names
+    # quartz/styles/custom.scss. Source Serif 4 sets all text, IBM Plex Mono the code; the names
     # below fall back to the system font stacks defined in quartz/util/theme.ts.
     fontOrigin: local
     cdnCaching: false
     typography:
-      header: IBM Plex Sans Condensed
-      body: IBM Plex Sans
+      header: Source Serif 4
+      body: Source Serif 4
       code: IBM Plex Mono
-    # Mapping: light = page background, lightgray = borders, gray = muted text, darkgray = body
-    # text, dark = headings, secondary = accent and links, tertiary = link hover. Surfaces and the
-    # status colours are CSS variables in quartz/styles/custom.scss; scripts/check-contrast.mjs
-    # checks both files.
+    # Mapping: light = the sheet of paper (article, popovers, inputs), lightgray = rules, gray =
+    # muted text, darkgray = body text, dark = headings and ink, secondary = accent and links,
+    # tertiary = link hover. The desk behind the sheet, the tints and the status colours are CSS
+    # variables in quartz/styles/custom.scss; scripts/check-contrast.mjs checks both files.
     colors:
       lightMode:
-        light: "#f4f6f8"
-        lightgray: "#d3d9e1"
-        gray: "#566172"
-        darkgray: "#1b2330"
-        dark: "#111823"
-        secondary: "#1b66db"
-        tertiary: "#1450ad"
-        highlight: rgba(27, 102, 219, 0.05)
-        textHighlight: "#ffe56688"
+        light: "#faf6ee"
+        lightgray: "#d8cfbd"
+        gray: "#5c5345"
+        darkgray: "#2a251e"
+        dark: "#1f1b16"
+        secondary: "#8a2a1a"
+        tertiary: "#6b1f12"
+        highlight: rgba(138, 42, 26, 0.07)
+        textHighlight: "#f2d36b88"
       darkMode:
-        light: "#11151a"
-        lightgray: "#2a323d"
-        gray: "#9aa5b4"
-        darkgray: "#d9dee5"
-        dark: "#eef2f6"
-        secondary: "#5a9cff"
-        tertiary: "#8dbbff"
-        highlight: rgba(90, 156, 255, 0.14)
-        textHighlight: "#b3aa0288"
+        light: "#1c1712"
+        lightgray: "#3a332a"
+        gray: "#aca08b"
+        darkgray: "#ddd5c4"
+        dark: "#eee7d8"
+        secondary: "#e8a283"
+        tertiary: "#f2c1a9"
+        highlight: rgba(232, 162, 131, 0.13)
+        textHighlight: "#b3830488"
 plugins:
   - source: github:quartz-community/created-modified-date
     enabled: true
@@ -86,7 +86,7 @@ plugins:
     # Upstream's default config omits the layout entry, so no ToC component is rendered without it.
     layout:
       position: right
-      priority: 20
+      priority: 5
   - source: github:quartz-community/crawl-links
     enabled: true
     options:
@@ -165,7 +165,8 @@ plugins:
     layout:
       position: beforeBody
       priority: 10
-  # Reading time is shown by the metadata strip (note-meta), so only the date stays here.
+  # The spec sheet (note-meta) shows reading time and the modified date; this date is the fallback
+  # for pages without one (home, section indexes, tags).
   - source: github:quartz-community/content-meta
     enabled: true
     options:
@@ -213,33 +214,20 @@ plugins:
     enabled: true
     options:
       links: {}
-  # Home page only (condition `home`). quartz.ts registers the component, because the pinned plugin
-  # does not declare it in its manifest, and adds the filter that leaves out section index pages
-  # and the tags page. Sorted by defaultDateType (modified).
-  - source: github:quartz-community/recent-notes
-    enabled: true
-    options:
-      title: Recently updated
-      limit: 5
-      showTags: true
-    layout:
-      position: afterBody
-      priority: 10
-      condition: home
-  # Local plugins (local-plugins/). The components are registered in quartz.ts, like recent-notes.
-  # Metadata strip above the title, from the type, status, verified and decided frontmatter.
+  # Local plugins (local-plugins/). The components are registered in quartz.ts.
+  # Spec sheet under the title, from the type, status, verified and decided frontmatter.
   - source: ./local-plugins/note-meta
     enabled: true
     layout:
       position: beforeBody
-      priority: 8
-  # Anchor-link tabs for the h2 sections, under the title; from 800px up (Quartz desktop-only).
-  - source: ./local-plugins/section-tabs
+      priority: 12
+  # Index of every note, grouped by section: the body of the home page (condition `home`).
+  - source: ./local-plugins/note-index
     enabled: true
     layout:
-      position: beforeBody
-      priority: 12
-      display: desktop-only
+      position: afterBody
+      priority: 10
+      condition: home
   # Markdown footnotes become margin sidenotes from 1200px up (see custom.scss).
   - source: ./local-plugins/sidenotes
     enabled: true

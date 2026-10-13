@@ -1,11 +1,11 @@
 {
-  "name": "section-tabs",
+  "name": "note-index",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "index.js",
   "quartz": {
-    "name": "section-tabs",
+    "name": "note-index",
     "category": "component",
     "version": "1.0.0",
     "quartzVersion": ">=5.0.0",

@@ -13,13 +13,13 @@
 // attribute is dropped and the script falls back to those defaults.
 //
 // Two more adjustments for the site's own design:
-//   fonts      IBM Plex and Literata are self-hosted. quartz/styles/custom.scss declares the
-//              @font-face rules for /static/fonts/*.woff2; the files come from the @fontsource
+//   fonts      Source Serif 4 and IBM Plex Mono are self-hosted. quartz/styles/custom.scss declares
+//              the @font-face rules for /static/fonts/*.woff2; the files come from the @fontsource
 //              devDependencies and are copied to public/static/fonts/ here.
-//   dark mode  the site is dark on the first visit. The darkmode plugin picks the first-visit theme
-//              from prefers-color-scheme and re-applies the system theme whenever it changes; both
-//              are rewritten so that dark is the default and only a saved toggle choice
-//              (localStorage "theme") changes it.
+//   light mode the site is light (paper) on the first visit. The darkmode plugin picks the
+//              first-visit theme from prefers-color-scheme and re-applies the system theme
+//              whenever it changes; both are rewritten so that light is the default and only a
+//              saved toggle choice (localStorage "theme") changes it.
 //
 // This script copies exact, npm-pinned builds of those libraries (see package.json devDependencies)
 // to public/static/vendor/ and rewrites the URLs in the built output, so the site only talks to its
@@ -130,8 +130,8 @@ rewrites.forEach((r, i) => {
 })
 
 // 3. Self-hosted fonts: copy every woff2 file that index.css refers to.
-const fontPackages = ["ibm-plex-sans-condensed", "ibm-plex-sans", "ibm-plex-mono", "literata"].map(
-  (name) => nm("@fontsource", name, "files"),
+const fontPackages = ["source-serif-4", "ibm-plex-mono"].map((name) =>
+  nm("@fontsource", name, "files"),
 )
 const indexCss = readFileSync(join(pub, "index.css"), "utf8")
 const fontFiles = [
@@ -147,7 +147,7 @@ for (const name of fontFiles) {
   fontBytes += statSync(join(dir, name)).size
 }
 
-// 4. Dark by default (see the header comment).
+// 4. Light by default (see the header comment).
 const prescriptPath = join(pub, "prescript.js")
 let prescript = readFileSync(prescriptPath, "utf8")
 const firstVisit =
@@ -160,7 +160,7 @@ if (count(firstVisit) !== 1 || count(systemChange) !== 1) {
     "darkmode script not recognised in prescript.js; update the rewrite in postprocess-build.mjs",
   )
 }
-prescript = prescript.replace(firstVisit, '"dark"').replace(systemChange, "")
+prescript = prescript.replace(firstVisit, '"light"').replace(systemChange, "")
 writeFileSync(prescriptPath, prescript)
 
 // 5. Guard: no remaining references to known third-party CDNs / font hosts.
@@ -176,5 +176,5 @@ for (const file of walk(pub)) {
 if (leftovers.length > 0) fail(`third-party origins remain:\n  ${leftovers.join("\n  ")}`)
 
 console.log(
-  `postprocess-build: rewrote d3=${counts[0]} pixi=${counts[1]} mermaid=${counts[2]} urls, removed ${preconnects} preconnect hint(s) and ${dataFnsRemoved} data-data-fns attribute(s), copied ${fontFiles.length} font files (${fontBytes} bytes), dark theme by default`,
+  `postprocess-build: rewrote d3=${counts[0]} pixi=${counts[1]} mermaid=${counts[2]} urls, removed ${preconnects} preconnect hint(s) and ${dataFnsRemoved} data-data-fns attribute(s), copied ${fontFiles.length} font files (${fontBytes} bytes), light theme by default`,
 )
