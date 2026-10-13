@@ -33,7 +33,7 @@ aliases:
 ---
 ```
 
-`type`, `status` and `decided` feed the metadata strip above the title (see [[writing-notes#Metadata strip|writing notes]]). Add `verified: YYYY-MM-DD` only after checking the claims against their sources.
+`type`, `status` and `decided` feed the metadata sheet under the title (see [[writing-notes#Metadata sheet|writing notes]]). Add `verified: YYYY-MM-DD` only after checking the claims against their sources.
 
 Body structure:
 
