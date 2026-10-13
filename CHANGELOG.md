@@ -30,10 +30,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
-- Light by default: `scripts/postprocess-build.mjs` now makes the first visit light (it was dark). A saved toggle choice still wins, and the OS theme is still not followed after the first visit. It still fails when it does not recognise the darkmode script.
+- Light by default: `scripts/postprocess-build.mjs` now makes the first visit light (it was dark). A saved toggle choice still wins, and the OS theme is not followed at all. It still fails when it does not recognise the darkmode script.
 - Fonts: Source Serif 4 (400, 600, italic; latin, latin-ext and cyrillic) for all text and IBM Plex Mono for code, replacing IBM Plex Sans, Plex Sans Condensed and Literata. A page loads 76 KB of fonts for Latin text: three Source Serif 4 files (62 KB) and IBM Plex Mono (15 KB). Body text is 1.125rem with a 66ch measure and old-style numerals.
 - The metadata strip above the title is now a spec sheet under it: a ruled list of label and value pairs (type, status, decided, verified, modified, reading time). It is a definition list, and `verified` is shown as a full date. The date line of the content-meta plugin is hidden where the sheet has the modified date.
-- `quartz/styles/custom.scss` is rewritten for the paper design (callouts, code blocks, tables, graph, search, explorer, backlinks, table of contents, sidenotes), with `:focus-visible`, `prefers-reduced-motion` and a 390px single-column layout. The table of contents comes first in the right sidebar.
+- Printing uses the light palette whatever the saved theme, chips and status colours included.
+- The home index lists notes at the top level of `content/` under "Other notes", and switches to cards on phones even where container queries are unsupported.
+- `quartz/styles/custom.scss` is rewritten for the paper design (callouts, code blocks, tables, graph, search, explorer, backlinks, table of contents, sidenotes), with `:focus-visible`, `prefers-reduced-motion` and a single-column layout below 800px. The table of contents comes first in the right sidebar.
 - `scripts/check-contrast.mjs` checks the new tokens: body, muted, link, hover, chip, code, callout title and focus-ring pairs on the sheet (including the strongest grain), the desk and the surface tint, in both themes. The light syntax theme's comment colour is darkened in CSS to stay above AA.
 - `content/index.md` keeps its introduction and drops the section table and the "Start with these" list, which the index replaces. `content/standards/writing-notes.md` describes the metadata sheet, the numbered sections and the home index.
 - `docs/screenshots/` holds new screenshots (home, runbook in light and dark, phone).
