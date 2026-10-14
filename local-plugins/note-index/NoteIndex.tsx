@@ -70,15 +70,15 @@ export default (() => {
 
     return (
       <>
-        <section class={classNames(displayClass, "section-cards")} aria-label="Sections">
+        <section class={classNames(displayClass, "section-cards")} aria-label="Browse by section">
           <ul>
             {cards.map((card) => (
               <li class="section-card">
-                <h3>
+                <h2>
                   <a href={resolveRelative(from, `${card.folder}/index` as FullSlug)}>
                     {card.title}
                   </a>
-                </h3>
+                </h2>
                 {card.description && <p class="section-card-desc">{card.description}</p>}
                 <p class="section-card-meta">
                   <span>

@@ -436,16 +436,19 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
     pointer-events: none;
   }
 
+  // With reduced motion the band stays solid (no fade from transparent) and there is no line.
   @supports (animation-timeline: scroll()) {
-    &::before {
-      opacity: 0;
-      animation: bar-band linear both;
-      animation-timeline: scroll(root block);
-      animation-range: 0 72px;
-    }
-    &::after {
-      animation: reading-progress linear both;
-      animation-timeline: scroll(root block);
+    @media (prefers-reduced-motion: no-preference) {
+      &::before {
+        opacity: 0;
+        animation: bar-band linear both;
+        animation-timeline: scroll(root block);
+        animation-range: 0 72px;
+      }
+      &::after {
+        animation: reading-progress linear both;
+        animation-timeline: scroll(root block);
+      }
     }
   }
 }
@@ -769,6 +772,13 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
       text-transform: uppercase;
       color: var(--gray);
     }
+  }
+
+  // The explorer's own `.folder-outer.open { visibility: visible }` would otherwise show the open
+  // folders of a closed drawer.
+  &.collapsed .explorer-content,
+  &.collapsed .explorer-content * {
+    visibility: hidden !important;
   }
 
   &:not(.collapsed) .explorer-content {
@@ -1477,7 +1487,7 @@ body[data-slug="index"] {
       outline: 0 !important;
     }
 
-    & h3 {
+    & h2 {
       margin: 0;
       font-size: 1.2rem;
       font-weight: 600;
@@ -1485,7 +1495,7 @@ body[data-slug="index"] {
       letter-spacing: 0;
     }
 
-    & h3 a {
+    & h2 a {
       color: var(--dark);
       text-decoration: none;
       background: none;
@@ -1498,7 +1508,7 @@ body[data-slug="index"] {
         border-radius: inherit;
       }
     }
-    &:hover h3 a {
+    &:hover h2 a {
       color: var(--secondary);
     }
   }
@@ -1739,7 +1749,7 @@ body[data-slug="index"] {
 
 // The tag page lists its notes twice (Quartz renders the listing inside the article and again after
 // it); the copy inside the article is hidden. The tag index keeps its listings, which sit deeper.
-article > .popover-hint > .page-listing {
+.popover-hint .popover-hint > .page-listing {
   display: none;
 }
 
