@@ -9,7 +9,9 @@
 //                               --chip-* tokens, in the `:root` block (light) and the
 //                               `:root[saved-theme="dark"]` block (dark)
 // Text sits on the sheet (with the paper grain, checked at its maximum strength), on the desk (the
-// sidebars) and on the surface tint (callouts, code, cards). If public/ holds a build, the colours
+// top bar and the table of contents; the bar is translucent, so it is the desk or the sheet,
+// whichever is behind it) and on the surface tint (callouts, code, cards, the drawer's hover
+// state). If public/ holds a build, the colours
 // of the code syntax tokens found in its HTML are checked against the code surface as well.
 //
 // Usage: node scripts/check-contrast.mjs [--out <file>]   (also saved to <file> as Markdown)
@@ -25,7 +27,7 @@ const outFile = outIndex > 0 ? process.argv[outIndex + 1] : undefined
 const TEXT = 4.5
 const UI = 3
 // Strongest opacity of the grain (the alpha row of the feColorMatrix in custom.scss).
-const GRAIN_MAX = { light: 0.09, dark: 0.05 }
+const GRAIN_MAX = { light: 0.05, dark: 0.03 }
 
 function parseColor(value) {
   const v = value.trim().toLowerCase()
@@ -177,6 +179,35 @@ for (const theme of ["light", "dark"]) {
       c(`chip-${kind}-bg`),
     )
   }
+  // Tags are neutral chips; their hover state, the accent, and the section a note belongs to in
+  // the top bar and in the drawer (accent on the link highlight) sit on tints as well.
+  check(
+    theme,
+    "Tag chip hover (accent) on chip background",
+    parseColor(q.secondary),
+    c("chip-neutral-bg"),
+  )
+  check(
+    theme,
+    "Tag chip hover (tertiary) on chip background",
+    parseColor(q.tertiary),
+    c("chip-neutral-bg"),
+  )
+  check(
+    theme,
+    "Accent on link highlight (desk): current section in the bar",
+    parseColor(q.secondary),
+    over(highlight, desk),
+  )
+  check(
+    theme,
+    "Accent on link highlight (surface tint)",
+    parseColor(q.secondary),
+    over(highlight, surface),
+  )
+  check(theme, "Focus ring on chip background", parseColor(q.secondary), c("chip-neutral-bg"), UI)
+  check(theme, "Interface text (ink) on desk: top bar links on the band", parseColor(q.dark), desk)
+
   // The outlined type chip is ink on whatever it sits on.
   check(theme, "Type chip (ink) on sheet with grain", parseColor(q.dark), grainy)
   check(theme, "Type chip (ink) on surface tint (phone cards)", parseColor(q.dark), surface)
