@@ -2,35 +2,7 @@ import { classNames } from "../../quartz/util/lang"
 import { resolveRelative, type FullSlug } from "../../quartz/util/path"
 import type { QuartzComponent, QuartzComponentProps } from "../../quartz/components/types"
 import { asLowerString, isoDay, statusTone, typeLabel } from "../note-meta/format"
-
-/** Sections in reading order: the first folder of a note's slug, and a one-line description. */
-const SECTIONS: { folder: string; title: string; description: string }[] = [
-  {
-    folder: "adr",
-    title: "Architecture decisions",
-    description: "Numbered, immutable records of significant decisions and their context.",
-  },
-  {
-    folder: "patterns",
-    title: "Patterns",
-    description: "Reusable, tested ways of building things on the platform.",
-  },
-  {
-    folder: "tools",
-    title: "Tools",
-    description: "Comparisons and evaluations of tools, with the reasoning behind the choice.",
-  },
-  {
-    folder: "runbooks",
-    title: "Runbooks",
-    description: "Step-by-step operational procedures: release, roll back, recover.",
-  },
-  {
-    folder: "standards",
-    title: "Standards",
-    description: "How notes themselves are written, named, tagged and reviewed.",
-  },
-]
+import { SECTIONS } from "../top-bar/sections"
 
 /** Templates are copied, not read, so they stay out of the index. */
 const isNote = (slug: string) =>
@@ -47,7 +19,8 @@ const folderOf = (slug: string) => (slug.includes("/") ? slug.split("/")[0] : ""
 const pad = (n: number) => String(n).padStart(2, "0")
 
 /**
- * Index of every note, grouped by section, for the home page (condition `home`). Each row has the
+ * Home page body (condition `home`): a card per section (title, description, note count, last
+ * update), then the index of every note, grouped by section. Each row has the
  * note's number and file name, its title, type and status chips and its verified date (or the
  * modified date for notes that are not verified). It replaces a "recently updated" list: the
  * dates are in the index. Sections come from the first folder of the slug, in the order of
@@ -83,94 +56,132 @@ export default (() => {
         : []),
     ]
 
+    const cards = order
+      .filter((section) => section.folder !== "")
+      .map((section) => {
+        const notes = pages.filter((f) => folderOf(f.slug!) === section.folder)
+        const updated = notes
+          .map((f) => isoDay(f.dates?.modified))
+          .filter((d): d is string => !!d)
+          .sort()
+          .pop()
+        return { ...section, count: notes.length, updated }
+      })
+
     return (
-      <section class={classNames(displayClass, "note-index")} aria-labelledby="note-index-title">
-        <h2 id="note-index-title" class="note-index-title">
-          All notes
-        </h2>
-        <div class="note-index-head" aria-hidden="true">
-          <span>No.</span>
-          <span>Title</span>
-          <span>Type</span>
-          <span>Status</span>
-          <span>Date</span>
-        </div>
-        {order.map((section, s) => {
-          const notes = pages
-            .filter((f) => folderOf(f.slug!) === section.folder)
-            .sort((a, b) => a.slug!.localeCompare(b.slug!))
-          return (
-            <section
-              class="note-index-section"
-              aria-labelledby={`note-index-${section.folder || "other"}`}
-            >
-              <header>
-                <span class="note-index-num" aria-hidden="true">
-                  {pad(s + 1)}
-                </span>
-                <h3 id={`note-index-${section.folder || "other"}`}>
-                  {section.folder ? (
-                    <a href={resolveRelative(from, `${section.folder}/index` as FullSlug)}>
-                      {section.title}
-                    </a>
-                  ) : (
-                    section.title
+      <>
+        <section class={classNames(displayClass, "section-cards")} aria-label="Browse by section">
+          <ul>
+            {cards.map((card) => (
+              <li class="section-card">
+                <h2>
+                  <a href={resolveRelative(from, `${card.folder}/index` as FullSlug)}>
+                    {card.title}
+                  </a>
+                </h2>
+                {card.description && <p class="section-card-desc">{card.description}</p>}
+                <p class="section-card-meta">
+                  <span>
+                    {card.count} {card.count === 1 ? "note" : "notes"}
+                  </span>
+                  {card.updated && (
+                    <span>
+                      Updated <time datetime={card.updated}>{card.updated}</time>
+                    </span>
                   )}
-                </h3>
-                <p>{section.description}</p>
-              </header>
-              <ol>
-                {notes.map((note, n) => {
-                  const fm = (note.frontmatter ?? {}) as Record<string, unknown>
-                  const type = asLowerString(fm.type)
-                  const status = asLowerString(fm.status)
-                  const verified = isoDay(fm.verified)
-                  const modified = isoDay(note.dates?.modified)
-                  const date = verified ?? modified
-                  const stem = note.slug!.split("/").pop()!
-                  return (
-                    <li class="note-index-row">
-                      <span class="note-index-no">
-                        {pad(s + 1)}.{n + 1}
-                      </span>
-                      <span class="note-index-name">
-                        <a href={resolveRelative(from, note.slug!)} class="internal">
-                          {String(fm.title ?? stem)}
-                        </a>
-                        <code class="note-index-slug">{stem}</code>
-                      </span>
-                      <span class="note-index-type">
-                        {type && (
-                          <span class="chip chip-type" data-type={type}>
-                            {typeLabel(type)}
-                          </span>
-                        )}
-                      </span>
-                      <span class="note-index-status">
-                        {status && (
-                          <span class="chip chip-status" data-tone={statusTone(status)}>
-                            {status}
-                          </span>
-                        )}
-                      </span>
-                      <span class="note-index-date">
-                        {date && (
-                          <>
-                            <span class="note-index-date-label">
-                              {verified ? "verified" : "modified"}
-                            </span>{" "}
-                            <time datetime={date}>{date}</time>
-                          </>
-                        )}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ol>
-            </section>
-          )
-        })}
-      </section>
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section class={classNames(displayClass, "note-index")} aria-labelledby="note-index-title">
+          <h2 id="note-index-title" class="note-index-title">
+            All notes
+          </h2>
+          <div class="note-index-head" aria-hidden="true">
+            <span>No.</span>
+            <span>Title</span>
+            <span>Type</span>
+            <span>Status</span>
+            <span>Date</span>
+          </div>
+          {order.map((section, s) => {
+            const notes = pages
+              .filter((f) => folderOf(f.slug!) === section.folder)
+              .sort((a, b) => a.slug!.localeCompare(b.slug!))
+            return (
+              <section
+                class="note-index-section"
+                aria-labelledby={`note-index-${section.folder || "other"}`}
+              >
+                <header>
+                  <span class="note-index-num" aria-hidden="true">
+                    {pad(s + 1)}
+                  </span>
+                  <h3 id={`note-index-${section.folder || "other"}`}>
+                    {section.folder ? (
+                      <a href={resolveRelative(from, `${section.folder}/index` as FullSlug)}>
+                        {section.title}
+                      </a>
+                    ) : (
+                      section.title
+                    )}
+                  </h3>
+                  <p>{section.description}</p>
+                </header>
+                <ol>
+                  {notes.map((note, n) => {
+                    const fm = (note.frontmatter ?? {}) as Record<string, unknown>
+                    const type = asLowerString(fm.type)
+                    const status = asLowerString(fm.status)
+                    const verified = isoDay(fm.verified)
+                    const modified = isoDay(note.dates?.modified)
+                    const date = verified ?? modified
+                    const stem = note.slug!.split("/").pop()!
+                    return (
+                      <li class="note-index-row">
+                        <span class="note-index-no">
+                          {pad(s + 1)}.{n + 1}
+                        </span>
+                        <span class="note-index-name">
+                          <a href={resolveRelative(from, note.slug!)} class="internal">
+                            {String(fm.title ?? stem)}
+                          </a>
+                          <code class="note-index-slug">{stem}</code>
+                        </span>
+                        <span class="note-index-type">
+                          {type && (
+                            <span class="chip chip-type" data-type={type}>
+                              {typeLabel(type)}
+                            </span>
+                          )}
+                        </span>
+                        <span class="note-index-status">
+                          {status && (
+                            <span class="chip chip-status" data-tone={statusTone(status)}>
+                              {status}
+                            </span>
+                          )}
+                        </span>
+                        <span class="note-index-date">
+                          {date && (
+                            <>
+                              <span class="note-index-date-label">
+                                {verified ? "verified" : "modified"}
+                              </span>{" "}
+                              <time datetime={date}>{date}</time>
+                            </>
+                          )}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ol>
+              </section>
+            )
+          })}
+        </section>
+      </>
     )
   }
   return NoteIndex

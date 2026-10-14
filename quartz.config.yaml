@@ -20,8 +20,10 @@ configuration:
   theme:
     # "local": do not link to Google Fonts. The fonts are self-hosted: @fontsource woff2 files are
     # copied to /static/fonts by scripts/postprocess-build.mjs and declared in
-    # quartz/styles/custom.scss. Source Serif 4 sets all text, IBM Plex Mono the code; the names
-    # below fall back to the system font stacks defined in quartz/util/theme.ts.
+    # quartz/styles/custom.scss. Source Serif 4 sets the reading text and headings, IBM Plex Mono
+    # the code; the names below fall back to the system font stacks defined in
+    # quartz/util/theme.ts. Inter, for the interface (top bar, labels, chips, table of contents),
+    # has no key here: it is the --ui variable in custom.scss.
     fontOrigin: local
     cdnCaching: false
     typography:
@@ -137,29 +139,28 @@ plugins:
     enabled: true
   - source: github:quartz-community/tag-page
     enabled: true
+  # Before the toolbar group (priority 35), so that the keyboard meets Browse, search and the theme
+  # toggle in the order they are drawn.
   - source: github:quartz-community/explorer
     enabled: true
     layout:
       position: left
-      priority: 50
+      priority: 25
+  # The local graph closes the note, below "Linked from".
   - source: github:quartz-community/graph
     enabled: true
     layout:
-      position: right
-      priority: 10
+      position: afterBody
+      priority: 20
   - source: github:quartz-community/search
     enabled: true
     layout:
       position: left
       priority: 20
       group: toolbar
-      groupOptions:
-        grow: true
+  # Replaced by local-plugins/linked-from, which has its own heading.
   - source: github:quartz-community/backlinks
-    enabled: true
-    layout:
-      position: right
-      priority: 30
+    enabled: false
   - source: github:quartz-community/article-title
     enabled: true
     layout:
@@ -179,23 +180,18 @@ plugins:
     layout:
       position: beforeBody
       priority: 30
+  # The wordmark is part of the top bar (local-plugins/top-bar).
   - source: github:quartz-community/page-title
-    enabled: true
-    layout:
-      position: left
-      priority: 10
+    enabled: false
   - source: github:quartz-community/darkmode
     enabled: true
     layout:
       position: left
       priority: 30
       group: toolbar
+  # The note is one centred column with nothing to hide, so there is no reader mode.
   - source: github:quartz-community/reader-mode
-    enabled: true
-    layout:
-      position: left
-      priority: 35
-      group: toolbar
+    enabled: false
   - source: github:quartz-community/breadcrumbs
     enabled: true
     layout:
@@ -228,18 +224,34 @@ plugins:
       position: afterBody
       priority: 10
       condition: home
-  # Markdown footnotes become margin sidenotes from 1200px up (see custom.scss).
+  # The sticky top bar: wordmark and section links. The page frame's left sidebar is the bar, and
+  # holds this component, the Explorer (its Browse button opens the drawer), the search and the
+  # dark-mode toggle (see custom.scss).
+  - source: ./local-plugins/top-bar
+    enabled: true
+    layout:
+      position: left
+      priority: 10
+  # The target of the skip link, before the breadcrumbs and the title.
+  - source: ./local-plugins/content-start
+    enabled: true
+    layout:
+      position: beforeBody
+      priority: 1
+  # "Linked from": the notes that link here, at the end of the note.
+  - source: ./local-plugins/linked-from
+    enabled: true
+    layout:
+      position: afterBody
+      priority: 15
+  # Markdown footnotes become margin sidenotes from 1280px up (see custom.scss).
   - source: ./local-plugins/sidenotes
     enabled: true
     order: 95
   - source: github:quartz-community/spacer
-    enabled: true
+    enabled: false
     options: {}
     order: 25
-    layout:
-      position: left
-      priority: 25
-      display: mobile-only
   - source: github:quartz-community/bases-page
     enabled: false
     options: {}
@@ -285,21 +297,23 @@ layout:
       direction: row
       gap: 0.5rem
   byPageType:
+    # The top bar (left) stays on every page type; section and tag pages have no table of contents
+    # and no graph. The 404 page is built for the minimal frame (no sidebars); the default frame
+    # brings the bar back.
     "404":
+      template: default
       positions:
         beforeBody: []
-        left: []
+        afterBody: []
         right: []
     content: {}
     folder:
-      exclude:
-        - reader-mode
       positions:
         right: []
+        afterBody: []
     tag:
-      exclude:
-        - reader-mode
       positions:
         right: []
+        afterBody: []
     canvas: {}
     bases: {}
