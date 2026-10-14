@@ -13,9 +13,10 @@
 // attribute is dropped and the script falls back to those defaults.
 //
 // Two more adjustments for the site's own design:
-//   fonts      Source Serif 4 and IBM Plex Mono are self-hosted. quartz/styles/custom.scss declares
-//              the @font-face rules for /static/fonts/*.woff2; the files come from the @fontsource
-//              devDependencies and are copied to public/static/fonts/ here.
+//   fonts      Source Serif 4, Inter (the UI) and IBM Plex Mono are self-hosted. quartz/styles/custom.scss
+//              declares the @font-face rules for /static/fonts/*.woff2; the files come from the
+//              @fontsource and @fontsource-variable devDependencies and are copied to
+//              public/static/fonts/ here.
 //   light mode the site is light (paper) on the first visit. The darkmode plugin picks the
 //              first-visit theme from prefers-color-scheme and re-applies the system theme
 //              whenever it changes; both are rewritten so that light is the default and only a
@@ -130,9 +131,11 @@ rewrites.forEach((r, i) => {
 })
 
 // 3. Self-hosted fonts: copy every woff2 file that index.css refers to.
-const fontPackages = ["source-serif-4", "ibm-plex-mono"].map((name) =>
-  nm("@fontsource", name, "files"),
-)
+const fontPackages = [
+  nm("@fontsource", "source-serif-4", "files"),
+  nm("@fontsource", "ibm-plex-mono", "files"),
+  nm("@fontsource-variable", "inter", "files"),
+]
 const indexCss = readFileSync(join(pub, "index.css"), "utf8")
 const fontFiles = [
   ...new Set([...indexCss.matchAll(/\/static\/fonts\/([a-z0-9-]+\.woff2)/g)].map((m) => m[1])),
