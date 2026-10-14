@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- A code block inside a list item (the `curl` line in the runbook's numbered steps) sat tight against the text above and below and ran off the right edge: Quartz's `li > *` rule removed the block's margin. Blocks in list items now have the same frame and padding as top-level blocks and a vertical margin; a long line scrolls sideways inside the block (the `<pre>`, which the keyboard can focus) and has room at its end. Tables and callouts in list items get the same margin.
 - `scripts/smoke-test.sh` no longer follows redirects: any 3xx is a failure with the status and `Location`. A Cloudflare Access redirect is still detected from the response headers (a notice with `SMOKE_ALLOW_ACCESS=1`, a failure otherwise), but only on a 3xx response: a `Location` header on a 200 is not Access. Tested by `scripts/smoke-test.test.mjs`.
 - Note pages no longer open scrolled down. The Explorer's script calls `scrollIntoView` on the open note's entry at load, which scrolled the whole page (about 260px at 1440px wide) when the entry was visible in the sidebar. The list now lives in a fixed, hidden drawer, so there is nothing to scroll; pages open at the top unless the URL has a `#hash`.
 - The tag page listed its notes twice; one copy is hidden. The tag index (`/tags`) listed each tag's notes twice as well, and now shows each listing once.
@@ -37,6 +38,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Smoother motion. One set of motion tokens in `quartz/styles/custom.scss` (`--dur-fast` 180ms, `--dur` 260ms, `--dur-slow` 380ms, `--dur-theme` 300ms, `--dur-drawer-in` 360ms, `--dur-drawer-out` 260ms; the curves `--ease-out`, `--ease-in-out`, `--ease-drawer`, `--ease-spring`) replaces the ad-hoc durations and `ease`; only `opacity`, `transform`, colours and `box-shadow` are transitioned.
+- Page navigation: the sheet's content fades in and rises 6px over 380ms instead of dimming while the next page loads, with no layout shift; the router's scroll to the top is instant. A link to a `#heading` fades without the rise. The top-bar script starts it on the router's `prenav` and `nav` events (no View Transitions API: the router does not expose the DOM swap).
+- The Browse drawer slides in over 360ms on a spring-like curve with a fade (the scrim in step) and out over 260ms; its contents stay visible until it has left, and it is still inert when closed.
+- Section cards lift 2px with a softer, growing shadow and a border colour change on hover and on keyboard focus; body links ease their underline from thin to 2px; the section pill and table of contents entries fade; the table of contents indicator is one bar that slides between entries.
+- Theme toggle: colours, surfaces and the sun/moon icon (which now turns and cross-fades) change over 300ms, only when the theme is switched, never on load. The search overlay fades in with its panel scaling from 98%. The top bar's band comes in over the first 80px of scrolling.
+- With `prefers-reduced-motion: reduce` all of it is off: no animation, transition or smooth scrolling, and the top bar's band stays solid.
 - Light by default: `scripts/postprocess-build.mjs` now makes the first visit light (it was dark). A saved toggle choice still wins, and the OS theme is not followed at all. It still fails when it does not recognise the darkmode script.
 - Fonts: Source Serif 4 (400, 600, italic; latin, latin-ext and cyrillic) for all text and IBM Plex Mono for code, replacing IBM Plex Sans, Plex Sans Condensed and Literata. A page loads 76 KB of fonts for Latin text: three Source Serif 4 files (62 KB) and IBM Plex Mono (15 KB). Body text is 1.125rem with a 66ch measure and old-style numerals.
 - The metadata strip above the title is now a spec sheet under it: a ruled list of label and value pairs (type, status, decided, verified, modified, reading time). It is a definition list, and `verified` is shown as a full date. The date line of the content-meta plugin is hidden where the sheet has the modified date.
