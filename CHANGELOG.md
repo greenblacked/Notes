@@ -20,6 +20,13 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 ### Fixed
 
 - `scripts/smoke-test.sh` no longer follows redirects: any 3xx is a failure with the status and `Location`. A Cloudflare Access redirect is still detected from the response headers (a notice with `SMOKE_ALLOW_ACCESS=1`, a failure otherwise), but only on a 3xx response: a `Location` header on a 200 is not Access. Tested by `scripts/smoke-test.test.mjs`.
+- Note pages no longer open scrolled down. The Explorer's script calls `scrollIntoView` on the open note's entry at load, which scrolled the whole page (about 260px at 1440px wide) when the entry was visible in the sidebar. The list now lives in a fixed, hidden drawer, so there is nothing to scroll; pages open at the top unless the URL has a `#hash`.
+- The tag page listed its notes twice; one copy is hidden. The tag index (`/tags`) listed each tag's notes twice as well, and now shows each listing once.
+- The closed Browse drawer is inert, so Tab no longer reaches its open folders (the explorer's CSS made them visible again), at every width.
+- The top bar keeps its solid band with reduced motion; the fade from transparent applies only without it.
+- Following a link to a `#heading` lands the heading below the bar after the layout settles (code and diagram blocks grow after the router scrolls).
+- Opening the search (button, Ctrl/Cmd+K) closes the Browse drawer first; Escape and Tab then act on the search only.
+- "Skip to content" targets the title instead of the article, and works without JavaScript. The centre column is the `main` landmark, the home section cards are named "Browse by section" (the top bar keeps "Sections") and their headings are level 2.
 
 ### Added
 
@@ -44,6 +51,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - `docs/deployment.md` states that on a tag push or tag dispatch the workflow file and guard script come from the tagged commit, so the guard only catches mistakes; the controls for creating production tags are the `v*` tag ruleset and required reviewers on the `production` environment ("Prevent self-review" when more than one person has access). The "rely on the guard for creations" fallback is removed. The rollback drill notes that tags from before the CI check have no such step and that a very old tag needs its `ci.yml` run record to still exist.
 
 - `docs/deployment.md`: "Repository settings you must apply" (rulesets for `main` and `v*` tags, environment branch policies, optional separate stage token) and a one-time `wrangler rollback` drill.
+- Modern, smoother design. The always-open Explorer sidebar is gone: a slim sticky top bar (`local-plugins/top-bar`) has the wordmark, section links with the current section highlighted, search and the theme toggle, and a **Browse** button that opens the Explorer as a drawer at every width (Escape, outside click, focus kept inside while open). The bar blurs on scroll and shows reading progress with CSS scroll-driven animations. The reader mode is removed (one centred column leaves nothing to hide).
+- One centred reading column with the table of contents sticky beside it (the entry being read is highlighted); the local graph moves to the end of the note, under a new "Linked from" block (`local-plugins/linked-from`, replaces the Backlinks plugin). Sidenotes now appear from 1280px.
+- Softer paper: lighter grain, a diffuse shadow, rounded corners, thinner and lighter rules, no margin line. Inter (self-hosted variable font) for the interface; Source Serif 4 stays for reading text.
+- Home page: a short intro, a card per section (description, note count, last update) and then the index of notes. The home text now names the real search shortcut (Ctrl+K), not `/`.
+- Polish: tags are light chips (no `#`, no capitals), the stray alias line under the tags is gone, tidier spacing between title, lede, tags and metadata, slash breadcrumbs, rounded tables, callouts and code blocks with a quieter caption and copy button, footnotes with a visible label, a styled search overlay and link previews, a 404 page with the top bar, section and tag page rows, a skip link, a phone-friendly search result and tables that scroll inside their frame.
+- Motion: smooth anchor scrolling below the bar, hover and focus transitions, colours that fade when the theme is toggled, and a soft fade of the page content on SPA navigation, all disabled under `prefers-reduced-motion`.
 
 ### Removed
 
