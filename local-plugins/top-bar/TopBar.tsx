@@ -23,10 +23,17 @@ export default (() => {
     displayClass,
   }: QuartzComponentProps) => {
     const slug = fileData.slug!
+    // The 404 page is served at whatever URL was missing (/missing/deep), so relative links would
+    // resolve against that path. It links from the site root instead, as Quartz's own 404 body does.
+    const root = slug === "404" ? new URL(`https://${cfg.baseUrl ?? "example.com"}`).pathname : null
+    const href = (target: FullSlug) =>
+      root === null
+        ? resolveRelative(slug, target)
+        : `${root.replace(/\/?$/, "/")}${target.replace(/index$/, "")}`
     const links = SECTIONS.filter((s) => allFiles.some((f) => f.slug === `${s.folder}/index`)).map(
       (s) => ({
         ...s,
-        href: resolveRelative(slug, `${s.folder}/index` as FullSlug),
+        href: href(`${s.folder}/index` as FullSlug),
         current:
           slug === `${s.folder}/index`
             ? ("page" as const)
@@ -41,7 +48,7 @@ export default (() => {
         <a class="skip-link" href="#article">
           Skip to content
         </a>
-        <a class="top-bar-brand" href={pathToRoot(slug)}>
+        <a class="top-bar-brand" href={root ?? pathToRoot(slug)}>
           {cfg.pageTitle}
         </a>
         <ul class="top-bar-links">
