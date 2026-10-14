@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
-- Dev Preview: `deploy-dev.yml` deploys every push to the `dev` branch to the Worker Preview `dev` at https://dev.notes.szolotov.com, with the same safeguards as stage. `is-main-head.sh` takes the branch from `BRANCH` (default `main`), and `read-wrangler-output.mjs --preview` also prints the Preview's `custom_url`.
+- Dev Preview: `deploy-dev.yml` deploys every push to the `dev` branch to the Worker Preview `dev` at https://dev.notes.szolotov.com, with the same safeguards as stage; its upload job runs only code checked out from `main` and takes only `public/` from the dev build. `is-main-head.sh` takes the branch from `BRANCH` (default `main`), and `read-wrangler-output.mjs --preview` also prints the Preview's `custom_url`.
 
 ### Security
 

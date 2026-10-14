@@ -31,11 +31,12 @@ Stage is a [Worker Preview](https://developers.cloudflare.com/workers/previews/)
 
 ## Dev Preview
 
-A second Preview of the same Worker, named `dev`, for looking at a change before it is merged. `deploy-dev.yml` updates it on every push to the `dev` branch, with the same two jobs and safeguards as stage (untrusted build without secrets, wrangler-only upload, CSP regenerated from trusted code).
+A second Preview of the same Worker, named `dev`, for looking at a change before it is merged. `deploy-dev.yml` updates it on every push to the `dev` branch, with the same two jobs and safeguards as stage (untrusted build without secrets, wrangler-only upload, CSP regenerated from trusted code). One more: `dev` is not protected, so the upload job, which holds the Cloudflare token (it can deploy production too), checks out `main` and runs only main's scripts, wrangler lockfile, `wrangler.jsonc` and Worker code. Only the checked `public/` comes from the dev build: a dev Preview shows content and design changes, and Worker changes show there only once they are on `main`.
 
 - Use it: push the branch you want to see to `dev`, e.g. `git push origin feat/my-change:dev --force`. The run summary and the `dev` environment link to https://dev.notes.szolotov.com once it is deployed (about 15 minutes, the build is cold).
 - Same rules as stage: noindex, behind Cloudflare Access, no rollback, production and the `stage` Preview untouched. `dev` is a scratch branch: nothing is merged from it, and a force-push replaces it.
-- Who can deploy it: anyone who can push to `dev`. Restrict the `dev` environment to the `dev` branch and, if more people get write access, add required reviewers to it, because it holds the same Cloudflare token as stage.
+- What the `main` checkout protects against: a script, `tools/` lockfile, `wrangler.jsonc` or Worker change pushed to `dev` never runs next to the token. It does not protect against someone who edits `deploy-dev.yml` itself on `dev`, because a push runs the workflow file of the pushed commit.
+- Who is trusted with the token: while `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are **repository** secrets, every workflow on every branch can read them, so everyone with write access is trusted with a token that can deploy production. That is fine for a single-owner repository. Before giving anyone else write access, move them into **environment** secrets: `production` (tags `v*` and branch `main`, required reviewers), `staging` (branch `main`) and `dev` (branch `dev`, required reviewers with "Prevent self-review"), and delete the repository secrets. A workflow on another branch then cannot reach the token, and a dev deploy waits for an approval.
 - Remove it: `npx wrangler preview delete --name dev`.
 
 ### Migration from the separate `notes-stage` Worker (one time)
