@@ -139,11 +139,13 @@ plugins:
     enabled: true
   - source: github:quartz-community/tag-page
     enabled: true
+  # Before the toolbar group (priority 35), so that the keyboard meets Browse, search and the theme
+  # toggle in the order they are drawn.
   - source: github:quartz-community/explorer
     enabled: true
     layout:
       position: left
-      priority: 50
+      priority: 25
   # The local graph closes the note, below "Linked from".
   - source: github:quartz-community/graph
     enabled: true
@@ -230,6 +232,12 @@ plugins:
     layout:
       position: left
       priority: 10
+  # The target of the skip link, before the breadcrumbs and the title.
+  - source: ./local-plugins/content-start
+    enabled: true
+    layout:
+      position: beforeBody
+      priority: 1
   # "Linked from": the notes that link here, at the end of the note.
   - source: ./local-plugins/linked-from
     enabled: true

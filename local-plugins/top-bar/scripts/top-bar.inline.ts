@@ -1,7 +1,8 @@
 // Behaviour of the top bar that CSS cannot do: the Browse drawer (Quartz's Explorer, shown at
 // every width) gets a name, focus management and Escape, the table of contents marks the heading
-// being read, and the skip link gets its target. Runs once per page load; the parts that touch the page re-run on every
-// SPA navigation ("nav") and clean up after themselves.
+// being read, the centre column gets its landmark and the skip link its focus. Runs once per page
+// load; the parts that touch the page re-run on every SPA navigation ("nav") and clean up after
+// themselves.
 
 const drawerParts = () => {
   const explorer = document.querySelector<HTMLElement>(".explorer")
@@ -21,6 +22,8 @@ const focusable = (drawer: HTMLElement) =>
     (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility === "visible",
   )
 
+const searchActive = () => !!document.querySelector(".search-container.active")
+
 function setupDrawer() {
   const parts = drawerParts()
   if (!parts) return
@@ -37,6 +40,9 @@ function setupDrawer() {
     const open = isOpen(parts)
     toggle.setAttribute("aria-expanded", String(open))
     drawer.setAttribute("aria-modal", String(open))
+    // Closed, the drawer is out of the tab order and the accessibility tree (the explorer's own
+    // CSS can make its open folders visible again, which `visibility: hidden` alone does not stop).
+    if (open) drawer.inert = false
     if (open && !wasOpen) {
       const first = drawer.querySelector<HTMLElement>("a.active") ?? focusable(drawer)[0]
       first?.focus({ preventScroll: true })
@@ -47,6 +53,7 @@ function setupDrawer() {
         toggle.focus({ preventScroll: true })
       }
     }
+    if (!open) drawer.inert = true
     wasOpen = open
   }
   const observer = new MutationObserver(sync)
@@ -60,16 +67,32 @@ function setupDrawer() {
   }
   explorer.addEventListener("click", onBackdrop)
 
+  // Opening the search closes the drawer first, so that focus stays in the search.
+  const searchContainer = document.querySelector<HTMLElement>(".search-container")
+  const searchObserver = new MutationObserver(() => {
+    if (searchActive() && isOpen(parts)) toggle.click()
+  })
+  if (searchContainer) {
+    searchObserver.observe(searchContainer, { attributes: true, attributeFilter: ["class"] })
+  }
+
   window.addCleanup(() => {
     observer.disconnect()
+    searchObserver.disconnect()
     explorer.removeEventListener("click", onBackdrop)
   })
 }
 
-// Escape closes the drawer; Tab stays inside it while it is open.
+// Escape closes the drawer; Tab stays inside it while it is open. The search has the keyboard
+// while it is open, and Ctrl/Cmd+K closes the drawer before the search opens.
 document.addEventListener("keydown", (e) => {
   const parts = drawerParts()
   if (!parts || !isOpen(parts)) return
+  if (e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey)) {
+    parts.toggle.click()
+    return
+  }
+  if (e.defaultPrevented || searchActive()) return
   if (e.key === "Escape") {
     e.preventDefault()
     parts.toggle.click()
@@ -132,23 +155,50 @@ function setupTocSpy() {
   })
 }
 
-// "Skip to content": the article gets an id and can take focus, so that following the link moves
-// the keyboard (the SPA router only scrolls to an in-page anchor).
-function setupSkipLink() {
+// The centre column is the page's main landmark, and "Skip to content" lands on the title: the
+// target (#content) is rendered by the content-start component; the 404 page has none, so its
+// article stands in. Following the link also moves the keyboard (the SPA router only scrolls to an
+// in-page anchor).
+function setupLandmarks() {
+  const center = document.querySelector<HTMLElement>(".center")
+  center?.setAttribute("role", "main")
   const link = document.querySelector<HTMLAnchorElement>(".skip-link")
-  const target = document.querySelector<HTMLElement>(".center article")
+  let target = document.getElementById("content")
+  if (!target) {
+    target = document.querySelector<HTMLElement>(".center article")
+    if (target) target.id = "content"
+  }
   if (!link || !target) return
-  target.id = "article"
-  target.tabIndex = -1
-  const onClick = () => requestAnimationFrame(() => target.focus({ preventScroll: true }))
+  const skipTo = target
+  skipTo.tabIndex = -1
+  const onClick = () => requestAnimationFrame(() => skipTo.focus({ preventScroll: true }))
   link.addEventListener("click", onClick)
   window.addCleanup(() => link.removeEventListener("click", onClick))
+}
+
+// The router scrolls to a #hash before code and diagram blocks have their final height, which
+// leaves the heading under the bar or off screen; scroll again once layout has settled.
+let hashScroll = 0
+async function settleHash() {
+  const id = ++hashScroll
+  const { hash } = location
+  if (!hash) return
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  await document.fonts?.ready
+  if (id !== hashScroll || location.hash !== hash) return
+  let name = hash.slice(1)
+  try {
+    name = decodeURIComponent(name)
+  } catch {
+    // Not valid percent-encoding: use it as written.
+  }
+  document.getElementById(name)?.scrollIntoView({ behavior: "instant", block: "start" })
 }
 
 const onNav = () => {
   setupDrawer()
   setupTocSpy()
-  setupSkipLink()
+  setupLandmarks()
+  void settleHash()
 }
 document.addEventListener("nav", onNav)
-document.addEventListener("render", onNav)

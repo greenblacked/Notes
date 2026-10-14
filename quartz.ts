@@ -8,6 +8,7 @@ import NoteMeta from "./local-plugins/note-meta/NoteMeta"
 import NoteIndex from "./local-plugins/note-index/NoteIndex"
 import TopBar from "./local-plugins/top-bar/TopBar"
 import LinkedFrom from "./local-plugins/linked-from/LinkedFrom"
+import ContentStart from "./local-plugins/content-start/ContentStart"
 import type { QuartzComponentConstructor } from "./quartz/components/types"
 
 // Host only: no protocol, no trailing slash (what Quartz expects for baseUrl).
@@ -19,7 +20,7 @@ const baseUrl = (process.env.NOTES_BASE_URL || "notes.szolotov.com")
 // The `home` condition limits a component to the home page (note-index uses it).
 registerCondition("home", (props) => props.fileData.slug === "index")
 
-// Spec sheet, note index, top bar and "Linked from" (local-plugins/, laid out in
+// Spec sheet, note index, top bar, skip-link target and "Linked from" (local-plugins/, laid out in
 // quartz.config.yaml). Registered here because the plugin loader only registers components that a
 // plugin's manifest declares, and these have none. The sidenotes transformer in
 // local-plugins/sidenotes needs no registration.
@@ -30,6 +31,11 @@ componentRegistry.register(
   "linked-from",
   LinkedFrom as QuartzComponentConstructor<any>,
   "linked-from",
+)
+componentRegistry.register(
+  "content-start",
+  ContentStart as QuartzComponentConstructor<any>,
+  "content-start",
 )
 
 const config = await loadQuartzConfig({ baseUrl })
