@@ -2,17 +2,25 @@
 @use "sass:map";
 @use "./variables.scss" as *;
 
-// Site design: a sheet of paper on a desk. Warm paper with a faint grain and a soft shadow carries
-// the article; the sidebars sit on the desk like the margin of a notebook. Source Serif 4 for all
-// text, IBM Plex Mono for code, light by default and "paper at night" in the dark theme.
+// Site design: a calm sheet of paper on a desk. Warm paper with a faint grain, rounded corners and
+// a soft, diffuse shadow carries the reading column; a slim sticky bar at the top holds the
+// navigation, and the Explorer lives in a drawer opened from it. Source Serif 4 sets the reading
+// text and headings, Inter the interface (bar, labels, chips, table of contents, metadata), IBM
+// Plex Mono the code. Light by default, "paper at night" in the dark theme.
 // Everything custom lives in this file. The Quartz colour keys (--light is the sheet, --lightgray,
 // --gray, --darkgray, --dark, --secondary, --tertiary, --highlight) come from quartz.config.yaml;
 // the variables in the two token blocks below add what Quartz has no key for. scripts/check-contrast.mjs
 // reads both and fails when a text/background pair drops below WCAG AA, so keep the token blocks
-// to plain `--name: #rrggbb;` lines for colours (other values, such as the grain and the shadow,
-// go on lines that do not start with a hex colour).
+// to plain `--name: #rrggbb;` lines for colours (other values, such as the grain, the shadow and
+// the colours mixed from the tokens, go on lines that do not start with a hex colour).
 //
 // Do not name a variable --bg, --border or --color: the callout styles set those per callout.
+
+// Breakpoints of the site's own layout. Quartz's ($mobile < 800px, $tablet, $desktop from 1200px)
+// still apply to its components; the sidenotes need a wider sheet than the table of contents does.
+$wide: "(min-width: 1280px)";
+$wider: "(min-width: 1500px)";
+$compact-bar: "(max-width: 60rem)";
 
 // ============================================================================
 // Fonts (self-hosted)
@@ -20,7 +28,8 @@
 // woff2 files from the @fontsource devDependencies, copied to /static/fonts by
 // scripts/postprocess-build.mjs (which fails if a file referenced here is missing). Only the
 // weights used below and the latin, latin-ext and cyrillic subsets; the browser fetches a subset
-// only when the page has characters in its unicode-range.
+// only when the page has characters in its unicode-range. Inter is the variable font (one file
+// per subset covers every weight).
 
 $unicode-ranges: (
   "latin": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD",
@@ -42,10 +51,25 @@ $unicode-ranges: (
   }
 }
 
+@mixin variable-font-faces($family, $package, $subsets: ("latin", "latin-ext", "cyrillic")) {
+  @each $subset in $subsets {
+    $range: map.get($unicode-ranges, $subset);
+    @font-face {
+      font-family: $family;
+      font-style: normal;
+      font-weight: 100 900;
+      font-display: swap;
+      src: url("/static/fonts/#{$package}-#{$subset}-wght-normal.woff2") format("woff2-variations");
+      unicode-range: #{$range};
+    }
+  }
+}
+
 @include font-faces("Source Serif 4", "source-serif-4", 400);
 @include font-faces("Source Serif 4", "source-serif-4", 400, italic);
 @include font-faces("Source Serif 4", "source-serif-4", 600);
 @include font-faces("IBM Plex Mono", "ibm-plex-mono", 400);
+@include variable-font-faces("Inter", "inter");
 
 // ============================================================================
 // Tokens
@@ -53,13 +77,19 @@ $unicode-ranges: (
 
 :root {
   --serif: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  --measure: 66ch;
+  --measure: 38rem;
+  --pad: clamp(1.25rem, 4vw, 3.25rem);
   --sidenote-gap: 1.25rem;
+  --bar-h: 3.5rem;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --ease: cubic-bezier(0.22, 0.7, 0.24, 1);
 
   // The desk behind the sheet, and the tint of callouts, code and cards on the sheet.
-  --desk: #e6dece;
-  --surface: #f1eadb;
+  --desk: #ebe5d7;
+  --surface: #f2ecde;
   --accepted: #1f6b3a;
   --warning: #7a4a00;
 
@@ -73,15 +103,20 @@ $unicode-ranges: (
   --chip-warning-bg: #f4e6c6;
   --chip-warning-fg: #6e4300;
 
-  // The grain is a tile of feTurbulence noise, brown at up to 9% opacity (GRAIN_MAX in
+  // Rules are the Quartz "lightgray" at two thirds strength: thin and light, never the only cue.
+  --rule: color-mix(in srgb, var(--lightgray) 65%, transparent);
+  // The top bar over the page: the desk colour, translucent once the page has scrolled.
+  --bar-bg: color-mix(in srgb, var(--desk) 80%, transparent);
+  --scrim: rgba(40, 30, 15, 0.32);
+
+  // The grain is a tile of feTurbulence noise, brown at up to 5% opacity (GRAIN_MAX in
   // scripts/check-contrast.mjs), so the contrast check can allow for it.
-  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n' color-interpolation-filters='sRGB' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .27 0 0 0 0 .16 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n' color-interpolation-filters='sRGB' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .27 0 0 0 0 .16 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --grain-color: #594529;
   --sheet-shadow:
-    0 1px 1px rgba(70, 50, 20, 0.1), 0 2px 5px rgba(70, 50, 20, 0.06),
-    0 14px 26px -10px rgba(70, 50, 20, 0.2), 0 34px 50px -26px rgba(70, 50, 20, 0.26),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.4), inset 0 0 90px rgba(150, 115, 60, 0.07);
-  --margin-rule: rgba(138, 42, 26, 0.2);
+    0 0 0 1px rgba(90, 70, 35, 0.05), 0 2px 6px rgba(90, 70, 35, 0.04),
+    0 14px 34px -14px rgba(90, 70, 35, 0.14), 0 44px 90px -44px rgba(90, 70, 35, 0.16);
+  --lift-shadow: 0 10px 28px -12px rgba(90, 70, 35, 0.22);
 }
 
 :root[saved-theme="dark"] {
@@ -99,23 +134,45 @@ $unicode-ranges: (
   --chip-warning-bg: #35291a;
   --chip-warning-fg: #e8c070;
 
-  // Pale specks instead of dark ones, at up to 5% opacity.
-  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n' color-interpolation-filters='sRGB' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .88 0 0 0 0 .75 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --scrim: rgba(0, 0, 0, 0.5);
+
+  // Pale specks instead of dark ones, at up to 3% opacity.
+  --grain-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n' color-interpolation-filters='sRGB' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .95 0 0 0 0 .88 0 0 0 0 .75 0 0 0 .03 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --grain-color: #f2e0bf;
   --sheet-shadow:
-    0 1px 1px rgba(0, 0, 0, 0.5), 0 2px 5px rgba(0, 0, 0, 0.3), 0 16px 30px -10px rgba(0, 0, 0, 0.55),
-    0 38px 56px -28px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 235, 200, 0.05),
-    inset 0 0 90px rgba(0, 0, 0, 0.18);
-  --margin-rule: rgba(232, 162, 131, 0.22);
+    0 0 0 1px rgba(255, 235, 200, 0.04), 0 2px 6px rgba(0, 0, 0, 0.25),
+    0 18px 40px -16px rgba(0, 0, 0, 0.5), 0 50px 100px -46px rgba(0, 0, 0, 0.55);
+  --lift-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.6);
+}
+
+@media all and ($mobile) {
+  :root {
+    --bar-h: 3.25rem;
+    --radius: 12px;
+  }
 }
 
 // ============================================================================
-// Accessibility
+// Accessibility and motion
 // ============================================================================
 
 :focus-visible {
   outline: 2px solid var(--secondary) !important;
   outline-offset: 2px;
+}
+
+// Colours fade when the theme is toggled (and on hover): every colour property, never layout.
+// Components that declare their own `transition` list these properties again.
+*,
+*::before,
+*::after {
+  transition:
+    color 0.3s var(--ease),
+    background-color 0.3s var(--ease),
+    border-color 0.3s var(--ease),
+    fill 0.3s var(--ease),
+    stroke 0.3s var(--ease),
+    box-shadow 0.3s var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -128,12 +185,18 @@ $unicode-ranges: (
   }
 }
 
-// ============================================================================
-// The desk, the sheet and the margins
-// ============================================================================
-
 html {
+  scroll-behavior: smooth;
+  // Anchors and the table of contents land below the sticky bar.
+  scroll-padding-top: calc(var(--bar-h) + 1.25rem);
   background-color: var(--desk);
+  -webkit-font-smoothing: antialiased;
+}
+
+// The Browse drawer is open: the page behind it does not scroll.
+html.mobile-no-scroll {
+  overflow: hidden;
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -141,57 +204,84 @@ body {
   font-family: var(--serif);
 }
 
+::selection {
+  background: color-mix(in srgb, var(--secondary) 24%, transparent);
+  color: var(--dark);
+}
+
+// ============================================================================
+// Page grid: the bar, one centred sheet, and the table of contents on the desk
+// ============================================================================
+// Quartz's frame puts a left sidebar, the centre and a right sidebar in a grid. Here the left
+// sidebar is the top bar (the whole row), the centre is the sheet and the right sidebar holds the
+// table of contents, sticky beside the sheet. The sheet is one reading column --measure wide; it
+// grows by the width of the margin when a note has sidenotes.
+
+.page {
+  max-width: none;
+  margin: 0;
+}
+
 .page > #quartz-body {
-  padding: 0 1rem;
-  column-gap: 1.25rem;
-  row-gap: 0.75rem;
+  --rail: 1rem;
+  --sheet-w: calc(var(--measure) + 2 * var(--pad));
+  --gutter: 1rem;
+
+  display: block;
+  padding: 0;
+  margin: 0;
+
+  // Only pages with a table of contents reserve a column for it.
+  &:has(.toc) {
+    --rail: 13rem;
+  }
+
+  @media all and ($mobile) {
+    --gutter: 0.5rem;
+  }
 
   @media all and ($desktop) {
-    grid-template-columns: clamp(11.5rem, 15vw, 16rem) minmax(0, 1fr) clamp(11.5rem, 15vw, 16rem);
+    display: grid;
+    grid-template-columns: minmax(var(--rail), 1fr) minmax(0, var(--sheet-w)) minmax(var(--rail), 1fr);
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      "bar bar bar"
+      ". sheet rail"
+      ". foot .";
+    column-gap: 0;
     row-gap: 0;
   }
-  @media all and ($tablet) {
-    grid-template-columns: 15rem minmax(0, 1fr);
+
+  // Sidenotes widen the sheet by their column (see "Sidenotes").
+  @media all and ($wide) {
+    &:has(.center article .sidenote) {
+      --sheet-w: calc(var(--measure) + 2 * var(--pad) + var(--sidenote-w) + var(--sidenote-gap));
+    }
   }
 
-  // Sidebars: no panel, just text on the desk with a short rule over each block.
-  & .sidebar {
+  // The sheet.
+  & .center {
+    position: relative;
     box-sizing: border-box;
-
-    @media all and ($desktop) {
-      top: 0;
-      height: 100vh;
-      padding: 2.25rem 0.25rem 2rem 0;
-      overflow-y: auto;
-      scrollbar-width: thin;
-    }
+    width: auto;
+    min-width: 0;
+    max-width: var(--sheet-w);
+    margin: 1.25rem var(--gutter) 1rem;
+    padding: clamp(1.75rem, 4vw, 3rem) var(--pad) clamp(2rem, 4vw, 3.25rem);
+    background-color: var(--light);
+    background-image: var(--grain-image);
+    border-radius: var(--radius);
+    box-shadow: var(--sheet-shadow);
     @media all and ($tablet) {
-      top: 0;
-      height: 100vh;
-      padding: 2.25rem 0 2rem;
-      overflow-y: auto;
-      scrollbar-width: thin;
+      margin-inline: auto;
     }
-  }
-
-  & .sidebar.left {
     @media all and ($mobile) {
-      padding: 1.25rem 0 0.5rem;
+      margin-top: 0.75rem;
+      padding: 1.5rem var(--pad) 2rem;
     }
-  }
-
-  & .sidebar.right {
     @media all and ($desktop) {
-      padding-left: 0.25rem;
-      padding-right: 0;
-    }
-    @media all and not ($desktop) {
-      padding: 0.5rem 0 0;
-      gap: 1rem;
-    }
-    @media all and ($tablet) {
-      height: unset;
-      overflow: visible;
+      grid-area: sheet;
+      margin: 1.25rem 0 1rem;
     }
   }
 
@@ -200,317 +290,751 @@ body {
     padding: 0;
   }
 
-  // The sheet.
-  & .center {
-    position: relative;
-    box-sizing: border-box;
-    margin: 1.5rem 0 1rem;
-    padding: clamp(1.75rem, 4vw, 3.25rem) clamp(1.25rem, 4vw, 3.25rem) clamp(2rem, 4vw, 3.5rem);
-    background-color: var(--light);
-    background-image: var(--grain-image);
-    border-radius: 2px;
-    box-shadow: var(--sheet-shadow);
-
-    @media all and ($tablet) {
-      margin-right: 0;
-    }
-    @media all and ($mobile) {
-      margin: 0.5rem 0 0.5rem;
-      padding: 1.25rem 1.1rem 1.75rem;
-    }
-
-    // The margin rule of a ruled page.
-    @media all and not ($mobile) {
-      &::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        left: clamp(0.75rem, 1.8vw, 1.6rem);
-        width: 1px;
-        background: var(--margin-rule);
-        pointer-events: none;
-      }
-    }
-  }
-
   & .page-footer {
     margin-top: 0;
   }
 
   & footer {
-    margin: 0.5rem 0 2.5rem;
-    padding: 0 0.25rem;
+    box-sizing: border-box;
+    grid-area: foot;
+    min-width: 0;
+    max-width: var(--sheet-w);
+    margin: 0.5rem auto 2.5rem;
+    padding: 0 var(--gutter);
     color: var(--gray);
-    font-size: 0.85rem;
+    font: 400 0.8rem/1.5 var(--ui);
+
+    @media all and ($desktop) {
+      width: 100%;
+      padding: 0 0.25rem;
+    }
 
     & p,
     & a {
       color: var(--gray);
+      font-weight: 400;
     }
     & a {
       text-decoration: underline;
+      text-underline-offset: 0.2em;
+      text-decoration-color: var(--rule);
+
+      &:hover {
+        color: var(--dark);
+      }
+    }
+    & ul {
+      margin: 0;
+      padding: 0;
+    }
+  }
+
+  // Table of contents rail: beside the sheet from the desktop breakpoint, hidden below it.
+  & .sidebar.right {
+    display: none;
+
+    @media all and ($desktop) {
+      display: block;
+      grid-area: rail;
+      align-self: start;
+      position: sticky;
+      top: calc(var(--bar-h) + 1.25rem);
+      box-sizing: border-box;
+      width: 100%;
+      height: auto;
+      max-height: calc(100dvh - var(--bar-h) - 2.5rem);
+      margin-top: 1.25rem;
+      padding: 1.5rem 0 1rem 1.75rem;
+      overflow-y: auto;
+      scrollbar-width: thin;
     }
   }
 }
 
-// Quartz positions the mobile explorer overlay absolutely inside the sidebar, which sits inside the
-// page padding, so it starts 16px from the left and sticks out 16px on the right. Pin it to the
-// viewport instead.
-@media all and ($mobile) {
-  .explorer .explorer-content {
-    position: fixed;
-    box-sizing: border-box;
-    padding: 4.5rem 1.5rem 2rem;
-    background-color: var(--light);
-    background-image: var(--grain-image);
+// The home page carries a table of notes and is wider than a note.
+body[data-slug="index"] .page > #quartz-body {
+  --sheet-w: 60rem;
+}
+
+// While the next page is fetched Quartz appends a .navigation-progress element to the body and the
+// morph removes it again: the content of the sheet dims a little and fades back in with the new
+// page. CSS only.
+.page > #quartz-body .center > * {
+  transition: opacity 0.4s var(--ease);
+}
+body:has(> .navigation-progress) .page > #quartz-body .center > * {
+  opacity: 0.5;
+  transition-duration: 0.2s;
+}
+
+.navigation-progress {
+  height: 2px;
+  border-radius: 0 2px 2px 0;
+}
+
+// ============================================================================
+// Top bar
+// ============================================================================
+// The left sidebar of the frame: wordmark and section links (local-plugins/top-bar), then the
+// Browse button (the Explorer, below), search and the theme toggle. Sticky; from the first pixels
+// of scrolling its background fades in as a translucent, blurred band and a thin line under it
+// fills with the reading progress. Both are scroll-driven animations; where they are not
+// supported the band is simply always there and the progress line stays out.
+// The bar must not get a filter, backdrop-filter, transform or contain of its own: the Browse
+// drawer and the search overlay are position: fixed inside it. The blur is on its ::before.
+
+.page > #quartz-body > .sidebar.left.sidebar {
+  grid-area: bar;
+  background: none;
+  margin: 0;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  height: var(--bar-h);
+  padding: 0 var(--gutter);
+  overflow: visible;
+
+  @media all and ($tablet) {
+    padding: 0 1rem;
+  }
+  @media all and ($desktop) {
+    padding: 0 max(1rem, calc((100% - 72rem) / 2));
+  }
+  @media all and ($mobile) {
+    padding: 0 0.75rem;
+  }
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--bar-bg);
+    border-bottom: 1px solid var(--rule);
+    -webkit-backdrop-filter: blur(14px) saturate(1.15);
+    backdrop-filter: blur(14px) saturate(1.15);
+    pointer-events: none;
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 2px;
+    background: var(--secondary);
+    border-radius: 0 2px 2px 0;
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    pointer-events: none;
+  }
+
+  @supports (animation-timeline: scroll()) {
+    &::before {
+      opacity: 0;
+      animation: bar-band linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 72px;
+    }
+    &::after {
+      animation: reading-progress linear both;
+      animation-timeline: scroll(root block);
+    }
   }
 }
 
+@keyframes bar-band {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes reading-progress {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.top-bar {
+  order: 1;
+  display: flex;
+  align-items: center;
+  gap: 1.75rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+// Hidden until the keyboard reaches it, then a pill over the bar.
+.skip-link {
+  position: fixed;
+  top: 0.6rem;
+  left: 0.75rem;
+  z-index: 50;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--secondary);
+  border-radius: 999px;
+  background: var(--light);
+  font: 600 0.85rem/1 var(--ui);
+  color: var(--secondary);
+  text-decoration: none;
+  transform: translateY(-300%);
+
+  &:focus-visible {
+    transform: none;
+  }
+}
+
+.top-bar-brand {
+  flex: none;
+  font: 600 1.35rem/1 var(--serif);
+  letter-spacing: -0.01em;
+  color: var(--dark);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--secondary);
+  }
+}
+
+.top-bar-links {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media all and ($compact-bar) {
+    display: none;
+  }
+
+  & li {
+    margin: 0;
+    padding: 0;
+    line-height: 1;
+  }
+
+  & a {
+    position: relative;
+    display: block;
+    padding: 0.5rem 0.7rem;
+    border-radius: 999px;
+    font: 500 0.875rem/1 var(--ui);
+    color: var(--darkgray);
+    text-decoration: none;
+    transition:
+      color 0.2s var(--ease),
+      background-color 0.2s var(--ease);
+
+    &:hover {
+      color: var(--dark);
+      background: color-mix(in srgb, var(--dark) 6%, transparent);
+    }
+
+    // The section the page belongs to.
+    &[aria-current] {
+      color: var(--secondary);
+      background: var(--highlight);
+      font-weight: 600;
+    }
+  }
+}
+
+// Search, the theme toggle (Quartz's own components) and the Browse button.
+.page > #quartz-body > .sidebar.left.sidebar {
+  & > .flex-component {
+    order: 3;
+    flex: none;
+    align-items: center;
+    gap: 0.25rem !important;
+
+    // Quartz sizes the group's children with inline styles.
+    & > div {
+      flex: none !important;
+    }
+  }
+
+  & .search {
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  & .search-button {
+    gap: 0.5rem;
+    height: 2.25rem;
+    padding: 0 0.5rem 0 0;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface) 70%, transparent);
+    font: 400 0.85rem/1 var(--ui);
+    color: var(--gray);
+    cursor: pointer;
+    transition:
+      color 0.2s var(--ease),
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease);
+
+    @media all and ($desktop) {
+      min-width: 11rem;
+    }
+
+    & p {
+      margin: 0;
+      color: var(--gray);
+      font: inherit;
+      flex: 1;
+      text-align: left;
+    }
+
+    & svg {
+      width: 16px;
+      min-width: 16px;
+      margin: 0 0 0 0.75rem;
+      cursor: pointer;
+    }
+    & svg .search-path {
+      stroke: var(--gray);
+    }
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--secondary) 55%, transparent);
+      background: var(--surface);
+    }
+
+    @media all and ($mobile) {
+      width: 2.25rem;
+      padding: 0;
+      justify-content: center;
+
+      & p {
+        display: none;
+      }
+      & svg {
+        margin: 0;
+      }
+    }
+  }
+
+  & .darkmode {
+    position: relative;
+    flex: none;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    color: var(--gray);
+
+    & svg {
+      left: calc(50% - 9px);
+      top: calc(50% - 9px);
+      width: 18px;
+      height: 18px;
+      fill: var(--gray);
+    }
+
+    &:hover {
+      background: color-mix(in srgb, var(--dark) 7%, transparent);
+    }
+    &:hover svg {
+      fill: var(--dark);
+    }
+  }
+}
+
+// ---- Browse: the Explorer as a drawer ------------------------------------------------------
+// Quartz's explorer already has a drawer mode with a toggle (below 800px). Here it is the only
+// mode: the mobile toggle is the Browse button at every width, and the list is a panel from the
+// left edge. Quartz's script adds .collapsed to the explorer when it has loaded, removes
+// hide-until-loaded from the button, and toggles .collapsed on a click. Until then the list is
+// display: none, and it stays out of the page's way afterwards: the drawer is position: fixed and
+// hidden, so the script's scrollIntoView of the active entry has nothing to scroll (it used to
+// scroll the whole page to the open note's entry, which sat in the sidebar). The focus handling
+// and Escape are in local-plugins/top-bar/scripts/top-bar.inline.ts.
+
+.page > #quartz-body > .sidebar.left.sidebar .explorer {
+  order: 2;
+  flex: none;
+  align-self: center;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  overflow: visible;
+
+  &.collapsed {
+    flex: none;
+  }
+
+  // The title row of the desktop mode.
+  & button.desktop-explorer {
+    display: none;
+  }
+
+  & button.mobile-explorer {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    height: 2.25rem;
+    margin: 0;
+    z-index: auto;
+    padding: 0 0.9rem 0 0.7rem;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: transparent;
+    font: 500 0.85rem/1 var(--ui);
+    color: var(--darkgray);
+    cursor: pointer;
+    transition:
+      color 0.2s var(--ease),
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease);
+
+    &::after {
+      content: "Browse";
+    }
+
+    & svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      pointer-events: none;
+    }
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--surface);
+      border-color: color-mix(in srgb, var(--secondary) 55%, transparent);
+      color: var(--dark);
+    }
+
+    &.hide-until-loaded {
+      display: none;
+    }
+  }
+
+  & .hide-until-loaded ~ .explorer-content {
+    display: none;
+  }
+
+  // The dimmed page behind the open drawer (a click on it closes the drawer).
+  &:not(.collapsed):not(:has(> .hide-until-loaded))::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: var(--scrim);
+    -webkit-backdrop-filter: blur(1.5px);
+    backdrop-filter: blur(1.5px);
+    animation: scrim-in 0.3s var(--ease) both;
+  }
+
+  & .explorer-content {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    box-sizing: border-box;
+    width: min(22rem, 90vw);
+    max-width: none;
+    height: auto;
+    max-height: none;
+    margin: 0;
+    padding: 1.25rem 1.1rem 2rem 1.25rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background-color: var(--light);
+    background-image: var(--grain-image);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    box-shadow: var(--sheet-shadow);
+    visibility: hidden;
+    transform: translateX(calc(-100% - 2rem));
+    transition:
+      transform 0.32s var(--ease),
+      visibility 0s linear 0.32s,
+      background-color 0.3s var(--ease);
+
+    &::before {
+      content: "Browse notes";
+      display: block;
+      margin: 0.65rem 0 1.1rem;
+      font: 600 0.72rem/1.3 var(--ui);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+  }
+
+  &:not(.collapsed) .explorer-content {
+    visibility: visible;
+    transform: none;
+    transition-delay: 0s;
+  }
+
+  & .explorer-ul {
+    max-height: none;
+    overflow: visible;
+    mask-image: none;
+  }
+
+  // Sections and notes.
+  & .folder-container {
+    gap: 0.35rem;
+  }
+
+  & .folder-icon {
+    margin-right: 0;
+    color: var(--gray);
+  }
+
+  & .folder-container div > a,
+  & .folder-container div > button span {
+    font: 600 0.92rem/1.5 var(--ui);
+    color: var(--dark);
+  }
+
+  & .folder-container div > a:hover {
+    color: var(--secondary);
+  }
+
+  & .explorer-content ul li > a {
+    display: block;
+    margin: 0.1rem 0;
+    padding: 0.35rem 0.6rem;
+    border-radius: var(--radius-sm);
+    font: 400 0.9rem/1.4 var(--ui);
+    color: var(--darkgray);
+    opacity: 1;
+    text-decoration: none;
+    transition:
+      color 0.2s var(--ease),
+      background-color 0.2s var(--ease);
+
+    &:hover {
+      background: var(--surface);
+      color: var(--dark);
+    }
+
+    &.active {
+      background: var(--highlight);
+      color: var(--secondary);
+      font-weight: 600;
+    }
+  }
+
+  & .explorer-content .folder-outer > ul {
+    margin-left: 0.55rem;
+    padding-left: 0.65rem;
+    border-left: 1px solid var(--rule);
+  }
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+// ============================================================================
+// Shared pieces
+// ============================================================================
+
 hr {
   border: 0;
-  border-top: 1px solid var(--lightgray);
+  border-top: 1px solid var(--rule);
+  background: none;
+  height: 0;
   margin: 2.5rem 0;
 }
 
-// Small labels: capitals with letter-spacing, in the serif. One recipe for every tiny UI label.
+// Between the article and what follows it (Linked from, graph, the home index); gone when
+// nothing follows.
+.center > hr {
+  margin: 2.75rem 0 2rem;
+
+  &:has(+ .page-footer:empty) {
+    display: none;
+  }
+}
+
+// Small labels: capitals with letter-spacing, in the interface font. One recipe for every tiny UI
+// label.
 %label {
-  font-family: var(--serif);
-  font-size: 0.72rem;
+  font-family: var(--ui);
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   line-height: 1.3;
   color: var(--gray);
 }
 
-.page-title {
-  margin: 0;
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: 2rem;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
-
-  &::before {
-    content: "";
-    display: block;
-    width: 2.25rem;
-    height: 3px;
-    margin-bottom: 0.7rem;
-    background: var(--secondary);
-  }
-
-  & a,
-  .sidebar & a {
-    color: var(--dark);
-    font-size: inherit;
-    text-decoration: none;
-  }
+// Visually hidden, still read by screen readers (the "Footnotes" heading, see below).
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
-// ---- sidebar blocks --------------------------------------------------------
-
-.sidebar {
-  & h2:not(.page-title),
-  & h3 {
-    @extend %label;
-    margin: 0;
-  }
-
-  // Every block under the page title gets the same short rule and label.
-  & .explorer,
-  & .toc,
-  & .graph,
-  & .backlinks {
-    padding-top: 0.6rem;
-    border-top: 1px solid var(--lightgray);
-  }
-
-  & .toolbar,
-  & .flex-component {
-    align-items: center;
-  }
-
-  & .search-button,
-  & .darkmode,
-  & .readermode {
-    color: var(--gray);
-    background: none;
-    border: 0;
-    border-radius: 2px;
-  }
-
-  & .search-button {
-    border-bottom: 1px solid var(--lightgray);
-    border-radius: 0;
-    font-family: var(--serif);
-    font-style: italic;
-    font-size: 0.95rem;
-
-    & p {
-      color: var(--gray);
-    }
-    & svg {
-      fill: var(--gray);
-    }
-    &:hover {
-      border-bottom-color: var(--secondary);
-    }
-  }
-
-  & .darkmode svg,
-  & .readermode svg {
-    fill: var(--gray);
-    stroke: var(--gray);
-  }
-  & .darkmode:hover svg,
-  & .readermode:hover svg {
-    fill: var(--secondary);
-    stroke: var(--secondary);
-  }
-
-  & li,
-  & a {
-    font-size: 0.92rem;
-    line-height: 1.4;
-  }
-
-  & .backlinks li {
-    margin: 0.2rem 0;
-  }
-
-  & .graph-outer {
-    border: 1px solid var(--lightgray);
-    border-radius: 2px;
-    background: var(--light);
-  }
+// Links in running text: an underline, no tinted box; the tint appears on hover.
+a.internal {
+  background: none;
+  padding: 0;
+  border-radius: 4px;
+  line-height: inherit;
 }
 
-// Explorer: an outline of the sections, the open note in italic.
-.explorer {
-  & .title-button h2 {
-    @extend %label;
-  }
+// ============================================================================
+// Table of contents (right rail on the desk)
+// ============================================================================
+// Numbered like the h2 sections ("Numbered sections" below). The entry of the heading being read
+// is marked by the script in local-plugins/top-bar (a.current, aria-current="location").
 
-  & li > a,
-  & .folder-title,
-  & .folder-button {
-    font-family: var(--serif);
-    font-size: 0.95rem;
-    color: var(--darkgray);
-  }
-
-  & .folder-title {
-    font-weight: 600;
-  }
-
-  & li > a.active,
-  & a[aria-current="page"] {
-    color: var(--secondary);
-    font-style: italic;
-  }
-
-  & li > a:hover,
-  & .folder-button:hover .folder-title {
-    color: var(--secondary);
-  }
-}
-
-// Table of contents with the numbering of the h2 sections (see "Numbered sections" below).
 .toc {
   counter-reset: toc;
+  overflow: visible;
 
   & .toc-header {
+    width: 100%;
+    margin: 0 0 0.5rem;
+    padding: 0;
     background: none;
     border: 0;
-    padding: 0;
     cursor: pointer;
-  }
+    justify-content: flex-start;
 
-  & li.depth-0 {
-    counter-increment: toc;
-    margin-top: 0.35rem;
-
-    & > a {
-      font-weight: 400;
-      color: var(--darkgray);
+    & h3 {
+      @extend %label;
+      margin: 0;
     }
-    & > a::before {
-      content: counter(toc, decimal-leading-zero);
-      display: inline-block;
-      min-width: 1.7rem;
-      font-size: 0.72rem;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      font-variant-numeric: lining-nums tabular-nums;
-      color: var(--secondary);
-    }
-  }
 
-  & li.depth-1,
-  & li.depth-2 {
-    margin: 0.1rem 0;
-    & > a {
-      font-size: 0.85rem;
-      font-style: italic;
+    & .fold {
+      width: 14px;
+      height: 14px;
+      margin-left: 0.5rem;
       color: var(--gray);
+      transition: transform 0.3s var(--ease);
     }
   }
 
   & ul.toc-content.overflow {
-    & .depth-0 {
-      padding-left: 0;
-    }
-    & .depth-1 {
-      padding-left: 1.7rem;
-    }
-    & .depth-2 {
-      padding-left: 2.4rem;
-    }
+    margin: 0;
+    padding: 0;
+    max-height: none;
+    overflow: visible;
+    mask-image: none;
+    border-left: 1px solid var(--rule);
 
-    // Quartz fades the entries that are out of view; the text stays at full strength here and the
-    // entry in view turns to the accent.
+    // Quartz fades the entries that are out of view; every entry stays at full strength here.
     & > li > a {
+      display: block;
+      margin-left: -1px;
+      padding: 0.32rem 0.5rem 0.32rem 0.85rem;
+      border-left: 2px solid transparent;
+      font: 500 0.82rem/1.4 var(--ui);
+      color: var(--gray);
       opacity: 1;
       text-decoration: none;
+      transition:
+        color 0.2s var(--ease),
+        border-color 0.2s var(--ease),
+        background-color 0.2s var(--ease);
 
-      &:hover,
-      &.in-view {
+      &:hover {
+        color: var(--dark);
+      }
+
+      &.current {
+        border-left-color: var(--secondary);
         color: var(--secondary);
+        font-weight: 600;
       }
     }
-  }
 
-  & .toc-header h3 {
-    font-size: 0.72rem;
+    & > li.depth-0 {
+      counter-increment: toc;
+      padding-left: 0;
+
+      & > a::before {
+        content: counter(toc, decimal-leading-zero);
+        display: inline-block;
+        min-width: 1.6rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        font-variant-numeric: lining-nums tabular-nums;
+      }
+    }
+
+    & > li.depth-1,
+    & > li.depth-2 {
+      padding-left: 0;
+
+      & > a {
+        padding-left: 2.45rem;
+        font-size: 0.78rem;
+        font-weight: 400;
+      }
+      & > a.current {
+        font-weight: 600;
+      }
+    }
+    & > li.depth-2 > a {
+      padding-left: 3.1rem;
+    }
   }
 }
 
 // Breadcrumbs above the title.
 .breadcrumb-container {
-  margin: 0 0 1.25rem;
-  gap: 0.35rem;
+  margin: 0 0 1.1rem;
+  gap: 0.15rem 0.1rem;
 
   & .breadcrumb-element {
-    @extend %label;
-    letter-spacing: 0.1em;
+    font: 500 0.8rem/1.4 var(--ui);
 
     & p {
-      margin: 0;
-      color: var(--lightgray);
-      font-size: 0.6rem;
+      // The separator glyph is not in the interface font; draw a slash instead.
+      margin: 0 0.4rem;
+      font-size: 0;
+      color: var(--gray);
+
+      &::after {
+        content: "/";
+        font-size: 0.8rem;
+        opacity: 0.55;
+      }
     }
+
     & a {
       color: var(--gray);
       text-decoration: none;
       background: none;
+      font-weight: 500;
       font-size: inherit;
-      font-weight: 600;
+      padding: 0;
 
       &:hover {
         color: var(--secondary);
       }
+    }
+
+    // The page itself is the last crumb, not a link.
+    &:last-child a {
+      color: var(--darkgray);
+      pointer-events: none;
     }
   }
 }
@@ -533,10 +1057,10 @@ h6 {
 
 h1.article-title {
   margin: 0;
-  font-size: clamp(2.15rem, 5vw, 3.1rem);
+  font-size: clamp(2.1rem, 5vw, 2.85rem);
   font-weight: 400;
-  line-height: 1.08;
-  letter-spacing: -0.015em;
+  line-height: 1.1;
+  letter-spacing: -0.018em;
   text-wrap: balance;
 }
 
@@ -551,19 +1075,15 @@ article {
     "liga",
     "onum";
 
+  @media all and ($mobile) {
+    font-size: 1.0625rem;
+  }
+
   & p,
   & li,
   & tbody {
     line-height: 1.65;
     font-variant-numeric: inherit;
-  }
-
-  & > p,
-  & > ul,
-  & > ol,
-  & > blockquote,
-  & > .callout {
-    max-width: var(--measure);
   }
 
   & p {
@@ -588,19 +1108,26 @@ article {
   }
 
   & a:not([role="anchor"]) {
+    font-weight: 400;
     text-decoration: underline;
     text-decoration-thickness: 1px;
-    text-underline-offset: 0.2em;
-    text-decoration-color: color-mix(in srgb, var(--secondary) 45%, transparent);
+    text-underline-offset: 0.22em;
+    text-decoration-color: color-mix(in srgb, var(--secondary) 40%, transparent);
+    transition:
+      color 0.2s var(--ease),
+      background-color 0.2s var(--ease),
+      text-decoration-color 0.2s var(--ease);
 
     &:hover {
       text-decoration-color: currentColor;
     }
+    &.internal:hover {
+      background: var(--highlight);
+    }
   }
 
-  & .table-container table,
-  & .callout-title {
-    font-family: var(--serif);
+  & img {
+    border-radius: var(--radius-sm);
   }
 }
 
@@ -614,42 +1141,35 @@ article {
   & > h2 {
     counter-increment: section;
     position: relative;
-    margin: 3.25rem 0 1rem;
+    margin: 3rem 0 1rem;
     padding-top: 1.1rem;
-    border-top: 1px solid var(--lightgray);
-    font-size: 1.65rem;
-    letter-spacing: -0.005em;
+    border-top: 1px solid var(--rule);
+    font-size: 1.6rem;
+    letter-spacing: -0.008em;
     text-wrap: balance;
 
-    // The short accent rule on the sheet's hairline, like a section tab on an index card.
+    // A short accent rule on the hairline, like the tab of an index card.
     &::after {
       content: "";
       position: absolute;
       top: -1px;
       left: 0;
-      width: 2.5rem;
-      height: 3px;
+      width: 2.25rem;
+      height: 2px;
+      border-radius: 2px;
       background: var(--secondary);
     }
 
     &::before {
       content: counter(section, decimal-leading-zero);
       display: block;
-      margin-bottom: 0.35rem;
-      font-size: 0.78rem;
+      margin-bottom: 0.3rem;
+      font-family: var(--ui);
+      font-size: 0.72rem;
       font-weight: 600;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.08em;
       font-variant-numeric: lining-nums tabular-nums;
       color: var(--secondary);
-    }
-  }
-
-  & > h2.sr-only {
-    counter-increment: none;
-    border: 0;
-    &::before,
-    &::after {
-      content: none;
     }
   }
 
@@ -658,7 +1178,7 @@ article {
   }
 
   & h3 {
-    margin: 2.25rem 0 0.6rem;
+    margin: 2.1rem 0 0.6rem;
     font-size: 1.25rem;
     font-weight: 400;
     font-style: italic;
@@ -683,8 +1203,8 @@ article {
 
 blockquote:not(.callout) {
   margin: 1.25rem 0;
-  padding: 0 0 0 1.25rem;
-  border-left: 2px solid var(--lightgray);
+  padding: 0.1rem 0 0.1rem 1.15rem;
+  border-left: 2px solid var(--rule);
   font-style: italic;
   color: var(--gray);
 
@@ -693,35 +1213,28 @@ blockquote:not(.callout) {
   }
 }
 
-// On the home page the lede repeats the first paragraph, and the index follows without a rule.
-body[data-slug="index"] {
-  & .note-properties .note-properties-row:first-child .note-properties-text,
-  & hr {
-    display: none;
-  }
-}
-
 // ============================================================================
-// Spec sheet and the head of a note
+// Head of a note: breadcrumbs, title, spec sheet, lede, tags
 // ============================================================================
-// Under the title: the metadata as a ruled sheet of label/value pairs, then the description as the
-// lede and the tags (both from the note-properties plugin).
+// Under the title: the metadata as a ruled sheet of label/value pairs (note-meta), then the
+// description as the lede and the tags (both from the note-properties plugin).
 
 .note-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 0.75rem 2rem;
-  margin: 1.4rem 0 0;
-  padding: 0.8rem 0;
-  border-top: 1px solid var(--dark);
-  border-bottom: 1px solid var(--lightgray);
+  margin: 1.25rem 0 0;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--ui);
   font-variant-numeric: lining-nums tabular-nums;
 
   & .note-meta-item {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.3rem;
     margin: 0;
   }
 
@@ -732,13 +1245,14 @@ body[data-slug="index"] {
 
   & dd {
     margin: 0;
-    font-size: 0.95rem;
+    font-size: 0.875rem;
+    font-weight: 500;
     line-height: 1.4;
     color: var(--darkgray);
   }
 
   & .chip {
-    display: inline-block;
+    display: inline-flex;
   }
 }
 
@@ -750,48 +1264,78 @@ body[data-slug="index"] {
 .chip {
   display: inline-flex;
   align-items: center;
-  padding: 0.12rem 0.55rem;
-  border: 1px solid var(--lightgray);
-  border-radius: 2px;
-  font-family: var(--serif);
-  font-size: 0.7rem;
+  padding: 0.14rem 0.62rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  font-family: var(--ui);
+  font-size: 0.74rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
-  line-height: 1.35;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
   white-space: nowrap;
   font-variant-numeric: lining-nums;
 }
 
 .chip-type {
   background: transparent;
-  border-color: var(--dark);
+  border-color: color-mix(in srgb, var(--dark) 40%, transparent);
   color: var(--dark);
 }
 
 .chip-status {
   background: var(--chip-neutral-bg);
   color: var(--chip-neutral-fg);
+  text-transform: capitalize;
 
   &[data-tone="accepted"] {
     background: var(--chip-accepted-bg);
-    border-color: var(--accepted);
+    border-color: color-mix(in srgb, var(--accepted) 55%, transparent);
     color: var(--chip-accepted-fg);
   }
   &[data-tone="proposed"] {
     background: var(--chip-proposed-bg);
-    border-color: var(--chip-proposed-fg);
+    border-color: color-mix(in srgb, var(--chip-proposed-fg) 45%, transparent);
     color: var(--chip-proposed-fg);
   }
   &[data-tone="warning"] {
     background: var(--chip-warning-bg);
-    border-color: var(--warning);
+    border-color: color-mix(in srgb, var(--warning) 55%, transparent);
     color: var(--chip-warning-fg);
   }
 }
 
-// note-properties: the description is the lede, the tags a line of #tags; the "Properties" header
-// and the other rows are not shown.
+// Tags, everywhere: a light chip with the tag's name, no "#" and no capitals.
+a.tag-link,
+a.internal.tag-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.14rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--chip-neutral-bg);
+  font: 500 0.78rem/1.4 var(--ui);
+  letter-spacing: 0.01em;
+  text-transform: none;
+  text-decoration: none;
+  color: var(--chip-neutral-fg);
+  transition:
+    color 0.2s var(--ease),
+    background-color 0.2s var(--ease),
+    border-color 0.2s var(--ease);
+
+  &::before {
+    content: none;
+  }
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--secondary) 55%, transparent);
+    color: var(--secondary);
+    text-decoration: none;
+  }
+}
+
+// note-properties: the description is the lede, the tags a row of chips; the "Properties" header,
+// the aliases and the other rows are not shown.
 .note-properties {
   margin: 0 0 1.75rem;
   border: 0;
@@ -801,10 +1345,16 @@ body[data-slug="index"] {
     display: none;
   }
 
+  // Every table part is a block that fits the sheet: a table keeps its intrinsic width otherwise,
+  // and the lede overflowed the sheet on phones.
   & .note-properties-table,
-  & tbody {
+  & tbody,
+  & tr,
+  & td {
     display: block;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     margin: 0;
     border: 0;
   }
@@ -826,59 +1376,49 @@ body[data-slug="index"] {
     display: none;
   }
 
-  & .note-properties-row:first-child .note-properties-text {
+  // Aliases (and any other list value): shown in the explorer and search, not under the title.
+  & .note-properties-row:has(.note-properties-list) {
+    display: none;
+  }
+
+  & .note-properties-value > .note-properties-text {
     display: block;
-    max-width: var(--measure);
-    margin-top: 1.1rem;
-    font-size: 1.3rem;
+    max-width: min(var(--measure), 100%);
+    margin-top: 1.25rem;
+    font-size: 1.28rem;
     font-style: italic;
     line-height: 1.45;
     color: var(--gray);
-  }
-
-  // Aliases (and any other text value) as a small line of their own.
-  & .note-properties-row:not(:first-child) .note-properties-text {
-    @extend %label;
-    display: block;
-    margin-top: 0.7rem;
-    font-weight: 400;
-    letter-spacing: 0.08em;
+    text-wrap: pretty;
   }
 
   & .note-properties-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.15rem 0.9rem;
-    margin-top: 0.9rem;
+    gap: 0.4rem;
+    margin-top: 1rem;
   }
 
   & .note-properties-separator {
     display: none;
   }
+}
 
-  & .tag-link {
-    @extend %label;
-    letter-spacing: 0.08em;
-    text-decoration: none;
-    background: none;
-    color: var(--secondary);
-
-    &::before {
-      content: "#";
-    }
-    &:hover {
-      color: var(--tertiary);
-      text-decoration: underline;
-    }
+// On the home page the intro follows the lede directly: no tags, no rule below.
+body[data-slug="index"] {
+  & .note-properties .note-properties-tags,
+  & .center > hr {
+    display: none;
   }
 }
 
 // The date line on pages without a spec sheet (home, section indexes, tags).
 .content-meta {
-  margin: 0.75rem 0 1.5rem;
+  margin: 0.9rem 0 1.5rem;
   @extend %label;
-  font-weight: 400;
-  font-variant-numeric: lining-nums;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  font-variant-numeric: lining-nums tabular-nums;
 
   &::before {
     content: "Modified ";
@@ -886,22 +1426,112 @@ body[data-slug="index"] {
 }
 
 // ============================================================================
-// Home page: the index of notes
+// Home page: section cards and the index of notes
 // ============================================================================
-// local-plugins/note-index. A ruled table on the sheet; below 40rem of width (a container query,
-// so it follows the sheet and not the screen) every row becomes a card.
+// local-plugins/note-index. A card per section (the whole card is the link: the title's link is
+// stretched over it), then a ruled table on the sheet; below 40rem of width (a container query, so
+// it follows the sheet and not the screen) every row becomes a card.
+
+.section-cards {
+  margin: 2.25rem 0 0;
+
+  & ul {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+    gap: 0.85rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  & .section-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 1.1rem 1.2rem 1rem;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--surface);
+    transition:
+      transform 0.25s var(--ease),
+      box-shadow 0.25s var(--ease),
+      color 0.3s var(--ease),
+      background-color 0.3s var(--ease),
+      border-color 0.3s var(--ease);
+
+    &:hover,
+    &:has(a:focus-visible) {
+      transform: translateY(-2px);
+      border-color: color-mix(in srgb, var(--secondary) 50%, transparent);
+      box-shadow: var(--lift-shadow);
+    }
+
+    // The ring goes round the card, not the title.
+    &:has(a:focus-visible) {
+      outline: 2px solid var(--secondary);
+      outline-offset: 2px;
+    }
+    & a:focus-visible {
+      outline: 0 !important;
+    }
+
+    & h3 {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    & h3 a {
+      color: var(--dark);
+      text-decoration: none;
+      background: none;
+
+      // Stretch the link over the whole card.
+      &::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+      }
+    }
+    &:hover h3 a {
+      color: var(--secondary);
+    }
+  }
+
+  & .section-card-desc {
+    margin: 0;
+    font: 400 0.875rem/1.5 var(--ui);
+    color: var(--darkgray);
+  }
+
+  & .section-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.9rem;
+    margin: auto 0 0;
+    padding-top: 0.7rem;
+    font: 500 0.75rem/1.4 var(--ui);
+    color: var(--gray);
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+}
 
 .note-index {
   --ni-cols: 3.6rem minmax(0, 1fr) 5.5rem 6.75rem 9.25rem;
   container-type: inline-size;
-  margin-top: 1rem;
+  margin-top: 3rem;
   font-variant-numeric: lining-nums tabular-nums;
 
   & .note-index-title {
     @extend %label;
-    margin: 0 0 0.6rem;
-    padding-top: 0.9rem;
-    border-top: 2px solid var(--dark);
+    margin: 0 0 0.75rem;
+    padding: 0;
+    font-size: 0.72rem;
   }
 
   & .note-index-head,
@@ -915,8 +1545,9 @@ body[data-slug="index"] {
   & .note-index-head {
     @extend %label;
     font-size: 0.66rem;
-    padding-bottom: 0.4rem;
-    border-bottom: 1px solid var(--lightgray);
+    padding: 0.6rem 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
   }
 
   & .note-index-section {
@@ -927,12 +1558,12 @@ body[data-slug="index"] {
       grid-template-columns: 3.6rem minmax(0, 1fr);
       column-gap: 1rem;
       align-items: baseline;
-      padding-bottom: 0.4rem;
-      border-bottom: 1px solid var(--dark);
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--rule);
 
       & h3 {
         margin: 0;
-        font-size: 1.35rem;
+        font-size: 1.3rem;
         font-weight: 600;
         letter-spacing: 0;
         text-transform: none;
@@ -952,8 +1583,7 @@ body[data-slug="index"] {
       & p {
         grid-column: 2;
         margin: 0.15rem 0 0;
-        font-size: 0.92rem;
-        font-style: italic;
+        font: 400 0.85rem/1.5 var(--ui);
         color: var(--gray);
       }
     }
@@ -973,14 +1603,14 @@ body[data-slug="index"] {
 
   & .note-index-row {
     margin: 0;
-    padding: 0.7rem 0;
-    border-bottom: 1px solid var(--lightgray);
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--rule);
     line-height: 1.35;
   }
 
   & .note-index-no {
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     color: var(--gray);
   }
 
@@ -1010,6 +1640,7 @@ body[data-slug="index"] {
     padding: 0;
     border: 0;
     background: none;
+    box-shadow: none;
     font-size: 0.74rem;
     color: var(--gray);
     overflow-wrap: anywhere;
@@ -1023,14 +1654,14 @@ body[data-slug="index"] {
   }
 
   & .note-index-date {
-    font-size: 0.88rem;
+    font: 500 0.82rem/1.4 var(--ui);
     color: var(--darkgray);
   }
 
   & .note-index-date-label {
     @extend %label;
     font-size: 0.62rem;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
   }
 }
 
@@ -1052,7 +1683,7 @@ body[data-slug="index"] {
       margin-top: 0.75rem;
     }
 
-    // A card: number, type and status on the first line, the title, then the date.
+    // A card: type and status on the first line with the number, the title, then the date.
     & .note-index-row {
       grid-template-columns: auto auto minmax(0, 1fr);
       grid-template-areas:
@@ -1061,9 +1692,9 @@ body[data-slug="index"] {
         "date date date";
       gap: 0.4rem 0.6rem;
       align-items: center;
-      padding: 0.8rem 0.9rem;
-      border: 1px solid var(--lightgray);
-      border-radius: 3px;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--rule);
+      border-radius: var(--radius-sm);
       background: var(--surface);
     }
 
@@ -1101,10 +1732,33 @@ body[data-slug="index"] {
 }
 
 // ============================================================================
-// Folder and tag pages
+// Section pages, tag pages and the tag index
 // ============================================================================
+// The folder and tag pages list their notes below the page's own text: a quiet row each with the
+// title, the date and the tags.
+
+// The tag page lists its notes twice (Quartz renders the listing inside the article and again after
+// it); the copy inside the article is hidden. The tag index keeps its listings, which sit deeper.
+article > .popover-hint > .page-listing {
+  display: none;
+}
 
 .page-listing {
+  margin-top: 2.25rem;
+
+  // "3 items with this tag." / "2 items under this folder."
+  & > p {
+    @extend %label;
+    margin: 0 0 0.6rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--rule);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: none;
+    font-size: 0.82rem;
+    color: var(--gray);
+  }
+
   & ul.section-ul {
     margin: 0;
     padding: 0;
@@ -1113,31 +1767,52 @@ body[data-slug="index"] {
 
   & .section-li {
     margin: 0;
-    padding: 0.8rem 0;
-    border-bottom: 1px solid var(--lightgray);
+    padding: 0.85rem 0.75rem;
+    border-bottom: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.3s var(--ease);
+
+    &:last-child {
+      border-bottom-color: transparent;
+    }
+
+    &:hover,
+    &:has(a:focus-visible) {
+      background: var(--surface);
+      border-bottom-color: transparent;
+    }
   }
 
   & .section {
     display: grid;
-    grid-template-columns: 8.5rem minmax(0, 1fr);
+    grid-template-columns: 7.5rem minmax(0, 1fr);
     column-gap: 1rem;
     align-items: baseline;
 
     @media all and ($mobile) {
       grid-template-columns: minmax(0, 1fr);
+      row-gap: 0.15rem;
     }
   }
 
   & .meta {
     margin: 0;
-    @extend %label;
-    font-weight: 400;
+    font: 500 0.78rem/1.4 var(--ui);
+    color: var(--gray);
     font-variant-numeric: lining-nums tabular-nums;
+  }
+
+  & .desc {
+    min-width: 0;
   }
 
   & h3 {
     margin: 0;
     font-size: 1.15rem;
+    font-weight: 600;
+    font-style: normal;
     text-transform: none;
     letter-spacing: 0;
     color: var(--dark);
@@ -1151,7 +1826,6 @@ body[data-slug="index"] {
 
     &:hover {
       color: var(--secondary);
-      text-decoration: underline;
     }
   }
 
@@ -1159,26 +1833,130 @@ body[data-slug="index"] {
     grid-column: 2;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.1rem 0.8rem;
-    margin: 0.2rem 0 0;
+    gap: 0.35rem;
+    margin: 0.5rem 0 0;
     padding: 0;
     list-style: none;
 
     @media all and ($mobile) {
       grid-column: 1;
     }
+
+    & li {
+      margin: 0;
+    }
+  }
+}
+
+// The tag index: one heading per tag, then its notes.
+article h2:has(> a.tag-link) {
+  margin: 2.5rem 0 0;
+  font-size: 1.35rem;
+
+  & > a.tag-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: 600 1.35rem/1.2 var(--serif);
+    color: var(--dark);
+
+    &:hover {
+      color: var(--secondary);
+    }
+  }
+}
+
+// ============================================================================
+// Linked from, and the graph
+// ============================================================================
+// The end of a note: the notes that link to it, as chips, then the local graph.
+
+.linked-from {
+  margin-top: 0;
+
+  & h2 {
+    @extend %label;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    border: 0;
   }
 
-  & .tag-link {
-    @extend %label;
-    letter-spacing: 0.08em;
-    background: none;
-    text-decoration: none;
-    color: var(--secondary);
+  & ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
 
-    &::before {
-      content: "#";
+  & li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin: 0;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    background: var(--surface);
+    transition:
+      border-color 0.2s var(--ease),
+      background-color 0.3s var(--ease);
+
+    &:hover,
+    &:has(a:focus-visible) {
+      border-color: color-mix(in srgb, var(--secondary) 55%, transparent);
     }
+  }
+
+  & a {
+    padding: 0;
+    background: none;
+    font: 500 0.88rem/1.4 var(--ui);
+    color: var(--dark);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--secondary);
+    }
+  }
+
+  & .linked-from-section {
+    font: 500 0.7rem/1.4 var(--ui);
+    color: var(--gray);
+  }
+}
+
+.graph {
+  margin-top: 2rem;
+
+  & > h3 {
+    @extend %label;
+    margin: 0;
+  }
+
+  & > .graph-outer {
+    height: 260px;
+    margin: 0.75rem 0 0;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  & > .graph-outer > .global-graph-icon {
+    border-radius: var(--radius-sm);
+    color: var(--dark);
+
+    &:hover {
+      background-color: color-mix(in srgb, var(--dark) 8%, transparent);
+      opacity: 1;
+    }
+  }
+
+  & > .global-graph-outer > .global-graph-container {
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    box-shadow: var(--sheet-shadow);
   }
 }
 
@@ -1187,13 +1965,14 @@ body[data-slug="index"] {
 // ============================================================================
 // The sidenotes transformer (local-plugins/sidenotes) puts a .sidenote after every footnote
 // reference and marks the footnotes section with data-sidenotes. In the margin of the sheet from
-// the desktop breakpoint; below it the sidenotes stay hidden and the normal footnotes are used.
+// 1280px up (the sheet grows by the column, see the page grid); below it the sidenotes stay
+// hidden and the normal footnotes are used.
 
 .sidenote {
   display: none;
 }
 
-@media all and ($desktop) {
+@media all and ($wide) {
   :root {
     --sidenote-w: 11.5rem;
   }
@@ -1209,7 +1988,7 @@ body[data-slug="index"] {
     width: var(--sidenote-w);
     margin: 0.1rem calc(-1 * (var(--sidenote-w) + var(--sidenote-gap))) 0.75rem 0;
     padding-top: 0.45rem;
-    border-top: 1px solid var(--lightgray);
+    border-top: 1px solid var(--rule);
     font-size: 0.84rem;
     font-weight: 400;
     font-style: normal;
@@ -1260,16 +2039,54 @@ body[data-slug="index"] {
   }
 }
 
-@media all and (min-width: 1400px) {
+@media all and ($wider) {
   :root {
     --sidenote-w: 14rem;
   }
 }
 
+// Footnotes: a small, quiet list at the end; the sr-only heading becomes its label.
 .footnotes {
-  margin-top: 2.5rem;
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
   font-size: 0.95rem;
-  border-top: 1px solid var(--lightgray);
+
+  & > h2.sr-only {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0 0 0.5rem;
+    overflow: visible;
+    clip-path: none;
+    @extend %label;
+
+    & a[role="anchor"] {
+      display: none;
+    }
+  }
+
+  & ol {
+    margin: 0;
+    padding-left: 1.25rem;
+  }
+
+  & li {
+    margin: 0.5rem 0;
+    color: var(--darkgray);
+    font-size: 0.95rem;
+  }
+
+  & li p {
+    margin: 0;
+  }
+
+  & a[data-footnote-backref] {
+    margin-left: 0.25rem;
+    text-decoration: none;
+    color: var(--secondary);
+    font-family: var(--ui);
+  }
 }
 
 sup a[data-footnote-ref] {
@@ -1283,24 +2100,25 @@ sup a[data-footnote-ref] {
 // ============================================================================
 // Callouts
 // ============================================================================
-// A tinted slip pinned to the page: an ink rule on top and a small-caps title. The icon keeps the
-// callout's own symbol; warning-like types use the warning colour for the rule and the icon.
+// A tinted note: rounded, a soft border and a coloured rule on its left edge, the title in small
+// interface type. The icon keeps the callout's own symbol; warning-like types use the warning
+// colour for the rule and the icon, tips the green.
 
 .callout[data-callout] {
-  --color: var(--dark);
-  --border: var(--lightgray);
+  --color: var(--secondary);
+  --border: var(--rule);
   --bg: var(--surface);
 
-  border: 0;
-  border-top: 2px solid var(--color);
-  border-radius: 0;
-  padding: 0 1.1rem 0.25rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--color);
+  border-radius: var(--radius-sm);
+  padding: 0 1.15rem 0.35rem 1.05rem;
   margin: 1.5rem 0;
 
   & .callout-title {
     @extend %label;
     gap: 0.5rem;
-    padding: 0.85rem 0 0.15rem;
+    padding: 0.85rem 0 0.1rem;
     color: var(--dark);
 
     & .callout-icon {
@@ -1339,26 +2157,40 @@ sup a[data-footnote-ref] {
 // ============================================================================
 // Tables
 // ============================================================================
-// Ruled like a printed table: heavy rules above and below, a hairline between rows, no columns.
+// A rounded frame with hairlines between rows and no columns; the header row in small interface
+// type on the surface tint. Wide tables scroll inside the frame.
 
 .table-container {
   margin: 1.5rem 0;
   overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+
+  & > table {
+    margin: 0;
+    padding: 0;
+
+    // On a phone a table keeps a readable width and scrolls inside its frame.
+    @media all and ($mobile) {
+      min-width: 30rem;
+    }
+  }
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  border-top: 2px solid var(--dark);
-  border-bottom: 2px solid var(--dark);
+
+
+  border: 0;
   font-size: 0.95rem;
   font-variant-numeric: lining-nums tabular-nums;
 
   & th,
   & td {
-    padding: 0.55rem 0.9rem 0.55rem 0;
+    padding: 0.6rem 0.9rem;
     border: 0;
-    border-bottom: 1px solid var(--lightgray);
+    border-bottom: 1px solid var(--rule);
     text-align: left;
     vertical-align: top;
     line-height: 1.5;
@@ -1366,12 +2198,17 @@ table {
 
   & thead th {
     @extend %label;
-    border-bottom: 1px solid var(--dark);
+    background: var(--surface);
     padding-top: 0.7rem;
+    padding-bottom: 0.7rem;
   }
 
   & tbody tr:last-child td {
     border-bottom: 0;
+  }
+
+  & tbody tr:hover td {
+    background: color-mix(in srgb, var(--surface) 55%, transparent);
   }
 }
 
@@ -1380,10 +2217,11 @@ table {
 // ============================================================================
 
 code {
-  padding: 0.08em 0.3em;
+  padding: 0.1em 0.38em;
   border: 0;
-  border-radius: 2px;
+  border-radius: 6px;
   background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--rule);
   color: var(--dark);
   font-family: var(--mono);
   font-size: 0.82em;
@@ -1393,9 +2231,8 @@ code {
 
 figure[data-rehype-pretty-code-figure] {
   margin: 1.5rem 0;
-  border: 1px solid var(--lightgray);
-  border-top: 2px solid var(--dark);
-  border-radius: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
   background: var(--surface);
   overflow: hidden;
 
@@ -1404,13 +2241,13 @@ figure[data-rehype-pretty-code-figure] {
     display: block;
     width: auto;
     margin: 0;
-    padding: 0.4rem 0.9rem;
+    padding: 0.5rem 0.95rem;
     border: 0;
-    border-bottom: 1px solid var(--lightgray);
+    border-bottom: 1px solid var(--rule);
     border-radius: 0;
     background: none;
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     color: var(--gray);
   }
 
@@ -1423,19 +2260,19 @@ figure[data-rehype-pretty-code-figure] {
 
 pre {
   background: var(--surface);
-  border: 1px solid var(--lightgray);
-  border-top: 2px solid var(--dark);
-  border-radius: 0;
-  padding: 0.9rem 1rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  padding: 0.95rem 1.05rem;
 
   & > code {
-    display: block;
+    display: grid;
     padding: 0;
     background: none;
     border: 0;
+    box-shadow: none;
     color: var(--darkgray);
     font-size: 0.84rem;
-    line-height: 1.6;
+    line-height: 1.65;
   }
 
   & code[data-theme*=" "] {
@@ -1450,16 +2287,24 @@ code[data-theme*=" "] span[style*="--shiki-light:#66707b" i] {
   --shiki-light: #59626c !important;
 }
 
+// Copy button: appears when the block is hovered or focused, always on touch screens.
 .clipboard-button {
-  top: 0.4rem;
-  right: 0.4rem;
+  top: 0.5rem;
+  right: 0.5rem;
   margin: 0;
-  padding: 0.35rem;
-  border: 1px solid var(--lightgray);
-  border-radius: 2px;
+  padding: 0.4rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
   background: var(--light);
   color: var(--gray);
   line-height: 0;
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity 0.2s var(--ease),
+    color 0.2s var(--ease),
+    border-color 0.2s var(--ease),
+    background-color 0.3s var(--ease);
 
   & > svg {
     width: 14px;
@@ -1470,12 +2315,13 @@ code[data-theme*=" "] span[style*="--shiki-light:#66707b" i] {
 
   &:hover {
     color: var(--secondary);
-    border-color: var(--secondary);
+    border-color: color-mix(in srgb, var(--secondary) 55%, transparent);
   }
 }
 
 pre:hover > .clipboard-button,
-pre:focus-within > .clipboard-button {
+pre:focus-within > .clipboard-button,
+.clipboard-button:focus-visible {
   opacity: 1;
 }
 
@@ -1485,11 +2331,173 @@ pre:focus-within > .clipboard-button {
   }
 }
 
+// A Mermaid diagram: the same frame as code, no copy button.
+pre:has(> code.mermaid) {
+  padding: 1rem;
+  border: 1px solid var(--rule);
+  text-align: center;
+}
+
+// ============================================================================
+// Link previews and the search overlay
+// ============================================================================
+
+.popover > .popover-inner {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background-color: var(--light);
+  box-shadow: var(--sheet-shadow);
+}
+
+// Search (Quartz's component, in the bar): a dimmed, blurred page and one rounded panel.
+#quartz-body .search > .search-container {
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+
+  & > .search-space {
+    width: min(48rem, 92%);
+    margin-top: 10vh;
+
+    & > * {
+      border-radius: var(--radius);
+      box-shadow: var(--sheet-shadow);
+      background-color: var(--light);
+    }
+
+    & > input {
+      padding: 0.85rem 1.15rem;
+      border: 1px solid var(--rule);
+      font: 400 1.05rem/1.4 var(--ui);
+      color: var(--dark);
+
+      &::placeholder {
+        color: var(--gray);
+        opacity: 1;
+      }
+    }
+
+    // The ring sits inside the field.
+    & > input:focus-visible {
+      outline-offset: -2px;
+    }
+
+    & > .search-layout {
+      border: 1px solid var(--rule);
+      overflow: hidden;
+
+      & > div {
+        border-radius: 0;
+      }
+      & > .results-container {
+        font-family: var(--ui);
+      }
+
+      & .result-card {
+        padding: 0.9rem 1.1rem;
+        border-bottom: 1px solid var(--rule);
+        transition:
+          background-color 0.15s var(--ease),
+          border-color 0.3s var(--ease);
+
+        &:hover,
+        &:focus,
+        &.focus {
+          background: var(--surface);
+        }
+
+        & > h3 {
+          font: 600 1rem/1.3 var(--serif);
+          color: var(--secondary);
+        }
+        & > p {
+          font: 400 0.85rem/1.5 var(--ui);
+          color: var(--gray);
+        }
+        & > ul.tags > li > p {
+          border-radius: 999px;
+          padding: 0.1rem 0.6rem;
+          font: 500 0.72rem/1.5 var(--ui);
+          background: var(--chip-neutral-bg);
+          color: var(--chip-neutral-fg);
+        }
+        & > ul.tags > li > p.match-tag {
+          color: var(--secondary);
+        }
+      }
+
+      // On a phone the result shows a few lines of the match, not the whole note.
+      & .result-card > p.preview {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 4;
+        line-clamp: 4;
+        overflow: hidden;
+      }
+
+      & .highlight {
+        background: color-mix(in srgb, var(--secondary) 18%, transparent);
+        border-radius: 4px;
+      }
+
+      & > .preview-container {
+        font-family: var(--serif);
+        background: var(--light);
+      }
+    }
+  }
+}
+
+// ============================================================================
+// 404
+// ============================================================================
+
+body[data-slug="404"] .center article {
+  padding: 3rem 0 2rem;
+  text-align: center;
+
+  & h1 {
+    margin: 0 0 0.5rem;
+    font-size: clamp(4rem, 14vw, 7rem);
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--secondary);
+  }
+
+  & p {
+    margin: 0 0 1.75rem;
+    font-size: 1.2rem;
+    font-style: italic;
+    color: var(--gray);
+  }
+
+  & a {
+    display: inline-block;
+    padding: 0.6rem 1.25rem;
+    border: 1px solid color-mix(in srgb, var(--secondary) 55%, transparent);
+    border-radius: 999px;
+    font: 600 0.9rem/1 var(--ui);
+    color: var(--secondary);
+    text-decoration: none;
+    transition:
+      color 0.2s var(--ease),
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease);
+
+    &:hover {
+      background: var(--highlight);
+      color: var(--tertiary);
+    }
+  }
+}
+
 // ============================================================================
 // Print
 // ============================================================================
-// Plain paper: the page's own white, ink in a dark neutral, no desk, sidebars, buttons or shadow.
-// External links show their address, sidenotes become the ordinary footnotes again.
+// Plain paper: the page's own white, ink in a dark neutral, no desk, bar, drawer, progress line,
+// buttons, graph or shadow. External links show their address, sidenotes become the ordinary
+// footnotes again.
 
 @media print {
   @page {
@@ -1526,18 +2534,17 @@ pre:focus-within > .clipboard-button {
     overflow: visible;
   }
 
+  // The bar holds the Browse drawer, the search overlay and the progress line.
   .left.sidebar,
   .right.sidebar,
   footer,
   .breadcrumb-container,
   .clipboard-button,
   .expand-button,
-  .page > #quartz-body .center::before {
+  .graph,
+  .linked-from,
+  .center > hr {
     display: none !important;
-  }
-
-  .page {
-    max-width: none;
   }
 
   .page > #quartz-body {
@@ -1546,9 +2553,11 @@ pre:focus-within > .clipboard-button {
   }
 
   .page > #quartz-body .center {
+    max-width: none;
     margin: 0;
     padding: 0;
     background: none;
+    border-radius: 0;
     box-shadow: none;
   }
 
