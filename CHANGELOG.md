@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Added
+
+- Dev Preview: `deploy-dev.yml` deploys every push to the `dev` branch to the Worker Preview `dev` at https://dev.notes.szolotov.com, with the same safeguards as stage. `is-main-head.sh` takes the branch from `BRANCH` (default `main`), and `read-wrangler-output.mjs --preview` also prints the Preview's `custom_url`.
+
 ### Security
 
 - The build jobs of `ci.yml`, `deploy-stage.yml` and `deploy-production.yml` run with `NPM_CONFIG_IGNORE_SCRIPTS=true`: no install script of our dependencies or of the third-party plugins' npm dependencies runs. The output is identical to a build with scripts.
