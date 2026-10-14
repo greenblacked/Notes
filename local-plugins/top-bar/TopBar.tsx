@@ -13,7 +13,8 @@ import script from "./scripts/top-bar.inline.ts"
  * belongs to carries aria-current, which the styles highlight.
  *
  * The script (scripts/top-bar.inline.ts) manages the focus of the Browse drawer, marks the
- * current heading in the table of contents and gives the skip link its target (the article).
+ * current heading in the table of contents, marks the centre column as the main landmark and moves
+ * the keyboard to the skip link's target (#content, rendered by local-plugins/content-start).
  */
 export default (() => {
   const TopBar: QuartzComponent = ({
@@ -45,7 +46,7 @@ export default (() => {
 
     return (
       <nav class={classNames(displayClass, "top-bar")} aria-label="Sections">
-        <a class="skip-link" href="#article">
+        <a class="skip-link" href="#content">
           Skip to content
         </a>
         <a class="top-bar-brand" href={root ?? pathToRoot(slug)}>
