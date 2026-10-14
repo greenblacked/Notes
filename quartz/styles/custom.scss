@@ -85,7 +85,23 @@ $unicode-ranges: (
   --bar-h: 3.5rem;
   --radius: 12px;
   --radius-sm: 8px;
-  --ease: cubic-bezier(0.22, 0.7, 0.24, 1);
+
+  // Motion. Durations: hover and focus, state changes, entrances. Curves: --ease-out decelerates
+  // (the default for anything that arrives or reacts), --ease-in-out is for colour fades that run
+  // both ways, --ease-drawer is a spring-like settle without overshoot (the drawer sits on the
+  // screen edge, so overshoot would show a gap) and --ease-spring overshoots slightly, for small
+  // things such as the theme icon. Only cheap properties are transitioned: opacity, transform,
+  // colours and box-shadow, never `all` and never layout.
+  --dur-fast: 180ms;
+  --dur: 260ms;
+  --dur-slow: 380ms;
+  --dur-theme: 300ms;
+  --dur-drawer-in: 360ms;
+  --dur-drawer-out: 260ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   // The desk behind the sheet, and the tint of callouts, code and cards on the sheet.
   --desk: #ebe5d7;
@@ -117,6 +133,8 @@ $unicode-ranges: (
     0 0 0 1px rgba(90, 70, 35, 0.05), 0 2px 6px rgba(90, 70, 35, 0.04),
     0 14px 34px -14px rgba(90, 70, 35, 0.14), 0 44px 90px -44px rgba(90, 70, 35, 0.16);
   --lift-shadow: 0 10px 28px -12px rgba(90, 70, 35, 0.22);
+  // The same shape, transparent: a card at rest, so that the shadow grows instead of switching on.
+  --lift-shadow-rest: 0 10px 28px -12px rgba(90, 70, 35, 0);
 }
 
 :root[saved-theme="dark"] {
@@ -143,6 +161,7 @@ $unicode-ranges: (
     0 0 0 1px rgba(255, 235, 200, 0.04), 0 2px 6px rgba(0, 0, 0, 0.25),
     0 18px 40px -16px rgba(0, 0, 0, 0.5), 0 50px 100px -46px rgba(0, 0, 0, 0.55);
   --lift-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.6);
+  --lift-shadow-rest: 0 10px 28px -12px rgba(0, 0, 0, 0);
 }
 
 @media all and ($mobile) {
@@ -161,20 +180,41 @@ $unicode-ranges: (
   outline-offset: 2px;
 }
 
-// Colours fade when the theme is toggled (and on hover): every colour property, never layout.
-// Components that declare their own `transition` list these properties again.
-*,
-*::before,
-*::after {
+// Colours ease on hover and focus: every colour property, never layout. The rule has no
+// specificity (:where), so a component that declares its own `transition` wins and lists the
+// properties it needs. It starts once the page has loaded (.motion-ready, set by the top-bar
+// script), so nothing fades on first paint.
+:where(:root.motion-ready) *,
+:where(:root.motion-ready) *::before,
+:where(:root.motion-ready) *::after {
   transition:
-    color 0.3s var(--ease),
-    background-color 0.3s var(--ease),
-    border-color 0.3s var(--ease),
-    fill 0.3s var(--ease),
-    stroke 0.3s var(--ease),
-    box-shadow 0.3s var(--ease);
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    fill var(--dur-fast) var(--ease-out),
+    stroke var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    text-decoration-color var(--dur-fast) var(--ease-out);
 }
 
+// Toggling the theme: the top-bar script puts .theme-fade on the root for the length of the fade
+// (on the "themechange" event, never on load). Every colour, the sun/moon icon and the surfaces
+// cross-fade on the same curve and duration, over whatever shorter transition a component has.
+@media (prefers-reduced-motion: no-preference) {
+  :root.theme-fade,
+  :root.theme-fade *,
+  :root.theme-fade *::before,
+  :root.theme-fade *::after {
+    transition-property:
+      color, background-color, border-color, fill, stroke, box-shadow, text-decoration-color, opacity, transform,
+      visibility !important;
+    transition-duration: var(--dur-theme) !important;
+    transition-timing-function: var(--ease-in-out) !important;
+    transition-delay: 0s !important;
+  }
+}
+
+// Reduced motion: no animation, no transition, no smooth scrolling anywhere.
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -191,6 +231,13 @@ html {
   scroll-padding-top: calc(var(--bar-h) + 1.25rem);
   background-color: var(--desk);
   -webkit-font-smoothing: antialiased;
+
+  // The router scrolls to the top of the next page by itself: that jump is instant, not a smooth
+  // scroll across the new content (the top-bar script sets the attribute for the length of a
+  // navigation). In-page anchors keep scrolling smoothly.
+  &[data-navigating] {
+    scroll-behavior: auto;
+  }
 }
 
 // The Browse drawer is open: the page behind it does not scroll.
@@ -356,15 +403,40 @@ body[data-slug="index"] .page > #quartz-body {
   --sheet-w: 60rem;
 }
 
-// While the next page is fetched Quartz appends a .navigation-progress element to the body and the
-// morph removes it again: the content of the sheet dims a little and fades back in with the new
-// page. CSS only.
-.page > #quartz-body .center > * {
-  transition: opacity 0.4s var(--ease);
+// Page navigation. The router morphs the new page into the old one (the .center element stays), so
+// there is nothing to cross-fade natively; the top-bar script puts data-enter on .center when the
+// new content is in place and the sheet's children (and the table of contents beside it) fade in
+// and rise a few pixels. The sheet itself, with its paper and shadow, does not move. Opacity and
+// transform only: no layout shift. `backwards` fill: nothing is left on the elements afterwards. A
+// navigation to a #heading only fades, so that the scroll target is not off by the rise.
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
-body:has(> .navigation-progress) .page > #quartz-body .center > * {
-  opacity: 0.5;
-  transition-duration: 0.2s;
+
+@keyframes page-enter-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.page > #quartz-body {
+  & .center[data-enter] > *,
+  &:has(> .center[data-enter]) > .sidebar.right > * {
+    animation: page-enter var(--dur-slow) var(--ease-out) backwards;
+  }
+
+  & .center[data-enter="fade"] > *,
+  &:has(> .center[data-enter="fade"]) > .sidebar.right > * {
+    animation-name: page-enter-fade;
+  }
+
+  & .center[data-enter] > :not(article),
+  &:has(> .center[data-enter]) > .sidebar.right > * {
+    animation-delay: 60ms;
+  }
 }
 
 .navigation-progress {
@@ -437,13 +509,16 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
   }
 
   // With reduced motion the band stays solid (no fade from transparent) and there is no line.
+  // Both are driven by the scroll position itself, so they follow it exactly: `linear` is the one
+  // right curve here (an easing would make them lag behind the finger) and neither has a
+  // transition. The band comes in over the first 80px of scrolling.
   @supports (animation-timeline: scroll()) {
     @media (prefers-reduced-motion: no-preference) {
       &::before {
         opacity: 0;
         animation: bar-band linear both;
         animation-timeline: scroll(root block);
-        animation-range: 0 72px;
+        animation-range: 0 80px;
       }
       &::after {
         animation: reading-progress linear both;
@@ -488,6 +563,10 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
   color: var(--secondary);
   text-decoration: none;
   transform: translateY(-300%);
+  transition:
+    transform var(--dur) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
 
   &:focus-visible {
     transform: none;
@@ -532,11 +611,14 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
     font: 500 0.875rem/1 var(--ui);
     color: var(--darkgray);
     text-decoration: none;
+    // The pill of the current section fades in and out (the router changes aria-current when the
+    // page is swapped), so it moves between sections instead of jumping.
     transition:
-      color 0.2s var(--ease),
-      background-color 0.2s var(--ease);
+      color var(--dur) var(--ease-out),
+      background-color var(--dur) var(--ease-out);
 
-    &:hover {
+    &:hover,
+    &:focus-visible {
       color: var(--dark);
       background: color-mix(in srgb, var(--dark) 6%, transparent);
     }
@@ -581,9 +663,9 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
     color: var(--gray);
     cursor: pointer;
     transition:
-      color 0.2s var(--ease),
-      background-color 0.2s var(--ease),
-      border-color 0.2s var(--ease);
+      color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out);
 
     @media all and ($desktop) {
       min-width: 11rem;
@@ -634,12 +716,38 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
     border-radius: 50%;
     color: var(--gray);
 
+    transition: background-color var(--dur-fast) var(--ease-out);
+
+    // Both icons are always drawn and cross-fade: the one that leaves turns away and shrinks, the
+    // one that arrives turns in from the other side (Quartz hides one with display: none, which
+    // cannot be animated). The hidden one is also visibility: hidden, so it stays out of the
+    // accessibility tree and Quartz's single label per state is kept.
     & svg {
+      display: block;
       left: calc(50% - 9px);
       top: calc(50% - 9px);
       width: 18px;
       height: 18px;
       fill: var(--gray);
+      opacity: 1;
+      visibility: visible;
+      transform: none;
+      transition:
+        opacity var(--dur) var(--ease-out),
+        transform var(--dur-slow) var(--ease-spring),
+        fill var(--dur-fast) var(--ease-out),
+        visibility 0s;
+    }
+
+    & > .nightIcon {
+      opacity: 0;
+      visibility: hidden;
+      transform: rotate(-70deg) scale(0.55);
+      transition:
+        opacity var(--dur) var(--ease-out),
+        transform var(--dur-slow) var(--ease-spring),
+        fill var(--dur-fast) var(--ease-out),
+        visibility 0s linear var(--dur);
     }
 
     &:hover {
@@ -647,6 +755,30 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
     }
     &:hover svg {
       fill: var(--dark);
+    }
+  }
+
+  :root[saved-theme="dark"] & .darkmode {
+    & > .dayIcon {
+      opacity: 0;
+      visibility: hidden;
+      transform: rotate(70deg) scale(0.55);
+      transition:
+        opacity var(--dur) var(--ease-out),
+        transform var(--dur-slow) var(--ease-spring),
+        fill var(--dur-fast) var(--ease-out),
+        visibility 0s linear var(--dur);
+    }
+
+    & > .nightIcon {
+      opacity: 1;
+      visibility: visible;
+      transform: none;
+      transition:
+        opacity var(--dur) var(--ease-out),
+        transform var(--dur-slow) var(--ease-spring),
+        fill var(--dur-fast) var(--ease-out),
+        visibility 0s;
     }
   }
 }
@@ -694,9 +826,9 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
     color: var(--darkgray);
     cursor: pointer;
     transition:
-      color 0.2s var(--ease),
-      background-color 0.2s var(--ease),
-      border-color 0.2s var(--ease);
+      color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out);
 
     &::after {
       content: "Browse";
@@ -725,15 +857,31 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
     display: none;
   }
 
-  // The dimmed page behind the open drawer (a click on it closes the drawer).
-  &:not(.collapsed):not(:has(> .hide-until-loaded))::before {
+  // The dimmed page behind the drawer (a click on it closes the drawer). It is always there and
+  // fades with the drawer, in step with it: in over the opening time, out over the shorter closing
+  // time. Closed, it is hidden and does not take clicks.
+  &::before {
     content: "";
     position: fixed;
     inset: 0;
     background: var(--scrim);
     -webkit-backdrop-filter: blur(1.5px);
     backdrop-filter: blur(1.5px);
-    animation: scrim-in 0.3s var(--ease) both;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity var(--dur-drawer-out) var(--ease-out),
+      visibility 0s linear var(--dur-drawer-out);
+  }
+
+  &:not(.collapsed):not(:has(> .hide-until-loaded))::before {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      opacity var(--dur-drawer-in) var(--ease-out),
+      visibility 0s;
   }
 
   & .explorer-content {
@@ -757,11 +905,16 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
     border-radius: 0 var(--radius) var(--radius) 0;
     box-shadow: var(--sheet-shadow);
     visibility: hidden;
+    opacity: 0;
     transform: translateX(calc(-100% - 2rem));
+    // Closing: a little quicker than opening, and the panel stays visible until it has left.
+    // No will-change: the transform is composited anyway while it runs, and an idle layer for a
+    // panel that is mostly closed would be a cost for nothing.
     transition:
-      transform 0.32s var(--ease),
-      visibility 0s linear 0.32s,
-      background-color 0.3s var(--ease);
+      transform var(--dur-drawer-out) var(--ease-in-out),
+      opacity var(--dur-drawer-out) var(--ease-out),
+      visibility 0s linear var(--dur-drawer-out),
+      background-color var(--dur) var(--ease-out);
 
     &::before {
       content: "Browse notes";
@@ -776,15 +929,26 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
 
   // The explorer's own `.folder-outer.open { visibility: visible }` would otherwise show the open
   // folders of a closed drawer.
+  // The contents wait out the closing slide before they hide (a visibility transition with a delay
+  // holds `visible` until the delay is over), so the panel does not empty while it leaves.
   &.collapsed .explorer-content,
   &.collapsed .explorer-content * {
     visibility: hidden !important;
   }
+  &.collapsed .explorer-content * {
+    transition: visibility 0s linear var(--dur-drawer-out);
+  }
 
+  // Opening: a spring-like settle (fast start, long soft landing, no overshoot).
   &:not(.collapsed) .explorer-content {
     visibility: visible;
+    opacity: 1;
     transform: none;
-    transition-delay: 0s;
+    transition:
+      transform var(--dur-drawer-in) var(--ease-drawer),
+      opacity var(--dur) var(--ease-out),
+      visibility 0s,
+      background-color var(--dur) var(--ease-out);
   }
 
   & .explorer-ul {
@@ -823,8 +987,8 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
     opacity: 1;
     text-decoration: none;
     transition:
-      color 0.2s var(--ease),
-      background-color 0.2s var(--ease);
+      color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out);
 
     &:hover {
       background: var(--surface);
@@ -842,12 +1006,6 @@ body:has(> .navigation-progress) .page > #quartz-body .center > * {
     margin-left: 0.55rem;
     padding-left: 0.65rem;
     border-left: 1px solid var(--rule);
-  }
-}
-
-@keyframes scrim-in {
-  from {
-    opacity: 0;
   }
 }
 
@@ -935,7 +1093,7 @@ a.internal {
       height: 14px;
       margin-left: 0.5rem;
       color: var(--gray);
-      transition: transform 0.3s var(--ease);
+      transition: transform var(--dur) var(--ease-out);
     }
   }
 
@@ -946,6 +1104,33 @@ a.internal {
     overflow: visible;
     mask-image: none;
     border-left: 1px solid var(--rule);
+    position: relative;
+
+    // The active indicator is one bar that slides between the entries: the top-bar script sets its
+    // position and height (--toc-y in px, --toc-h as a number, --toc-on 0 or 1) as the reader
+    // scrolls. A 1px-tall bar scaled by transform, so it moves on the compositor.
+    &::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -1px;
+      width: 2px;
+      height: 1px;
+      background: var(--secondary);
+      transform-origin: 0 0;
+      transform: translateY(var(--toc-y, 0px)) scaleY(var(--toc-h, 0));
+      opacity: var(--toc-on, 0);
+      pointer-events: none;
+      transition:
+        transform var(--dur) var(--ease-out),
+        opacity var(--dur-fast) var(--ease-out),
+        background-color var(--dur) var(--ease-out);
+    }
+
+    // On a new page the bar appears at its place instead of sliding in from the old one.
+    &[data-still]::after {
+      transition: none;
+    }
 
     // Quartz fades the entries that are out of view; every entry stays at full strength here.
     & > li > a {
@@ -957,17 +1142,13 @@ a.internal {
       color: var(--gray);
       opacity: 1;
       text-decoration: none;
-      transition:
-        color 0.2s var(--ease),
-        border-color 0.2s var(--ease),
-        background-color 0.2s var(--ease);
+      transition: color var(--dur) var(--ease-out);
 
       &:hover {
         color: var(--dark);
       }
 
       &.current {
-        border-left-color: var(--secondary);
         color: var(--secondary);
         font-weight: 600;
       }
@@ -1123,13 +1304,17 @@ article {
     text-decoration-thickness: 1px;
     text-underline-offset: 0.22em;
     text-decoration-color: color-mix(in srgb, var(--secondary) 40%, transparent);
+    // The underline eases in: it darkens and thickens, and the tint of an internal link fades in.
     transition:
-      color 0.2s var(--ease),
-      background-color 0.2s var(--ease),
-      text-decoration-color 0.2s var(--ease);
+      color var(--dur) var(--ease-out),
+      background-color var(--dur) var(--ease-out),
+      text-decoration-color var(--dur) var(--ease-out),
+      text-decoration-thickness var(--dur) var(--ease-out);
 
-    &:hover {
+    &:hover,
+    &:focus-visible {
       text-decoration-color: currentColor;
+      text-decoration-thickness: 2px;
     }
     &.internal:hover {
       background: var(--highlight);
@@ -1329,9 +1514,9 @@ a.internal.tag-link {
   text-decoration: none;
   color: var(--chip-neutral-fg);
   transition:
-    color 0.2s var(--ease),
-    background-color 0.2s var(--ease),
-    border-color 0.2s var(--ease);
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 
   &::before {
     content: none;
@@ -1464,18 +1649,25 @@ body[data-slug="index"] {
     border: 1px solid var(--rule);
     border-radius: var(--radius);
     background: var(--surface);
+    box-shadow: var(--lift-shadow-rest);
     transition:
-      transform 0.25s var(--ease),
-      box-shadow 0.25s var(--ease),
-      color 0.3s var(--ease),
-      background-color 0.3s var(--ease),
-      border-color 0.3s var(--ease);
+      transform var(--dur) var(--ease-out),
+      box-shadow var(--dur-slow) var(--ease-out),
+      color var(--dur) var(--ease-out),
+      background-color var(--dur) var(--ease-out),
+      border-color var(--dur) var(--ease-out);
 
+    // Hover and keyboard focus lift the card alike; it settles back a touch slower than it rises.
     &:hover,
     &:has(a:focus-visible) {
       transform: translateY(-2px);
       border-color: color-mix(in srgb, var(--secondary) 50%, transparent);
       box-shadow: var(--lift-shadow);
+    }
+
+    &:active {
+      transform: translateY(-1px);
+      transition-duration: var(--dur-fast);
     }
 
     // The ring goes round the card, not the title.
@@ -1508,7 +1700,11 @@ body[data-slug="index"] {
         border-radius: inherit;
       }
     }
-    &:hover h2 a {
+    & h2 a {
+      transition: color var(--dur) var(--ease-out);
+    }
+    &:hover h2 a,
+    &:has(a:focus-visible) h2 a {
       color: var(--secondary);
     }
   }
@@ -1781,8 +1977,8 @@ body[data-slug="index"] {
     border-bottom: 1px solid var(--rule);
     border-radius: var(--radius-sm);
     transition:
-      background-color 0.2s var(--ease),
-      border-color 0.3s var(--ease);
+      background-color var(--dur-fast) var(--ease-out),
+      border-color var(--dur) var(--ease-out);
 
     &:last-child {
       border-bottom-color: transparent;
@@ -1910,8 +2106,8 @@ article h2:has(> a.tag-link) {
     border-radius: 999px;
     background: var(--surface);
     transition:
-      border-color 0.2s var(--ease),
-      background-color 0.3s var(--ease);
+      border-color var(--dur-fast) var(--ease-out),
+      background-color var(--dur) var(--ease-out);
 
     &:hover,
     &:has(a:focus-visible) {
@@ -2217,6 +2413,10 @@ table {
     border-bottom: 0;
   }
 
+  & td {
+    transition: background-color var(--dur-fast) var(--ease-out);
+  }
+
   & tbody tr:hover td {
     background: color-mix(in srgb, var(--surface) 55%, transparent);
   }
@@ -2288,6 +2488,39 @@ pre {
   & code[data-theme*=" "] {
     background-color: transparent;
   }
+
+  // A highlighted block: the frame (the figure) clips, the <pre> scrolls sideways (it is the
+  // focusable one, so the keyboard can scroll it) and the <code> inside is as wide as its longest
+  // line, with the padding, so the end of a long line has room too. The same for a block at the
+  // top level and one inside a list item.
+  figure[data-rehype-pretty-code-figure] > & {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
+  }
+
+  & > code:not(.mermaid) {
+    width: max-content;
+    min-width: 100%;
+    box-sizing: border-box;
+    padding: 0.8rem 1.05rem;
+    overflow: visible;
+  }
+}
+
+// Blocks inside a list item: Quartz's `li > * { margin: 0 }` took the figure's margin away, so the
+// block sat tight against the text above and below. Same spacing as at the top level, a little
+// tighter, and never wider than the item.
+article li {
+  & > figure[data-rehype-pretty-code-figure],
+  & > pre,
+  & > .table-container,
+  & > .callout {
+    max-width: 100%;
+    margin-top: 0.85rem;
+    margin-bottom: 1rem;
+  }
 }
 
 // The comment colour of the light syntax theme (github-light-high-contrast, #66707b) is 4.2:1 on the
@@ -2311,10 +2544,10 @@ code[data-theme*=" "] span[style*="--shiki-light:#66707b" i] {
   opacity: 0;
   cursor: pointer;
   transition:
-    opacity 0.2s var(--ease),
-    color 0.2s var(--ease),
-    border-color 0.2s var(--ease),
-    background-color 0.3s var(--ease);
+    opacity var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur) var(--ease-out);
 
   & > svg {
     width: 14px;
@@ -2360,10 +2593,35 @@ pre:has(> code.mermaid) {
 }
 
 // Search (Quartz's component, in the bar): a dimmed, blurred page and one rounded panel.
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(-6px);
+  }
+}
+
 #quartz-body .search > .search-container {
   background: var(--scrim);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
+
+  // Quartz shows the overlay with display: none -> inline-block, so it opens with keyframes (they
+  // play each time the element is displayed): the backdrop fades in and the panel fades and
+  // scales in from 98%. Closing is immediate, which is what a dismissed search should feel like.
+  &.active {
+    animation: overlay-in var(--dur) var(--ease-out) backwards;
+
+    & > .search-space {
+      transform-origin: 50% 0;
+      animation: panel-in var(--dur-slow) var(--ease-out) backwards;
+    }
+  }
 
   & > .search-space {
     width: min(48rem, 92%);
@@ -2407,8 +2665,8 @@ pre:has(> code.mermaid) {
         padding: 0.9rem 1.1rem;
         border-bottom: 1px solid var(--rule);
         transition:
-          background-color 0.15s var(--ease),
-          border-color 0.3s var(--ease);
+          background-color var(--dur-fast) var(--ease-out),
+          border-color var(--dur) var(--ease-out);
 
         &:hover,
         &:focus,
@@ -2491,9 +2749,9 @@ body[data-slug="404"] .center article {
     color: var(--secondary);
     text-decoration: none;
     transition:
-      color 0.2s var(--ease),
-      background-color 0.2s var(--ease),
-      border-color 0.2s var(--ease);
+      color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out);
 
     &:hover {
       background: var(--highlight);
