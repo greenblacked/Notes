@@ -21,7 +21,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 - `scripts/smoke-test.sh` no longer follows redirects: any 3xx is a failure with the status and `Location`. A Cloudflare Access redirect is still detected from the response headers (a notice with `SMOKE_ALLOW_ACCESS=1`, a failure otherwise), but only on a 3xx response: a `Location` header on a 200 is not Access. Tested by `scripts/smoke-test.test.mjs`.
 - Note pages no longer open scrolled down. The Explorer's script calls `scrollIntoView` on the open note's entry at load, which scrolled the whole page (about 260px at 1440px wide) when the entry was visible in the sidebar. The list now lives in a fixed, hidden drawer, so there is nothing to scroll; pages open at the top unless the URL has a `#hash`.
-- The tag page listed its notes twice; one copy is hidden.
+- The tag page listed its notes twice; one copy is hidden. The tag index (`/tags`) listed each tag's notes twice as well, and now shows each listing once.
+- The closed Browse drawer is inert, so Tab no longer reaches its open folders (the explorer's CSS made them visible again), at every width.
+- The top bar keeps its solid band with reduced motion; the fade from transparent applies only without it.
+- Following a link to a `#heading` lands the heading below the bar after the layout settles (code and diagram blocks grow after the router scrolls).
+- Opening the search (button, Ctrl/Cmd+K) closes the Browse drawer first; Escape and Tab then act on the search only.
+- "Skip to content" targets the title instead of the article, and works without JavaScript. The centre column is the `main` landmark, the home section cards are named "Browse by section" (the top bar keeps "Sections") and their headings are level 2.
 
 ### Added
 
