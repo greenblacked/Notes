@@ -6,17 +6,17 @@ The site is built with [Quartz](https://quartz.jzhao.xyz/) and served by a Cloud
 
 ## Repository layout
 
-| Path                           | Contents                                                             |
-| ------------------------------ | -------------------------------------------------------------------- |
-| `content/`                     | The notes: `adr/`, `patterns/`, `tools/`, `standards/`, `index.md`   |
-| `quartz/`                      | Vendored Quartz engine (do not edit; see "Quartz" below)             |
-| `quartz.config.*`, `quartz.ts` | Site configuration and layout (our customisations)                   |
-| `local-plugins/`               | Local Quartz plugins: top bar, metadata sheet, note index, sidenotes |
-| `worker/`, `wrangler.jsonc`    | Cloudflare Worker (headers, robots) and its configuration            |
-| `scripts/`                     | Build helpers, `smoke-test.sh`, `update-quartz.sh`                   |
-| `.github/`                     | Workflows, Dependabot, CODEOWNERS                                    |
-| `docs/`                        | [deployment.md](docs/deployment.md), [obsidian.md](docs/obsidian.md) |
-| `docs/screenshots/`            | Screenshots shown in this README                                     |
+| Path                           | Contents                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `content/`                     | The notes: `adr/`, `patterns/`, `tools/`, `standards/`, `index.md`                               |
+| `quartz/`                      | Vendored Quartz engine (do not edit; see "Quartz" below)                                         |
+| `quartz.config.*`, `quartz.ts` | Site configuration and layout (our customisations)                                               |
+| `local-plugins/`               | Local Quartz plugins: top bar, metadata sheet, note index, linked-from, content-start, sidenotes |
+| `worker/`, `wrangler.jsonc`    | Cloudflare Worker (headers, robots) and its configuration                                        |
+| `scripts/`                     | Build helpers, `smoke-test.sh`, `update-quartz.sh`                                               |
+| `.github/`                     | Workflows, Dependabot, CODEOWNERS                                                                |
+| `docs/`                        | [deployment.md](docs/deployment.md), [obsidian.md](docs/obsidian.md)                             |
+| `docs/screenshots/`            | Screenshots shown in this README                                                                 |
 
 ## Local development
 
@@ -60,10 +60,10 @@ Source Serif 4 sets the reading text and headings (400, 600 and italic; old-styl
 
 The structure:
 
-- A slim sticky top bar holds the wordmark, links to the five sections (the current one highlighted), search and the theme toggle. Its background turns into a translucent, blurred band as the page scrolls and a thin line under it shows the reading progress, both CSS scroll-driven animations (older browsers just keep the band and no line). The **Browse** button opens the full tree (Quartz's Explorer) as a drawer at every width; Escape, a click outside or a link closes it. The bar is the page frame's left sidebar, and `local-plugins/top-bar` supplies the wordmark, the section links and a small script for the drawer's focus handling and the current heading in the table of contents.
+- A slim sticky top bar holds the wordmark, links to the five sections (the current one highlighted), search and the theme toggle. Its background turns into a translucent, blurred band as the page scrolls and a thin line under it shows the reading progress, both CSS scroll-driven animations (older browsers just keep the band and no line). The **Browse** button opens the full tree (Quartz's Explorer) as a drawer at every width; Escape, a click outside or a link closes it. The bar is the page frame's left sidebar, and `local-plugins/top-bar` supplies the wordmark, the section links and a small script for the drawer's focus handling (a closed drawer is inert; opening the search closes it), the current heading in the table of contents, the `main` landmark and a second scroll to a `#hash` once the layout has settled. "Skip to content" targets the page title (`local-plugins/content-start`) and works without JavaScript.
 - The home page has a short intro, a card per section (description, note count, last update), then a table of every note grouped by section (number, title and file name, type, status, verified or modified date), which becomes a stack of cards on a phone. It is built from the notes' frontmatter by `local-plugins/note-index`, so a new note appears there without any edit to the home page.
 - Notes show a spec sheet under the title (`type`, `status`, `decided`, `verified`, modified date, reading time; `local-plugins/note-meta`), tags as light chips, numbered `##` sections (01, 02, ...) that the sticky table of contents beside the sheet repeats, and sidenotes in the margin of the sheet from 1280px up. A note ends with "Linked from" (`local-plugins/linked-from`) and its local graph.
-- Printing gives plain paper: no bar, drawer or graph, external links with their address, sidenotes as footnotes.
+- Printing gives plain paper: no bar, drawer, graph or "Linked from" list, external links with their address, sidenotes as footnotes.
 - Motion is gentle and all of it is off under `prefers-reduced-motion`.
 
 All custom CSS is in `quartz/styles/custom.scss` and the colour keys are in `quartz.config.yaml`; `npm run check:contrast` checks both themes. The frontmatter fields are described in `content/standards/writing-notes.md`.
