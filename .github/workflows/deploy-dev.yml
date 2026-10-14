@@ -6,8 +6,14 @@ name: Deploy dev
 # replaces whatever was there). Production and stage are not touched: Previews never change
 # production traffic, and `dev` is a separate Preview from `stage`.
 #
-# Same shape and safeguards as deploy-stage.yml. Anyone who can push to `dev` can deploy this
-# Preview, so the `dev` environment should be limited to people who can push to main.
+# Same shape and safeguards as deploy-stage.yml, plus one: the job that holds the Cloudflare
+# token runs only code checked out from main and takes nothing but the checked public/ from the
+# dev build, so a script, lockfile or Worker change pushed to dev never runs next to the token.
+# Worker changes therefore show on dev only after they reach main. This does not protect
+# against someone who can edit this workflow on dev: as long as the Cloudflare secrets are
+# repository secrets, every workflow on every branch can read them, so everyone with write
+# access is trusted with them. See docs/deployment.md#dev-preview for moving them into
+# environments.
 #
 # Two jobs: `build` runs the (third-party plugin) build code with no secrets and
 # no environment; `upload` has the secrets, installs only wrangler (tools/, without
@@ -120,9 +126,14 @@ jobs:
       BRANCH: dev
       WRANGLER_SEND_METRICS: "false"
     steps:
-      - name: Check out
+      # Everything this job runs comes from main, not from the dev branch: dev is unprotected
+      # scratch space, and this job holds a token that can also deploy production. Only public/
+      # is taken from the dev build (checked below), so a dev Preview shows content and design
+      # changes; Worker changes are previewed only once they are on main.
+      - name: Check out main (trusted code only)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: main
           persist-credentials: false
 
       - name: Set up Node.js
