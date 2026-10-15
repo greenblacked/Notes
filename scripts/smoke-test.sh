@@ -8,7 +8,7 @@
 #                     e.g. "1.2.3+<40-char sha>" or "main+<40-char sha>"
 #   indexable|noindex what this host is expected to send: "indexable" (no noindex,
 #                     robots.txt allows crawling; only notes.szolotov.com in production) or
-#                     "noindex" (X-Robots-Tag noindex, robots.txt "Disallow: /"; the stage
+#                     "noindex" (X-Robots-Tag noindex, robots.txt "Disallow: /"; the dev
 #                     Preview and every workers.dev URL)
 #
 # The version check is retried with a growing delay (custom domains and edge
@@ -38,7 +38,7 @@ MAX_DELAY="${SMOKE_MAX_DELAY:-20}"
 CHECK_ROUNDS="${SMOKE_CHECK_ROUNDS:-6}"
 CHECK_DELAY="${SMOKE_CHECK_DELAY:-10}"
 # SMOKE_ALLOW_ACCESS=1: a host behind Cloudflare Access (redirect to its login) passes with a
-# notice instead of failing. Only for stage, whose Previews the account protects with Access.
+# notice instead of failing. Only for the dev Preview, which the account protects with Access.
 ALLOW_ACCESS="${SMOKE_ALLOW_ACCESS:-}"
 # Identifiable User-Agent, so a Cloudflare WAF rule can recognise these requests
 # (see docs/deployment.md, Troubleshooting).
