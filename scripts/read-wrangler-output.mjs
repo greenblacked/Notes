@@ -11,6 +11,7 @@
  *   node scripts/read-wrangler-output.mjs --preview <file>   wrangler preview
  *     workers_dev_url=<the Preview's workers.dev URL, or empty>
  *     stage_url=https://stage.notes.szolotov.com or empty
+ *     custom_url=<the Preview's https://<name>.notes.szolotov.com URL, or empty>
  *
  * Shape of the entries (wrangler 4.149.0, node_modules/wrangler/wrangler-dist/cli.js):
  *  - one JSON object per line, each with a `timestamp` added by writeOutput() (line ~64635);
@@ -141,7 +142,7 @@ export function readDeploy(entries) {
 
 /**
  * @param {Record<string, unknown>[]} entries
- * @returns {{ workers_dev_url: string, stage_url: string }}
+ * @returns {{ workers_dev_url: string, stage_url: string, custom_url: string }}
  */
 export function readPreview(entries) {
   const entry = lastOfType(entries, "preview")
@@ -152,13 +153,17 @@ export function readPreview(entries) {
   ]
   let workersDev = ""
   let stage = ""
+  let custom = ""
   for (const raw of urls) {
     const url = validUrl(raw)
     if (url === null) continue
+    const host = new URL(url).hostname
     if (url === STAGE_URL) stage = url
-    else if (new URL(url).hostname.endsWith(".workers.dev") && workersDev === "") workersDev = url
+    // The first stable URL on a subdomain of the custom domain is the Preview's own address.
+    if (custom === "" && host.endsWith(`.${CUSTOM_DOMAIN}`)) custom = url
+    if (host.endsWith(".workers.dev") && workersDev === "") workersDev = url
   }
-  return { workers_dev_url: workersDev, stage_url: stage }
+  return { workers_dev_url: workersDev, stage_url: stage, custom_url: custom }
 }
 
 /** @param {string[]} argv */

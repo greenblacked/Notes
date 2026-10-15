@@ -29,6 +29,16 @@ Stage is a [Worker Preview](https://developers.cloudflare.com/workers/previews/)
 - Cloudflare Access: this account protects Worker Previews with Cloudflare Access, so the stage Preview's workers.dev URL redirects to the Access login. The stage smoke test recognises that redirect and passes with a notice (`SMOKE_ALLOW_ACCESS` in `deploy-stage.yml`); Wrangler reporting `https://stage.notes.szolotov.com` is then the verification. Production never allows it: a redirect to Access fails the production smoke test. To skip the stage smoke test entirely, set the repository or `staging` environment variable `STAGE_SMOKE_TEST` to `false`.
 - Smoke test retries: `/version.txt` is retried until it serves the expected build, then the content, header and indexing checks are retried as a set (`SMOKE_CHECK_ROUNDS`, default 6, every `SMOKE_CHECK_DELAY`, default 10 s), because a new route or custom domain can take a moment to reach every Cloudflare edge.
 
+## Dev Preview
+
+A second Preview of the same Worker, named `dev`, for looking at a change before it is merged. `deploy-dev.yml` updates it on every push to the `dev` branch, with the same two jobs and safeguards as stage (untrusted build without secrets, wrangler-only upload, CSP regenerated from trusted code). One more: `dev` is not protected, so the upload job, which holds the Cloudflare token (it can deploy production too), checks out `main` and runs only main's scripts, wrangler lockfile, `wrangler.jsonc` and Worker code. Only the checked `public/` comes from the dev build: a dev Preview shows content and design changes, and Worker changes show there only once they are on `main`.
+
+- Use it: push the branch you want to see to `dev`, e.g. `git push origin feat/my-change:dev --force`. The run summary and the `dev` environment link to https://dev.notes.szolotov.com once it is deployed (about 15 minutes, the build is cold).
+- Same rules as stage: noindex, behind Cloudflare Access, no rollback, production and the `stage` Preview untouched. `dev` is a scratch branch: nothing is merged from it, and a force-push replaces it.
+- What the `main` checkout protects against: a script, `tools/` lockfile, `wrangler.jsonc` or Worker change pushed to `dev` never runs next to the token. It does not protect against someone who edits `deploy-dev.yml` itself on `dev`, because a push runs the workflow file of the pushed commit.
+- Who is trusted with the token: while `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are **repository** secrets, every workflow on every branch can read them, so everyone with write access is trusted with a token that can deploy production. That is fine for a single-owner repository. Before giving anyone else write access, move them into **environment** secrets: `production` (tags `v*` and branch `main`, required reviewers), `staging` (branch `main`) and `dev` (branch `dev`, required reviewers with "Prevent self-review"), and delete the repository secrets. A workflow on another branch then cannot reach the token, and a dev deploy waits for an approval.
+- Remove it: `npx wrangler preview delete --name dev`.
+
 ### Migration from the separate `notes-stage` Worker (one time)
 
 Stage used to be its own Worker, `notes-stage`, with a Custom Domain `stage.notes.szolotov.com`. That domain must be gone before the first Preview, and between step 1 and step 3 stage is down. Production is not affected.
@@ -228,6 +238,7 @@ These cannot be set from the repository. The pipeline assumes them: without them
 
 **Environments** (Settings, Environments; details in the [table above](#2-github-repository-settings))
 
+- `dev`: deployment branches limited to `dev` (rule `dev`). It uses the same repository secrets; add required reviewers if anyone but you can push to `dev`.
 - `staging`: deployment branches limited to `main` (a deployment branch policy, "Selected branches and tags", rule `main`). Only code that went through the `main` ruleset can reach the job that holds the Cloudflare token.
 - `production`: deployment branches and tags limited to the tag rule `v*` and the branch rule `main` (`main` for the call from `release.yml`), plus required reviewers.
 
