@@ -1,7 +1,7 @@
 /**
- * Indexing policy. One Worker serves production and the `stage` Preview, so the decision is
+ * Indexing policy. One Worker serves production and the Worker Previews, so the decision is
  * made per request: indexable only for the production build on the canonical host. Everything
- * else (the stage Preview, any workers.dev URL, production version URLs, localhost) is noindex.
+ * else (the dev Preview, any workers.dev URL, production version URLs, localhost) is noindex.
  *
  * @module indexing
  */
