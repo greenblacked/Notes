@@ -1,5 +1,5 @@
 // Local change to the vendored entry point (see QUARTZ_VERSION): baseUrl is taken from the
-// NOTES_BASE_URL environment variable so the same source builds prod and stage.
+// NOTES_BASE_URL environment variable so the same source builds prod and dev.
 // scripts/update-quartz.sh deliberately does not overwrite this file.
 import { loadQuartzConfig, loadQuartzLayout } from "./quartz/plugins/loader/config-loader"
 import { componentRegistry } from "./quartz/components/registry"

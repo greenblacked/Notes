@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Writes `current=true|false` to $GITHUB_OUTPUT: whether $SHA is still the head
-# of $BRANCH (default main). Used by deploy-stage.yml and deploy-dev.yml so a stale run never
-# overwrites a newer deployment. Requires GH_TOKEN, GITHUB_REPOSITORY and SHA in the env.
+# of $BRANCH (default main). Used by deploy-dev.yml so a stale run never overwrites a newer
+# deployment. Requires GH_TOKEN, GITHUB_REPOSITORY and SHA in the env.
 set -euo pipefail
 
 branch="${BRANCH:-main}"

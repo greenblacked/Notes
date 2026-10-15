@@ -25,9 +25,9 @@ const preview = {
   version: 1,
   worker_name: "notes",
   preview_id: "p1",
-  preview_name: "stage",
-  preview_slug: "stage",
-  preview_urls: ["https://stage-notes.example-sub.workers.dev", "https://stage.notes.szolotov.com"],
+  preview_name: "dev",
+  preview_slug: "dev",
+  preview_urls: ["https://dev-notes.example-sub.workers.dev", "https://dev.notes.szolotov.com"],
   deployment_id: "d1",
   deployment_urls: ["https://0a1b2c3d-notes.example-sub.workers.dev"],
   timestamp: "2026-10-10T10:00:02.000Z",
@@ -65,34 +65,24 @@ test("deploy: a missing deploy entry or version id is an error", () => {
   assert.throws(() => readDeploy([{ ...deploy, version_id: undefined }]), /version_id/)
 })
 
-test("preview: workers.dev and stage URLs", () => {
+test("preview: workers.dev and custom domain URLs", () => {
   assert.deepEqual(readPreview([session, preview]), {
-    workers_dev_url: "https://stage-notes.example-sub.workers.dev",
-    stage_url: "https://stage.notes.szolotov.com",
-    custom_url: "https://stage.notes.szolotov.com",
-  })
-})
-
-test("preview: custom_url is the Preview's own subdomain for any Preview name", () => {
-  const entry = {
-    ...preview,
-    preview_urls: ["https://dev-notes.example-sub.workers.dev", "https://dev.notes.szolotov.com"],
-  }
-  assert.deepEqual(readPreview([entry]), {
     workers_dev_url: "https://dev-notes.example-sub.workers.dev",
-    stage_url: "",
     custom_url: "https://dev.notes.szolotov.com",
   })
 })
 
-test("preview: stage_url is empty when the custom domain Preview is not active", () => {
-  const entry = { ...preview, preview_urls: ["https://stage-notes.example-sub.workers.dev"] }
-  assert.equal(readPreview([entry]).stage_url, "")
+test("preview: custom_url is empty when the custom domain Preview is not active", () => {
+  const entry = { ...preview, preview_urls: ["https://dev-notes.example-sub.workers.dev"] }
+  assert.deepEqual(readPreview([entry]), {
+    workers_dev_url: "https://dev-notes.example-sub.workers.dev",
+    custom_url: "",
+  })
 })
 
 test("preview: no URLs at all gives empty values", () => {
   const entry = { ...preview, preview_urls: [], deployment_urls: undefined }
-  assert.deepEqual(readPreview([entry]), { workers_dev_url: "", stage_url: "", custom_url: "" })
+  assert.deepEqual(readPreview([entry]), { workers_dev_url: "", custom_url: "" })
 })
 
 test("validUrl accepts only plain https URLs on allowed hosts", () => {
@@ -127,7 +117,7 @@ test("main prints key=value lines and rejects bad usage or missing files", () =>
   writeFileSync(file, ndjson(session, preview))
   assert.equal(
     main(["--preview", file]),
-    "workers_dev_url=https://stage-notes.example-sub.workers.dev\nstage_url=https://stage.notes.szolotov.com\ncustom_url=https://stage.notes.szolotov.com",
+    "workers_dev_url=https://dev-notes.example-sub.workers.dev\ncustom_url=https://dev.notes.szolotov.com",
   )
   assert.throws(() => main(["--preview", join(dir, "missing.json")]), /cannot read/)
   assert.throws(() => main(["--other", file]), /usage/)

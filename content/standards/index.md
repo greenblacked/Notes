@@ -20,7 +20,7 @@ Standards keep a growing set of notes consistent and findable.
 
 - Use Conventional Commits (for example `feat:`, `fix:`, `docs:`, `ci:`, `build:`, `chore:`, optionally scoped as `fix(ci):`) and keep the subject line to 72 characters or fewer.
 - Every change goes through a pull request into `main`, and the `CI OK` check must pass.
-- Merging to `main` deploys to staging.
+- Merging to `main` deploys nothing by itself. The dev site is updated by running Deploy dev manually from `main`, when the owner asks.
 - Production releases are `vX.Y.Z` tags created by the Release workflow, and need approval in the `production` environment.
 - Notable changes go into `CHANGELOG.md` under _Unreleased_.
 
