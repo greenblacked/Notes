@@ -10,9 +10,9 @@ test("indexable only in production on the canonical host", () => {
 
 test("everything else is noindex", () => {
   const production = { ENVIRONMENT: "production" }
-  assert.equal(isIndexable({ ENVIRONMENT: "stage" }, at("notes.szolotov.com")), false)
+  assert.equal(isIndexable({ ENVIRONMENT: "preview" }, at("notes.szolotov.com")), false)
   assert.equal(isIndexable({}, at("notes.szolotov.com")), false)
-  assert.equal(isIndexable(production, at("stage.notes.szolotov.com")), false)
+  assert.equal(isIndexable(production, at("dev.notes.szolotov.com")), false)
   assert.equal(isIndexable(production, at("notes.sub.workers.dev")), false)
   assert.equal(isIndexable(production, at("1a2b3c4d-notes.sub.workers.dev")), false)
   assert.equal(isIndexable(production, new URL("http://localhost:8787/")), false)
