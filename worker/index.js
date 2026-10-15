@@ -19,7 +19,7 @@ import { CANONICAL_HOST, isIndexable } from "./indexing.js"
 /**
  * @typedef {Object} Env
  * @property {{ fetch: (request: Request) => Promise<Response> }} ASSETS Static assets binding.
- * @property {string} [ENVIRONMENT] "production" (top-level vars) or "stage" (`previews.vars`).
+ * @property {string} [ENVIRONMENT] "production" (top-level vars) or "preview" (`previews.vars`).
  */
 
 const PRODUCTION_ORIGIN = `https://${CANONICAL_HOST}`

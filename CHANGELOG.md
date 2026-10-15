@@ -8,14 +8,14 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
-- Dev Preview: `deploy-dev.yml` deploys every push to the `dev` branch to the Worker Preview `dev` at https://dev.notes.szolotov.com, with the same safeguards as stage; its upload job runs only code checked out from `main` and takes only `public/` from the dev build. `is-main-head.sh` takes the branch from `BRANCH` (default `main`), and `read-wrangler-output.mjs --preview` also prints the Preview's `custom_url`.
+- Dev Preview: `deploy-dev.yml` deploys the Worker Preview `dev` at https://dev.notes.szolotov.com. It is the pre-production site and runs only manually (`workflow_dispatch`), only from `main`, when the owner asks for it; a `guard` job fails every other ref. `is-main-head.sh` takes the branch from `BRANCH` (default `main`), and `read-wrangler-output.mjs --preview` also prints the Preview's `custom_url`.
 
 ### Security
 
-- The build jobs of `ci.yml`, `deploy-stage.yml` and `deploy-production.yml` run with `NPM_CONFIG_IGNORE_SCRIPTS=true`: no install script of our dependencies or of the third-party plugins' npm dependencies runs. The output is identical to a build with scripts.
+- The build jobs of `ci.yml`, `deploy-dev.yml` and `deploy-production.yml` run with `NPM_CONFIG_IGNORE_SCRIPTS=true`: no install script of our dependencies or of the third-party plugins' npm dependencies runs. The output is identical to a build with scripts.
 - `scripts/check-artifact.mjs` (tested by `scripts/check-artifact.test.mjs`) replaces the inline artifact check of the deploy workflows. Besides the expected layout it rejects `public/_redirects`, `public/_headers`, symlinks and any file extension outside an allowlist. It also runs after the build in CI and in both build jobs.
 - Deploy production now requires, for tag pushes, manual runs and the call from `release.yml`, a successful `ci.yml` push run for the exact commit and that the commit is on `main` (`compare/main...<sha>` is `identical` or `behind`). The check is shared with `release.yml` (`.github/scripts/require-ci-success.sh`); the guard job has `actions: read` and `contents: read`.
-- `deploy-stage.yml`: `GH_TOKEN` is set on the one step that needs it (the re-check of the head of `main` in the `upload` job) instead of on the whole job.
+- `deploy-dev.yml`: `GH_TOKEN` is set on the one step that needs it (the re-check of the head of `main` in the `upload` job) instead of on the whole job.
 - The `upload` and `deploy` jobs that hold the Cloudflare token no longer install the root dependencies. `--ignore-scripts` alone did not keep third-party code out: `@quartz-community/types` and `@quartz-community/utils` are git dependencies whose `prepare` script npm runs anyway. They now run `npm ci --ignore-scripts --prefix tools` (`tools/package.json` pins only wrangler, with its own lockfile and a Dependabot entry) and call `tools/node_modules/.bin/wrangler`; the scripts they run use only Node built-ins. The build jobs, which hold no secrets, keep the root install.
 - The build artifact is `public/` only. `worker/csp.generated.js` is no longer taken from it: the `upload` and `deploy` jobs regenerate it with `scripts/build-csp.mjs` from the checked `public/`, and `check-artifact.mjs --root` fails on a `worker/` directory.
 - `require-ci-success.sh` resolves the SHA of `main` first and compares `<main sha>...<commit>` instead of the ambiguous name `main`.
@@ -58,11 +58,17 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - `scripts/check-contrast.mjs` checks the new tokens: body, muted, link, hover, chip, code, callout title and focus-ring pairs on the sheet (including the strongest grain), the desk and the surface tint, in both themes. The light syntax theme's comment colour is darkened in CSS to stay above AA.
 - `content/index.md` keeps its introduction and drops the section table and the "Start with these" list, which the index replaces. `content/standards/writing-notes.md` describes the metadata sheet, the numbered sections and the home index.
 - `docs/screenshots/` holds new screenshots (home, runbook in light and dark, phone).
+- No stage environment any more: `dev` (https://dev.notes.szolotov.com, the Worker Preview `dev`) is the pre-production site. Deploy dev is manual only (`workflow_dispatch`) and only from `main`, with no push trigger and no `dev` branch; its upload job checks out the `main` commit (`github.sha`) and runs the smoke test as before. Feature previews happen outside CI. The flow is: feature branch, preview by the maintainer, merge to `main`, manual Deploy dev, Release tag, production.
+- The `STAGE_SMOKE_TEST` variable is now `DEV_SMOKE_TEST`, and the GitHub environment `dev` (branch `main` only) replaces `staging`.
+- `ENVIRONMENT` in `previews.vars` of `wrangler.jsonc` is `preview` instead of `stage`. The Worker only compares it with `production`, so behaviour is the same: only production on `notes.szolotov.com` is indexable.
+- `npm run preview:stage` is now `npm run preview:dev` (`ENVIRONMENT:preview`, same port).
+- `read-wrangler-output.mjs --preview` no longer prints `stage_url`; `custom_url` and `workers_dev_url` remain.
+- The runbook `content/runbooks/cloudflare-workers-deploy-and-rollback.md`, `docs/deployment.md`, `README.md` and `content/standards/index.md` describe the new flow.
 
 - `quartz plugin restore` exits non-zero when a plugin fails to build or install, instead of continuing with a partial set. The vendored `quartz/cli/plugin-git-handlers.js` is patched locally; `scripts/update-quartz.sh` notes this.
 - `docs/deployment.md` states that on a tag push or tag dispatch the workflow file and guard script come from the tagged commit, so the guard only catches mistakes; the controls for creating production tags are the `v*` tag ruleset and required reviewers on the `production` environment ("Prevent self-review" when more than one person has access). The "rely on the guard for creations" fallback is removed. The rollback drill notes that tags from before the CI check have no such step and that a very old tag needs its `ci.yml` run record to still exist.
 
-- `docs/deployment.md`: "Repository settings you must apply" (rulesets for `main` and `v*` tags, environment branch policies, optional separate stage token) and a one-time `wrangler rollback` drill.
+- `docs/deployment.md`: "Repository settings you must apply" (rulesets for `main` and `v*` tags, environment branch policies, optional separate dev token) and a one-time `wrangler rollback` drill.
 - Modern, smoother design. The always-open Explorer sidebar is gone: a slim sticky top bar (`local-plugins/top-bar`) has the wordmark, section links with the current section highlighted, search and the theme toggle, and a **Browse** button that opens the Explorer as a drawer at every width (Escape, outside click, focus kept inside while open). The bar blurs on scroll and shows reading progress with CSS scroll-driven animations. The reader mode is removed (one centred column leaves nothing to hide).
 - One centred reading column with the table of contents sticky beside it (the entry being read is highlighted); the local graph moves to the end of the note, under a new "Linked from" block (`local-plugins/linked-from`, replaces the Backlinks plugin). Sidenotes now appear from 1280px.
 - Softer paper: lighter grain, a diffuse shadow, rounded corners, thinner and lighter rules, no margin line. Inter (self-hosted variable font) for the interface; Source Serif 4 stays for reading text.
@@ -76,6 +82,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - The "Recently updated" list and the `recent-notes` plugin (also from `quartz.lock.json`): the index shows every note with its date.
 - `@fontsource/ibm-plex-sans`, `@fontsource/ibm-plex-sans-condensed` and `@fontsource/literata`.
 - The previous screenshots in `docs/screenshots/` (`phone-dark.png` and the old light and dark ones).
+- `deploy-stage.yml`, the Preview `stage` and its `staging` environment. Delete the existing Preview once with Deploy dev, action `remove-stage` (a new `workflow_dispatch` choice; harmless to re-run when the Preview is already gone).
 
 ## [0.3.0] - 2026-10-11
 
