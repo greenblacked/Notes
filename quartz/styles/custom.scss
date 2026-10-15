@@ -787,8 +787,12 @@ body[data-slug="index"] .page > #quartz-body {
 // Quartz's explorer already has a drawer mode with a toggle (below 800px). Here it is the only
 // mode: the mobile toggle is the Browse button at every width, and the list is a panel from the
 // right edge, the side of the button. Quartz's script adds .collapsed to the explorer when it has
-// loaded, removes hide-until-loaded from the button, and toggles .collapsed on a click. Until then
-// the list is display: none, and it stays out of the page's way afterwards: the drawer is
+// loaded, removes hide-until-loaded from the button, and toggles .collapsed on a click. The drawer
+// is drawn open only when the explorer carries data-open, which the top-bar script sets from those
+// classes once each change is complete: after every navigation Quartz's script briefly leaves the
+// explorer neither loading nor collapsed (it removes hide-until-loaded, reads the layout, then adds
+// .collapsed), and styling that instant as open slid the drawer in and out on every link. Until it
+// has loaded the list is display: none, and it stays out of the page's way afterwards: the drawer is
 // position: fixed and hidden, so the script's scrollIntoView of the active entry has nothing to
 // scroll (it used to scroll the whole page to the open note's entry, which sat in the sidebar). The
 // focus handling and Escape are in local-plugins/top-bar/scripts/top-bar.inline.ts.
@@ -875,7 +879,7 @@ body[data-slug="index"] .page > #quartz-body {
       visibility 0s linear var(--dur-drawer-out);
   }
 
-  &:not(.collapsed):not(:has(> .hide-until-loaded))::before {
+  &[data-open]::before {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
@@ -932,26 +936,16 @@ body[data-slug="index"] .page > #quartz-body {
   // folders of a closed drawer.
   // The contents wait out the closing slide before they hide (a visibility transition with a delay
   // holds `visible` until the delay is over), so the panel does not empty while it leaves.
-  &.collapsed .explorer-content,
-  &.collapsed .explorer-content * {
+  &:not([data-open]) .explorer-content,
+  &:not([data-open]) .explorer-content * {
     visibility: hidden !important;
   }
-  &.collapsed .explorer-content * {
+  &:not([data-open]) .explorer-content * {
     transition: visibility 0s linear var(--dur-drawer-out);
   }
 
-  // After a navigation Quartz's explorer script shows the drawer as open for an instant before it
-  // closes it again (it removes hide-until-loaded, then adds .collapsed). The drawer does not
-  // animate until it is closed again (data-drawer-settling, set by the top-bar script), or it slid
-  // in and out on every link.
-  :root[data-drawer-settling] &::before,
-  :root[data-drawer-settling] & .explorer-content,
-  :root[data-drawer-settling] & .explorer-content * {
-    transition: none !important;
-  }
-
   // Opening: a spring-like settle (fast start, long soft landing, no overshoot).
-  &:not(.collapsed) .explorer-content {
+  &[data-open] .explorer-content {
     visibility: visible;
     opacity: 1;
     transform: none;

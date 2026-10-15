@@ -37,9 +37,14 @@ function setupDrawer() {
   drawer.setAttribute("aria-label", "Browse notes")
   drawer.removeAttribute("aria-expanded")
 
+  // The CSS draws the drawer open only with data-open. It is set here, from a MutationObserver, so
+  // it sees each change of Quartz's script complete: after a navigation that script removes
+  // hide-until-loaded, reads the layout and then adds .collapsed, and the explorer looks open for
+  // that instant (styled from the classes, the drawer slid in and out on every link).
   let wasOpen = false
   const sync = () => {
     const open = isOpen(parts)
+    explorer.toggleAttribute("data-open", open)
     toggle.setAttribute("aria-expanded", String(open))
     drawer.setAttribute("aria-modal", String(open))
     // Closed, the drawer is out of the tab order and the accessibility tree (the explorer's own
@@ -241,37 +246,7 @@ let enterTimer = 0
 document.addEventListener("prenav", () => {
   navigating = true
   root.dataset.navigating = ""
-  root.dataset.drawerSettling = ""
 })
-
-// The morph puts the explorer back in its not-yet-loaded state, and Quartz's nav handler (async: it
-// loads the content index first) then shows the drawer as open for an instant before it collapses
-// it. The drawer's transitions stay off (data-drawer-settling) until it is closed again, so it does
-// not slide in and out; a timeout ends the wait if the explorer never closes.
-let settleObserver: MutationObserver | undefined
-let settleTimer = 0
-function endDrawerSettle() {
-  settleObserver?.disconnect()
-  settleObserver = undefined
-  window.clearTimeout(settleTimer)
-  requestAnimationFrame(() => delete root.dataset.drawerSettling)
-}
-function settleDrawer() {
-  settleObserver?.disconnect()
-  const parts = drawerParts()
-  const closed = () =>
-    !parts ||
-    (parts.explorer.classList.contains("collapsed") &&
-      !parts.toggle.classList.contains("hide-until-loaded"))
-  if (!parts || closed()) return endDrawerSettle()
-  settleObserver = new MutationObserver(() => {
-    if (closed()) endDrawerSettle()
-  })
-  settleObserver.observe(parts.explorer, { attributes: true, attributeFilter: ["class"] })
-  settleObserver.observe(parts.toggle, { attributes: true, attributeFilter: ["class"] })
-  window.clearTimeout(settleTimer)
-  settleTimer = window.setTimeout(endDrawerSettle, 2000)
-}
 
 function playEnter() {
   const center = document.querySelector<HTMLElement>(".center")
@@ -290,7 +265,6 @@ const onNav = () => {
   void settleHash()
   if (navigating) {
     navigating = false
-    settleDrawer()
     playEnter()
     requestAnimationFrame(() => delete root.dataset.navigating)
   }
