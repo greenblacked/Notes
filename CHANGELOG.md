@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The Browse drawer no longer slides in and out after a click on a link (a section, a note at the bottom of the page). After each navigation Quartz's explorer script shows the drawer as open for an instant before it closes it again; the top-bar script now keeps the drawer's transitions off (`data-drawer-settling`) from `prenav` until the drawer is closed again.
 - A code block inside a list item (the `curl` line in the runbook's numbered steps) sat tight against the text above and below and ran off the right edge: Quartz's `li > *` rule removed the block's margin. Blocks in list items now have the same frame and padding as top-level blocks and a vertical margin; a long line scrolls sideways inside the block (the `<pre>`, which the keyboard can focus) and has room at its end. Tables and callouts in list items get the same margin.
 - `scripts/smoke-test.sh` no longer follows redirects: any 3xx is a failure with the status and `Location`. A Cloudflare Access redirect is still detected from the response headers (a notice with `SMOKE_ALLOW_ACCESS=1`, a failure otherwise), but only on a 3xx response: a `Location` header on a 200 is not Access. Tested by `scripts/smoke-test.test.mjs`.
 - Note pages no longer open scrolled down. The Explorer's script calls `scrollIntoView` on the open note's entry at load, which scrolled the whole page (about 260px at 1440px wide) when the entry was visible in the sidebar. The list now lives in a fixed, hidden drawer, so there is nothing to scroll; pages open at the top unless the URL has a `#hash`.
@@ -42,6 +43,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The Browse drawer opens from the right edge, the side of its button in the top bar, instead of the left.
 - Wider page: the reading column (`--measure`) is 46rem instead of 38rem, and 52rem from 1500px; the home sheet is 68rem instead of 60rem. Long code lines and tables fit without scrolling more often; the table of contents and sidenotes still sit beside the sheet without overlap at 1280px and wider.
 - Smoother motion. One set of motion tokens in `quartz/styles/custom.scss` (`--dur-fast` 180ms, `--dur` 260ms, `--dur-slow` 380ms, `--dur-theme` 300ms, `--dur-drawer-in` 360ms, `--dur-drawer-out` 260ms; the curves `--ease-out`, `--ease-in-out`, `--ease-drawer`, `--ease-spring`) replaces the ad-hoc durations and `ease`; only `opacity`, `transform`, colours and `box-shadow` are transitioned.
 - Page navigation: the sheet's content fades in and rises 6px over 380ms instead of dimming while the next page loads, with no layout shift; the router's scroll to the top is instant. A link to a `#heading` fades without the rise. The top-bar script starts it on the router's `prenav` and `nav` events (no View Transitions API: the router does not expose the DOM swap).
