@@ -42,6 +42,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Wider page: the reading column (`--measure`) is 46rem instead of 38rem, and 52rem from 1500px; the home sheet is 68rem instead of 60rem. Long code lines and tables fit without scrolling more often; the table of contents and sidenotes still sit beside the sheet without overlap at 1280px and wider.
 - Smoother motion. One set of motion tokens in `quartz/styles/custom.scss` (`--dur-fast` 180ms, `--dur` 260ms, `--dur-slow` 380ms, `--dur-theme` 300ms, `--dur-drawer-in` 360ms, `--dur-drawer-out` 260ms; the curves `--ease-out`, `--ease-in-out`, `--ease-drawer`, `--ease-spring`) replaces the ad-hoc durations and `ease`; only `opacity`, `transform`, colours and `box-shadow` are transitioned.
 - Page navigation: the sheet's content fades in and rises 6px over 380ms instead of dimming while the next page loads, with no layout shift; the router's scroll to the top is instant. A link to a `#heading` fades without the rise. The top-bar script starts it on the router's `prenav` and `nav` events (no View Transitions API: the router does not expose the DOM swap).
 - The Browse drawer slides in over 360ms on a spring-like curve with a fade (the scrim in step) and out over 260ms; its contents stay visible until it has left, and it is still inert when closed.
