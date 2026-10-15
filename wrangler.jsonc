@@ -3,8 +3,8 @@
   // One Worker serves everything. Static site is served from ./public (the Quartz build output)
   // through worker/index.js, which adds security headers, serves /robots.txt and sets cache policy.
   //   - production: `wrangler deploy` (tag releases) at https://notes.szolotov.com
-  //   - stage: a Worker Preview named `stage` (`wrangler preview`, every merge to main) at
-  //     https://stage.notes.szolotov.com. See docs/deployment.md#stage-preview.
+  //   - dev: a Worker Preview named `dev` (`wrangler preview`, deployed manually from main) at
+  //     https://dev.notes.szolotov.com. See docs/deployment.md#dev-preview.
   "name": "notes",
   "main": "worker/index.js",
   "compatibility_date": "2026-10-01",
@@ -14,8 +14,8 @@
   "workers_dev": true,
   "preview_urls": true,
   "routes": [
-    // previews_enabled serves production AND Previews: the Preview `stage` is then reachable at
-    // stage.notes.szolotov.com through a Cloudflare-managed wildcard. Applied by `wrangler deploy`
+    // previews_enabled serves production AND Previews: the Preview `dev` is then reachable at
+    // dev.notes.szolotov.com through a Cloudflare-managed wildcard. Applied by `wrangler deploy`
     // (or the dashboard), not by `wrangler preview`.
     { "pattern": "notes.szolotov.com", "custom_domain": true, "previews_enabled": true },
   ],
@@ -32,6 +32,6 @@
   "vars": { "ENVIRONMENT": "production" },
   // Preview settings are not inherited from the top level.
   "previews": {
-    "vars": { "ENVIRONMENT": "stage" },
+    "vars": { "ENVIRONMENT": "preview" },
   },
 }
