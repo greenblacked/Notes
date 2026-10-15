@@ -2,7 +2,9 @@
 // every width) gets a name, focus management and Escape, the table of contents marks the heading
 // being read, the centre column gets its landmark and the skip link its focus. Runs once per page
 // load; the parts that touch the page re-run on every SPA navigation ("nav") and clean up after
-// themselves.
+// themselves. It also drives the motion that CSS cannot start by itself: the fade-in of the new page
+// after a navigation and the cross-fade of the theme (see "Motion" below). No inline script is
+// involved: this file is bundled into postscript.js.
 
 const drawerParts = () => {
   const explorer = document.querySelector<HTMLElement>(".explorer")
@@ -121,6 +123,7 @@ function setupTocSpy() {
     .map((link) => ({ link, heading: document.getElementById(link.dataset.for ?? "") }))
     .filter((entry): entry is { link: HTMLAnchorElement; heading: HTMLElement } => !!entry.heading)
   if (entries.length === 0) return
+  const list = entries[0].link.closest<HTMLElement>("ul")
 
   let frame = 0
   const update = () => {
@@ -141,13 +144,24 @@ function setupTocSpy() {
       if (on) entry.link.setAttribute("aria-current", "location")
       else entry.link.removeAttribute("aria-current")
     }
+    // The indicator bar of the list slides to the current entry (the CSS transitions its transform).
+    if (list) {
+      list.style.setProperty("--toc-y", `${current ? current.link.offsetTop : 0}px`)
+      list.style.setProperty("--toc-h", String(current ? current.link.offsetHeight : 0))
+      list.style.setProperty("--toc-on", current ? "1" : "0")
+    }
   }
   const schedule = () => {
     if (!frame) frame = requestAnimationFrame(update)
   }
   window.addEventListener("scroll", schedule, { passive: true })
   window.addEventListener("resize", schedule, { passive: true })
+  // The first placement is not animated: the bar starts where the reader is.
+  if (list) list.dataset.still = ""
   update()
+  if (list) {
+    requestAnimationFrame(() => requestAnimationFrame(() => delete list.dataset.still))
+  }
   window.addCleanup(() => {
     window.removeEventListener("scroll", schedule)
     window.removeEventListener("resize", schedule)
@@ -195,10 +209,59 @@ async function settleHash() {
   document.getElementById(name)?.scrollIntoView({ behavior: "instant", block: "start" })
 }
 
+// ---- Motion ------------------------------------------------------------------------------
+// Reduced motion: the CSS switches every animation and transition off; nothing here starts one.
+const root = document.documentElement
+const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+// Transitions are enabled once the page has painted: nothing fades on the first paint, in
+// particular not the colours when a saved dark theme is applied while the page loads.
+requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add("motion-ready")))
+
+// A theme change (the toggle, or the OS) cross-fades: .theme-fade makes every colour transition on
+// one curve and duration, and goes again once the fade is over.
+let themeTimer = 0
+document.addEventListener("themechange", () => {
+  if (reducedMotion()) return
+  root.classList.add("theme-fade")
+  window.clearTimeout(themeTimer)
+  themeTimer = window.setTimeout(() => root.classList.remove("theme-fade"), 450)
+})
+
+// The page change. The router fetches the next page, fires "prenav", morphs it into the document
+// (the .center element survives) and scrolls, then fires "nav". While that runs the root has
+// data-navigating, so the router's scroll to the top is instant and not a smooth scroll across the
+// new page; at "nav" the sheet gets data-enter, which the CSS turns into a fade and a small rise
+// (opacity and transform only, no layout shift). The initial page load, which also fires "nav",
+// does not animate. A link to a #heading fades without the rise, so the scroll target stays exact.
+// (The View Transitions API is not used: the router swaps the DOM inside its own async function,
+// so there is no callback to hand to startViewTransition without patching Quartz's router.)
+let navigating = false
+let enterTimer = 0
+document.addEventListener("prenav", () => {
+  navigating = true
+  root.dataset.navigating = ""
+})
+
+function playEnter() {
+  const center = document.querySelector<HTMLElement>(".center")
+  if (!center || reducedMotion()) return
+  center.removeAttribute("data-enter")
+  void center.offsetWidth // restart the animation if one is still running
+  center.dataset.enter = location.hash ? "fade" : "rise"
+  window.clearTimeout(enterTimer)
+  enterTimer = window.setTimeout(() => center.removeAttribute("data-enter"), 800)
+}
+
 const onNav = () => {
   setupDrawer()
   setupTocSpy()
   setupLandmarks()
   void settleHash()
+  if (navigating) {
+    navigating = false
+    playEnter()
+    requestAnimationFrame(() => delete root.dataset.navigating)
+  }
 }
 document.addEventListener("nav", onNav)

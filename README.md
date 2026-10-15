@@ -64,7 +64,7 @@ The structure:
 - The home page has a short intro, a card per section (description, note count, last update), then a table of every note grouped by section (number, title and file name, type, status, verified or modified date), which becomes a stack of cards on a phone. It is built from the notes' frontmatter by `local-plugins/note-index`, so a new note appears there without any edit to the home page.
 - Notes show a spec sheet under the title (`type`, `status`, `decided`, `verified`, modified date, reading time; `local-plugins/note-meta`), tags as light chips, numbered `##` sections (01, 02, ...) that the sticky table of contents beside the sheet repeats, and sidenotes in the margin of the sheet from 1280px up. A note ends with "Linked from" (`local-plugins/linked-from`) and its local graph.
 - Printing gives plain paper: no bar, drawer, graph or "Linked from" list, external links with their address, sidenotes as footnotes.
-- Motion is gentle and all of it is off under `prefers-reduced-motion`.
+- Motion is gentle and all of it is off under `prefers-reduced-motion`. Durations and easing curves are tokens at the top of `quartz/styles/custom.scss`; only opacity, transform, colours and shadows are animated. Pages fade in and rise a few pixels after a navigation (the top-bar script marks the moment, the CSS does the rest), the Browse drawer slides in on a spring-like curve, the section cards lift, the table of contents indicator slides, and toggling the theme cross-fades the colours (never on load).
 
 All custom CSS is in `quartz/styles/custom.scss` and the colour keys are in `quartz.config.yaml`; `npm run check:contrast` checks both themes. The frontmatter fields are described in `content/standards/writing-notes.md`.
 
