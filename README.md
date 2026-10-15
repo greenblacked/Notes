@@ -90,7 +90,7 @@ flowchart LR
 ```
 
 1. Work on a branch and open a pull request. CI must pass (`CI OK`).
-2. Merging to `main` updates the Preview `stage` of the Worker `notes` automatically (served at https://stage.notes.szolotov.com; production traffic is untouched).
+2. Merging to `main` updates the Preview `stage` of the Worker `notes` automatically (served at https://stage.notes.szolotov.com; production traffic is untouched). To look at a branch before merging, push it to `dev` (`git push origin <branch>:dev --force`): it is deployed to the Preview `dev` at https://dev.notes.szolotov.com ([Dev Preview](docs/deployment.md#dev-preview)).
 3. To release: Actions, **Release**, **Run workflow** on `main`, enter the version as `X.Y.Z`. The workflow checks that CI passed for that commit and that the version is higher than the latest tag, creates the tag and GitHub Release, and starts the production deployment.
 4. Approve the deployment in the `production` environment. A smoke test runs against the Worker's workers.dev URL after the deploy; on failure the previous version is restored automatically.
 
