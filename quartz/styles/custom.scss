@@ -786,12 +786,12 @@ body[data-slug="index"] .page > #quartz-body {
 // ---- Browse: the Explorer as a drawer ------------------------------------------------------
 // Quartz's explorer already has a drawer mode with a toggle (below 800px). Here it is the only
 // mode: the mobile toggle is the Browse button at every width, and the list is a panel from the
-// left edge. Quartz's script adds .collapsed to the explorer when it has loaded, removes
-// hide-until-loaded from the button, and toggles .collapsed on a click. Until then the list is
-// display: none, and it stays out of the page's way afterwards: the drawer is position: fixed and
-// hidden, so the script's scrollIntoView of the active entry has nothing to scroll (it used to
-// scroll the whole page to the open note's entry, which sat in the sidebar). The focus handling
-// and Escape are in local-plugins/top-bar/scripts/top-bar.inline.ts.
+// right edge, the side of the button. Quartz's script adds .collapsed to the explorer when it has
+// loaded, removes hide-until-loaded from the button, and toggles .collapsed on a click. Until then
+// the list is display: none, and it stays out of the page's way afterwards: the drawer is
+// position: fixed and hidden, so the script's scrollIntoView of the active entry has nothing to
+// scroll (it used to scroll the whole page to the open note's entry, which sat in the sidebar). The
+// focus handling and Escape are in local-plugins/top-bar/scripts/top-bar.inline.ts.
 
 .page > #quartz-body > .sidebar.left.sidebar .explorer {
   order: 2;
@@ -888,25 +888,26 @@ body[data-slug="index"] .page > #quartz-body {
     position: fixed;
     z-index: 2;
     top: 0;
-    left: 0;
+    right: 0;
     bottom: 0;
+    left: auto;
     box-sizing: border-box;
     width: min(22rem, 90vw);
     max-width: none;
     height: auto;
     max-height: none;
     margin: 0;
-    padding: 1.25rem 1.1rem 2rem 1.25rem;
+    padding: 1.25rem 1.25rem 2rem 1.1rem;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     background-color: var(--light);
     background-image: var(--grain-image);
-    border-radius: 0 var(--radius) var(--radius) 0;
+    border-radius: var(--radius) 0 0 var(--radius);
     box-shadow: var(--sheet-shadow);
     visibility: hidden;
     opacity: 0;
-    transform: translateX(calc(-100% - 2rem));
+    transform: translateX(calc(100% + 2rem));
     // Closing: a little quicker than opening, and the panel stays visible until it has left.
     // No will-change: the transform is composited anyway while it runs, and an idle layer for a
     // panel that is mostly closed would be a cost for nothing.
@@ -937,6 +938,16 @@ body[data-slug="index"] .page > #quartz-body {
   }
   &.collapsed .explorer-content * {
     transition: visibility 0s linear var(--dur-drawer-out);
+  }
+
+  // After a navigation Quartz's explorer script shows the drawer as open for an instant before it
+  // closes it again (it removes hide-until-loaded, then adds .collapsed). The drawer does not
+  // animate until it is closed again (data-drawer-settling, set by the top-bar script), or it slid
+  // in and out on every link.
+  :root[data-drawer-settling] &::before,
+  :root[data-drawer-settling] & .explorer-content,
+  :root[data-drawer-settling] & .explorer-content * {
+    transition: none !important;
   }
 
   // Opening: a spring-like settle (fast start, long soft landing, no overshoot).
