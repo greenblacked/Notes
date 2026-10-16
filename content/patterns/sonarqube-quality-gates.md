@@ -54,10 +54,20 @@ Make the Sonar job a required status via the project's "pipelines must succeed" 
 ## GitLab CI with sonar-scanner
 
 ```yaml title=".gitlab-ci.yml"
+go-test:
+  stage: test
+  image: golang:<tested-version>@sha256:<digest>
+  script:
+    - go test ./... -coverprofile=coverage.out
+  artifacts:
+    paths: [coverage.out]
+    expire_in: 1 day
+
 sonarqube:
   stage: test
+  needs: [go-test] # downloads the coverage.out artifact from go-test
   image:
-    name: sonarsource/sonar-scanner-cli:latest # pin a specific tag in real use
+    name: sonarsource/sonar-scanner-cli:<tested-version>@sha256:<digest>
     entrypoint: [""]
   variables:
     SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
@@ -78,7 +88,7 @@ sonarqube:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 ```
 
-`SONAR_TOKEN` and `SONAR_HOST_URL` are set as masked CI/CD variables, which the scanner reads from the environment. The project properties live in the repository:
+Pin the scanner image by tag and digest rather than using `latest`; [[automated-dependency-updates]] shows how to keep those pins current. `SONAR_TOKEN` and `SONAR_HOST_URL` are set as masked CI/CD variables, which the scanner reads from the environment. The project properties live in the repository:
 
 ```properties title="sonar-project.properties"
 sonar.projectKey=payments-api
@@ -87,10 +97,20 @@ sonar.tests=src
 sonar.test.inclusions=**/*_test.go
 sonar.exclusions=**/vendor/**,**/generated/**,**/*.pb.go
 sonar.coverage.exclusions=**/cmd/**,**/mocks/**
+# relative to the project root; must match the artifact path from go-test
 sonar.go.coverage.reportPaths=coverage.out
 ```
 
 `sonar.qualitygate.wait=true` makes the scanner poll the server and exit non-zero when the gate fails, so the job fails. It needs a long enough timeout for the server's background processing; check the default for your version.
+
+## Verify
+
+- A merge request shows the SonarQube decoration and a coverage value above 0 on new code.
+- A deliberately failing gate (for example a new bug) fails the `sonarqube` job.
+
+## Rollback
+
+While you investigate a bad gate, make it non-blocking by removing `sonar.qualitygate.wait` or setting `allow_failure: true` on the job, and record it as a temporary exception with an owner and an end date.
 
 ## Maven
 

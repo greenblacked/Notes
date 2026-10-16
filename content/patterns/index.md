@@ -18,6 +18,7 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[sonarqube-quality-gates|SonarQube quality gates]]: gate merges on new-code quality with SonarQube in GitLab CI and Jenkins, and roll it out to an existing codebase without blocking everyone.
 - [[artifact-promotion-artifactory|Artifact promotion with Artifactory]]: build once, then promote the same artefact from dev to staging to prod in Artifactory using build info and the JFrog CLI in GitLab CI.
 - [[dockerfile-hardening|Dockerfile hardening]]: build small, reproducible, non-root container images with multi-stage builds, digest pinning, BuildKit secrets, scanning and signing.
+- [[automated-dependency-updates|Automated dependency and image updates]]: keep base images, CI tool images, Helm charts and Terraform providers pinned by digest and current with Renovate merge requests in GitLab.
 
 ## Kubernetes and GKE
 
@@ -27,6 +28,7 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[kubernetes-network-policies|Kubernetes network policies]]: default-deny NetworkPolicies with DNS, namespace and Google API egress on GKE, plus testing, common mistakes and a safe rollout.
 - [[gke-workload-identity|Workload Identity Federation for GKE]]: give Pods access to Google Cloud APIs without service account keys, using a direct IAM principal or GSA impersonation.
 - [[external-secrets-with-secret-manager|External Secrets Operator with Google Secret Manager]]: sync Google Secret Manager secrets into Kubernetes Secrets on GKE with External Secrets Operator and Workload Identity, including refresh, RBAC and failure modes.
+- [[pod-security-admission|Pod Security admission and policy enforcement]]: enforce Pod Security Standards per namespace with warn, audit and enforce labels, and add Kyverno or Gatekeeper policy for what PSS cannot express.
 
 ## Infrastructure as code
 
@@ -37,6 +39,8 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[slo-burn-rate-alerting|SLO burn rate alerting]]: define SLIs and SLOs for HTTP services and alert on error budget burn with multi-window, multi-burn-rate rules in Prometheus and Cloud Monitoring.
 
 ## Shape of a pattern note
+
+A pattern note covers the following, in roughly this order; items 3 to 5 can be short or a link when another note already holds them:
 
 1. The problem and when the pattern applies.
 2. The steps, with commands that can be copied.

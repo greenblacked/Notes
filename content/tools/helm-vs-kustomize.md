@@ -98,6 +98,8 @@ Build it with `kustomize build --enable-helm .`. Pin the chart `version` explici
 RELEASE=ingress-nginx
 CHART=ingress-nginx/ingress-nginx
 VERSION=4.11.3
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
 helm template "$RELEASE" "$CHART" --version "$VERSION" -f values.yaml > base/all.yaml
 kustomize build overlays/prod
 ```

@@ -1,6 +1,6 @@
 ---
 title: GKE cluster upgrade
-description: "Upgrade a GKE control plane and node pools safely: channels, maintenance windows, deprecated API checks, surge or blue-green, PDBs, validation and rollback limits."
+description: "Upgrade a GKE control plane and node pools safely: channels, maintenance windows, deprecated API checks, surge or blue-green, PDBs, validation, rollback limits"
 type: runbook
 tags:
   - runbooks
@@ -24,7 +24,7 @@ How to upgrade a GKE Standard cluster to a newer Kubernetes version with predict
 - The cluster's version is approaching end of support and the automatic upgrade is blocked by an exclusion or a failing check.
 - You are changing node pool upgrade settings (surge or blue-green) ahead of a planned upgrade.
 
-For Autopilot clusters, GKE manages nodes; the control plane steps and the API checks still apply, but the node pool steps do not. Application-level upgrades are a different procedure, see [[helm-release-rollback]].
+For Autopilot clusters, GKE manages nodes; the control plane steps and the API checks still apply, but the node pool steps do not. On Autopilot, nodes follow the control plane version automatically. Application-level upgrades are a different procedure, see [[helm-release-rollback]].
 
 ## Preconditions
 
@@ -60,8 +60,7 @@ gcloud container get-server-config --location "$LOCATION" \
 
 Rules to keep in mind:
 
-- Nodes must not be newer than the control plane, and they may lag by a limited number of minor versions (see the Kubernetes version skew policy and the GKE docs for the current number). Upgrade the control plane first, then the node pools.
-- Skip no more than the supported number of minor versions per node pool step. Upgrade one minor at a time for the control plane.
+- Upgrade the control plane first, one minor version at a time. Under the upstream [Kubernetes version skew policy](https://kubernetes.io/releases/version-skew-policy/), a kubelet may be up to three minor versions older than the API server (since Kubernetes 1.28) and never newer; GKE's own node pool rules can be stricter, so check the GKE version skew documentation for your cluster.
 - A cluster enrolled in a release channel gets versions on that channel's schedule. Use the channel to set pace, and use a manual upgrade to go sooner.
 
 ### 2. Release channels, maintenance windows and exclusions

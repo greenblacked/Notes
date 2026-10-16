@@ -1,6 +1,6 @@
 ---
 title: External Secrets Operator with Google Secret Manager
-description: Sync Google Secret Manager secrets into Kubernetes Secrets on GKE with External Secrets Operator and Workload Identity, including refresh, RBAC and failure modes.
+description: "Sync Google Secret Manager secrets into Kubernetes Secrets on GKE with External Secrets Operator and Workload Identity: refresh, RBAC and failure modes."
 type: pattern
 tags:
   - patterns
@@ -45,21 +45,23 @@ Pin the chart version in your GitOps repo and read the release notes on upgrade;
 
 ## Grant the operator access
 
-Set variables, then bind the role to the ESO controller ServiceAccount using the direct principal method from [[gke-workload-identity]]:
+Read [RBAC](#rbac) before choosing the scope. Set variables, then bind the role on a single secret to the ESO controller ServiceAccount, using the direct principal method from [[gke-workload-identity]]:
 
 ```bash
 export PROJECT_ID="my-project"
 export PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
 export ESO_NS="external-secrets"
 export ESO_KSA="external-secrets"
+export SECRET_ID="payments-db-password"
 
-gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+gcloud secrets add-iam-policy-binding "${SECRET_ID}" \
+  --project "${PROJECT_ID}" \
   --role="roles/secretmanager.secretAccessor" \
   --member="principal://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${PROJECT_ID}.svc.id.goog/subject/ns/${ESO_NS}/sa/${ESO_KSA}" \
   --condition=None
 ```
 
-Prefer a resource-level or conditional binding (for example an IAM condition on the secret name prefix) over project-wide access when several teams share a project. If your environment needs a Google service account instead, annotate the controller's ServiceAccount through the chart values (`serviceAccount.annotations`) and use the impersonation method.
+Repeat per secret, or use a project-level binding in a dedicated secrets project used only by this store. A project-wide binding is only acceptable when the project holds nothing but this store's secrets. If your environment needs a Google service account instead, annotate the controller's ServiceAccount through the chart values (`serviceAccount.annotations`) and use the impersonation method.
 
 ## ClusterSecretStore
 
@@ -86,7 +88,7 @@ Older installs serve `external-secrets.io/v1beta1` with the same fields; newer o
 
 With the direct principal method, some ESO versions let you omit `auth` and fall back to Application Default Credentials, which resolve to the controller Pod's own federated identity. Test this on a non-production cluster first; the explicit `workloadIdentity` block is the safe default.
 
-### Restrict who can use a ClusterSecretStore
+### Restrict which namespaces can reference a ClusterSecretStore
 
 A ClusterSecretStore is usable from any namespace unless you say otherwise. Restrict it:
 
@@ -111,6 +113,8 @@ spec:
             name: external-secrets
             namespace: external-secrets
 ```
+
+The example points at a separate `payments-secrets` project; the isolation comes from that project boundary and the controller's IAM on it, not from conditions. Any other store the controller can use could read the same project if granted.
 
 For hard isolation use one SecretStore per tenant namespace, each pointing at a separate GCP project or at a tenant-specific KSA with narrower IAM. Namespace conditions alone only stop a namespace from _referencing_ the store; IAM is what stops the data leaving the project.
 

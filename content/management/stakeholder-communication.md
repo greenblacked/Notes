@@ -1,6 +1,6 @@
 ---
 title: Stakeholder communication
-description: Communicating up and across as a DevOps lead, with copy-paste templates for status updates, incident comms, RFC summaries, migration expectations and risk registers.
+description: Communicating up and across as a DevOps lead, with templates for status updates, incident comms, RFC summaries, migration expectations and risk registers.
 type: guide
 tags:
   - management
@@ -32,10 +32,12 @@ Platform team, week of 12 Oct
 Status: AMBER (GKE upgrade slipped 1 week, see below)
 Shipped: pipeline template v3 rolled out to 9 of 14 services; runner autoscaling in staging
 Next: upgrade staging clusters; start Terraform provider bump
-Risks: Kubernetes 1.x EOL date in Dec, upgrade needs 3 more weeks of capacity
+Risks: <cluster version> reaches end of support on <date>, upgrade needs 3 more weeks of capacity
 Need: decision by Friday on whether we defer the Jenkins decommission to Q1
 Metrics: pages 11 (last week 17), out-of-hours 2; lead time stable
 ```
+
+Text in `<angle brackets>` is a placeholder.
 
 ```text title="Email: weekly status (full version)"
 Subject: Platform team status, week of 12 October (amber)

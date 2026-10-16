@@ -73,12 +73,14 @@ An EM is not a promotion from senior engineer; it is a different job with differ
 
 Evidence is concrete, observable and dated. Collect it over the whole period, not in the week before the review.
 
-| Level                    | Typical evidence                                                                                                                                                                                                                                                            |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Engineer to senior       | Designed and shipped the migration of a pipeline from Jenkins to GitLab CI ([[gitlab-ci-vs-jenkins]]) with zero failed releases. Became owner of the artifact promotion flow. Reduced mean time to restore for the service from 40 to 15 minutes. Mentored two new joiners. |
-| Senior to staff          | Led the multi-quarter GKE fleet upgrade across five teams, with a published runbook ([[gke-cluster-upgrade]]). Removed a recurring class of incidents through a platform default. Wrote the RFC that three teams adopted.                                                   |
-| Engineer meeting the bar | Merged changes with few review rounds. Handled shadowed on-call incidents correctly and improved a runbook.                                                                                                                                                                 |
-| EM readiness             | Ran a retrospective that changed team practice. Delegated successfully. Handled a difficult conversation well. Understands budget and planning basics.                                                                                                                      |
+| Level                    | Typical evidence                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Engineer to senior       | Designed and shipped the migration of a pipeline from Jenkins to GitLab CI ([[gitlab-ci-vs-jenkins]]) with zero failed releases. Became owner of the artifact promotion flow. Built the alerting and runbook changes that helped the team cut recovery time for the service from 40 to 15 minutes (team metric, used as context). Mentored two new joiners. |
+| Senior to staff          | Led the multi-quarter GKE fleet upgrade across five teams, with a published runbook ([[gke-cluster-upgrade]]). Removed a recurring class of incidents through a platform default. Wrote the RFC that three teams adopted.                                                                                                                                   |
+| Engineer meeting the bar | Merged changes with few review rounds. Handled shadowed on-call incidents correctly and improved a runbook.                                                                                                                                                                                                                                                 |
+| EM readiness             | Ran a retrospective that changed team practice. Delegated successfully. Handled a difficult conversation well. Understands budget and planning basics.                                                                                                                                                                                                      |
+
+Team and service metrics such as DORA numbers are context for an individual's contribution, never individual scores; see [[dora-metrics]].
 
 Not evidence: hours worked, number of commits, being busy during incidents, tool certifications on their own.
 
@@ -90,6 +92,43 @@ Not evidence: hours worked, number of commits, being busy during incidents, tool
 4. **Calibrate** with other managers. Compare cases against the same bar, particularly for people who work quietly or on glue work like documentation and on-call improvements, which is easy to undervalue.
 5. **Decide twice a year**, not ad hoc, so that decisions are comparable.
 6. **Feedback after a "not yet"** must be specific: which dimension, what evidence would change the answer, and a date to revisit. See [[performance-feedback]].
+
+A template for the case in step 3:
+
+```markdown title="promotion-case.md"
+## Promotion case: <candidate>
+
+- Candidate: <name>
+- Current level: <level>
+- Proposed level: <level>
+- Date: <yyyy-mm-dd>
+
+### Summary
+
+<Three sentences: what the candidate does at the proposed level, the main impact, and the recommendation.>
+
+### Evidence per ladder dimension
+
+For each of technical scope, operational ownership, influence and leadership, communication: three to five dated examples with links.
+
+- <yyyy-mm-dd>: <what was done and what it changed> (<link to MR, ADR or incident>)
+
+### Scope and impact
+
+<Teams, services and outcomes affected, and for how long.>
+
+### Gaps and how they are being addressed
+
+<Honest gaps against the proposed level, with the plan and date to review.>
+
+### Peer and stakeholder input
+
+<Short quotes or summaries, with who gave them.>
+
+### Manager recommendation
+
+<Promote now / promote at <date> / not yet, with the reasoning.>
+```
 
 > [!warning] Beware of promotion by hero work
 > Rewarding only people who rescue outages encourages fragile systems. Weight prevention, documentation and operability work equally with fire-fighting.

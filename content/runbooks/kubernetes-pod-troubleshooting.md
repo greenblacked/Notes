@@ -214,7 +214,7 @@ Watch restarts for at least one back-off window (five minutes) before declaring 
 
 Changes made while troubleshooting are small; undo the one you made.
 
-- Resource or config change applied with `kubectl edit` or `patch`: revert with `kubectl rollout undo deployment/my-app -n "$NS"`, then check `kubectl rollout status`. `rollout undo` only reverts the pod template, not a ConfigMap, Secret or Service. In a GitOps setup, revert the commit instead, otherwise the controller overwrites your manual change; see [[argocd-vs-flux]].
+- Resource or config change applied with `kubectl edit` or `patch`: revert with `kubectl rollout undo deployment/my-app -n "$NS"`, then check `kubectl rollout status`. `rollout undo` only reverts the pod template, not a ConfigMap, Secret or Service. In a GitOps setup, revert the commit instead, otherwise the controller overwrites your manual change; see [[helm-release-rollback#6. GitOps: Argo CD manages the release|the GitOps section of Helm release rollback]] and [[argocd-sync-failure-and-drift]].
 - Debug copies and node debug pods: delete them as shown above.
 - Deleted pods are recreated by their controller; a bare pod without one is gone for good, so export it first with `kubectl get pod "$POD" -n "$NS" -o yaml > pod-backup.yaml`.
 

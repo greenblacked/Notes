@@ -1,6 +1,6 @@
 ---
 title: Zero-downtime deployments on Kubernetes
-description: Rolling update settings, probes, graceful shutdown, PodDisruptionBudgets, GCP load balancer draining and expand/contract migrations, with a verification checklist.
+description: Rolling update settings, probes, graceful shutdown, PodDisruptionBudgets, GCP load balancer draining and expand/contract migrations, with a checklist.
 type: pattern
 tags:
   - patterns

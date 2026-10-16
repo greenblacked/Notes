@@ -1,6 +1,6 @@
 ---
 title: TLS certificate renewal
-description: Find certificate expiry, renew with cert-manager, debug Certificate, Order and Challenge objects, handle Google-managed certificates on GKE, and alert before expiry.
+description: Find certificate expiry, renew with cert-manager, debug Certificate, Order and Challenge objects, handle Google-managed GKE certificates, alert before expiry
 type: runbook
 tags:
   - runbooks
@@ -85,14 +85,15 @@ cmctl status certificate "$CERT" -n "$NS"
 cmctl renew "$CERT" -n "$NS"          # force a new issuance now
 ```
 
-Without it, delete the Secret (cert-manager reissues) or trigger via annotation-free means such as `kubectl delete secret`:
+Without `cmctl`, delete the Secret only when the certificate is already expired or unusable and you have a backup; cert-manager then issues a new one. Do not use deletion as routine renewal: the ingress serves no or a default certificate until issuance completes.
 
 ```bash
-kubectl get secret "$CERT" -n "$NS" -o yaml > "$CERT-secret-backup.yaml"   # backup first
+(umask 077; kubectl get secret "$CERT" -n "$NS" -o yaml > "$CERT-secret-backup.yaml")   # backup first
 kubectl delete secret "$CERT" -n "$NS"
 ```
 
-Deleting the Secret removes the live certificate until reissue completes; do this only if the current certificate is already expired or unusable, and not as a routine renewal.
+> [!warning] The backup contains the private key
+> Create it with `umask 077`, keep it out of git, tickets and chat, and delete it (`shred` or `rm`) once the new certificate is confirmed.
 
 ### 3. cert-manager: debug a failing issuance
 
@@ -145,7 +146,7 @@ You cannot renew a Google-managed certificate on demand. If one fails, fix DNS o
 For a certificate you hold yourself (commercial CA, internal CA), issue the new certificate and chain, then update the Secret or load balancer:
 
 ```bash
-kubectl get secret "$CERT" -n "$NS" -o yaml > "$CERT-secret-backup.yaml"
+(umask 077; kubectl get secret "$CERT" -n "$NS" -o yaml > "$CERT-secret-backup.yaml")   # contains the private key, see the warning above
 kubectl create secret tls "$CERT" -n "$NS" --cert=fullchain.pem --key=privkey.pem \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
@@ -175,6 +176,7 @@ groups:
         for: 1h
         labels:
           severity: warning
+          route: ticket # to the owning team's queue, with a named owner
         annotations:
           summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in under 14 days"
       - alert: CertificateNotReady
@@ -193,7 +195,7 @@ groups:
           summary: "TLS certificate for {{ $labels.instance }} expires in under 7 days"
 ```
 
-Because auto-renewal normally happens a third of the way before expiry, an alert at 14 days means renewal has already failed for a long time, so route it to a person. For burn-rate style alerting on user-visible failures, see [[slo-burn-rate-alerting]], and for the Prometheus side see [[prometheus-vs-cloud-monitoring]].
+Because auto-renewal normally happens a third of the way before expiry, an alert at 14 days means renewal has already failed for a long time, so route it to the owning team's queue with an owner within one working day. The `route: ticket` label is an example; match it to your Alertmanager routing, and keep the 7-day probe alert as a page. For burn-rate style alerting on user-visible failures, see [[slo-burn-rate-alerting]], and for the Prometheus side see [[prometheus-vs-cloud-monitoring]].
 
 ## Validation
 

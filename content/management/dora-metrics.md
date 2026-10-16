@@ -68,10 +68,21 @@ GITLAB_URL="https://gitlab.example.com"
 PROJECT_ID="1234"
 TOKEN="${GITLAB_TOKEN:?set GITLAB_TOKEN}"
 SINCE="2026-09-01T00:00:00Z"
+PER_PAGE=100
 
-curl --silent --header "PRIVATE-TOKEN: ${TOKEN}" \
-  "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/deployments?environment=production&status=success&updated_after=${SINCE}&per_page=100" \
-  | jq -r '.[] | [.id, .created_at, .deployable.commit.id] | @tsv'
+set -euo pipefail
+HEADERS="$(mktemp)"
+trap 'rm -f "${HEADERS}"' EXIT
+
+# check the deployments API docs for your GitLab version for filter and ordering requirements on updated_after
+page=1
+while [ -n "${page}" ]; do
+  curl --silent --show-error --fail --header "PRIVATE-TOKEN: ${TOKEN}" \
+    --dump-header "${HEADERS}" \
+    "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/deployments?environment=production&status=success&updated_after=${SINCE}&per_page=${PER_PAGE}&page=${page}" \
+    | jq -r '.[] | [.id, .created_at, .deployable.commit.id] | @tsv'
+  page="$(awk -F': ' 'tolower($1)=="x-next-page" {print $2}' "${HEADERS}" | tr -d '\r')"
+done
 ```
 
 Lead time is the difference between the commit timestamp and the successful deployment timestamp for that commit. GitLab also offers DORA metrics in its analytics, which depend on your edition and settings, so check the current documentation for what is available to you. For pipeline layout that makes events reliable see [[gitlab-ci-pipeline-structure]].
@@ -95,7 +106,7 @@ Whichever CI you use, send the same event shape to one place (a database or BigQ
 
 ## Failures and recovery from incident data
 
-Throughput comes from CI. Instability comes from incidents.
+Deployment frequency and change lead time come from CI. Change failure rate and deployment rework rate come from incident data. Failed deployment recovery time is grouped with throughput in the table above, but it is measured from incident or failed-deployment records.
 
 - Record in each incident ticket the **service** and the **triggering change** (commit or deployment ID), if there was one.
 - Failure rate for a period is deployments linked to an incident, rollback or hotfix, divided by all deployments.
@@ -105,7 +116,7 @@ Throughput comes from CI. Instability comes from incidents.
 
 ## Benchmarks
 
-DORA's annual State of DevOps reports have grouped teams into performance tiers by these metrics. The groupings and thresholds have changed between years, and the clusters are derived from that year's survey. So:
+Past annual DORA reports grouped teams into performance tiers (elite, high, medium, low). The groupings, thresholds and even the report format have changed between editions, including in recent years, so check the current report at [dora.dev](https://dora.dev/) before quoting it. The clusters are derived from that year's survey. So:
 
 - Quote the report and year, never a bare number. Read the current one at [dora.dev](https://dora.dev/).
 - Use the tiers as a rough compass for direction, not a target to hit.

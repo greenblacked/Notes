@@ -119,11 +119,40 @@ Use directories for long-lived environments. Use workspaces only for ephemeral c
 
 The flow: every merge request runs `fmt`, `validate`, lint and `plan`, and posts the plan; merging to the default branch re-plans and requires a manual job to apply the exact saved plan. Applying a saved plan file means what was reviewed is what runs. The structure of the pipeline follows [[gitlab-ci-pipeline-structure]].
 
+> [!info] Check the WIF wiring against current docs
+> The Workload Identity Federation wiring below follows the GitLab and Google Cloud WIF documentation. Check both for the current flags and token claims before copying it.
+
+The credential config file tells Google's auth libraries where the OIDC token file is and which service account to impersonate. It holds no secret, so generate it once per service account, outside the Terraform jobs (the `hashicorp/terraform` image has no `gcloud`), and commit the result:
+
+```bash
+# Placeholders: replace with your own values.
+GCP_PROJECT_NUMBER="123456789012"
+WIF_POOL="gitlab-pool"
+WIF_PROVIDER="gitlab-provider"
+PLAN_SA="tf-plan@my-project.iam.gserviceaccount.com"
+APPLY_SA="tf-apply@my-project.iam.gserviceaccount.com"
+
+for ROLE in plan apply; do
+  SA_VAR="${ROLE^^}_SA"   # PLAN_SA or APPLY_SA
+  gcloud iam workload-identity-pools create-cred-config \
+    "projects/${GCP_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${WIF_POOL}/providers/${WIF_PROVIDER}" \
+    --service-account="${!SA_VAR}" \
+    --credential-source-file=/tmp/oidc_token \
+    --output-file="ci/gcp-${ROLE}-creds.json"
+done
+```
+
+Check the flags with `gcloud iam workload-identity-pools create-cred-config --help`. The file stores the token path literally, so use a fixed absolute path that every job writes to (`/tmp/oidc_token` here). The Terraform jobs then only write the job's OIDC token to that path:
+
 ```yaml title=".gitlab-ci.yml"
 variables:
   TF_IMAGE: hashicorp/terraform:1.9
   TF_DIR: live/production/gke
   TF_IN_AUTOMATION: "true"
+  # Placeholders: replace with your own values.
+  GCP_PROJECT_NUMBER: "123456789012"
+  WIF_POOL: gitlab-pool
+  WIF_PROVIDER: gitlab-provider
 
 stages: [validate, plan, apply]
 
@@ -131,13 +160,22 @@ stages: [validate, plan, apply]
   image:
     name: $TF_IMAGE
     entrypoint: [""]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://iam.googleapis.com/projects/${GCP_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${WIF_POOL}/providers/${WIF_PROVIDER}
   before_script:
+    # Each job sets $GCP_CRED_FILE to the committed credential config of the
+    # service account it should impersonate (generated with the command above).
+    - echo "$GITLAB_OIDC_TOKEN" > /tmp/oidc_token
+    - export GOOGLE_APPLICATION_CREDENTIALS="$CI_PROJECT_DIR/$GCP_CRED_FILE"
     - cd "$TF_DIR"
     - terraform init -input=false
 
 validate:
   extends: .terraform
   stage: validate
+  variables:
+    GCP_CRED_FILE: ci/gcp-plan-creds.json
   script:
     - terraform fmt -check -recursive
     - terraform validate
@@ -145,19 +183,33 @@ validate:
 plan:
   extends: .terraform
   stage: plan
+  variables:
+    GCP_CRED_FILE: ci/gcp-plan-creds.json
+  # The plan identity must be read-only (for example roles/viewer plus storage
+  # object read on the state bucket). The WIF provider attribute condition must
+  # restrict which projects and branches can use each service account.
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
     - terraform plan -input=false -out=tfplan
     - terraform show -json tfplan > tfplan.json
   artifacts:
+    # check the artifacts:access values your GitLab version supports
+    access: developer
     paths:
       - $TF_DIR/tfplan
       - $TF_DIR/tfplan.json
-    expire_in: 1 week
+    expire_in: 1 day
 
 apply:
   extends: .terraform
   stage: apply
   needs: [plan]
+  variables:
+    GCP_CRED_FILE: ci/gcp-apply-creds.json
+  # The apply service account's WIF binding must be restricted to protected
+  # default-branch pipelines (attribute condition on ref_protected / ref).
   script:
     - terraform apply -input=false tfplan
   resource_group: production-gke
@@ -173,7 +225,7 @@ apply:
 - A plan goes stale: if state changes between plan and apply, `apply tfplan` refuses to run. That is the desired behaviour; re-run the pipeline.
 - Use `resource_group` so two pipelines cannot apply to the same state at once, in addition to the backend lock.
 - For many components, generate one job per directory with `rules:changes` or a parent-child pipeline, and order dependent layers with `needs`.
-- Authenticate to Google Cloud with short-lived credentials from GitLab OIDC through Workload Identity Federation, not a downloaded service account key. The pattern is the same as [[gke-workload-identity]] but for CI.
+- The example authenticates to Google Cloud with short-lived credentials from GitLab OIDC through Workload Identity Federation, with separate plan and apply identities, not a downloaded service account key. The idea is the same as [[gke-workload-identity]] but for CI.
 - GitLab also offers a managed Terraform state backend over HTTP. It is a valid alternative, but the GCS layout above keeps state inside your own GCP projects and IAM.
 
 ## Drift detection
@@ -207,6 +259,15 @@ Run these in the merge request before the plan is approved:
 - Cross-state references with `terraform_remote_state` create hidden coupling. Prefer passing values explicitly or reading them with data sources.
 - Renaming a resource without a `moved` block destroys and recreates it. Use `moved` blocks for refactors and review plans for any `destroy`.
 - Provider upgrades mixed with feature changes. Upgrade in isolation.
+
+## Verify
+
+- A merge request pipeline shows a `plan` job with the planned changes and no apply job.
+- A default-branch pipeline shows a manual `apply` job bound to the plan from the same pipeline.
+
+## Rollback
+
+Revert the merge request and re-apply through the same pipeline. If state itself is damaged, see [[terraform-state-recovery]].
 
 ## Related
 

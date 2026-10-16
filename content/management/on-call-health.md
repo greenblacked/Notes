@@ -62,7 +62,13 @@ groups:
   - name: checkout-slo
     rules:
       - alert: CheckoutErrorBudgetBurnFast
+        # 0.001 is the error budget of a 99.9% SLO (1 - 0.999)
         expr: |
+          (
+            sum(rate(http_requests_total{service="checkout",code=~"5.."}[1h]))
+            / sum(rate(http_requests_total{service="checkout"}[1h]))
+          ) > (14.4 * 0.001)
+          and
           (
             sum(rate(http_requests_total{service="checkout",code=~"5.."}[5m]))
             / sum(rate(http_requests_total{service="checkout"}[5m]))
@@ -75,7 +81,7 @@ groups:
           runbook_url: https://wiki.example.com/runbooks/checkout-errors
 ```
 
-The metric name, objective and burn factor here are examples. Derive yours from the SLO method in [[slo-burn-rate-alerting]]. For tooling background see [[prometheus-vs-cloud-monitoring]].
+The rule assumes a 99.9% SLO over 30 days (error budget 0.001); the 1h window keeps it from firing on short blips and the 5m window lets it resolve quickly. Copy the full rule set (page and ticket tiers) from [[slo-burn-rate-alerting]] rather than re-deriving it. For tooling background see [[prometheus-vs-cloud-monitoring]].
 
 ## Measuring load
 
@@ -89,7 +95,7 @@ You cannot manage what you do not count. Export alert history from your paging t
 - **Toil during the shift:** time spent on manual, repeatable work. Ask the engineer to log it in the handover.
 - **Load per person** over a quarter, to spot imbalance.
 
-Choose thresholds with your team and write them down. Many teams adopt a target on the order of a small number of incidents per shift, but pick yours from your own data and review it. Report the numbers in the weekly status, see [[stakeholder-communication]]. If load stays over the threshold, treat reliability work as the top roadmap item in [[planning-and-prioritization]].
+Choose thresholds with your team and write them down. Start from your own data: take last quarter's median pages per shift and out-of-hours pages per person, set the threshold at or below that, write it down, and review it each quarter. Report the numbers in the weekly status, see [[stakeholder-communication]]. If load stays over the threshold, treat reliability work as the top roadmap item in [[planning-and-prioritization]].
 
 ## Handover template
 
