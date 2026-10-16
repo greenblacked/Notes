@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - security
 created: 2026-10-10
-modified: 2026-10-10
+modified: 2026-10-16
 draft: false
 aliases:
   - workload-identity
@@ -102,8 +102,8 @@ gcloud container node-pools update "${NODE_POOL}" \
   --workload-metadata=GKE_METADATA
 ```
 
-> [!note] Node pools are recreated
-> Changing the workload metadata mode on an existing node pool triggers a rolling update of its nodes. Plan for the disruption, and set sensible PodDisruptionBudgets first.
+> [!note] Nodes are recreated
+> Changing the workload metadata mode on an existing node pool recreates its nodes (a rolling update), so Pods are evicted. Plan for the disruption, and set sensible PodDisruptionBudgets first (see [[zero-downtime-deployments-kubernetes]]). Enabling the workload pool on an existing cluster can also roll node pools on Standard clusters, so do both in one maintenance window.
 
 ## Create the Kubernetes ServiceAccount
 
@@ -215,15 +215,17 @@ If `gcloud auth list` shows the node's Compute Engine default service account, t
 
 ## Troubleshooting
 
-| Symptom                                                                   | Likely cause and fix                                                                                                                      |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Pod authenticates as the node's default service account                   | Node pool is not on `GKE_METADATA`, or the Pod runs on a node pool that was not updated. Re-check the node pool mode.                     |
-| `403 Permission 'iam.serviceAccounts.getAccessToken' denied` (GSA method) | Missing or wrong `roles/iam.workloadIdentityUser` binding. Namespace and KSA name in `PROJECT_ID.svc.id.goog[ns/ksa]` are case-sensitive. |
-| `403` on the target API (direct principal method)                         | Role not bound to the `principal://` identifier, wrong project number, or the product does not support federated principals.              |
-| It worked a minute ago, now fails after a change                          | IAM changes can take a few minutes to propagate. Retry with backoff.                                                                      |
-| No credentials at all inside the Pod                                      | The Pod uses `hostNetwork: true`, which bypasses the GKE metadata server. Run it on the Pod network.                                      |
-| Pod uses the wrong KSA                                                    | `spec.serviceAccountName` unset, so the Pod uses `default` in its namespace.                                                              |
-| Client library ignores metadata and uses a key file                       | `GOOGLE_APPLICATION_CREDENTIALS` is set. Unset it so Application Default Credentials fall through to the metadata server.                 |
+| Symptom                                                                   | Likely cause and fix                                                                                                                                                      |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pod authenticates as the node's default service account                   | Node pool is not on `GKE_METADATA`, or the Pod runs on a node pool that was not updated. Re-check the node pool mode.                                                     |
+| `403 Permission 'iam.serviceAccounts.getAccessToken' denied` (GSA method) | Missing or wrong `roles/iam.workloadIdentityUser` binding. Namespace and KSA name in `PROJECT_ID.svc.id.goog[ns/ksa]` are case-sensitive.                                 |
+| `403` on the target API (direct principal method)                         | Role not bound to the `principal://` identifier, wrong project number, or the product does not support federated principals.                                              |
+| It worked a minute ago, now fails after a change                          | IAM changes can take a few minutes to propagate. Retry with backoff.                                                                                                      |
+| First call after a Pod or node starts fails, later calls succeed          | The metadata server can be briefly unavailable on a new node. Retry in the client, or have the entrypoint wait for the first token.                                       |
+| Calls time out only when a NetworkPolicy or default-deny egress is active | The Pod must still reach the GKE metadata server. Allow that egress explicitly; check the current GKE docs for the address and port. See [[kubernetes-network-policies]]. |
+| No credentials at all inside the Pod                                      | The Pod uses `hostNetwork: true`, which bypasses the GKE metadata server. Run it on the Pod network.                                                                      |
+| Pod uses the wrong KSA                                                    | `spec.serviceAccountName` unset, so the Pod uses `default` in its namespace.                                                                                              |
+| Client library ignores metadata and uses a key file                       | `GOOGLE_APPLICATION_CREDENTIALS` is set. Unset it so Application Default Credentials fall through to the metadata server.                                                 |
 
 Useful checks:
 
@@ -241,4 +243,7 @@ kubectl get serviceaccount "${KSA}" --namespace "${NAMESPACE}" -o yaml
 ## Related
 
 - [[0001-gitops-with-argocd]]: apply the ServiceAccount and annotation through Git rather than by hand.
+- [[external-secrets-with-secret-manager]]: use this identity to read Secret Manager instead of mounting keys.
+- [[kubernetes-network-policies]]: egress rules must still allow the metadata server.
+- [[leaked-credential-rotation]]: what to do if a service account key already leaked, the case this pattern avoids.
 - [[writing-notes]]: how these notes are structured.
