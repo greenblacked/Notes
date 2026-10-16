@@ -38,13 +38,23 @@ PROJECT="my-dev-project"
 CLUSTER="dev-cluster"
 REGION="europe-west1"
 NAMESPACE="platform-dev"
+PROD_PROJECT="my-prod-project"
+PROD_CLUSTER="prod-cluster"
+PROD_NAMESPACE="platform"
 
-gcloud auth list
+gcloud config get-value account   # expect: the joiner's own address
 gcloud container clusters get-credentials "$CLUSTER" --region "$REGION" --project "$PROJECT"
-kubectl auth can-i get pods -n "$NAMESPACE"
-kubectl auth can-i delete pods -n "$NAMESPACE"
-kubectl auth can-i get secrets -n "$NAMESPACE"
+kubectl auth can-i get pods -n "$NAMESPACE"      # expect: yes
+kubectl auth can-i delete pods -n "$NAMESPACE"   # expect: yes or no per team policy (here: yes in dev)
+kubectl auth can-i get secrets -n "$NAMESPACE"   # expect: no, unless the role requires it
+
+# Production: the joiner must not be able to write
+gcloud container clusters get-credentials "$PROD_CLUSTER" --region "$REGION" --project "$PROD_PROJECT"
+kubectl auth can-i create deployments -n "$PROD_NAMESPACE"   # expect: no
+kubectl auth can-i delete pods -n "$PROD_NAMESPACE"          # expect: no
 ```
+
+If the production `get-credentials` call fails for lack of access, that also counts as a pass. Any yes on production before the milestones below is a defect in the IAM change; fix it before day one.
 
 Also prepare: a starter ticket, a buddy, the first-week calendar, and a welcome message that tells them where to be and when.
 

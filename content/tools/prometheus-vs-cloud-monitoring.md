@@ -77,7 +77,7 @@ Do not guess; use the calculators.
 - **GMP and Cloud Monitoring:** priced on usage, such as samples ingested and API reads; the dimensions and rates change. See the [Google Cloud Observability pricing page](https://cloud.google.com/stackdriver/pricing).
 - **High cardinality is the cost driver in all three.** Labels such as user ID, pod name with unbounded churn or full URL paths multiply series. Drop or aggregate them at scrape time with relabelling.
 
-Estimate before migrating: count active series (`count({__name__=~".+"})` on an existing Prometheus), scrape interval and number of clusters, then put those into the pricing calculator.
+Estimate before migrating: count active series (`sum(prometheus_tsdb_head_series)`, the active series in each server's head block; sum across your Prometheus servers; avoid `count({__name__=~".+"})`, which touches every series and is expensive on large servers), scrape interval and number of clusters, then put those into the pricing calculator.
 
 ## Alerting
 

@@ -90,7 +90,7 @@ If the plan is too large to read, the change is too large: split it.
 ## Approval rules
 
 - At least one approval from a code owner for the path (`CODEOWNERS`); authors cannot approve their own MR.
-- Two approvals for High-risk changes (IAM, networking, production data stores, pipeline definitions that affect all projects).
+- Two approvals for High-risk MRs (IAM, networking, production data stores, pipeline definitions that affect all projects). This is separate from the change classes in [[production-change-checklist]]: a High change class always counts as a High-risk MR, but an MR touching IAM, networking, production data stores or shared pipeline definitions is High-risk even when its change class is lower.
 - New commits after approval reset approvals for protected branches.
 - Merge only with the pipeline green. No bypass except documented emergencies with later review.
 - The author merges or triggers the deploy, so someone is present when it lands.

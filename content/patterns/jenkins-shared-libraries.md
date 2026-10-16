@@ -81,9 +81,7 @@ def call(Map config = [:]) {
             sh '''
               set +x
               mvn -B -ntp jib:build \
-                -Djib.to.image="${IMAGE}" \
-                -Djib.to.auth.username="${REG_USER}" \
-                -Djib.to.auth.password="${REG_PASS}"
+                -Djib.to.image="${IMAGE}"
             '''.stripIndent()
           }
         }
@@ -101,7 +99,24 @@ def call(Map config = [:]) {
 }
 ```
 
-This sketch assumes the Maven project configures the Jib plugin and that `IMAGE` is set in the environment; adapt it to your build.
+This sketch assumes the Maven project configures the Jib plugin and that `IMAGE` is set in the environment; adapt it to your build. The registry credentials are not on the command line. The `jib-maven-plugin` reads them from the environment through Maven's `${env.NAME}` interpolation:
+
+```xml title="pom.xml (jib excerpt)"
+<plugin>
+  <groupId>com.google.cloud.tools</groupId>
+  <artifactId>jib-maven-plugin</artifactId>
+  <configuration>
+    <to>
+      <auth>
+        <username>${env.REG_USER}</username>
+        <password>${env.REG_PASS}</password>
+      </auth>
+    </to>
+  </configuration>
+</plugin>
+```
+
+`withCredentials` still sets `REG_USER` and `REG_PASS` as environment variables for the block, so they never appear in the argument list. Values passed as `-D` flags are visible in the process list of the agent; environment variables read by the build are not. Jib also supports Docker credential helpers; check the Jib docs for the options in the plugin version you use, and pin that version in the `pom.xml`.
 
 ## Versioning the library
 
@@ -157,7 +172,7 @@ spec:
         limits:
           memory: 2Gi
     - name: helm
-      image: alpine/helm:latest
+      image: alpine/helm:<tested-version>@sha256:<digest> # pin to a tested tag and digest
       command: ["sleep"]
       args: ["infinity"]
       resources:
@@ -173,7 +188,7 @@ Notes:
 - The plugin adds a `jnlp` container to each pod to connect back to the controller; you do not declare it unless you want to override it.
 - Containers that do work must stay alive. `sleep infinity` keeps them running; the pipeline runs commands in them with `container('name') { ... }` or via `defaultContainer`.
 - Set requests and limits on every container, or builds will be scheduled as best effort and evicted first. Sizing guidance is in [[kubernetes-resource-requests-and-limits]].
-- Pin image tags; `latest` is shown here only to keep the example short.
+- Pin image tags and digests, never `latest`; the tag in the example is a placeholder. [[automated-dependency-updates]] covers keeping the pins current.
 - Give the agent a dedicated Kubernetes ServiceAccount and use Workload Identity Federation for Google Cloud access instead of key files; see [[gke-workload-identity]].
 
 ## Credentials
@@ -203,6 +218,15 @@ JenkinsPipelineUnit cannot execute real steps, so treat it as a check of your ow
 - **Unpinned library.** The most common cause of "the pipeline broke and nothing changed in my repo".
 - **Controller load.** Heavy Groovy and string processing run on the controller. Push work into `sh` steps on agents.
 - **Secrets in parameters.** Build parameters are visible in the UI and logs. Use credentials, not string parameters, for secrets.
+
+## Verify
+
+- A test job loads the library at the branch under review (`@Library('platform-lib@<branch>') _`).
+- A sample pipeline that uses the library runs green on a non-production Jenkins.
+
+## Rollback
+
+Pin consumers back to the previous library tag with `@Library('platform-lib@<previous-tag>') _`, or reset the global default version in Manage Jenkins to that tag.
 
 ## Related
 

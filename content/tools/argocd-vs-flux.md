@@ -24,7 +24,7 @@ Both [Argo CD](https://argo-cd.readthedocs.io/) and [Flux](https://fluxcd.io/) a
 | ---------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
 | Architecture     | A small set of components: API server, repo server, application controller     | A toolkit of controllers (source, kustomize, helm, notification, image automation) |
 | Core resources   | `Application`, `ApplicationSet`, `AppProject`                                  | `GitRepository`, `OCIRepository`, `HelmRepository`, `Kustomization`, `HelmRelease` |
-| User interface   | First-party web UI and CLI with live resource tree, diff and sync              | No UI in core Flux; Flux CLI, plus the Flux Operator web UI and community UIs[^ui] |
+| User interface   | First-party web UI and CLI with live resource tree, diff and sync              | No UI in core Flux; Flux CLI, plus the Flux Operator web UI and community UIs      |
 | Multi-cluster    | One instance manages many registered clusters (hub and spoke)                  | Typically one Flux per cluster; remote clusters possible via kubeconfig            |
 | Multi-tenancy    | `AppProject` limits repos, destinations and resource kinds; RBAC               | Namespaced tenants with `serviceAccountName` impersonation on reconciliation       |
 | Helm             | Renders charts to manifests and applies them; Helm release not tracked by Helm | Runs real Helm releases through the Helm controller                                |
@@ -33,6 +33,8 @@ Both [Argo CD](https://argo-cd.readthedocs.io/) and [Flux](https://fluxcd.io/) a
 | Image automation | Separate project (Argo CD Image Updater)                                       | Built-in image reflector and automation controllers                                |
 | Drift handling   | Detects and shows diff; self-heal optional                                     | Reconciles on an interval; drift corrected on each run                             |
 | SSO / RBAC       | Built in (OIDC, Dex), project-scoped RBAC                                      | Uses Kubernetes RBAC; no separate user model                                       |
+
+Flux has no UI in core; the Flux Operator ships one.[^ui]
 
 ## Where Argo CD is stronger
 

@@ -60,18 +60,22 @@ Use a transparent score that your team can recompute. A simple one:
 | Ongoing interest                    | Negligible      | Noticeable weekly cost                 | Blocks other work                                |
 | Spread (teams or services affected) | One             | Several                                | Most                                             |
 
-Priority = risk x likelihood + interest + spread. Divide by effort to get a "value for effort" ordering, as with RICE in [[planning-and-prioritization]]. Treat anything with a hard deadline separately: schedule backwards from the date, leaving margin for staging, rollout and surprises.
+Priority = (Risk × Likelihood) + Interest + Spread, a range of 3 to 15.
+
+Effort: S = 1, M = 2, L = 3 (or use engineer-weeks consistently). Value for effort = Priority / Effort, as with RICE in [[planning-and-prioritization]]. Treat anything with a hard deadline separately: schedule backwards from the date, leaving margin for staging, rollout and surprises.
 
 Review the scores quarterly. A debt item that is never scored higher than the cut line for a year is a candidate for an explicit decision to accept it. Writing "accepted, because..." is a legitimate outcome.
 
 ### Worked examples
 
-| Item                                 | Risk | Likelihood | Interest | Spread | Effort | Comment                                                                                      |
-| ------------------------------------ | ---- | ---------- | -------- | ------ | ------ | -------------------------------------------------------------------------------------------- |
-| GKE minor version near EOL           | 3    | 3          | 2        | 3      | M      | Hard date. Plan with [[gke-cluster-upgrade]]                                                 |
-| Terraform provider two majors behind | 2    | 2          | 1        | 2      | M      | Do in small steps, read the upgrade guide, plan before apply                                 |
-| Helm chart dependencies unpinned     | 2    | 2          | 2        | 2      | S      | See [[helm-chart-conventions]]                                                               |
-| Hand-made Jenkins jobs               | 2    | 2          | 3        | 2      | L      | Migrate with [[jenkins-shared-libraries]] or move to GitLab CI, see [[gitlab-ci-vs-jenkins]] |
+| Item                                 | Risk | Likelihood | Interest | Spread | Effort | Priority | Value | Comment                                                                                      |
+| ------------------------------------ | ---- | ---------- | -------- | ------ | ------ | -------- | ----- | -------------------------------------------------------------------------------------------- |
+| Helm chart dependencies unpinned     | 2    | 2          | 2        | 2      | S      | 8        | 8.0   | Cheap and broad. See [[helm-chart-conventions]]                                              |
+| GKE minor version near EOL           | 3    | 3          | 2        | 3      | M      | 14       | 7.0   | Hard date. Plan with [[gke-cluster-upgrade]]                                                 |
+| Terraform provider two majors behind | 2    | 2          | 1        | 2      | M      | 7        | 3.5   | Do in small steps, read the upgrade guide, plan before apply                                 |
+| Hand-made Jenkins jobs               | 2    | 2          | 3        | 2      | L      | 9        | 3.0   | Migrate with [[jenkins-shared-libraries]] or move to GitLab CI, see [[gitlab-ci-vs-jenkins]] |
+
+Rows are ordered by Value. The GKE upgrade has a hard date, so schedule it backwards from that date regardless of its place in the order.
 
 The scores are illustrative.
 

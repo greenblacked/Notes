@@ -1,6 +1,6 @@
 ---
 title: Managing conflict
-description: Handling disagreement in technical teams, from tooling wars and design disputes to Dev versus Ops friction, using disagree-and-commit, escalation, ADRs and mediation.
+description: Handling disagreement in technical teams, from tooling wars and design disputes to Dev versus Ops friction, with disagree-and-commit, ADRs and mediation.
 type: guide
 tags:
   - management
@@ -122,4 +122,4 @@ Useful phrases:
 - Regular one-on-ones that surface tension early, see [[one-on-ones]].
 - Review norms agreed by the team: tone, response time, how to disagree in a review.
 - Praise in public, give difficult feedback in private.
-- Rotate responsibilities so that no one owns a grievance alone.
+- Rotate who presents shared decisions and who facilitates retros and design reviews, so one person is not always the one delivering unpopular outcomes or carrying a dispute alone; see [[delegation-and-ownership]].

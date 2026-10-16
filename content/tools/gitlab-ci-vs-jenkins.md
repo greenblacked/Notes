@@ -41,16 +41,23 @@ Jenkins is a self-hosted automation server whose behaviour is assembled from plu
 
 Jenkins Declarative Pipeline is Groovy with a fixed structure; scripted pipelines allow arbitrary code. Reuse is through Shared Libraries (see [[jenkins-shared-libraries]]). The power is real, and so is the risk: Groovy in a Jenkinsfile can do anything, runs in a sandbox with approval friction, and is hard to lint and test.
 
-GitLab pipelines are YAML. Reuse is through `include`, `extends`, hidden jobs and CI/CD components. The model is less expressive but much easier to review and validate (`glab ci lint`, the CI Lint API). Conventions for structuring this are in [[gitlab-ci-pipeline-structure]].
+GitLab pipelines are YAML. Reuse is through `include`, `extends`, hidden jobs and CI/CD components. The model is less expressive but much easier to review and validate (`glab ci lint`, the CI Lint API). Conventions for structuring this are in [[gitlab-ci-pipeline-structure]]. The build job below uses Docker-in-Docker, which needs a privileged runner.
 
 ```yaml title=".gitlab-ci.yml"
 stages: [build, test, deploy]
 
 build:
   stage: build
-  image: docker:27
+  image: docker:cli
+  services:
+    - docker:dind # needs a privileged runner; a rootless builder is the alternative
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
     - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" .
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -69,7 +76,7 @@ Both use ephemeral pods per job, which gives clean workspaces and horizontal sca
 - **GitLab Runner** with the Kubernetes executor creates a pod per job in a namespace you choose. Configure resource requests and limits, a dedicated service account and node selectors in `config.toml` or the Helm chart values. Use separate runners for trusted and untrusted (fork/MR) workloads.
 - **Jenkins** uses the Kubernetes plugin with pod templates (inline in the Jenkinsfile or defined in the controller). The controller itself should run outside the build namespace.
 
-For either, set resource requests and limits on build pods (see [[kubernetes-resource-requests-and-limits]]) and avoid privileged Docker-in-Docker where Kaniko, BuildKit rootless or similar will do.
+For either, set resource requests and limits on build pods (see [[kubernetes-resource-requests-and-limits]]) and avoid privileged Docker-in-Docker where a rootless builder such as BuildKit rootless will do; check the maintenance status of any builder you pick, as some have been archived.
 
 ## Security posture
 

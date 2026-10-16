@@ -43,7 +43,7 @@ Keep it short and specific. Candidates self-select on what you write.
 | Collaboration and values    | 45 minutes       | EM plus a peer from another team | Communication, incident behaviour, feedback                 |
 | Debrief                     | 30 minutes       | All interviewers                 | Decision                                                    |
 
-Keep it to a total of about four to five hours of candidate time and a response within two working days of each stage. Use the same stages and questions for every candidate for the role.
+Keep it to a total of about three and a quarter to three and three-quarter hours of candidate time (intro, exercise, design and collaboration stages) and a response within two working days of each stage. Use the same stages and questions for every candidate for the role.
 
 ## Practical exercise
 

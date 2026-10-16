@@ -29,6 +29,20 @@ Key consequences:
 - **CPU is compressible, memory is not.** CPU pressure slows things down. Memory pressure kills things.
 - **HPA percentages are relative to requests.** A CPU target of 70 percent means 70 percent of the request, so an inflated request makes autoscaling slow to react and a tiny one makes it flap.
 
+### Ephemeral storage
+
+`ephemeral-storage` is a third resource you can request and limit. It covers the container's writable layer, container logs and `emptyDir` volumes that do not use `medium: Memory`. Requests are used for scheduling against the node's allocatable ephemeral storage. A Pod that exceeds its ephemeral-storage limit is evicted by the kubelet, not throttled, and a node under disk pressure evicts Pods too.
+
+```yaml title="deployment.yaml (excerpt)"
+resources:
+  requests:
+    ephemeral-storage: 1Gi # example size
+  limits:
+    ephemeral-storage: 2Gi # example size
+```
+
+The sizes above are examples. Size them from observed usage, and keep large scratch data on a persistent volume or object storage instead.
+
 ## QoS classes
 
 Kubernetes derives a QoS class from the requests and limits. It decides eviction order under node pressure.
@@ -130,6 +144,15 @@ kubectl get vpa my-service --namespace payments -o jsonpath='{.status.recommenda
 
 Recent Kubernetes versions can resize a running container's resources in place without recreating the Pod, but support depends on the version and the cluster; check the current Kubernetes documentation and your GKE version before relying on it.
 
+**Investigating evictions.** If Pods disappear with status `Evicted`, list them and check the node for disk pressure; the steps after that are in [[kubernetes-pod-troubleshooting]]:
+
+```bash
+NODE="gke-platform-1-pool-1-abcd"   # example node name
+
+kubectl get events -A --field-selector reason=Evicted
+kubectl describe node "${NODE}" | grep -A8 Conditions   # look for DiskPressure and MemoryPressure
+```
+
 ## LimitRange and ResourceQuota
 
 These are namespace guardrails. A LimitRange sets defaults and bounds per container so a forgotten spec does not create a BestEffort Pod; a ResourceQuota caps the total a namespace can request.
@@ -190,7 +213,7 @@ A container limit of 1 GiB with `-Xmx1g` will be OOM killed. The JVM also derive
 GOMEMLIMIT=450MiB   # for a 512Mi container limit; leave headroom for non-Go memory
 ```
 
-`GOMAXPROCS` historically defaulted to the number of node CPUs rather than the CPU limit, which causes throttling on large nodes. Either set it to match the limit (for example through the downward API `resourceFieldRef` on `limits.cpu`), use the `automaxprocs` library, or check the release notes of your Go version for built-in cgroup awareness.
+Since Go 1.25, the runtime sets `GOMAXPROCS` from the container CPU limit on Linux when `GOMAXPROCS` is not set explicitly, and updates it if the limit changes; `GODEBUG` settings can turn this off (see the Go 1.25 release notes). On older Go versions set it explicitly (downward API `resourceFieldRef` on `limits.cpu`) or use `automaxprocs`. The runtime does not read the memory limit: set `GOMEMLIMIT` a little below the container memory limit.
 
 **Node.js, Python.** Set the old-space or worker count explicitly (for example `--max-old-space-size`) so it fits inside the memory limit.
 

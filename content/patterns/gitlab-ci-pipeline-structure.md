@@ -124,9 +124,12 @@ stages:
 variables:
   NODE_IMAGE: node:22-alpine
   IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
-  # Pin these to versions you have tested; do not leave them on a floating tag.
-  TRIVY_IMAGE: aquasec/trivy:latest
-  HELM_IMAGE: dtzar/helm-kubectl:latest
+  # Pin these by tag and digest to versions you have tested, in the form
+  # <image>:<tested-version>@sha256:<digest>. Kept current by Renovate, see the note below.
+  # renovate: datasource=docker depName=aquasec/trivy
+  TRIVY_IMAGE: aquasec/trivy:<tested-version>@sha256:<digest>
+  # renovate: datasource=docker depName=dtzar/helm-kubectl
+  HELM_IMAGE: dtzar/helm-kubectl:<tested-version>@sha256:<digest>
   AGENT_CONTEXT: platform/cluster-agents:gke-prod
   CHART: helm/my-service
   NPM_CONFIG_CACHE: $CI_PROJECT_DIR/.npm
@@ -274,6 +277,8 @@ Notes on the example:
 - `--atomic` rolls the release back if the upgrade fails, and `--wait` makes Helm wait for the workload to become ready. See [[helm-release-rollback]] for the manual path.
 - `docker:dind` needs a runner with privileged mode. If your runners are not privileged, use a rootless builder; check the maintenance status of any tool you pick, because some popular builders have been archived.
 - Production deploys use the same image tag as staging. Nothing is rebuilt.
+- `deploy-production` lists only `deploy-staging` in `needs`. That is safe because deploy-staging has no needs and therefore waited for every earlier stage; if you ever add needs to deploy-staging, list the same gates here too.
+- Deploying by tag is shown for brevity. To deploy exactly what was scanned and promoted, capture the digest after push (for example `docker inspect --format "{{index .RepoDigests 0}}" "$IMAGE"`), pass it to later jobs as a dotenv artifact, and deploy by digest if your chart supports it.
 
 ## Pitfalls
 
@@ -281,12 +286,22 @@ Notes on the example:
 - **`needs` and artifacts.** A job with `needs` downloads artifacts only from the jobs it lists. If you list `needs: [build]` and also need artifacts from an earlier stage, list that job too.
 - **`needs` points backwards only.** A job can need jobs in its own or an earlier stage; a job in a later stage makes the pipeline invalid when it is created. Across pipelines, use `trigger` or `needs:pipeline`.
 - **`needs` bypasses checks that are not listed.** Gate jobs (deploys, releases) should either list every job that must pass or have no `needs` at all.
-- **Floating image tags.** `latest` for scan and deploy tools makes pipelines non-reproducible. Pin by tag or digest and update deliberately.
+- **Floating image tags.** This is the site-wide rule: pin tool images by tag and digest, let [[automated-dependency-updates]] open merge requests to bump them, and never use `latest`. Other notes link here for it.
 - **Secrets in `variables:`.** Anything in the YAML is visible to everyone with repo access. Use masked, protected CI/CD variables, or better, short-lived credentials from OIDC (`id_tokens`) and an external secret manager.
 - **Unbounded artifacts and caches.** Missing `expire_in` fills storage; a cache key that never changes serves stale dependencies.
 - **Shared template on `main`.** A breaking change to a template then hits every project. Pin `ref` and release templates like software.
 - **Manual gate without an explicit `allow_failure: false`.** See the warning above.
 - **`rules` with `changes` on new branches.** On the first push of a branch there is no previous commit to compare to, so `changes` can match everything. Use `compare_to` where available and test the behaviour.
+
+## Verify
+
+- The pipeline graph shows the gate: staging deploys only after the earlier stages pass.
+- The staging URL is healthy after `deploy-staging`.
+- The production job stays blocked until someone runs it manually.
+
+## Rollback
+
+Re-run the production deploy job of the last good pipeline, or see [[helm-release-rollback]] for the manual path.
 
 ## Related
 

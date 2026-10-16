@@ -75,7 +75,7 @@ Mirroring: in locked-down environments configure a provider mirror in the CLI co
 
 ## Feature differences
 
-Verify the current list before deciding; this moves with every release. As reported at the time of writing, OpenTofu added state encryption and provider iteration with `for_each` in provider configuration, among others, while Terraform has features such as its own test and ephemeral-value work and HCP Terraform integration. Compare the two changelogs for the versions you would pin.
+Verify the current list before deciding; this moves with every release. OpenTofu 1.7 added client-side state and plan encryption; OpenTofu 1.9 added `for_each` on provider configurations. On the Terraform side, `terraform test` arrived in 1.6 and ephemeral resources in 1.10, followed by write-only arguments. Check both changelogs ([OpenTofu](https://github.com/opentofu/opentofu/blob/main/CHANGELOG.md), [Terraform](https://github.com/hashicorp/terraform/blob/main/CHANGELOG.md)) for the versions you would pin.
 
 ## Migration
 
@@ -84,7 +84,7 @@ From Terraform (up to the versions OpenTofu is compatible with) to OpenTofu:
 1. Pin the current Terraform version and ensure `plan` is clean on every workspace.
 2. Read the OpenTofu migration guide for your Terraform version. Check that no features specific to newer Terraform are in use.
 3. Install `tofu` in the CI image alongside `terraform`.
-4. In a non-production workspace: back up state (`gsutil cp` the object or rely on bucket versioning), run `tofu init`, then `tofu plan`. Expect no changes.
+4. In a non-production workspace: back up state (`gcloud storage cp gs://<bucket>/<prefix>/default.tfstate ./backup.tfstate`, see step 0 of [[terraform-state-recovery]], or rely on bucket versioning), run `tofu init`, then `tofu plan`. Expect no changes.
 5. Apply on a trivial change, confirm the state still reads with the old tool if you want a rollback path.
 6. Migrate environments one at a time, then update CI, pre-commit hooks and docs.
 

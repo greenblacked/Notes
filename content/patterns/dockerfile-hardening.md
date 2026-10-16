@@ -149,10 +149,11 @@ EXPOSE 8080
 ENTRYPOINT ["/app"]
 ```
 
-Build with resolved digests (substitute the Go version your project uses):
+Build with resolved digests. Go supports the two most recent major releases, so pick one of those that your `go.mod` allows and set `GO_VERSION` to it:
 
 ```bash
-export GO_TAG="golang:1.23-bookworm"
+export GO_VERSION="${GO_VERSION:?set to a Go release that is still supported, see https://go.dev/doc/devel/release}"
+export GO_TAG="golang:${GO_VERSION}-bookworm"
 export RUNTIME_TAG="gcr.io/distroless/static-debian12:nonroot"
 export IMAGE="europe-west1-docker.pkg.dev/my-project/apps/app"
 export VERSION="$(git rev-parse --short HEAD)"

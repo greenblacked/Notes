@@ -22,6 +22,7 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 - [[kubernetes-pod-troubleshooting|Kubernetes pod troubleshooting]]: triage Pending, CrashLoopBackOff, ImagePullBackOff, OOMKilled, CreateContainerConfigError, readiness failures and evictions with exact kubectl commands.
 - [[helm-release-rollback|Helm release rollback]]: roll back a Helm release with history and rollback, recover failed or pending-upgrade states, use atomic and wait, and revert in Git when Argo CD manages it.
 - [[gke-cluster-upgrade|GKE cluster upgrade]]: upgrade a GKE control plane and node pools safely: channels, maintenance windows, deprecated API checks, surge or blue-green, PDBs, validation and rollback limits.
+- [[argocd-sync-failure-and-drift|Argo CD sync failure and drift]]: diagnose an Argo CD application that is OutOfSync, Degraded or failing to sync, tell drift from bad manifests, fix it in Git, and roll back safely.
 
 ## Infrastructure as code
 

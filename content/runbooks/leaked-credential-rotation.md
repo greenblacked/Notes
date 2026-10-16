@@ -103,15 +103,37 @@ Revoke the token in the UI (**Administration, User Management, Access Tokens**) 
 
 #### Kubernetes secrets
 
-Rotate the underlying value in the source system first (database password, API key), then update the Secret.
+Rotate the underlying value in the source system first (database password, API key), then update the Secret. Generate the new value once and use the same value in both places; otherwise the application can no longer authenticate. Run this with history disabled (`set +o history`) or from a script; never print the value.
+
+Block A generates the value and changes the source system. Run it first.
+
+```bash
+# Generate once, without echoing it.
+NEW_PW="$(openssl rand -base64 32)"
+
+# Change it in the source system. The exact command depends on the system.
+# Example for PostgreSQL (feed the statement on stdin so it stays out of the process list):
+# psql -h "$DB_HOST" -U admin -d postgres <<SQL
+# ALTER USER app_user WITH PASSWORD '$NEW_PW';
+# SQL
+# Or call the vendor's rotate or reset-key API with "$NEW_PW".
+```
+
+Continue only after the source system accepts the new value, in the same shell so `NEW_PW` is still set. Block B updates the Secret from stdin, so the value never appears in the `kubectl` arguments, and restarts the workload:
 
 ```bash
 NS=my-namespace
-kubectl create secret generic app-db -n "$NS" \
-  --from-literal=password="$(openssl rand -base64 32)" \
+SECRET=app-db
+DEPLOY=my-app
+
+printf '%s' "$NEW_PW" | kubectl create secret generic "$SECRET" -n "$NS" \
+  --from-file=password=/dev/stdin \
   --dry-run=client -o yaml | kubectl apply -f -
-kubectl rollout restart deployment/my-app -n "$NS"
-kubectl rollout status deployment/my-app -n "$NS"
+
+kubectl rollout restart deployment/"$DEPLOY" -n "$NS"
+kubectl rollout status deployment/"$DEPLOY" -n "$NS"
+
+unset NEW_PW
 ```
 
 Pods do not read changed environment variable secrets until restarted. Delete old ServiceAccount token Secrets if the exposed item was one. If the Secret came from an external manager, rotate it there and let the operator sync; editing the cluster copy will be overwritten.

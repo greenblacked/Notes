@@ -1,6 +1,6 @@
 ---
 title: Terraform state recovery
-description: Recover from stuck locks, corrupted or lost state, refactors with state mv/rm/import, drift and provider upgrade breakage, with a backup before every destructive step.
+description: Recover from stuck locks, corrupted or lost state, state mv/rm/import refactors, drift and provider upgrade breakage, with a backup before each risky step.
 type: runbook
 tags:
   - runbooks

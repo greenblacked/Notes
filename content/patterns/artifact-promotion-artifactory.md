@@ -73,15 +73,30 @@ stages: [build, test, promote-staging, promote-prod]
 variables:
   JFROG_CLI_BUILD_NAME: $CI_PROJECT_PATH_SLUG
   JFROG_CLI_BUILD_NUMBER: $CI_PIPELINE_ID
+  IMAGE: artifactory.example.com/docker-dev-local/my-service:$CI_COMMIT_SHORT_SHA
+  # pin to a tested release and digest
+  # renovate: datasource=docker depName=releases-docker.jfrog.io/jfrog/jfrog-cli-v2-jf
+  JFROG_CLI_IMAGE: releases-docker.jfrog.io/jfrog/jfrog-cli-v2-jf:<tested-version>@sha256:<digest>
+  # renovate: datasource=docker depName=aquasec/trivy
+  TRIVY_IMAGE: aquasec/trivy:<tested-version>@sha256:<digest>
+  BUILDER_IMAGE: <builder-image>:<tested-version>@sha256:<digest>
 
 .jf:
-  image: releases-docker.jfrog.io/jfrog/jfrog-cli-v2-jf:latest # pin a version in practice
+  image: $JFROG_CLI_IMAGE
   before_script:
     - jf rt ping
 
 build-image:
   extends: .jf
   stage: build
+  # your builder image with docker CLI and jf, pinned by tag and digest
+  image: $BUILDER_IMAGE
+  services: [docker:dind]
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: /certs/client
+    DOCKER_TLS_CERTDIR: /certs
   script:
     - docker build -t "$IMAGE" .
     - jf docker push "$IMAGE" --build-name="$JFROG_CLI_BUILD_NAME" --build-number="$JFROG_CLI_BUILD_NUMBER"
@@ -89,9 +104,30 @@ build-image:
     - jf rt build-add-git
     - jf rt build-publish
 
+unit-test:
+  stage: test
+  needs: []
+  script:
+    - echo "run the unit tests here" # placeholder
+
+image-scan:
+  stage: test
+  needs: [build-image]
+  image:
+    name: $TRIVY_IMAGE
+    entrypoint: [""]
+  variables:
+    TRIVY_USERNAME: $REGISTRY_USER # masked CI/CD variables with read access to the dev repo
+    TRIVY_PASSWORD: $REGISTRY_PASSWORD
+  script:
+    # Scans the image in the dev repo, the one that promotion will copy.
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$IMAGE"
+
 promote-staging:
   extends: .jf
   stage: promote-staging
+  # A gate must list every job that must pass (see the GitLab note).
+  needs: [build-image, unit-test, image-scan]
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
@@ -105,6 +141,7 @@ promote-prod:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: manual
+      allow_failure: false # explicit, see gitlab-ci-pipeline-structure
   environment: production
   script:
     - >
@@ -114,6 +151,8 @@ promote-prod:
 
 Notes:
 
+- `build-image` uses `docker:dind`, which needs a privileged runner, the same setup as in [[gitlab-ci-pipeline-structure]]. `BUILDER_IMAGE` is your own image that contains both the Docker CLI and `jf`. The stock `docker:cli` image has no JFrog CLI, and because a custom image does not get the Docker client setup that the `docker` image entrypoint provides, the job sets `DOCKER_HOST`, `DOCKER_TLS_VERIFY` and `DOCKER_CERT_PATH` itself to reach the `dind` service over TLS (confirm the values against the GitLab docs for your runner's `dind` setup). Do not rely on a floating tag for it: pin `JFROG_CLI_IMAGE` and the scanner image by tag and digest, and let [[automated-dependency-updates]] keep them current.
+- `image-scan` runs against the image in the dev repo, which is the exact image `promote-staging` then copies. `promote-staging` lists `build-image`, `unit-test` and `image-scan` in `needs`, because a `needs` list replaces the stage barrier and only the listed jobs gate the promotion.
 - Running Docker builds in GitLab needs a Docker-capable runner or a daemonless builder; the `jf docker push` flow above assumes a Docker client with a daemon. With Kaniko or Buildx, push normally and then register the image with the build using the CLI's Docker build-info commands.
 - `--copy=true` copies rather than moves, which keeps the earlier stage's copy for audit. Moving makes dev cleaner. Pick one and apply it consistently.
 - Use a protected, manual `promote-prod` job so promotion is a recorded decision. Pair it with [[production-change-checklist]].
@@ -133,7 +172,7 @@ The Helm release should reference the image digest or version taken from the pro
 
 ## Helm charts
 
-Treat charts like any artefact: `helm package`, push once to `helm-dev-local`, promote the same `.tgz`. With an OCI-capable Artifactory the chart is pushed as an OCI artefact (`helm push chart-1.2.3.tgz oci://artifactory.example.com/helm-dev-local`), and with a classic Helm repo you push the file and Artifactory builds `index.yaml`. Chart version and app version must both be unique; see [[helm-chart-conventions]]. Promote chart and image from the same pipeline run so the pair stays consistent.
+Treat charts like any artefact: `helm package`, push once to `helm-dev-local`, promote the same `.tgz`. With an OCI-capable Artifactory the chart is pushed as an OCI artefact (`helm push chart-1.2.3.tgz oci://artifactory.example.com/helm-dev-local`), and with a classic Helm repo you push the file and Artifactory builds `index.yaml`. The chart version must be unique in the repository; `appVersion` is informational and need not change with every chart release (see [[helm-chart-conventions]]). Promote chart and image from the same pipeline run so the pair stays consistent.
 
 ## Retention and cleanup
 

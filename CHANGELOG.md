@@ -8,10 +8,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
-- 41 new notes for DevOps work and engineering management, all Markdown in `content/`:
+- 44 new notes for DevOps work and engineering management, all Markdown in `content/`:
   - a new **Management** section (`content/management/`, in the top bar and on the home page) with 14 guides: first 90 days as an EM, delegation, platform team operating model, one-on-ones, onboarding, hiring, career ladder, feedback, conflict, planning, DORA metrics, tech debt, stakeholder communication and on-call health;
-  - 12 patterns: GitLab CI pipeline structure, Jenkins shared libraries, SonarQube quality gates, Artifactory promotion, Dockerfile hardening, Helm chart conventions, resource requests and limits, zero-downtime deployments, network policies, External Secrets with Secret Manager, Terraform module and state layout, SLO burn-rate alerting;
-  - 7 runbooks: incident response, leaked credential rotation, TLS certificate renewal, Kubernetes pod troubleshooting, Helm release rollback, GKE cluster upgrade, Terraform state recovery;
+  - 14 patterns: Pod Security admission, automated dependency and image updates with Renovate, GitLab CI pipeline structure, Jenkins shared libraries, SonarQube quality gates, Artifactory promotion, Dockerfile hardening, Helm chart conventions, resource requests and limits, zero-downtime deployments, network policies, External Secrets with Secret Manager, Terraform module and state layout, SLO burn-rate alerting;
+  - 8 runbooks: Argo CD sync failure and drift, incident response, leaked credential rotation, TLS certificate renewal, Kubernetes pod troubleshooting, Helm release rollback, GKE cluster upgrade, Terraform state recovery;
   - 4 tool comparisons (GitLab CI vs Jenkins, Helm vs Kustomize, Terraform vs OpenTofu, Prometheus vs Cloud Monitoring) and 3 standards (production change checklist, code review, blameless postmortems).
 - A `guide` note type (shown as "Guide"), and new tags for platforms (`terraform`, `helm`, `docker`, `gitlab-ci`, `jenkins`, `artifactory`, `sonarqube`, `prometheus`), concerns (`ci-cd`, `incident-management`, `on-call`, `cost`) and people topics (`leadership`, `hiring`, `career`, `team-process`, `delivery`) in the taxonomy.
 - Dev Preview: `deploy-dev.yml` deploys the Worker Preview `dev` at https://dev.notes.szolotov.com. It is the pre-production site and runs only manually (`workflow_dispatch`), only from `main`, when the owner asks for it; a `guard` job fails every other ref. `is-main-head.sh` takes the branch from `BRANCH` (default `main`), and `read-wrangler-output.mjs --preview` also prints the Preview's `custom_url`.
@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- `postprocess-build.mjs` no longer fails the build when a note shows a Google API URL inside a code block (an OIDC audience in the Terraform CI example). Text in `<pre>` and `<code>` is skipped in HTML; any other reference to a third-party CDN or font host still fails it.
 - From 800px to 1199px the sheet ran to the window's edges with no gutter (on the home page before, on every page once all pages share its width). It now keeps a 1rem gutter on each side.
 - The Browse drawer no longer flashes open after a click on a link or when a page loads. Quartz's explorer script leaves the explorer neither loading nor collapsed for an instant (it removes `hide-until-loaded`, reads the layout, then adds `.collapsed`), and the CSS drew that instant as open. The drawer is now drawn open only with `data-open`, which the top-bar script sets from a MutationObserver once each change is complete.
 - A code block inside a list item (the `curl` line in the runbook's numbered steps) sat tight against the text above and below and ran off the right edge: Quartz's `li > *` rule removed the block's margin. Blocks in list items now have the same frame and padding as top-level blocks and a vertical margin; a long line scrolls sideways inside the block (the `<pre>`, which the keyboard can focus) and has room at its end. Tables and callouts in list items get the same margin.
