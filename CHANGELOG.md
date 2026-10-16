@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- From 800px to 1199px the sheet ran to the window's edges with no gutter (on the home page before, on every page once all pages share its width). It now keeps a 1rem gutter on each side.
 - The Browse drawer no longer flashes open after a click on a link or when a page loads. Quartz's explorer script leaves the explorer neither loading nor collapsed for an instant (it removes `hide-until-loaded`, reads the layout, then adds `.collapsed`), and the CSS drew that instant as open. The drawer is now drawn open only with `data-open`, which the top-bar script sets from a MutationObserver once each change is complete.
 - A code block inside a list item (the `curl` line in the runbook's numbered steps) sat tight against the text above and below and ran off the right edge: Quartz's `li > *` rule removed the block's margin. Blocks in list items now have the same frame and padding as top-level blocks and a vertical margin; a long line scrolls sideways inside the block (the `<pre>`, which the keyboard can focus) and has room at its end. Tables and callouts in list items get the same margin.
 - `scripts/smoke-test.sh` no longer follows redirects: any 3xx is a failure with the status and `Location`. A Cloudflare Access redirect is still detected from the response headers (a notice with `SMOKE_ALLOW_ACCESS=1`, a failure otherwise), but only on a 3xx response: a `Location` header on a 200 is not Access. Tested by `scripts/smoke-test.test.mjs`.
@@ -43,6 +44,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Every page now uses the home page's 68rem sheet, the text fills it, sidenotes sit inside the sheet and the table of contents stays beside it.
 - The Browse drawer opens from the right edge, the side of its button in the top bar, instead of the left.
 - Wider page: the reading column (`--measure`) is 46rem instead of 38rem, and 52rem from 1500px; the home sheet is 68rem instead of 60rem. Long code lines and tables fit without scrolling more often; the table of contents and sidenotes still sit beside the sheet without overlap at 1280px and wider.
 - Smoother motion. One set of motion tokens in `quartz/styles/custom.scss` (`--dur-fast` 180ms, `--dur` 260ms, `--dur-slow` 380ms, `--dur-theme` 300ms, `--dur-drawer-in` 360ms, `--dur-drawer-out` 260ms; the curves `--ease-out`, `--ease-in-out`, `--ease-drawer`, `--ease-spring`) replaces the ad-hoc durations and `ease`; only `opacity`, `transform`, colours and `box-shadow` are transitioned.

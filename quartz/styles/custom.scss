@@ -3,7 +3,7 @@
 @use "./variables.scss" as *;
 
 // Site design: a calm sheet of paper on a desk. Warm paper with a faint grain, rounded corners and
-// a soft, diffuse shadow carries the reading column; a slim sticky bar at the top holds the
+// a soft, diffuse shadow, the same width on every page; a slim sticky bar at the top holds the
 // navigation, and the Explorer lives in a drawer opened from it. Source Serif 4 sets the reading
 // text and headings, Inter the interface (bar, labels, chips, table of contents, metadata), IBM
 // Plex Mono the code. Light by default, "paper at night" in the dark theme.
@@ -79,7 +79,6 @@ $unicode-ranges: (
   --serif: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   --ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  --measure: 46rem;
   --pad: clamp(1.25rem, 4vw, 3.25rem);
   --sidenote-gap: 1.25rem;
   --bar-h: 3.5rem;
@@ -261,8 +260,10 @@ body {
 // ============================================================================
 // Quartz's frame puts a left sidebar, the centre and a right sidebar in a grid. Here the left
 // sidebar is the top bar (the whole row), the centre is the sheet and the right sidebar holds the
-// table of contents, sticky beside the sheet. The sheet is one reading column --measure wide; it
-// grows by the width of the margin when a note has sidenotes.
+// table of contents, sticky beside the sheet. Every page has the same sheet, --sheet-w wide, and the
+// text fills it; sidenotes sit in a margin column inside the sheet. The left column may shrink to
+// 1rem so that a page with a table of contents keeps the full sheet from about 1312px; the sheet is
+// centred again once both side columns are wider than the rail.
 
 .page {
   max-width: none;
@@ -271,7 +272,7 @@ body {
 
 .page > #quartz-body {
   --rail: 1rem;
-  --sheet-w: calc(var(--measure) + 2 * var(--pad));
+  --sheet-w: 68rem;
   --gutter: 1rem;
 
   display: block;
@@ -289,7 +290,7 @@ body {
 
   @media all and ($desktop) {
     display: grid;
-    grid-template-columns: minmax(var(--rail), 1fr) minmax(0, var(--sheet-w)) minmax(var(--rail), 1fr);
+    grid-template-columns: minmax(1rem, 1fr) minmax(0, var(--sheet-w)) minmax(var(--rail), 1fr);
     grid-template-rows: auto auto auto;
     grid-template-areas:
       "bar bar bar"
@@ -297,13 +298,6 @@ body {
       ". foot .";
     column-gap: 0;
     row-gap: 0;
-  }
-
-  // Sidenotes widen the sheet by their column (see "Sidenotes").
-  @media all and ($wide) {
-    &:has(.center article .sidenote) {
-      --sheet-w: calc(var(--measure) + 2 * var(--pad) + var(--sidenote-w) + var(--sidenote-gap));
-    }
   }
 
   // The sheet.
@@ -319,7 +313,11 @@ body {
     background-image: var(--grain-image);
     border-radius: var(--radius);
     box-shadow: var(--sheet-shadow);
+    // Centred with auto margins from 800px to the desktop grid, and never wider than the window
+    // minus a gutter on each side (it touched the window's edges when the window was narrower than
+    // the sheet).
     @media all and ($tablet) {
+      max-width: min(var(--sheet-w), calc(100% - 2 * var(--gutter)));
       margin-inline: auto;
     }
     @media all and ($mobile) {
@@ -396,11 +394,6 @@ body {
       scrollbar-width: thin;
     }
   }
-}
-
-// The home page carries a table of notes and is wider than a note.
-body[data-slug="index"] .page > #quartz-body {
-  --sheet-w: 68rem;
 }
 
 // Page navigation. The router morphs the new page into the old one (the .center element stays), so
@@ -1583,7 +1576,6 @@ a.internal.tag-link {
 
   & .note-properties-value > .note-properties-text {
     display: block;
-    max-width: min(var(--measure), 100%);
     margin-top: 1.25rem;
     font-size: 1.28rem;
     font-style: italic;
@@ -2175,9 +2167,9 @@ article h2:has(> a.tag-link) {
 // Sidenotes
 // ============================================================================
 // The sidenotes transformer (local-plugins/sidenotes) puts a .sidenote after every footnote
-// reference and marks the footnotes section with data-sidenotes. In the margin of the sheet from
-// 1280px up (the sheet grows by the column, see the page grid); below it the sidenotes stay
-// hidden and the normal footnotes are used.
+// reference and marks the footnotes section with data-sidenotes. In a margin column inside the
+// sheet from 1280px up (the article gives up the column's width; the sheet keeps its width); below
+// it the sidenotes stay hidden and the normal footnotes are used.
 
 .sidenote {
   display: none;
@@ -2253,8 +2245,6 @@ article h2:has(> a.tag-link) {
 @media all and ($wider) {
   :root {
     --sidenote-w: 14rem;
-    // Wide screens get a wider reading column.
-    --measure: 52rem;
   }
 }
 
