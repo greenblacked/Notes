@@ -166,14 +166,18 @@ if (count(firstVisit) !== 1 || count(systemChange) !== 1) {
 prescript = prescript.replace(firstVisit, '"light"').replace(systemChange, "")
 writeFileSync(prescriptPath, prescript)
 
-// 5. Guard: no remaining references to known third-party CDNs / font hosts.
+// 5. Guard: no remaining references to known third-party CDNs / font hosts. In HTML, text inside
+// <pre> and <code> is skipped: a note may show such a URL in an example (an OIDC audience, say),
+// and text in a code block is never loaded.
 const forbidden =
   /https?:\/\/(?:[a-z0-9-]+\.)*(?:jsdelivr\.net|cdnjs\.cloudflare\.com|unpkg\.com|esm\.sh|googleapis\.com|gstatic\.com|googletagmanager\.com|plausible\.io)/i
 const leftovers = []
 for (const file of walk(pub)) {
   if (file.startsWith(vendor)) continue
   if (!/\.(js|mjs|html|css|json|xml)$/.test(file)) continue
-  const m = readFileSync(file, "utf8").match(forbidden)
+  let text = readFileSync(file, "utf8")
+  if (file.endsWith(".html")) text = text.replace(/<(pre|code)\b[\s\S]*?<\/\1>/gi, "")
+  const m = text.match(forbidden)
   if (m) leftovers.push(`${relative(root, file)}: ${m[0]}`)
 }
 if (leftovers.length > 0) fail(`third-party origins remain:\n  ${leftovers.join("\n  ")}`)

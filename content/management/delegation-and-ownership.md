@@ -25,7 +25,7 @@ Signs you are the bottleneck: pull requests wait for your approval, people ask y
 
 ## Levels of delegation
 
-Use explicit levels so both sides know how much autonomy applies. A common scale, adapted from the seven-level delegation approach:
+Use explicit levels so both sides know how much autonomy applies. A six-level scale works well in practice. It is a simplified form of seven-level models such as Management 3.0 Delegation Poker:
 
 | Level                   | You say                            | Typical use                           |
 | ----------------------- | ---------------------------------- | ------------------------------------- |
@@ -63,6 +63,8 @@ Delegation needs somewhere to land. Define owners for every system.
 /terraform/modules/network/ @dave
 ```
 
+GitLab looks for the file at the repository root, in `docs/` or in `.gitlab/`, and uses the first one it finds. The `[Section]` headers are GitLab CODEOWNERS sections. Check the GitLab Code Owners documentation for your version, including how sections interact with approval rules.
+
 - Keep a one-page ownership table (service, owner, backup, runbook, SLO, on-call rotation) in the repo, and review it quarterly and whenever someone leaves or joins.
 - Define "done" for ownership: for a system to be handed over, it has a runbook someone has actually run ([[incident-response]]), alerts that page for real symptoms ([[slo-burn-rate-alerting]]), and a documented rollback.
 
@@ -93,10 +95,12 @@ RACI clarifies who does what: **R**esponsible (does the work), **A**ccountable (
 | New Terraform module                             | A/R           | R                 | I   | C        | C                |
 | Production change via approved MR                | A             | R                 | I   |          | C                |
 | Access grant to prod                             | R             |                   | A   | C        | I                |
-| Incident command                                 | R (IC rota)   | R                 | I   | C        | C                |
+| Incident command                                 | R (IC rota)   | R                 | A   | C        | C                |
 | Postmortem actions                               | A             | R                 | I   | I        | C                |
 | On-call rota design                              | C             | C                 | A/R |          | I                |
 | Secret rotation ([[leaked-credential-rotation]]) | A             | R                 | I   | C        | I                |
+
+During an incident the incident commander directs the response; the EM is accountable for there being a staffed, trained IC rota. See [[incident-response]].
 
 Use it for recurring ambiguities, not as a form for everything. Two or three painful rows resolved are worth more than a complete matrix nobody reads. Review it when the team or the platform changes ([[platform-team-operating-model]]).
 

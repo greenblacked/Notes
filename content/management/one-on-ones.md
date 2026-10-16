@@ -72,7 +72,7 @@ People rarely say "I am burning out". They answer specific questions honestly if
 - "If you could delete one alert, which would it be?"
 - "Do you dread the handover, or look forward to it?"
 
-Watch for changes rather than absolute answers: shorter replies, camera off, skipped reviews, commit times moving later. Correlate with the data in [[on-call-health]]; if a person has been paged outside hours more than their peers, address the rotation, not the person.
+Watch for changes rather than absolute answers: shorter replies, camera off, skipped reviews, more declined meetings. Do not monitor individual activity data such as commit timestamps; ask instead. Correlate with the data in [[on-call-health]]; if a person has been paged outside hours more than their peers, address the rotation, not the person.
 
 **Workload and toil**
 

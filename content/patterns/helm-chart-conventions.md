@@ -28,12 +28,13 @@ my-service/
   .helmignore
   templates/
     _helpers.tpl
+    configmap.yaml           # rendered app config; feeds the checksum/config annotation
     deployment.yaml
     service.yaml
     serviceaccount.yaml
     ingress.yaml             # behind ingress.enabled
     hpa.yaml                 # behind autoscaling.enabled
-    pdb.yaml                 # behind podDisruptionBudget.enabled
+    pdb.yaml                 # behind podDisruptionBudget.enabled and more than one replica
     NOTES.txt
     tests/
       test-connection.yaml
@@ -122,8 +123,30 @@ resources:
     memory: 256Mi
 
 probes:
-  path: /healthz
-  port: http
+  readiness:
+    path: /ready
+    port: http
+    periodSeconds: 5
+    timeoutSeconds: 2
+  liveness:
+    path: /healthz
+    port: http
+    periodSeconds: 10
+    timeoutSeconds: 2
+  startup:
+    path: /healthz
+    port: http
+    periodSeconds: 5
+    failureThreshold: 30 # up to 150 s to start
+
+# Rollout and shutdown defaults, explained in zero-downtime-deployments-kubernetes
+terminationGracePeriodSeconds: 60
+preStopSleepSeconds: 15
+minReadySeconds: 10
+strategy:
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 0
 
 autoscaling:
   enabled: false
@@ -131,6 +154,7 @@ autoscaling:
   maxReplicas: 6
   targetCPUUtilizationPercentage: 70
 
+# Created only when replicaCount > 1 (or autoscaling.minReplicas > 1)
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
@@ -143,6 +167,16 @@ existingSecret: "" # name of a Secret created outside the chart
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
   "required": ["image", "resources"],
+  "definitions": {
+    "probe": {
+      "type": "object",
+      "required": ["path", "port"],
+      "properties": {
+        "path": { "type": "string" },
+        "port": { "type": ["string", "integer"] }
+      }
+    }
+  },
   "properties": {
     "replicaCount": { "type": "integer", "minimum": 1 },
     "image": {
@@ -159,6 +193,22 @@ existingSecret: "" # name of a Secret created outside the chart
       "required": ["requests"],
       "properties": {
         "requests": { "type": "object", "required": ["cpu", "memory"] }
+      }
+    },
+    "probes": {
+      "type": "object",
+      "properties": {
+        "readiness": { "$ref": "#/definitions/probe" },
+        "liveness": { "$ref": "#/definitions/probe" },
+        "startup": { "$ref": "#/definitions/probe" }
+      }
+    },
+    "terminationGracePeriodSeconds": { "type": "integer", "minimum": 0 },
+    "podDisruptionBudget": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": { "type": ["integer", "string"] }
       }
     },
     "autoscaling": {
@@ -189,16 +239,62 @@ spec:
   selector:
     matchLabels:
       {{- include "my-service.selectorLabels" . | nindent 6 }}
+  minReadySeconds: {{ .Values.minReadySeconds }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      {{- toYaml .Values.strategy.rollingUpdate | nindent 6 }}
   template:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
         {{- include "my-service.labels" . | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: {{ .Chart.Name }}
+          ports:
+            - name: http
+              containerPort: 8080
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "{{ .Values.preStopSleepSeconds }}"]
+          startupProbe:
+            httpGet: { path: {{ .Values.probes.startup.path }}, port: {{ .Values.probes.startup.port }} }
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          readinessProbe:
+            httpGet: { path: {{ .Values.probes.readiness.path }}, port: {{ .Values.probes.readiness.port }} }
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+          livenessProbe:
+            httpGet: { path: {{ .Values.probes.liveness.path }}, port: {{ .Values.probes.liveness.port }} }
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
 ```
 
+The `sleep` preStop needs a `sleep` binary in the image; see [[zero-downtime-deployments-kubernetes]] for distroless alternatives.
+
 - The `checksum/config` annotation rolls the Pods when a ConfigMap rendered by the chart changes.
-- A PDB with `minAvailable: 1` on a single-replica Deployment blocks node drains forever. Template it so it is only created when replicas (or `minReplicas`) is greater than one.
+- A PDB with `minAvailable: 1` on a single-replica Deployment blocks node drains forever. Template it so it is only created when replicas (or `minReplicas`) is greater than one:
+
+```yaml title="templates/pdb.yaml"
+{{- if and .Values.podDisruptionBudget.enabled (gt (int (ternary .Values.autoscaling.minReplicas .Values.replicaCount .Values.autoscaling.enabled)) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "my-service.fullname" . }}
+  labels:
+    {{- include "my-service.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "my-service.selectorLabels" . | nindent 6 }}
+{{- end }}
+```
 
 ## Secrets
 
@@ -240,6 +336,8 @@ Package once per version and push to a registry. Both options below work with Ar
 CHART=helm/my-service
 REGISTRY=artifactory.example.com
 REPO=helm-local
+REG_USER="${REG_USER:?}" # supplied by masked CI variables
+REG_PASS="${REG_PASS:?}"
 VERSION=$(helm show chart "${CHART}" | awk '/^version:/ {print $2}')
 
 helm package "${CHART}" --destination dist/
@@ -249,12 +347,22 @@ helm registry login "${REGISTRY}" --username "${REG_USER}" --password-stdin <<< 
 helm push "dist/my-service-${VERSION}.tgz" "oci://${REGISTRY}/${REPO}"
 
 # Classic HTTP repository (Artifactory Helm repo, upload by PUT)
-curl --fail -u "${REG_USER}:${REG_PASS}" \
+# the config on stdin keeps the password out of argv
+curl --fail --config - <<< "user = \"${REG_USER}:${REG_PASS}\"" \
   -T "dist/my-service-${VERSION}.tgz" \
   "https://${REGISTRY}/artifactory/${REPO}/my-service-${VERSION}.tgz"
 ```
 
-Treat published chart versions as immutable and disable overwrite on the repository. Consumers then install with `helm install my-service oci://.../my-service --version 0.7.2`, which is the reproducible form. For promotion across repositories, see [[artifact-promotion-artifactory]]. For a failed release, see [[helm-release-rollback]].
+Treat published chart versions as immutable and disable overwrite on the repository. Consumers then install with `helm install my-service oci://.../my-service --version 0.7.2`, which is the reproducible form. For promotion across repositories, see [[artifact-promotion-artifactory]].
+
+## Verify
+
+- `helm template` renders with the defaults and with a single replica, and in the single-replica case no PDB is produced.
+- `ct install` passes against a throwaway cluster.
+
+## Rollback
+
+For a failed release, see [[helm-release-rollback]].
 
 ## Checklist
 

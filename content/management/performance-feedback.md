@@ -67,6 +67,41 @@ A review is a summary of what the person has already heard, set against the expe
 7. **Be careful with language.** Replace "aggressive" or "not a team player" with the behaviour. Check whether you use different words for different people.
 8. **Close with next-period goals**: two or three outcomes, one growth item, and what you will do to support them.
 
+A short template:
+
+```markdown title="performance-review.md"
+## Performance review: <name>, <role>, <level>, <review period>
+
+### Summary
+
+<Two to three sentences: overall assessment against the level.>
+
+### Assessment by ladder dimension
+
+Repeat for technical scope, operational ownership, influence and leadership, and communication.
+
+#### <dimension>
+
+- <yyyy-mm-dd>: <example and its impact> (<link>)
+- Assessment against level: <below / meets / exceeds>, because <reason>
+
+### Strengths to keep
+
+- <strength, with an example>
+
+### Areas to grow
+
+- <area>: next step <one concrete action, by when>
+
+### Goals for next period
+
+1. <measurable goal>
+
+### Employee comments
+
+<Their view, in their words.>
+```
+
 Share the draft with the person in conversation first, then in writing. Allow them to add their own view; their self-review is data.
 
 Consider how glue work is counted: documentation, on-call improvements, mentoring and toil reduction are often undervalued and disproportionately done by some people. Name it and weigh it.

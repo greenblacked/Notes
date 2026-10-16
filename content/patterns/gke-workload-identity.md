@@ -180,7 +180,7 @@ metadata:
 
 ## Verify
 
-Run a throwaway Pod with the KSA and ask who it is:
+Run a throwaway Pod with the KSA and ask who it is. Replace `TAG` and `DIGEST` with a pinned release and its digest; [[automated-dependency-updates]] keeps such pins current.
 
 ```yaml
 apiVersion: v1
@@ -193,7 +193,8 @@ spec:
   restartPolicy: Never
   containers:
     - name: gcloud
-      image: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+      # pin and let Renovate bump it
+      image: gcr.io/google.com/cloudsdktool/google-cloud-cli:TAG@sha256:DIGEST
       command: ["sleep", "3600"]
 ```
 

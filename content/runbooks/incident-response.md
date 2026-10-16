@@ -145,7 +145,7 @@ Close when impact has ended and the service has been stable for an agreed period
 1. Post the resolution message with the end time and impact summary.
 2. Record start, detection, mitigation and end times in the incident doc: these give time to detect and time to recover, see [[dora-metrics]].
 3. Create follow-up tickets for anything still open, such as a temporary workaround.
-4. Schedule the review within a few working days for SEV1 and SEV2.
+4. For SEV1 and SEV2, hold the review within 5 working days and publish the final version within 10, as set in [[blameless-postmortems]].
 
 ## Validation
 

@@ -21,4 +21,4 @@ Notes in this section compare tools and record why one was preferred. They are t
 
 ## Writing a comparison
 
-A good comparison states the criteria first, uses the same criteria for every option, and ends with a recommendation that names the circumstances under which it would change. Tool versions and the date checked go in the frontmatter `modified` field and the first paragraph. See [[writing-notes]].
+A good comparison states the criteria first, uses the same criteria for every option, and ends with a recommendation that names the circumstances under which it would change. Name the tool versions a claim depends on where it is made. Record the date you checked them against the docs in `verified`, only when you actually did, and put a short `[!info]` with what was checked near the top. See [[writing-notes]].

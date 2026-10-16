@@ -1,6 +1,6 @@
 ---
 title: Planning and prioritization
-description: Quarterly planning for a DevOps team, with a capacity split, example OKRs, RICE and cost of delay, saying no, tracking in GitLab or Jira, and re-planning after incidents.
+description: "Quarterly DevOps planning: capacity split, example OKRs, RICE and cost of delay, saying no, tracking in GitLab or Jira, and re-planning after incidents."
 type: guide
 tags:
   - management
