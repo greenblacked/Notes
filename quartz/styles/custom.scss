@@ -3,7 +3,7 @@
 @use "./variables.scss" as *;
 
 // Site design: a calm sheet of paper on a desk. Warm paper with a faint grain, rounded corners and
-// a soft, diffuse shadow carries the reading column; a slim sticky bar at the top holds the
+// a soft, diffuse shadow, the same width on every page; a slim sticky bar at the top holds the
 // navigation, and the Explorer lives in a drawer opened from it. Source Serif 4 sets the reading
 // text and headings, Inter the interface (bar, labels, chips, table of contents, metadata), IBM
 // Plex Mono the code. Light by default, "paper at night" in the dark theme.
@@ -313,7 +313,11 @@ body {
     background-image: var(--grain-image);
     border-radius: var(--radius);
     box-shadow: var(--sheet-shadow);
+    // Centred with auto margins from 800px to the desktop grid, and never wider than the window
+    // minus a gutter on each side (it touched the window's edges when the window was narrower than
+    // the sheet).
     @media all and ($tablet) {
+      max-width: min(var(--sheet-w), calc(100% - 2 * var(--gutter)));
       margin-inline: auto;
     }
     @media all and ($mobile) {
@@ -2163,9 +2167,9 @@ article h2:has(> a.tag-link) {
 // Sidenotes
 // ============================================================================
 // The sidenotes transformer (local-plugins/sidenotes) puts a .sidenote after every footnote
-// reference and marks the footnotes section with data-sidenotes. In the margin of the sheet from
-// 1280px up (the sheet grows by the column, see the page grid); below it the sidenotes stay
-// hidden and the normal footnotes are used.
+// reference and marks the footnotes section with data-sidenotes. In a margin column inside the
+// sheet from 1280px up (the article gives up the column's width; the sheet keeps its width); below
+// it the sidenotes stay hidden and the normal footnotes are used.
 
 .sidenote {
   display: none;
