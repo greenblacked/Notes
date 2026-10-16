@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- 41 new notes for DevOps work and engineering management, all Markdown in `content/`:
+  - a new **Management** section (`content/management/`, in the top bar and on the home page) with 14 guides: first 90 days as an EM, delegation, platform team operating model, one-on-ones, onboarding, hiring, career ladder, feedback, conflict, planning, DORA metrics, tech debt, stakeholder communication and on-call health;
+  - 12 patterns: GitLab CI pipeline structure, Jenkins shared libraries, SonarQube quality gates, Artifactory promotion, Dockerfile hardening, Helm chart conventions, resource requests and limits, zero-downtime deployments, network policies, External Secrets with Secret Manager, Terraform module and state layout, SLO burn-rate alerting;
+  - 7 runbooks: incident response, leaked credential rotation, TLS certificate renewal, Kubernetes pod troubleshooting, Helm release rollback, GKE cluster upgrade, Terraform state recovery;
+  - 4 tool comparisons (GitLab CI vs Jenkins, Helm vs Kustomize, Terraform vs OpenTofu, Prometheus vs Cloud Monitoring) and 3 standards (production change checklist, code review, blameless postmortems).
+- A `guide` note type (shown as "Guide"), and new tags for platforms (`terraform`, `helm`, `docker`, `gitlab-ci`, `jenkins`, `artifactory`, `sonarqube`, `prometheus`), concerns (`ci-cd`, `incident-management`, `on-call`, `cost`) and people topics (`leadership`, `hiring`, `career`, `team-process`, `delivery`) in the taxonomy.
 - Dev Preview: `deploy-dev.yml` deploys the Worker Preview `dev` at https://dev.notes.szolotov.com. It is the pre-production site and runs only manually (`workflow_dispatch`), only from `main`, when the owner asks for it; a `guard` job fails every other ref. `is-main-head.sh` takes the branch from `BRANCH` (default `main`), and `read-wrangler-output.mjs --preview` also prints the Preview's `custom_url`.
 
 ### Security

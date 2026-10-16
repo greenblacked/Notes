@@ -45,6 +45,6 @@ export const SECTIONS: Section[] = [
     folder: "standards",
     title: "Standards",
     label: "Standards",
-    description: "How notes themselves are written, named, tagged and reviewed.",
+    description: "How the team works: notes, production changes, code review and postmortems.",
   },
 ]
