@@ -1,0 +1,42 @@
+---
+title: Engineering management
+description: Running a platform or DevOps team, covering people, hiring, planning, delivery and on-call health.
+tags:
+  - management
+  - leadership
+created: 2026-10-16
+modified: 2026-10-16
+draft: false
+---
+
+These notes cover the engineering manager's side of a platform or DevOps team. That means people, hiring, planning, delivery and keeping on-call sustainable. They are written as guides you can follow on a Monday morning, not as theory, and each one links out to the technical notes it relies on.
+
+## Starting out
+
+- [[first-90-days-as-em|First 90 days as an EM of an infra team]]: a practical plan for a new engineering manager of a DevOps or infra team: listening tour, mapping risks, early wins, trust and what not to change yet.
+- [[delegation-and-ownership|Delegation and service ownership for a new EM]]: levels of delegation, service ownership, avoiding the prod-access bottleneck and a RACI for platform work, for EMs coming from a hands-on DevOps role.
+- [[platform-team-operating-model|Platform team operating model]]: how to run a DevOps platform team as a product team, with Team Topologies interaction modes, golden paths, intake, a shield rotation and adoption metrics.
+
+## People
+
+- [[one-on-ones|Running one-on-ones with platform engineers]]: cadence, agenda template, questions that surface burnout and career goals, note-taking and skip-levels for 1:1s on a DevOps or platform team.
+- [[onboarding-engineers|Onboarding a DevOps or platform engineer]]: access checklist, 30/60/90 plan with concrete milestones, buddy system and measures for onboarding a new DevOps or platform engineer.
+- [[hiring-devops-engineers|Hiring DevOps and SRE engineers]]: a structured hiring loop for DevOps and SRE roles, with a troubleshooting exercise, question bank, scoring rubric and debrief process.
+- [[career-ladder-devops|Career ladder for DevOps and platform engineers]]: expectations by level from Engineer to Staff, plus the EM track split, with evidence examples and guidance on using the ladder in promotions.
+- [[performance-feedback|Performance feedback and reviews]]: giving feedback with the SBI model, writing reviews, handling underperformance with an improvement plan, documenting and recognising good work.
+- [[managing-conflict|Managing conflict]]: handling disagreement in technical teams, from tooling wars and design disputes to Dev versus Ops friction, using disagree-and-commit, escalation, ADRs and mediation.
+
+## Planning and delivery
+
+- [[planning-and-prioritization|Planning and prioritization]]: quarterly planning for a DevOps team, with a capacity split, example OKRs, RICE and cost of delay, saying no, tracking in GitLab or Jira, and re-planning after incidents.
+- [[dora-metrics|DORA metrics for a platform team]]: definitions of the DORA software delivery metrics, how to measure them from GitLab CI, Jenkins and incident data, and how to avoid gaming them.
+- [[tech-debt-management|Tech debt management]]: how to identify, record, score and pay down infrastructure tech debt, with a debt register format, capacity budgeting and a way to make the case to leadership.
+- [[stakeholder-communication|Stakeholder communication]]: communicating up and across as a DevOps lead, with copy-paste templates for status updates, incident comms, RFC summaries, migration expectations and risk registers.
+
+## Operations
+
+- [[on-call-health|On-call health]]: designing a sustainable on-call rotation, with alert hygiene, load metrics, a handover template, escalation paths and burnout signals for a DevOps team.
+- [[incident-response|Incident response]] and [[blameless-postmortems|blameless postmortems]]: how the team runs an incident and learns from it.
+
+> [!note] Adapt the numbers
+> Percentages, scores and templates in these guides are starting points. Replace them with your own team's data, and check anything about pay, working time or performance processes against your company policy and local law.

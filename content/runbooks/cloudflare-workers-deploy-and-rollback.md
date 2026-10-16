@@ -6,15 +6,15 @@ tags:
   - runbooks
   - reliability
 created: 2026-10-11
-modified: 2026-10-15
-verified: 2026-10-15
+modified: 2026-10-16
+verified: 2026-10-16
 draft: false
 ---
 
 How this site reaches Cloudflare and how to undo a bad release. Production is the Worker `notes` at https://notes.szolotov.com; dev is a Worker Preview named `dev`[^preview] of the same Worker at https://dev.notes.szolotov.com. Dev is the pre-production site and is deployed by hand from `main`; there is no stage.
 
 > [!info] Checked against
-> `wrangler.jsonc`, `.github/workflows/{deploy-dev,deploy-production,release}.yml`, `scripts/smoke-test.sh` and `docs/deployment.md` in the repository, and the Wrangler CLI help (`npx wrangler <command> --help`). Wrangler Previews are an open beta, so flags may change.
+> `wrangler.jsonc`, `.github/workflows/{deploy-dev,deploy-production,release}.yml`, `scripts/smoke-test.sh`, `scripts/write-version.mjs` and `docs/deployment.md` in the repository, and the Wrangler 4.149.0 CLI help (`npx wrangler rollback --help`). Cloudflare docs: [Rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/), [Wrangler commands for Workers](https://developers.cloudflare.com/workers/wrangler/commands/workers/) (`deployments`, `versions`, `preview`) [Previews on custom domains](https://developers.cloudflare.com/workers/previews/custom-domains/) and the [changelog entry](https://developers.cloudflare.com/changelog/post/2025-09-11-increased-version-rollback-limit/) that raised the rollback window from 10 to 100 versions. Worker Previews are in open beta, so flags may change.
 
 ## When to use
 
@@ -91,7 +91,7 @@ curl -s https://dev.notes.szolotov.com/version.txt  # main+<40-char sha>
 curl -sI https://notes.szolotov.com | grep -i x-robots-tag   # no output: production is indexable
 ```
 
-Check which deployment serves traffic (the 10 most recent are listed):
+Check which deployment serves traffic (`deployments list` shows only the most recent ones; add `--json` for scripts):
 
 ```bash
 npx wrangler deployments status
@@ -114,35 +114,42 @@ Production only; dev has no rollback.
    npx wrangler versions list
    ```
 
-2. Roll back, giving a reason (`--yes` skips the prompt):
+2. Roll back, giving a reason (`--yes` skips the prompt; without a version id Wrangler picks the version uploaded before the latest one):
 
    ```bash
-   npx wrangler rollback <version-id> --message "Roll back vX.Y.Z: <reason>" --yes
+   VERSION_ID="<version-id>"
+   npx wrangler rollback "${VERSION_ID}" --message "Roll back vX.Y.Z: <reason>" --yes
    ```
+
+   The rollback creates a new deployment and takes effect on all routes and domains at once. The dashboard offers the same under the Worker, **Deployments**, **Rollback**.
 
 3. Validate with `curl -s https://notes.szolotov.com/version.txt` and `npx wrangler deployments status`.
 
-Only the 100 most recent versions can be rolled back to, and not if bindings changed.
+Only the 100 most recently published versions can be rolled back to. Rollback is also refused when a Durable Object class lifecycle change (migrations or exports) happened between the active version and that version, or when the target version binds an R2 bucket, KV namespace or queue that no longer exists; this Worker only has the `ASSETS` binding, so in practice the limit is the 100 versions. Rolling back from a gradual deployment replaces the split with the chosen version at 100%.
 
 ### Roll forward through the pipeline
 
-To redeploy a tag, including an older good one: **Actions**, **Deploy production**, **Run workflow**, select the **tag** (for example `v0.1.0`) as the ref, and approve. This rebuilds the tag and deploys it with the same checks, and rolls back automatically if they fail. Production deploys refuse any ref that is not a `vX.Y.Z` tag.
+To redeploy a tag, including an older good one: **Actions**, **Deploy production**, **Run workflow**, select the **tag** (for example `v0.1.0`) as the ref, and approve. This rebuilds the tag and deploys it with the same checks, and rolls back automatically if they fail. Production deploys refuse any ref that is not a `vX.Y.Z` tag, and the tagged commit must have a successful `ci.yml` push run on `main` and be on `main`, so a tag whose CI run is no longer available cannot be redeployed; use a rollback in that case. Pushing a `v*.*.*` tag by hand also starts **Deploy production**, but tags created by the Release workflow do not (they are deployed by the explicit call).
 
 Dev recovers by merging a fix and running **Deploy dev** again. To remove the Preview: `npx wrangler preview delete --name dev`.
 
 ## Troubleshooting
 
-| Symptom                                                                               | Cause and fix                                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cloudflare error 1042 right after a deploy that created a new workers.dev route       | The route is still propagating. The smoke test retries the version, content, header and indexing checks, so wait or re-run; this no longer fails a deploy or triggers a rollback.                                           |
-| `curl` works locally but CI gets 403 on notes.szolotov.com or dev.notes.szolotov.com  | Bot Fight Mode blocks GitHub runners on the custom domains. Expected: CI verifies on workers.dev. Look up the `cf-ray` in Security, Events only if workers.dev fails too.                                                   |
-| Dev smoke test notice, workers.dev URL of the Preview redirects to a Cloudflare login | Cloudflare Access protects Worker Previews in this account. The dev smoke test passes with a notice; Wrangler reporting https://dev.notes.szolotov.com is the check. Production never accepts an Access redirect.           |
-| Wrangler warns "Custom domain Preview URLs are configured, but none are active"       | Before the first production deploy, `previews_enabled` on the Custom Domain has not been applied yet. It is applied by `wrangler deploy` (the first release) or in the dashboard under Domains, **Production and Preview**. |
-| Deploy production waits and never starts                                              | The `production` environment needs approval; approve it in the run.                                                                                                                                                         |
-| Release fails with "must be strictly greater than the latest tag"                     | Pick a higher `X.Y.Z`. Tags are never reused; if the failure came after the tag step, re-run only **Deploy production** from that tag.                                                                                      |
-| Run failed, unsure whether production is affected                                     | Run `npx wrangler deployments status` and `curl -s https://notes.szolotov.com/version.txt`. The job log says either "rolled back", or "failed before it went live".                                                         |
+| Symptom                                                                                | Cause and fix                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloudflare error 1042 right after a deploy that created a new workers.dev route        | The route is still propagating. The smoke test retries the version, content, header and indexing checks, so wait or re-run; this no longer fails a deploy or triggers a rollback.                                           |
+| `curl` works locally but CI gets 403 on notes.szolotov.com or dev.notes.szolotov.com   | Bot Fight Mode blocks GitHub runners on the custom domains. Expected: CI verifies on workers.dev. Look up the `cf-ray` in Security, Events only if workers.dev fails too.                                                   |
+| Dev smoke test notice, workers.dev URL of the Preview redirects to a Cloudflare login  | Cloudflare Access protects Worker Previews in this account. The dev smoke test passes with a notice; Wrangler reporting https://dev.notes.szolotov.com is the check. Production never accepts an Access redirect.           |
+| Wrangler warns "Custom domain Preview URLs are configured, but none are active"        | Before the first production deploy, `previews_enabled` on the Custom Domain has not been applied yet. It is applied by `wrangler deploy` (the first release) or in the dashboard under Domains, **Production and Preview**. |
+| Deploy dev fails at "Require the custom domain Preview URL"                            | The Preview exists only on workers.dev because `previews_enabled` has not been applied. Do the first production release or enable **Production and Preview** in the dashboard, then re-run.                                 |
+| Deploy dev fails with "runs only from main"                                            | The run was started from another branch. Re-run it with branch `main` selected.                                                                                                                                             |
+| Deploy dev run succeeds but dev still shows an older commit                            | The run skipped because a newer commit reached `main` during the build (see the notice). Run it again.                                                                                                                      |
+| Deploy production fails in the tag guard ("Tag ... points at ...", not a `vX.Y.Z` ref) | The run was not started from a release tag, or the tag does not resolve to the commit being deployed. Re-run from the correct tag.                                                                                          |
+| Deploy production waits and never starts                                               | The `production` environment needs approval; approve it in the run.                                                                                                                                                         |
+| Release fails with "must be strictly greater than the latest tag"                      | Pick a higher `X.Y.Z`. Tags are never reused; if the failure came after the tag step, re-run only **Deploy production** from that tag.                                                                                      |
+| Run failed, unsure whether production is affected                                      | Run `npx wrangler deployments status` and `curl -s https://notes.szolotov.com/version.txt`. The job log says either "rolled back", or "failed before it went live".                                                         |
 
-The full setup, token permissions and removal of the old stage Preview are in `docs/deployment.md` in the repository. For how changes are decided and recorded, see [[adr/index|the architecture decisions]].
+The full setup, token permissions and removal of the old stage Preview are in `docs/deployment.md` in the repository. For how changes are decided and recorded, see [[adr/index|the architecture decisions]]. If a bad release becomes an incident, follow [[incident-response]]; the checks before any production release are in [[production-change-checklist]].
 
 [^preview]: Both come from `wrangler.jsonc`: production uses the top-level `vars`, and the Preview takes its own from `previews.vars` (`ENVIRONMENT` is `preview`), which is what makes the Worker send `noindex` on dev.
 

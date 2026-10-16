@@ -6,7 +6,7 @@ tags:
   - standards
   - meta
 created: 2026-10-10
-modified: 2026-10-11
+modified: 2026-10-16
 verified: 2026-10-11
 draft: false
 ---
@@ -16,7 +16,7 @@ This is the contract every note follows. It is deliberately short.
 ## File naming and layout
 
 - Lowercase kebab-case file names: `gke-workload-identity.md`, not `GKE Workload Identity.md`.
-- One note per file, in the folder that says what **kind** of note it is: `adr/`, `patterns/`, `tools/`, `standards/`.
+- One note per file, in the folder that says what **kind** of note it is: `adr/`, `patterns/`, `tools/`, `runbooks/`, `management/`, `standards/`.
 - Each folder has an `index.md` that introduces the section and links to its notes.
 - ADRs use `NNNN-short-kebab-title.md` (see [[adr/index|the ADR index]]).
 - Images and attachments go next to the note that uses them, in a folder named after the note; avoid binary files when text or Mermaid will do.
@@ -38,19 +38,19 @@ draft: false
 ---
 ```
 
-| Field         | Required | Notes                                                                                 |
-| ------------- | -------- | ------------------------------------------------------------------------------------- |
-| `title`       | yes      | Sentence case. Becomes the page heading, so do not repeat it as an `# H1`.            |
-| `description` | yes      | One sentence, under about 160 characters.                                             |
-| `tags`        | yes      | At least one tag from the taxonomy below.                                             |
-| `created`     | yes      | ISO date `YYYY-MM-DD`.                                                                |
-| `modified`    | yes      | ISO date. Update it when the meaning changes, not for typo fixes.                     |
-| `draft`       | yes      | `true` keeps a note out of the published site.                                        |
-| `type`        | yes      | What kind of note this is: `adr`, `pattern`, `tool`, `standard`, `runbook` or `note`. |
-| `aliases`     | no       | Alternative names that wikilinks can use.                                             |
-| `status`      | ADRs     | One of the ADR statuses below, in lowercase.                                          |
-| `verified`    | no       | ISO date `YYYY-MM-DD` on which the content was last checked against its sources.      |
-| `decided`     | ADRs     | ISO date `YYYY-MM-DD` on which the decision was accepted.                             |
+| Field         | Required | Notes                                                                                          |
+| ------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `title`       | yes      | Sentence case. Becomes the page heading, so do not repeat it as an `# H1`.                     |
+| `description` | yes      | One sentence, under about 160 characters.                                                      |
+| `tags`        | yes      | At least one tag from the taxonomy below.                                                      |
+| `created`     | yes      | ISO date `YYYY-MM-DD`.                                                                         |
+| `modified`    | yes      | ISO date. Update it when the meaning changes, not for typo fixes.                              |
+| `draft`       | yes      | `true` keeps a note out of the published site.                                                 |
+| `type`        | yes      | What kind of note this is: `adr`, `pattern`, `tool`, `standard`, `runbook`, `guide` or `note`. |
+| `aliases`     | no       | Alternative names that wikilinks can use.                                                      |
+| `status`      | ADRs     | One of the ADR statuses below, in lowercase.                                                   |
+| `verified`    | no       | ISO date `YYYY-MM-DD` on which the content was last checked against its sources.               |
+| `decided`     | ADRs     | ISO date `YYYY-MM-DD` on which the decision was accepted.                                      |
 
 Home, section index and tags pages are not notes in this sense: they take no `type`.
 
@@ -71,11 +71,12 @@ Home, section index and tags pages are not notes in this sense: they take no `ty
 
 Tags are lowercase and hyphen-separated. Use the existing ones before inventing new ones.
 
-| Kind     | Tags                                                        |
-| -------- | ----------------------------------------------------------- |
-| Type     | `adr`, `patterns`, `tools`, `standards`, `runbooks`, `meta` |
-| Platform | `kubernetes`, `gitops`, `gke`, `gcp`                        |
-| Concern  | `security`, `networking`, `observability`, `reliability`    |
+| Kind     | Tags                                                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Type     | `adr`, `patterns`, `tools`, `standards`, `runbooks`, `management`, `meta`                                                             |
+| Platform | `kubernetes`, `gitops`, `gke`, `gcp`, `terraform`, `helm`, `docker`, `gitlab-ci`, `jenkins`, `artifactory`, `sonarqube`, `prometheus` |
+| Concern  | `security`, `networking`, `observability`, `reliability`, `ci-cd`, `incident-management`, `on-call`, `cost`                           |
+| People   | `leadership`, `hiring`, `career`, `team-process`, `delivery`                                                                          |
 
 Add a new tag by adding it to this table in the same change that first uses it. See [[tags|the tags page]] for browsing.
 
