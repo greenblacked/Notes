@@ -37,9 +37,14 @@ function setupDrawer() {
   drawer.setAttribute("aria-label", "Browse notes")
   drawer.removeAttribute("aria-expanded")
 
+  // The CSS draws the drawer open only with data-open. It is set here, from a MutationObserver, so
+  // it sees each change of Quartz's script complete: after a navigation that script removes
+  // hide-until-loaded, reads the layout and then adds .collapsed, and the explorer looks open for
+  // that instant (styled from the classes, the drawer slid in and out on every link).
   let wasOpen = false
   const sync = () => {
     const open = isOpen(parts)
+    explorer.toggleAttribute("data-open", open)
     toggle.setAttribute("aria-expanded", String(open))
     drawer.setAttribute("aria-modal", String(open))
     // Closed, the drawer is out of the tab order and the accessibility tree (the explorer's own
