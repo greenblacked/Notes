@@ -117,8 +117,8 @@ include:
 stages:
   - build
   - test
-  - scan
   - package
+  - scan
   - deploy
 
 variables:
@@ -233,10 +233,11 @@ image-scan:
       --atomic --wait --timeout 5m
     - kubectl rollout status deployment/my-service --namespace "$NAMESPACE" --timeout=300s
 
+# No `needs`: the deploy waits for every job in the earlier stages, so lint, unit tests,
+# SAST and the image scan all have to pass before anything reaches staging.
 deploy-staging:
   extends: .helm-deploy
   stage: deploy
-  needs: [image-scan]
   variables:
     ENV_NAME: staging
     NAMESPACE: my-service-staging
@@ -267,6 +268,8 @@ deploy-production:
 Notes on the example:
 
 - `lint` has `needs: []`, so it starts immediately and does not wait for `build`.
+- `deploy-staging` has no `needs` on purpose. A `needs` list replaces the stage barrier, so `needs: [image-scan]` would let a commit that fails `lint` or SAST (which run in parallel) reach staging, and production after it. Without `needs` the deploy waits for every earlier stage. If you add `needs` for speed, list every gating job, including the SAST jobs the template creates.
+- The `package` stage comes before `scan` because `image-scan` needs `docker-build`, and a job can only need jobs in the same or an earlier stage.
 - The Docker build, scan and deploy jobs are excluded from merge request pipelines. MRs get build, test, lint and SAST; the image only exists for commits on the default branch or tags.
 - `--atomic` rolls the release back if the upgrade fails, and `--wait` makes Helm wait for the workload to become ready. See [[helm-release-rollback]] for the manual path.
 - `docker:dind` needs a runner with privileged mode. If your runners are not privileged, use a rootless builder; check the maintenance status of any tool you pick, because some popular builders have been archived.
@@ -276,7 +279,8 @@ Notes on the example:
 
 - **Duplicate pipelines.** Forgetting `workflow:rules` gives two pipelines per push to an MR branch.
 - **`needs` and artifacts.** A job with `needs` downloads artifacts only from the jobs it lists. If you list `needs: [build]` and also need artifacts from an earlier stage, list that job too.
-- **`needs` across stages is fine; across pipelines needs `trigger` or `needs:pipeline`.** Do not expect `needs` to reach into another pipeline.
+- **`needs` points backwards only.** A job can need jobs in its own or an earlier stage; a job in a later stage makes the pipeline invalid when it is created. Across pipelines, use `trigger` or `needs:pipeline`.
+- **`needs` bypasses checks that are not listed.** Gate jobs (deploys, releases) should either list every job that must pass or have no `needs` at all.
 - **Floating image tags.** `latest` for scan and deploy tools makes pipelines non-reproducible. Pin by tag or digest and update deliberately.
 - **Secrets in `variables:`.** Anything in the YAML is visible to everyone with repo access. Use masked, protected CI/CD variables, or better, short-lived credentials from OIDC (`id_tokens`) and an external secret manager.
 - **Unbounded artifacts and caches.** Missing `expire_in` fills storage; a cache key that never changes serves stale dependencies.

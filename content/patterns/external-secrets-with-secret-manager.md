@@ -28,7 +28,7 @@ External Secrets Operator (ESO) reads secrets from an external store and writes 
 | `ExternalSecret`                  | Namespace | Which remote keys to fetch, and the shape of the resulting `Secret`.            |
 | The resulting Kubernetes `Secret` | Namespace | What the Pods actually mount or reference.                                      |
 
-The ESO controller does the fetching, so **the controller's identity** needs `roles/secretmanager.secretAccessor`, not each application. Per-team isolation therefore comes from the store design, not from IAM on the Pod.
+The ESO controller does the fetching, so **the controller's identity** needs `roles/secretmanager.secretAccessor`, not each application. Per-team isolation therefore comes from the store design (see [RBAC](#rbac)), not from IAM on the Pod.
 
 ## Install
 
@@ -166,7 +166,18 @@ For a leaked value, follow [[leaked-credential-rotation]] rather than waiting fo
 
 ## RBAC
 
-- Developers should get `create/update` on `externalsecrets` in their namespace, not on `secrets`, so they can request a secret without being able to read others.
+> [!warning] Creating an ExternalSecret is reading a secret
+> Whoever can create an `ExternalSecret` against a store can set `remoteRef.key` to **any** secret that the store's identity can read, have ESO copy it into their namespace, and mount it in a Pod. With one shared ClusterSecretStore and a project-wide `secretAccessor` binding, that is every secret in the project. Withholding `get` on `secrets` does not prevent it.
+
+Isolate tenants with at least one of these:
+
+- **Per-tenant stores and identities.** One `SecretStore` per team namespace, authenticating as a team-specific identity whose IAM covers only that team's secrets (a separate project, per-secret bindings, or an IAM condition on the secret name). This is the boundary that holds.
+- **Admission policy.** A Kyverno or Gatekeeper rule that only admits `ExternalSecret` objects whose `remoteRef.key` matches the namespace's prefix (for example `payments-*` in `payments`).
+- **Narrow store conditions.** `conditions` on a ClusterSecretStore limit which namespaces may use it, which helps only when each store's identity is already scoped to those namespaces' secrets.
+
+Then:
+
+- Developers get `create/update` on `externalsecrets` in their own namespace and nothing on `secrets` in other namespaces. On its own this is not isolation, see the warning above.
 - Only the platform team needs rights on `clustersecretstores` and `secretstores`.
 - Anyone who can create a `Pod` in a namespace can mount any `Secret` there. ESO does not change that, so combine it with namespace boundaries and [[kubernetes-network-policies]].
 - Secret Manager audit logs (Data Access logs, which must be enabled) record `AccessSecretVersion` calls by the ESO principal, not by the end user. Per-team attribution needs per-team stores.
