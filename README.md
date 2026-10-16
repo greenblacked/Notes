@@ -54,7 +54,7 @@ Obsidian workflow: open `content/` as a vault, or publish selected notes with th
 
 ## Design
 
-A calm sheet of paper on a desk, light by default, whatever the OS theme (a saved toggle choice wins). One centred reading column sits on a warm paper sheet with rounded corners, a faint grain (an SVG `feTurbulence` noise tile as a data URI, so no image file; it uses the CSP's existing `img-src data:`) and a soft, diffuse shadow; rules are thin and light. The dark theme is the same page at night: a warm charcoal sheet with off-white ink and a salmon accent, never pure black or white.
+A calm sheet of paper on a desk, light by default, whatever the OS theme (a saved toggle choice wins). One centred 68rem sheet, the same on every page, sits on the desk as warm paper with rounded corners, a faint grain (an SVG `feTurbulence` noise tile as a data URI, so no image file; it uses the CSP's existing `img-src data:`) and a soft, diffuse shadow; rules are thin and light. The dark theme is the same page at night: a warm charcoal sheet with off-white ink and a salmon accent, never pure black or white.
 
 Source Serif 4 sets the reading text and headings (400, 600 and italic; old-style numerals in prose, lining and tabular ones in tables and dates), Inter the interface (top bar, labels, chips, table of contents, metadata, table headers) and IBM Plex Mono the code. All are self-hosted: the woff2 files come from the `@fontsource` and `@fontsource-variable` devDependencies and are copied to `public/static/fonts/` by `scripts/postprocess-build.mjs`, so the Worker's CSP needs no extra origin. Inter is the variable font, so one file per subset covers every weight; a Latin page fetches about 48 KB of Inter plus the serif files it uses.
 
