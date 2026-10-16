@@ -36,6 +36,12 @@ export const SECTIONS: Section[] = [
     description: "Step-by-step operational procedures: release, roll back, recover.",
   },
   {
+    folder: "management",
+    title: "Engineering management",
+    label: "Management",
+    description: "Running a platform team: people, hiring, planning, delivery and on-call health.",
+  },
+  {
     folder: "standards",
     title: "Standards",
     label: "Standards",
