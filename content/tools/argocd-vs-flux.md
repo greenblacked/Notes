@@ -7,7 +7,7 @@ tags:
   - gitops
   - kubernetes
 created: 2026-10-10
-modified: 2026-10-10
+modified: 2026-10-16
 draft: false
 aliases:
   - argo-vs-flux
@@ -24,7 +24,7 @@ Both [Argo CD](https://argo-cd.readthedocs.io/) and [Flux](https://fluxcd.io/) a
 | ---------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
 | Architecture     | A small set of components: API server, repo server, application controller     | A toolkit of controllers (source, kustomize, helm, notification, image automation) |
 | Core resources   | `Application`, `ApplicationSet`, `AppProject`                                  | `GitRepository`, `OCIRepository`, `HelmRepository`, `Kustomization`, `HelmRelease` |
-| User interface   | First-party web UI and CLI with live resource tree, diff and sync              | No first-party UI; Flux CLI, plus community and commercial UIs                     |
+| User interface   | First-party web UI and CLI with live resource tree, diff and sync              | No UI in core Flux; Flux CLI, plus the Flux Operator web UI and community UIs      |
 | Multi-cluster    | One instance manages many registered clusters (hub and spoke)                  | Typically one Flux per cluster; remote clusters possible via kubeconfig            |
 | Multi-tenancy    | `AppProject` limits repos, destinations and resource kinds; RBAC               | Namespaced tenants with `serviceAccountName` impersonation on reconciliation       |
 | Helm             | Renders charts to manifests and applies them; Helm release not tracked by Helm | Runs real Helm releases through the Helm controller                                |
@@ -33,6 +33,8 @@ Both [Argo CD](https://argo-cd.readthedocs.io/) and [Flux](https://fluxcd.io/) a
 | Image automation | Separate project (Argo CD Image Updater)                                       | Built-in image reflector and automation controllers                                |
 | Drift handling   | Detects and shows diff; self-heal optional                                     | Reconciles on an interval; drift corrected on each run                             |
 | SSO / RBAC       | Built in (OIDC, Dex), project-scoped RBAC                                      | Uses Kubernetes RBAC; no separate user model                                       |
+
+Flux has no UI in core; the Flux Operator ships one.[^ui]
 
 ## Where Argo CD is stronger
 
@@ -62,8 +64,17 @@ Choose **Flux** when:
 - you want native SOPS and image update automation.
 
 > [!tip] It is not a lifelong marriage
-> Both read plain manifests, Kustomize overlays and Helm charts from Git. Keeping the repository layout engine-agnostic keeps the switching cost low.
+> Both read plain manifests, Kustomize overlays and Helm charts from Git. Keeping the repository layout engine-agnostic keeps the switching cost low. See [[helm-vs-kustomize]] and [[helm-chart-conventions]] for the packaging choices that matter most when you switch.
+
+## Operating costs to plan for
+
+- **Upgrades and backups.** Either engine becomes critical infrastructure. Pin versions, read the upgrade notes before each minor release, and keep its own configuration in Git so it can be rebuilt.
+- **Secrets.** Neither stores secrets safely in plain Git. Decide early between SOPS in Git and an operator that reads a secret store: [[external-secrets-with-secret-manager]].
+- **Cluster credentials.** A hub-and-spoke Argo CD holds credentials for every spoke, so its blast radius is larger. Flux per cluster keeps credentials local at the price of more installations to upgrade.
+- **Rollback.** In both, rollback is a Git revert followed by reconciliation. Helm-based rollback of a release is a different procedure: [[helm-release-rollback]].
 
 ## Our choice
 
 We chose Argo CD, mainly for the multi-cluster hub model and the UI. The reasoning and the consequences we accepted are recorded in [[0001-gitops-with-argocd]].
+
+[^ui]: The web UI ships with the Flux Operator, a separate project from core Flux. Check its current docs for scope and licensing before relying on it.
