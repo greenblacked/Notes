@@ -221,17 +221,19 @@ git init -q .
 git config user.email "test@example.com"
 git config user.name "Scanner Test"
 
-# A deliberately fake, recognisable token in the GitLab personal access token format (glpat- plus 20 characters).
-# It authenticates nowhere. The AWS documentation example keys are not used because
-# the default rules likely allowlist values ending in EXAMPLE.
-printf 'token = glpat-FAKEFAKEFAKEFAKEFAKE\n' > config.ini
+# A deliberately fake token in the GitLab personal access token format (glpat- plus 20 characters).
+# The value is random-looking so that it passes the entropy check of the rule. It is made up,
+# authenticates nowhere, and is assembled at runtime from two parts, so this notes repository
+# never contains a complete token-shaped string. The AWS documentation example keys are not used
+# because the default rules likely allowlist values ending in EXAMPLE.
+printf 'token = glpat-%s\n' 'x7Kq2mPzR9vLb4TnW8Yd' > config.ini
 git add config.ini
 git commit -q -m "test: add sample key"
 
 gitleaks detect --source . --redact --exit-code 1 && echo "NOT DETECTED: check your setup" || echo "detected as expected"
 ```
 
-Expected: gitleaks reports a finding with the value redacted, and the script prints `detected as expected`. Then open a merge request that adds a similar line and confirm the `secret-scan` job fails and the finding shows in the merge request's test report. If the made-up token is not flagged by the default rules in your version, add a custom test rule with a recognisable prefix and confirm the job turns red.
+Expected: gitleaks reports a finding of the `gitlab-pat` rule with the value redacted (the exact output differs between versions; this is illustrative), and the script prints `detected as expected`. Then open a merge request that adds a similar line and confirm the `secret-scan` job fails and the finding shows in the merge request's test report. If the made-up token is not flagged by the default rules in your version, add a custom test rule with a recognisable prefix and confirm the job turns red.
 
 ## Rollback
 
