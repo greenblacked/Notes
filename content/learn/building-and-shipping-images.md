@@ -116,10 +116,14 @@ Each instruction's result is cached. The cache for a step is reused if the instr
 So put things that change **rarely** first and things that change **often** last. The classic pattern is "dependency manifest first, source later":
 
 ```dockerfile
-COPY go.mod ./           # changes rarely
-RUN go mod download      # slow; cached while go.mod is unchanged
-COPY . .                 # changes on every edit
-RUN go build ...         # re-runs on every edit, but the download above is cached
+# changes rarely
+COPY go.mod ./
+# slow; cached while go.mod is unchanged
+RUN go mod download
+# changes on every edit
+COPY . .
+# re-runs on every edit, but the download above is cached
+RUN go build ...
 ```
 
 If you wrote `COPY . .` first, a one-line source edit would invalidate the download step and re-fetch every dependency on every build. In CI this is the difference between a 20-second and a 5-minute build.
