@@ -18,7 +18,9 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Security
 
-- `@quartz-community/utils` is no longer a git dependency, so its `prepare` script no longer runs during the root install.
+- `@quartz-community/utils` and `@quartz-community/types` are no longer git dependencies (both resolve from the npm registry), so no `prepare` script of ours runs during the root install and the lockfile has no git-resolved package.
+- The `lodash-es` override is bounded to `^4.18.1`.
+- The `DataMap.frontmatter` type is now inherited from `@quartz-community/types` 1.0, where `tags` is optional and `description`, `socialDescription` and `lang` are declared there; the build output is unchanged.
 
 ## [0.4.0] - 2026-10-16
 

@@ -163,8 +163,8 @@ jobs:
           package-manager-cache: false # no npm cache outside CI (cache-poisoning)
 
       # Only wrangler, from tools/ (its own lockfile), with no lifecycle scripts. The root
-      # dependencies are not installed here: two of them are git dependencies with a `prepare`
-      # script, which npm runs even with --ignore-scripts. Nothing but wrangler and the Node
+      # dependencies are not installed here (defence in depth: a git dependency's `prepare`
+      # script would run even with --ignore-scripts). Nothing but wrangler and the Node
       # built-ins runs next to the token (the scripts below import nothing else).
       - name: Install wrangler
         run: npm ci --ignore-scripts --prefix tools
