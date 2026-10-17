@@ -1,6 +1,6 @@
 ---
 title: "Delivery 02: Your first pipeline in GitLab CI and Jenkins, artifacts and YAML pitfalls"
-description: Write a first pipeline in GitLab CI and in Jenkins side by side, pass files between jobs with artifacts, speed it up with a cache, and avoid the YAML traps that break pipelines.
+description: "Write a first pipeline in GitLab CI and Jenkins side by side, pass files with artifacts, speed it up with a cache and avoid YAML traps."
 type: guide
 tags:
   - learning

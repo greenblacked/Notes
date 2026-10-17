@@ -1,6 +1,6 @@
 ---
 title: Artifact retention and cleanup policy
-description: Retention rules for CI artifacts, images, packages and caches across GitLab, GCS, Artifact Registry and Artifactory, with automated cleanup that protects anything deployed.
+description: "Retention rules for CI artifacts, images, packages and caches across GitLab, GCS, Artifact Registry and Artifactory, with cleanup that protects deployed items."
 type: standard
 tags:
   - standards

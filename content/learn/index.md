@@ -42,7 +42,7 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 
 - `junior` [[learn/linux-shell-and-filesystem|Linux 01: The shell, the filesystem and the command line]]
 - `junior` [[learn/linux-users-permissions-sudo-and-ssh|Linux 02: Users, permissions, sudo and SSH]]
-- `junior` [[learn/text-and-data-tools|Linux 03: Text and data tools]]
+- `junior-middle` [[learn/text-and-data-tools|Linux 03: Text and data tools]]
 - `junior-middle` [[learn/linux-processes-memory-and-disk|Linux 04: Processes, memory and disk]]
 - `junior-middle` [[learn/linux-services-packages-and-scheduled-jobs|Linux 05: Services, packages and scheduled jobs]]
 
@@ -64,7 +64,7 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 
 - `junior` [[learn/git-mental-model-and-daily-workflow|Git 01: The mental model and the daily workflow]]
 - `junior-middle` [[learn/git-merge-rebase-and-undo|Git 02: Merge, rebase and undo]]
-- `junior` [[learn/pull-requests-and-code-review|Git 03: Pull requests and code review]]
+- `junior-middle` [[learn/pull-requests-and-code-review|Git 03: Pull requests and code review]]
 
 ## Stage 4: Scripting
 
@@ -82,7 +82,7 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 **Goal:** understand what a container is and build, run and debug one.
 
 - `junior` [[learn/containers-under-the-hood|Containers 01: What a container really is]]
-- `junior` [[learn/running-and-debugging-containers|Containers 02: Running and debugging containers]]
+- `junior-middle` [[learn/running-and-debugging-containers|Containers 02: Running and debugging containers]]
 - `junior-middle` [[learn/building-and-shipping-images|Containers 03: Building and shipping images]]
 - `junior-middle` [[learn/container-storage-networking-and-compose|Containers 04: Storage, networking and Compose]]
 
@@ -92,7 +92,7 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 
 **Goal:** run an app on Kubernetes, expose it, configure it, observe it and roll it back.
 
-- `junior-middle` [[learn/kubernetes-architecture-and-kind|Kubernetes 01: Architecture, kind and kubectl]]
+- `junior` [[learn/kubernetes-architecture-and-kind|Kubernetes 01: Architecture, kind and kubectl]]
 - `junior-middle` [[learn/kubernetes-pods-and-deployments|Kubernetes 02: Pods and Deployments]]
 - `junior-middle` [[learn/kubernetes-services-and-ingress|Kubernetes 03: Services and ingress]]
 - `junior-middle` [[learn/kubernetes-config-secrets-and-namespaces|Kubernetes 04: Config, Secrets and namespaces]]
@@ -118,9 +118,9 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 **Goal:** put changes through a pipeline and describe infrastructure in code.
 
 - `junior` [[learn/ci-cd-concepts-and-branching|Delivery 01: CI and CD from the ground up, with branching strategies]]
-- `junior-middle` [[learn/first-pipeline-gitlab-ci-and-jenkins|Delivery 02: Your first pipeline in GitLab CI and Jenkins]]
+- `junior` [[learn/first-pipeline-gitlab-ci-and-jenkins|Delivery 02: Your first pipeline in GitLab CI and Jenkins]]
 - `middle` [[learn/environments-releases-and-rollbacks|Delivery 03: Environments, releases, approvals and rollbacks]]
-- `junior-middle` [[learn/terraform-basics-on-gcp|Delivery 04: Terraform basics with a first GCP project]]
+- `junior` [[learn/terraform-basics-on-gcp|Delivery 04: Terraform basics with a first GCP project]]
 - `middle` [[learn/terraform-state-modules-and-pipelines|Delivery 05: Terraform state, remote backends, modules and pipelines]]
 
 **Homelab P4** after this stage: Terraform, CI and GitOps on one repository.
@@ -138,10 +138,10 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 
 **Goal:** see what the system is doing and handle it when it breaks.
 
-- `junior-middle` [[learn/observability-signals-and-dashboards|Observability 01: Signals and dashboards]]
-- `junior-middle` [[learn/searching-logs|Observability 02: Searching logs]]
-- `middle` [[learn/first-prometheus-alert|Observability 03: Your first Prometheus alert]]
-- `middle` [[learn/troubleshooting-method|Incidents 01: A troubleshooting method]]
+- `junior` [[learn/observability-signals-and-dashboards|Observability 01: Signals and dashboards]]
+- `junior` [[learn/searching-logs|Observability 02: Searching logs]]
+- `junior-middle` [[learn/first-prometheus-alert|Observability 03: Your first Prometheus alert]]
+- `junior-middle` [[learn/troubleshooting-method|Incidents 01: A troubleshooting method]]
 - `middle` [[learn/on-call-incidents-and-postmortems|Incidents 02: On-call, incidents and postmortems]]
 
 **Homelab P5** after this stage: Prometheus, Grafana and Loki, plus an alert that fires.

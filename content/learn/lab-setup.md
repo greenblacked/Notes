@@ -214,8 +214,10 @@ gcloud auth login
 gcloud billing accounts list
 gcloud projects create "$LAB_PROJECT_ID" --name="learning lab"
 gcloud billing projects link "$LAB_PROJECT_ID" --billing-account="$BILLING_ACCOUNT_ID"
-gcloud projects update "$LAB_PROJECT_ID" --update-labels=env=lab,owner=yourname,purpose=learning
+gcloud beta projects update "$LAB_PROJECT_ID" --update-labels=env=lab,owner=yourname,purpose=learning
 ```
+
+The labelling step uses the `beta` command group because the GA `gcloud projects update` only changes the name in the version checked. Check `gcloud beta projects update --help` for your version before relying on it; the beta group may need installing (`gcloud components install beta`), and the console or Terraform can set the same labels. [[learn/gcp-foundations]] covers this in its labelling exercise.
 
 Labels (`env=lab`, `owner=...`) travel into billing reports, which is how teams attribute cost later ([[architecture/finops-cost-allocation-and-guardrails]]).
 

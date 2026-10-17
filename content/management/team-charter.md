@@ -1,6 +1,6 @@
 ---
 title: Writing a team charter
-description: A one-page operating contract for a team, with mission, ownership, decision rights, working agreements, intake and on-call commitments, a full template and a platform team example.
+description: "A one-page operating contract for a team: mission, ownership, decision rights, working agreements, intake and on-call commitments, with a template and example."
 type: guide
 tags:
   - management

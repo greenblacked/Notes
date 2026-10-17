@@ -734,4 +734,4 @@ To go deeper:
 - GNU Bash Reference Manual (https://www.gnu.org/software/bash/manual/): "The Set Builtin" and "Bourne Shell Builtins" (`trap`). The examples were run with GNU bash 5.2.21 on Ubuntu 24.04 LTS.
 - Greg's Wiki, BashFAQ 105, "Why doesn't set -e (or set -o errexit, or trap ERR) do what I expected?" (https://mywiki.wooledge.org/BashFAQ/105).
 - ShellCheck wiki and project (https://www.shellcheck.net/wiki/ and https://github.com/koalaman/shellcheck). The output was produced with ShellCheck 0.11.0 (`shellcheck-py` 0.11.0.1); the distro-packaged version will differ.
-- Aaron Maxwell, "Use the Unofficial Bash Strict Mode (Unless You Looove Debugging)" (http://redsymbol.net/articles/unofficial-bash-strict-mode/). Read it together with BashFAQ 105: its `IFS` advice and its view of `set -e` are contested.
+- Aaron Maxwell, "Use the Unofficial Bash Strict Mode (Unless You Looove Debugging)" (https://redsymbol.net/articles/unofficial-bash-strict-mode/). Read it together with BashFAQ 105: its `IFS` advice and its view of `set -e` are contested.
