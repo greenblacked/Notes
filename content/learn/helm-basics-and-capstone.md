@@ -18,7 +18,7 @@ Over the last five lessons you wrote Kubernetes YAML by hand: a Deployment, a Se
 **Helm** solves this by turning a set of YAML files into a package called a **chart**, with a small set of **values** you change per environment. Installing a chart creates a **release**, which Helm tracks, so you can ask "what is deployed?", "what changed?" and "go back to the last good version". This lesson teaches the parts you need on day one, then closes the Kubernetes stage with a capstone: one chart that deploys a complete app (ConfigMap, Secret, Deployment with probes and resources, Service), which you upgrade, break on purpose and roll back.
 
 > [!warning] Check before relying on this
-> Two major versions of Helm exist as of this lesson, Helm 3 and Helm 4, and which one your team runs matters for a few flags. I could not confirm the support dates of either. The commands in this lesson (`create`, `lint`, `template`, `install`, `upgrade --install`, `list`, `history`, `rollback`, `uninstall`) work in both. The flags that differ are called out where they appear: in Helm 3 `--atomic` rolls back a failed upgrade, while Helm 4 calls it `--rollback-on-failure` and prints a deprecation warning for `--atomic`; Helm 4 also renames `--force` to `--force-replace` and changes what `--wait` does. Run `helm version --short` and `helm upgrade --help` on your machine and trust them over this page.
+> Two major versions of Helm exist as of this lesson, Helm 3 and Helm 4, and which one your team runs matters for a few flags. The support dates of Helm 3 and Helm 4 were not confirmed for this page. The commands in this lesson (`create`, `lint`, `template`, `install`, `upgrade --install`, `list`, `history`, `rollback`, `uninstall`) work in both. The flags that differ are called out where they appear: in Helm 3 `--atomic` rolls back a failed upgrade, while Helm 4 calls it `--rollback-on-failure` and prints a deprecation warning for `--atomic`; Helm 4 also renames `--force` to `--force-replace` and changes what `--wait` does. Run `helm version --short` and `helm upgrade --help` on your machine and trust them over this page.
 
 ## What you will learn
 
@@ -490,7 +490,7 @@ By default `helm upgrade` returns as soon as the API server has accepted the obj
 
 Two options change that.
 
-- **`--wait`** makes Helm wait until the resources are ready (Deployment Pods ready, Services with endpoints) or `--timeout` passes (default 5 minutes). If the wait fails, the revision is marked `failed`.
+- **`--wait`** makes Helm wait until the resources are ready (Pods and Deployments ready, PVCs bound, Services with an IP, and a load balancer address for type LoadBalancer) or `--timeout` passes (default 5 minutes). If the wait fails, the revision is marked `failed`.
 - **An atomic upgrade** adds an automatic rollback: if the upgrade fails or times out, Helm returns to the last good revision. In Helm 3 the flag is `--atomic` (it implies `--wait`). In Helm 4 it is `--rollback-on-failure`, and `--atomic` still works but is reported as deprecated.
 
 ```bash

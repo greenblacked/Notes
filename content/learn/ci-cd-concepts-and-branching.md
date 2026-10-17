@@ -133,7 +133,7 @@ You will meet these names. None of them is "the pipeline"; each does one job.
 | **GitLab CI**                          | Runs the pipeline defined in `.gitlab-ci.yml`, next to the repository. See [[patterns/gitlab-ci-pipeline-structure]].                                                                                             |
 | **Jenkins**                            | A self-hosted automation server. The pipeline is a `Jenkinsfile`; you manage the controller and agents. See [[patterns/jenkins-shared-libraries]] and [[tools/gitlab-ci-vs-jenkins]].                             |
 | **Artifactory** (or Artifact Registry) | Stores built artifacts and images so they can be promoted from one environment to the next. See [[patterns/artifact-promotion-artifactory]].                                                                      |
-| **Terraform**                          | Creates and changes the infrastructure the software runs on, from code. You meet it in [[learn/terraform-basics-on-gcp\|Terraform 01]].                                                                           |
+| **Terraform**                          | Creates and changes the infrastructure the software runs on, from code. You meet it in [[learn/terraform-basics-on-gcp\|Delivery 04: Terraform basics with a first GCP project]].                                 |
 | **Argo CD / Spinnaker**                | Deploy releases to environments. Argo CD watches a Git repository and makes the cluster match it (GitOps, see [[adr/0001-gitops-with-argocd]]); Spinnaker is a deployment orchestrator with pipelines of its own. |
 
 The split to remember is **CI builds and tests; a deployment tool puts the result in an environment**. Some teams do both from one pipeline; others separate them so that a deployment can be re-run or rolled back without a new build.
@@ -218,7 +218,7 @@ The first two measure throughput, the last two measure stability. The research f
 
    ```bash
    mkdir -p ~/lab/ci-demo/app && cd ~/lab/ci-demo
-   git init -q
+   git init -q -b main
    echo "1.0.0" > app/version.txt
 
    cat > app/test.sh <<'EOF'
@@ -316,7 +316,7 @@ The first two measure throughput, the last two measure stability. The research f
 4. **Measure drift between environment branches.** Create a local bare repository as the remote, the three environment branches, and ten commits on `dev` that `stage` does not have.
 
    ```bash
-   git init -q --bare ~/lab/ci-demo-remote.git
+   git init -q --bare -b main ~/lab/ci-demo-remote.git
    git remote add origin ~/lab/ci-demo-remote.git
    git push -q -u origin main
    git branch stage

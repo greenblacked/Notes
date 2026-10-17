@@ -304,8 +304,9 @@ Bisect works best when each commit builds and passes tests, which is one reason 
 Run these in your lab VM, in the order given. The exercises use scratch repositories in a temporary folder, so they cannot touch real work. The sample output is from the run described at the top. Start with the setup, which gives every exercise a throwaway Git home (your real `~/.gitconfig` is not read in this shell):
 
 ```bash
-export HOME="$(mktemp -d)"
-cd "$(mktemp -d)"
+export LAB_HOME="$(mktemp -d)"; export HOME="$LAB_HOME"
+export LAB_WORK="$(mktemp -d)"
+cd "$LAB_WORK"
 git config --global user.name "Lab User"
 git config --global user.email "lab@example.com"
 git config --global init.defaultBranch main
@@ -665,7 +666,7 @@ Expected: no output. If you see something else: an error mentioning `mktemp` mea
     Expected: the first merge says `Recorded preimage for 'l.txt'` and, after you commit, a resolution is recorded. After the reset, the second merge still reports a `CONFLICT` but also says `Resolved 'l.txt' using previous resolution.` and the file already holds `log: warn`. You still have to `git add` and commit.
     If you see something else: no "Resolved" line means `rerere.enabled` was not set before the first merge.
 
-Cleanup: nothing to remove beyond the temporary folder. Close the terminal, or delete the folder printed by `pwd` from the first command.
+Cleanup: nothing to remove beyond the temporary folder. Run `cd / && rm -rf "$LAB_WORK" "$LAB_HOME"` and then close the terminal so `HOME` is restored.
 
 ## Common mistakes
 

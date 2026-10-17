@@ -199,7 +199,7 @@ Rules to plan by:
 4. **Pods are the big consumer.** Each node gets a slice of the Pod range for its Pods. The slice size and the maximum Pods per node depend on GKE settings and version (verify in the GKE documentation), so compute the maximum node count from your slice size before you pick the Pod range.
 5. **Leave unallocated space.** A spare block per environment is cheap now and costly to find later.
 
-A small plan for three environments, using `10.20.0.0/14`-style space from one parent block (the numbers are an example you should adapt, not a standard):
+A small plan for three environments, from the parent block `10.16.0.0/12` (nodes in `10.20.0.0/14`, Pods in `10.24.0.0/14`, Services in `10.28.0.0/18`) (the numbers are an example you should adapt, not a standard):
 
 | Environment | Nodes (primary range) | Pods (secondary) | Services (secondary) |
 | ----------- | --------------------- | ---------------- | -------------------- |
@@ -385,6 +385,6 @@ For going deeper as a senior engineer:
 ## Sources
 
 - RFC 4632, Classless Inter-domain Routing (CIDR) (https://www.rfc-editor.org/rfc/rfc4632), RFC 1918, Address Allocation for Private Internets (https://www.rfc-editor.org/rfc/rfc1918), RFC 3021, Using 31-Bit Prefixes on IPv4 Point-to-Point Links (https://www.rfc-editor.org/rfc/rfc3021), RFC 6598, IANA-Reserved IPv4 Prefix for Shared Address Space (https://www.rfc-editor.org/rfc/rfc6598), RFC 5737, IPv4 Address Blocks Reserved for Documentation (https://www.rfc-editor.org/rfc/rfc5737) and RFC 3927 for link-local addresses (https://www.rfc-editor.org/rfc/rfc3927).
-- Python documentation for the `ipaddress` module (https://docs.python.org/3/library/ipaddress.html). The Python outputs in this lesson were run on Python 3.13.16 on Ubuntu 24.04, except where the text says illustrative. `ip route` output was not run in the lab and is illustrative.
+- Python documentation for the `ipaddress` module (https://docs.python.org/3/library/ipaddress.html). The Python outputs in this lesson were run on Python 3.13.16 (not the system `python3` of Ubuntu 24.04, which is 3.12, so edge-range results can differ there), except where the text says illustrative. `ip route` output was not run in the lab and is illustrative.
 - Google Cloud documentation: VPC subnets and IP addresses, and GKE VPC-native clusters and IP address ranges (https://cloud.google.com/vpc/docs/subnets). Not verified: the reserved-address count, subnet size limits, and the per-node Pod slice settings. Check the version you use.
 - AWS VPC documentation on subnet sizing (https://docs.aws.amazon.com/vpc/), only for the comparison of reserved addresses. Not verified.

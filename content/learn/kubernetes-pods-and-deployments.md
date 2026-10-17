@@ -1,6 +1,6 @@
 ---
 title: "Kubernetes 02: Pods, labels and Deployments"
-description: Learn what a Pod is, how labels and selectors connect objects, and how a Deployment keeps Pods running, scales them and rolls out new versions with a tested rollback.
+description: Learn what a Pod is, how labels and selectors link objects, and how a Deployment heals, scales and rolls out Pods with a tested rollback.
 type: guide
 tags:
   - learning
@@ -12,7 +12,7 @@ modified: 2026-10-17
 draft: false
 ---
 
-> [!info] Level: junior-middle | Time: about 7 h | You need: [[learn/kubernetes-architecture-and-kind|Kubernetes 01: Architecture, kind and the kubectl workflow]] | Lab: Option A, the Ubuntu LTS VM from [[learn/lab-setup|Start 01: Set up your lab]], with a kind cluster (you recreate it in the first exercise)
+> [!info] Level: junior-middle | Time: about 7 h | You need: [[learn/kubernetes-architecture-and-kind|Kubernetes 01: Architecture, kind and the kubectl workflow]] | Lab: Lab B, the local tools and a kind cluster from [[learn/lab-setup|Start 01: Set up your lab]] (you recreate the cluster in the first exercise)
 
 In the last lesson you learned who does what inside a cluster. Now you will use the two objects you meet in almost every manifest: the **Pod**, which runs your containers, and the **Deployment**, which keeps the right number of Pods running and replaces them safely when you ship a new version. By the end you will have broken a release on purpose and recovered from it with one command, which is the skill you need on the day it happens for real.
 
@@ -522,7 +522,7 @@ You need the lab VM from [[learn/lab-setup|Start 01]]. Outputs are illustrative:
    kubectl scale deployment/web --replicas=3
    ```
 
-   Expected: right after the delete, you see four or five Pods: the old one `Terminating` and a new one `ContainerCreating` or `Running` with a small age. The deployment reaches `5/5`, then goes back to three.
+   Expected: right after the delete, you see three or four Pods: the old one `Terminating` and a new one `ContainerCreating` or `Running` with a small age. The deployment reaches `5/5`, then goes back to three.
    If you see something else: if the count never returns to 3 after the last command, run `kubectl get deployment web -o yaml` and look at `spec.replicas`. A manual `scale` is overwritten by the file the next time you `apply` it, which is the point of keeping the file as the source of truth.
 
 9. **Roll out a new image and look at the two ReplicaSets.** In one terminal run `kubectl get pods -l app.kubernetes.io/name=web -w`, and in another:
@@ -617,7 +617,7 @@ You need the lab VM from [[learn/lab-setup|Start 01]]. Outputs are illustrative:
 
 ## Next steps
 
-Next lesson: [[learn/kubernetes-services-and-ingress|Kubernetes 03: Services and ingress]]. Previous lesson: [[learn/kubernetes-architecture-and-kind|Kubernetes 01: Architecture, kind and the kubectl workflow]].
+Next lesson: [[learn/kubernetes-services-and-ingress|Kubernetes 03: Services, DNS and Ingress]]. Previous lesson: [[learn/kubernetes-architecture-and-kind|Kubernetes 01: Architecture, kind and the kubectl workflow]].
 
 To go deeper:
 

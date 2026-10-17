@@ -198,7 +198,7 @@ Cause:       Six services depend on a legacy rewrite rule that was not in our
              in staging. Pager load was also higher than planned, which took
              about three engineer-weeks from the project.
 Impact:      Product team B's launch is not affected. The old ingress runs
-             for two more months, costing about an extra month of its
+             for two more months, costing about two extra months of its
              hosting bill.
 Change:      We added a traffic-based inventory step to the migration
              checklist, and we now plan 20% of capacity for interrupts.

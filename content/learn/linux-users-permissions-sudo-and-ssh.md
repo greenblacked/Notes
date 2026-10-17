@@ -66,7 +66,7 @@ Group membership is read when you log in. If you add yourself to a group, the ru
 Run `ls -l` and you see ten characters at the start of each line.
 
 ```bash
-ls -l /etc/passwd /usr/bin/passwd /tmp
+ls -l /etc/passwd /usr/bin/passwd
 ```
 
 ```text
@@ -252,11 +252,11 @@ Put one concern in each file. A least-privilege example lets members of the `app
 ```text title="/etc/sudoers.d/10-appops"
 # Members of group appops may restart or inspect myapp. Nothing else.
 Cmnd_Alias APP_OPS = /usr/bin/systemctl restart myapp, \
-                     /usr/bin/systemctl status myapp
+                     /usr/bin/systemctl --no-pager status myapp
 %appops ALL=(root) APP_OPS
 ```
 
-Things to change and why: `myapp` is your service name, `appops` is the group that should hold this right, and the `systemctl` path must match `command -v systemctl` on your host, because sudoers matches full paths. Use full paths always.
+Things to change and why: `myapp` is your service name, `appops` is the group that should hold this right, and the `systemctl` path must match `command -v systemctl` on your host, because sudoers matches full paths. Use full paths always. The `--no-pager` option matters: without it, `systemctl status` can open a pager as root, and a pager can run shell commands.
 
 Two rules about the `/etc/sudoers.d` directory: the file must be mode `0440` and owned by root (visudo sets this), and sudo ignores any file whose name contains a dot or ends with `~`. A file called `appops.conf` is silently skipped, which is why the example is `10-appops`.
 
@@ -526,13 +526,13 @@ Run these in the lab VM, never on a shared or production host. Some need `sudo`.
    sudo apt install -y openssh-server
    sudo useradd --create-home --shell /bin/bash labuser
    sudo install -d -m 700 -o labuser -g labuser /home/labuser/.ssh
-   sudo sh -c 'cat ~/.ssh/lab_ed25519.pub >> /home/labuser/.ssh/authorized_keys'
+   cat ~/.ssh/lab_ed25519.pub | sudo tee -a /home/labuser/.ssh/authorized_keys >/dev/null
    sudo chown labuser:labuser /home/labuser/.ssh/authorized_keys
    sudo chmod 600 /home/labuser/.ssh/authorized_keys
-   ssh -i ~/.ssh/lab_ed25519 -o IdentitiesOnly=yes labuser@localhost whoami
+   ssh -i ~/.ssh/lab_ed25519 -o IdentitiesOnly=yes -o PreferredAuthentications=publickey labuser@localhost whoami
    ```
 
-   Expected: a host key prompt on first connect (answer `yes` here, because this is your own VM), then `labuser`.
+   Expected: a host key prompt on first connect (answer `yes` here, because this is your own VM), your key passphrase prompt, then `labuser`. `PreferredAuthentications=publickey` stops ssh from falling back to a password prompt.
    Now run `sudo chmod 777 /home/labuser/.ssh` and repeat the `ssh` line.
    Expected: a failure with `Permission denied (publickey).` and, in `sudo journalctl -u ssh -n 5`, a line about bad ownership or modes. Restore with `sudo chmod 700 /home/labuser/.ssh`.
    If you see something else: if the first login asks for a password instead, the key was not appended or `~/.ssh` is not mode 700. Run `sudo namei -l /home/labuser/.ssh/authorized_keys`. On RHEL use `-u sshd` for the log.
@@ -559,7 +559,7 @@ Run these in the lab VM, never on a shared or production host. Some need `sudo`.
     Expected: no output from `sshd -t`, then `permitrootlogin no`, `passwordauthentication no` and `allowgroups ssh-users`. A new session from the second terminal still works.
     If you see something else: if `passwordauthentication yes` appears, another file set it first; look at `sudo grep -R PasswordAuthentication /etc/ssh/`. If `sshd -t` prints an error, fix it and do not reload. Remember `labuser` is not in `ssh-users`, so it can no longer log in; that proves `AllowGroups` works.
 
-When you finish, clean up: `sudo userdel -r labuser`, `sudo userdel -r myapp`, `sudo rm /etc/ssh/sshd_config.d/00-hardening.conf /etc/sudoers.d/10-appops`, `sudo rmdir /srv/shared`, then `sudo systemctl reload ssh`.
+When you finish, clean up: `sudo userdel -r labuser`, `sudo userdel -r myapp`, `sudo rm /etc/ssh/sshd_config.d/00-hardening.conf /etc/sudoers.d/10-appops`, `sudo rm -r /srv/shared`, then `sudo systemctl reload ssh` and `sudo groupdel team; sudo groupdel appops; sudo groupdel ssh-users`.
 
 ## Common mistakes
 

@@ -159,7 +159,9 @@ Artifactory dev repositories need a cleanup too, with one hard rule: never delet
 
 ```bash
 # In the promote-prod job, after build-promote succeeds. Marks the dev and staging copies.
-jf rt set-props --build="${JFROG_CLI_BUILD_NAME}/${JFROG_CLI_BUILD_NUMBER}" "prod-promoted=true"
+# change: "docker-*-local/" is the repository pattern that holds the dev and staging copies.
+jf rt set-props "docker-*-local/" "prod-promoted=true" \
+  --build="${JFROG_CLI_BUILD_NAME}/${JFROG_CLI_BUILD_NUMBER}"
 ```
 
 A scheduled cleanup then selects only unmarked, old items. Keep the query in a file in version control.
@@ -211,16 +213,18 @@ REGISTRY_PREFIX="europe-west1-docker.pkg.dev/example-prod-project/containers" # 
 missing=0
 for ctx in "${CONTEXTS[@]}"; do
   # Unique image digests of all containers (including init containers) in all namespaces.
-  kubectl --context "$ctx" get pods -A -o json |
-    jq -r '.. | .imageID? // empty' |
-    sed -E 's#^(docker-pullable|containerd)://##' |
-    grep -F "$REGISTRY_PREFIX" | sort -u |
-    while read -r ref; do
-      if ! gcloud artifacts docker images describe "$ref" >/dev/null 2>&1; then
-        echo "MISSING: $ref (running in $ctx)" >&2
-        exit 1
-      fi
-    done || missing=1
+  mapfile -t refs < <(
+    kubectl --context "$ctx" get pods -A -o json |
+      jq -r '.. | .imageID? // empty' |
+      sed -E 's#^(docker-pullable|containerd)://##' |
+      { grep -F "$REGISTRY_PREFIX" || true; } | sort -u
+  )
+  for ref in "${refs[@]}"; do
+    if ! gcloud artifacts docker images describe "$ref" >/dev/null 2>&1; then
+      echo "MISSING: $ref (running in $ctx)" >&2
+      missing=1
+    fi
+  done
 done
 
 if [[ "$missing" -ne 0 ]]; then
@@ -237,7 +241,7 @@ Run it before enabling a policy and after every change to one. For images in Art
 Deletions must leave a trail so that "why is this image gone" has an answer.
 
 - Keep cleanup rules in Git, reviewed like other infrastructure code (see [[code-review]]), so every change to a retention period has an author and a reason.
-- Turn on audit logging for the stores that support it. Cloud Audit Logs Admin Activity covers Artifact Registry and bucket configuration changes; object deletions in Cloud Storage need Data Access logs enabled, which cost money, so enable them on the artifact buckets deliberately. Artifactory records deletions in its own audit and request logs.
+- Turn on audit logging for the stores that support it. Cloud Audit Logs Admin Activity covers Artifact Registry and bucket configuration changes; object deletions made by users and jobs in Cloud Storage need Data Access logs enabled, which cost money, so enable them on the artifact buckets deliberately. Deletions made by a bucket lifecycle rule are not recorded in Cloud Audit Logs (not verified for your version; check the lifecycle documentation). Use Pub/Sub notifications for Cloud Storage (`OBJECT_DELETE` events) or usage logs if you need a record of lifecycle deletions. Artifactory records deletions in its own audit and request logs.
 - Have each scheduled cleanup job write its list of deleted items (the dry-run output with a timestamp) to the evidence location. Retention for that list follows [[audit-evidence-collection-and-retention]].
 - Alert on a delete count far above the normal range, for example ten times the weekly average, so a bad query is caught after one run and not after ten.
 

@@ -82,7 +82,7 @@ terraform {
   required_providers {
     cloudflare = {
       source  = "cloudflare/cloudflare"
-      version = "~> 4.0" # Pin the major version you tested. v5 uses different syntax (not verified).
+      version = ">= 4.40, < 5.0" # change: the 4.x release you tested. The zero_trust_* names are not in early 4.x (not verified which minor). v5 uses different syntax.
     }
   }
 }
@@ -212,25 +212,30 @@ If the call is redirected to a login page or returns an Access denial page inste
 
 ### CI screenshot runs against stage
 
-The pipeline for a site like this one deploys to stage and then takes screenshots or runs a smoke test against it. Those jobs need the two headers on every request, and only for the stage origin. In Playwright, set them on the browser context for the stage URL:
+The pipeline for a site like this one deploys to stage and then takes screenshots or runs a smoke test against it. Those jobs need the two headers on every request, and only for the stage origin. In Playwright, add them with request routing scoped to the stage origin:
 
 ```ts title="playwright.config.ts (excerpt)"
-import { defineConfig } from "@playwright/test"
+import { test as base } from "@playwright/test"
 
+const STAGE_URL = process.env.STAGE_URL ?? "https://stage.example.com"
 const clientId = process.env.CF_ACCESS_CLIENT_ID
 const clientSecret = process.env.CF_ACCESS_CLIENT_SECRET
 
-export default defineConfig({
-  use: {
-    baseURL: process.env.STAGE_URL ?? "https://stage.example.com",
-    // Sent with every request from this context. Only set them when running against stage.
-    extraHTTPHeaders:
-      clientId && clientSecret
-        ? {
+// Add the headers only to requests for the stage origin, never to third-party hosts.
+export const test = base.extend({
+  context: async ({ context }, use) => {
+    if (clientId && clientSecret) {
+      await context.route(new URL(STAGE_URL).origin + "/**", (route) =>
+        route.continue({
+          headers: {
+            ...route.request().headers(),
             "CF-Access-Client-Id": clientId,
             "CF-Access-Client-Secret": clientSecret,
-          }
-        : {},
+          },
+        }),
+      )
+    }
+    await use(context)
   },
 })
 ```
@@ -238,7 +243,7 @@ export default defineConfig({
 Rules for these runs:
 
 - Run the job only on the stage environment, so the secret is not available to jobs on other branches or to pull requests from forks.
-- Keep the headers off requests to third-party origins. `extraHTTPHeaders` applies to every request of the context, including to other hosts that the page loads, so for a page that loads external assets, restrict the header to the stage host with request routing instead.
+- Keep the headers off requests to third-party origins. `extraHTTPHeaders` is unsafe when the page loads external assets: it applies to every request of the context, including to other hosts. The example above routes by origin instead.
 - Preview deployments of a Worker on another hostname are a separate surface. If a preview URL should be protected, it needs its own application (or a destination in the same one); whether that is possible for your preview hostnames is **not verified**. Deploy and rollback steps for the Worker are in [[cloudflare-workers-deploy-and-rollback]].
 
 ## Rotation and expiry

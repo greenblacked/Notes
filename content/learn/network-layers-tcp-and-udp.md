@@ -288,8 +288,10 @@ Run these in the lab VM. Outputs are illustrative where addresses, names, PIDs a
 
    ```bash
    sudo apt install -y tcpdump
-   sudo tcpdump -n -i lo port 8080 -c 12
+   sudo tcpdump -n -i lo port 8080 -c 10
    ```
+
+   Press Ctrl+C if fewer than 10 packets arrive.
 
    and in terminal 3 (or after the capture has started, from another shell):
 
@@ -331,12 +333,12 @@ Run these in the lab VM. Outputs are illustrative where addresses, names, PIDs a
 7. **A timeout, not a refusal.** Stop the server with Ctrl+C, then run:
 
    ```bash
-   nc -vz -w 3 192.0.2.1 80
+   nc -vz -w 3 203.0.113.1 80
    echo "exit code: $?"
    ```
 
-   `192.0.2.1` is in a documentation range (TEST-NET-1) that should not be routed on the internet, so SYN packets sent to it normally disappear.
-   Expected after about 3 seconds, with the OpenBSD `nc` (illustrative): `nc: connect to 192.0.2.1 port 80 (tcp) timed out: Operation now in progress` and `exit code: 1`. The point is the difference from exercise 4: there the answer came **immediately** because a host replied with a RST, and here there was **silence** until the timer expired.
+   `203.0.113.1` is in a documentation range (TEST-NET-3) that should not be routed on the internet, so SYN packets sent to it normally disappear.
+   Expected after about 3 seconds, with the OpenBSD `nc` (illustrative): `nc: connect to 203.0.113.1 port 80 (tcp) timed out: Operation now in progress` and `exit code: 1`. The point is the difference from exercise 4: there the answer came **immediately** because a host replied with a RST, and here there was **silence** until the timer expired.
    If you see something else: an instant `No route to host` or `Network is unreachable` means your network or VM has no route for the address and your own host or a router said so (a layer 3 answer). An instant `Connection refused` means something on your network, such as a proxy or a captive gateway, answers for that address. Both results are valid lessons; name the layer for each.
 
 8. **See UDP.** In terminal 1 run `nc -u -l 127.0.0.1 9999`. In terminal 2 run:
@@ -381,7 +383,7 @@ Run these in the lab VM. Outputs are illustrative where addresses, names, PIDs a
    This is exactly a program that received the remote FIN and never closed its socket. It disappears when the listener exits or after the 120 seconds.
    If you see something else: no `CLOSE-WAIT` line means the listener already exited. Run the commands again, and run `ss` before the 120 seconds end.
 
-10. **Name the layer.** For each case, write which layer is broken and the first command you would run: (a) `curl: (7) Failed to connect to 127.0.0.1 port 8081`, (b) `ssh: connect to host 192.0.2.10 port 22: Connection timed out`, (c) `ping: connect: Network is unreachable`, (d) `curl: (6) Could not resolve host`.
+10. **Name the layer.** For each case, write which layer is broken and the first command you would run: (a) `curl: (7) Failed to connect to 127.0.0.1 port 8081`, (b) `ssh: connect to host 203.0.113.10 port 22: Connection timed out`, (c) `ping: connect: Network is unreachable`, (d) `curl: (6) Could not resolve host`.
     Expected: (a) L4, refused, check `ss -tlnp` on the target; (b) L3 or a firewall drop, check the route and the firewall; (c) L3, check `ip route`; (d) L7 DNS, check `getent hosts` and the resolver.
     If you see something else: there are several defensible first commands. What matters is that you name the layer and test from the bottom up.
 

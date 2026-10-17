@@ -21,7 +21,7 @@ Autoscaling configuration is out of scope; see [[kubernetes-autoscaling]]. This 
 > HTTP services on GKE in front of Cloudflare, tested with k6 (primary) or Locust (alternative). Hostnames use `example.com`; the load generator address uses the documentation range `198.51.100.0/24`. Rates, durations and thresholds in the examples are illustrations to replace with your own.
 
 > [!note] Not verified
-> Written from knowledge of the tools, not run in this batch. Check before relying on it: the current k6 executor names and options (`ramping-arrival-rate`, `constant-arrival-rate`), the k6 output name and environment variables for Prometheus remote write (`experimental-prometheus-rw` in the versions I know; it may be renamed or promoted), the Prometheus flag that enables the remote write receiver, the Locust options, and whether the Google SRE Workbook has a chapter on load testing (this note does not cite one).
+> Written from knowledge of the tools, not run in this batch. Check before relying on it: the current k6 executor names and options (`ramping-arrival-rate`, `constant-arrival-rate`), the k6 output name and environment variables for Prometheus remote write (`experimental-prometheus-rw` in current versions, not verified; it may be renamed or promoted), the Prometheus flag that enables the remote write receiver, the Locust options, and whether the Google SRE Workbook has a chapter on load testing (this note does not cite one).
 
 ## Workload model from production traffic
 
@@ -269,7 +269,7 @@ Test the `preAllocatedVUs` and `maxVUs` values: if k6 needs more virtual users t
 
 ### Output to Prometheus
 
-Send test metrics to the same Prometheus and Grafana you use for the service, so you see load generator and service metrics on one time axis. In k6 versions I know, the output is `experimental-prometheus-rw` and it needs the remote write receiver enabled on Prometheus (not verified for your versions).
+Send test metrics to the same Prometheus and Grafana you use for the service, so you see load generator and service metrics on one time axis. In current k6 versions the output is `experimental-prometheus-rw` and it needs the remote write receiver enabled on Prometheus (not verified for your versions).
 
 ```bash
 # Prometheus must run with the remote write receiver enabled (a startup flag, check your version).
@@ -364,7 +364,9 @@ Run the smoke test on every merge to the stage branch, and the load test on a sc
 ```yaml title=".gitlab-ci.yml"
 loadtest-smoke:
   stage: verify
-  image: grafana/k6:latest # CHANGE: pin a version and mirror it in Artifactory
+  image:
+    name: grafana/k6:latest # CHANGE: pin a version and mirror it in Artifactory
+    entrypoint: [""] # the image's entrypoint is k6; GitLab needs a shell
   rules:
     - if: '$CI_COMMIT_BRANCH == "stage"'
   variables:
@@ -376,7 +378,9 @@ loadtest-smoke:
 
 loadtest-load:
   stage: verify
-  image: grafana/k6:latest # CHANGE: pin a version and mirror it in Artifactory
+  image:
+    name: grafana/k6:latest # CHANGE: pin a version and mirror it in Artifactory
+    entrypoint: [""] # the image's entrypoint is k6; GitLab needs a shell
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $LOADTEST == "true"'
       when: always

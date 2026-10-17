@@ -12,7 +12,7 @@ modified: 2026-10-17
 draft: false
 ---
 
-> [!info] Level: junior | Time: about 6 h | You need: [[learn/container-storage-networking-and-compose|Containers 04: Volumes, networks and Docker Compose]] | Lab: Option A, the Ubuntu LTS VM from [[learn/lab-setup|Start 01: Set up your lab]], with Docker, `kind` and `kubectl` installed (see "Tools and version checks" there)
+> [!info] Level: junior | Time: about 6 h | You need: [[learn/container-storage-networking-and-compose|Containers 04: Volumes, networks and Docker Compose]] | Lab: Lab B, the local tools and a kind cluster from [[learn/lab-setup|Start 01: Set up your lab]] (Docker, `kind` and `kubectl`; see "Tools and version checks" there)
 
 You can now run a few containers on one machine with Compose. Production asks for more: what restarts a container that crashes, what moves it when a machine dies, how a new version replaces an old one without downtime, and how a hundred services find each other. **Kubernetes** answers these questions by keeping a cluster of machines in the state you describe. This lesson explains the parts of a cluster and how they cooperate, so that later errors make sense, and then gives you a local cluster and the habits of a careful `kubectl` user.
 
@@ -352,7 +352,7 @@ Run these on the lab VM. Outputs are illustrative: ages, hashes, addresses, port
    docker exec lab-worker crictl ps
    ```
 
-   Expected: `-o wide` adds `INTERNAL-IP`, `OS-IMAGE`, `KERNEL-VERSION` and a `CONTAINER-RUNTIME` column that reads `containerd://1.x.x`. `docker ps` lists `lab-control-plane`, `lab-worker` and `lab-worker2`, all from a `kindest/node` image. `crictl ps` (run inside the worker) lists the containers that the kubelet started there, such as `kube-proxy` and `kindnet-cni`.
+   Expected: `-o wide` adds `INTERNAL-IP`, `OS-IMAGE`, `KERNEL-VERSION` and a `CONTAINER-RUNTIME` column that reads `containerd://<version>` (the version depends on the kind node image). `docker ps` lists `lab-control-plane`, `lab-worker` and `lab-worker2`, all from a `kindest/node` image. `crictl ps` (run inside the worker) lists the containers that the kubelet started there, such as `kube-proxy` and `kindnet-cni`.
    If you see something else: if `crictl` is not found in your node image, skip that command; `docker exec lab-worker ps aux | grep kubelet` also shows the kubelet running inside the node container.
 
 5. **Read the documentation from the API.**

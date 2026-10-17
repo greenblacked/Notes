@@ -104,7 +104,14 @@ type Client struct {
 // Get performs an idempotent GET. The caller must close the response body.
 func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 	ctx, cancel := context.WithTimeout(ctx, overallTimeout)
-	defer cancel()
+	// The returned body is still bound to this context, so cancel it on the
+	// success path only when the caller closes the body, and on every other return here.
+	success := false
+	defer func() {
+		if !success {
+			cancel()
+		}
+	}()
 
 	if c.Budget != nil {
 		c.Budget.OnRequest()
@@ -123,6 +130,8 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 
 		resp, err := c.attempt(ctx, url)
 		if err == nil && !retryableStatus(resp.StatusCode) {
+			success = true
+			resp.Body = &cancelOnClose{ReadCloser: resp.Body, cancel: cancel}
 			return resp, nil
 		}
 		if err == nil {
@@ -274,7 +283,7 @@ Practical advice:
 - Pair the breaker with a fallback where you have one: cached data, a default, a degraded feature. A breaker with no fallback just converts a slow error into a fast one, which is still better.
 - Scope breakers per dependency, and per host where one bad instance should not block healthy ones. Outlier detection (ejecting a bad instance from the load-balancing pool) is the instance-level version of the same idea.
 - Do not count `4xx` client errors as failures.
-- Proxies such as Envoy offer circuit breaker limits (maximum connections, pending requests, retries) and outlier detection. The configuration is mesh-specific, so see the service mesh documentation; field names and defaults are not verified here.
+- Proxies such as Envoy offer circuit breaker limits (maximum connections, pending requests, retries) and outlier detection. The configuration is mesh-specific, so see [[service-mesh-on-gke]]; field names and defaults are not verified here.
 
 In Go, libraries such as `sony/gobreaker` implement the state machine. Verify the current API of whichever library you pick; it is not shown here.
 
@@ -382,9 +391,11 @@ Measure the mechanics, or you will not know when they are saving you or hiding a
 | `client_retries_total{dependency}`    | counter | Retry attempts made               |
 | `client_retry_budget_exhausted_total` | counter | Retries refused by the budget     |
 | `client_circuit_state{dependency}`    | gauge   | 0 closed, 1 half-open, 2 open     |
-| `server_requests_total{priority}`     | counter | Requests reaching the shedder     |
-| `server_shed_total{priority}`         | counter | Requests shed                     |
+| `server_requests_total`               | counter | Requests reaching the shedder     |
+| `server_shed_total`                   | counter | Requests shed                     |
 | `server_inflight_requests`            | gauge   | Current in-flight requests        |
+
+The `service` label used in the alerts below is not set by the code above; it must come from the scrape target labels (for example the Kubernetes service or job name). The shedder counts all priorities together; add labelled counter vectors per priority if you need that split.
 
 Alerts on the retry ratio and the shed ratio (as a Prometheus rules file):
 
@@ -501,5 +512,6 @@ Read the result by priority: critical should stay near 100% success while batch 
 
 - [[kubernetes-resource-requests-and-limits]] and [[kubernetes-autoscaling]] for capacity and scaling behaviour.
 - [[zero-downtime-deployments-kubernetes]] for graceful shutdown during rollouts.
+- [[service-mesh-on-gke]] for proxy-level circuit breaking and retries.
 - [[error-budget-policy]] and [[slo-burn-rate-alerting]] for how shed and failed requests count against the SLO.
 - [[load-and-performance-testing]] for load test design.

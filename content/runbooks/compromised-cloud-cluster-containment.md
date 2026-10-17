@@ -90,13 +90,13 @@ gcloud projects get-iam-policy "$PROJECT" --format=json > iam-policy.json
 gcloud iam service-accounts list --project "$PROJECT" --format=json > service-accounts.json
 
 sha256sum ./* > SHA256SUMS
-gcloud storage cp -r . "$FORENSIC_BUCKET/$INCIDENT/"
+gcloud storage cp ./* "$FORENSIC_BUCKET/$INCIDENT/"
 ```
 
 Rules of evidence:
 
 - Record who collected each item, when (UTC) and with which command. Keep the originals unmodified and work on copies.
-- Do not restart, delete or exec into the suspect pod to "have a look" yet. A process list and network connections from inside the container are valuable, but each action changes state. If you must look, use an ephemeral debug container and write down every command: `kubectl debug -it "$POD" -n "$NS" --image=busybox:1.36 --target=<container>`. Whether the target container shares its process namespace for your image and runtime is not verified; test it in a lab first.
+- Do not restart, delete or exec into the suspect pod to "have a look" yet. A process list and network connections from inside the container are valuable, but each action changes state. If you must look, use an ephemeral debug container and write down every command, and use an image pinned by digest from your own registry (for example `DEBUG_IMAGE=registry.example.com/tools/debug@sha256:<digest>`, as in [[node-resource-pressure-triage]]): `kubectl debug -it "$POD" -n "$NS" --image="$DEBUG_IMAGE" --target=<container>`. Whether the target container shares its process namespace for your image and runtime is not verified; test it in a lab first.
 - Memory contents and running processes disappear on reboot. A disk snapshot (next sections) does not capture them. Decide with the security lead whether live memory capture is worth it for this incident; it needs tooling prepared in advance.
 
 A time-stamped containment log lets you reconstruct what was done and by whom, and it is the first thing the postmortem needs. Keep it append-only (a shared document with edit history, or a file in the forensic bucket):
@@ -163,7 +163,10 @@ Do not hand out new broad credentials to "help the response". Responders use the
 
 ## Contain workloads
 
-Quarantine the suspect pods without killing them. A quarantine label selects a deny-all NetworkPolicy, so the process keeps running (and its memory and filesystem stay intact) but it cannot reach the network. `kubectl exec` and `kubectl logs` still work because they go through the API server and kubelet, not the pod network.
+Quarantine the suspect pods without killing them. A quarantine label selects a deny-all NetworkPolicy, and the pod's other labels are changed so no allow policy still selects it. The process keeps running (and its memory and filesystem stay intact) but it cannot reach the network. `kubectl exec` and `kubectl logs` still work because they go through the API server and kubelet, not the pod network.
+
+> [!warning] A NetworkPolicy cannot override another policy's allow
+> NetworkPolicies are allow-only and additive. If any other policy in the namespace (for example an `app=payments` allow) also selects the pod, its allows still apply, and the quarantine policy blocks nothing. In a namespace that already has policies this gives false containment. So the quarantine step is two actions: add `quarantine=true` and also remove or replace every label that other policies and the Service select (the relabel shown under "Replacement pods" below). A priority deny that is enforced first (a Calico GlobalNetworkPolicy or an AdminNetworkPolicy) is an alternative; whether either is supported on GKE Dataplane V2 is not verified. The enforcement test below is mandatory.
 
 Apply the policy once per affected namespace. It does nothing until a pod carries the label:
 
@@ -185,6 +188,8 @@ spec:
 ```bash
 kubectl apply -f quarantine-deny-all.yaml
 kubectl label pod "$POD" -n "$NS" quarantine=true
+# Also drop the labels that allow policies and the Service select (see "Replacement pods").
+kubectl label pod "$POD" -n "$NS" app=quarantined-<name> --overwrite
 ```
 
 Points that matter:
@@ -192,7 +197,7 @@ Points that matter:
 - **Replacement pods.** A pod owned by a Deployment keeps its place in the ReplicaSet while it carries the quarantine label, so no replacement starts and capacity drops. If you need a clean replacement to take traffic, remove the pod from the controller instead by changing the label the ReplicaSet selects on (for example `kubectl label pod "$POD" -n "$NS" app-` or setting `app=quarantined-<name>`). The pod is orphaned but keeps running, and the ReplicaSet creates a new one. Do this only after you know the replacement will not run the same compromised image or credentials.
 - **Service traffic.** The quarantined pod is cut off by the policy; also remove it from Service endpoints (the relabel above does that) so users stop hitting it.
 - **Existing connections.** Whether a policy terminates connections that are already established depends on the dataplane; this is not verified. Test it in a lab. If it matters, assume an established session may survive and rely on cutting the credentials in the previous section.
-- **Policy enforcement.** Confirm the quarantine works: exec into a different pod in the namespace and check that the quarantined pod's IP is unreachable, or test egress from the pod with a debug container. Record the result in the log.
+- **Policy enforcement (mandatory).** Confirm the quarantine works: exec into a different pod in the namespace and check that the quarantined pod's IP is unreachable, or test egress from the pod with a debug container. Record the result in the log.
 - **Scale to zero is not containment.** `kubectl scale --replicas=0` deletes the pods and their state. Do it only after evidence is saved.
 - **Namespace-wide compromise.** Apply a deny-all policy to the whole namespace and keep only the allows you need for the response, see [[kubernetes-network-policies]]. Also review the namespace for pods that run privileged or with host access, see [[pod-security-admission]].
 - Workload Identity bindings: remove the binding that lets the Kubernetes service account impersonate the Google service account, see [[gke-workload-identity]]. This cuts cloud access even if the pod keeps running.
@@ -237,11 +242,15 @@ gcloud compute instances describe "$NODE" --zone "$ZONE" --project "$PROJECT" \
   --format="value(disks[].source.basename())"
 
 DISK=gke-platform-1-default-pool-5b6c7d8e-xyz1   # boot disk name from the command above
+# GCE names: 63 characters or fewer, lowercase, starting with a letter. Keep incident and node in --description.
+SNAP="ir-20261017-${NODE: -12}-boot"
+echo "${#SNAP} characters"   # must be 63 or fewer
 gcloud compute disks snapshot "$DISK" --zone "$ZONE" --project "$PROJECT" \
-  --snapshot-names "${INCIDENT}-${NODE}-boot" \
+  --snapshot-names "$SNAP" \
+  --description "incident ${INCIDENT}, node ${NODE}, boot disk" \
   --storage-location europe-west1
 
-gcloud compute snapshots describe "${INCIDENT}-${NODE}-boot" --project "$PROJECT" \
+gcloud compute snapshots describe "$SNAP" --project "$PROJECT" \
   --format="value(status)"   # wait for READY
 ```
 

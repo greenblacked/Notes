@@ -68,6 +68,8 @@ Two details catch beginners.
 
 > [!warning] Check before relying on this
 > How published ports interact with `ufw`, `firewalld` and `nftables` depends on the Docker version and firewall backend. Test from another machine (use `192.0.2.10` style documentation addresses in your notes, never real ones) before you decide a port is private.
+>
+> The image tags in this lesson (`nginx:1.27-alpine`, `alpine:3.20`) are examples. Replace them with currently supported tags before you use them for anything real.
 
 ### Listing containers and format strings
 
@@ -129,7 +131,7 @@ For a debug shell use `docker exec -it NAME sh` (many images have `sh` but not `
 docker inspect --format '{{.State.Status}} {{.State.ExitCode}} {{.State.OOMKilled}}' c2-web
 docker inspect --format '{{json .State}}' c2-web | jq
 docker inspect --format '{{json .Config.Env}}' c2-web | jq
-docker inspect --format '{{.NetworkSettings.IPAddress}}' c2-web
+docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' c2-web
 ```
 
 ```text
@@ -148,7 +150,8 @@ The most common cause is **shell form** versus **exec form** in the Dockerfile:
 
 ```dockerfile
 # Shell form: Docker runs  /bin/sh -c "node server.js"
-# sh is PID 1, node is its child, and sh does not pass SIGTERM on.
+# With dash or busybox sh, sh is PID 1 and node is its child, and sh does not pass SIGTERM on.
+# (Some shells replace themselves with a single command; verify with docker top.)
 CMD node server.js
 
 # Exec form: node is PID 1 and receives SIGTERM directly.
@@ -161,17 +164,17 @@ In shell form, `sh` is PID 1 and ignores `SIGTERM`; `docker stop` waits 10 secon
 
 An exit code tells you how the main process ended. By convention, a process killed by signal N reports `128 + N`.
 
-| Code | Meaning                              | Typical cause                                                |
-| ---- | ------------------------------------ | ------------------------------------------------------------ |
-| 0    | Finished successfully                | A one-shot job, or a clean shutdown after `SIGTERM`          |
-| 1    | General error                        | The application failed; read the logs                        |
-| 2    | Misuse of a shell command (often)    | A script or a CLI got bad arguments                          |
-| 126  | Command found but cannot be executed | Missing execute bit, wrong file type                         |
-| 127  | Command not found                    | Typo, wrong `PATH`, missing binary, or a missing interpreter |
-| 137  | 128 + 9: killed by `SIGKILL`         | OOM kill, `docker kill`, or `docker stop` after the timeout  |
-| 143  | 128 + 15: ended by `SIGTERM`         | A graceful stop where the program did not catch the signal   |
+| Code | Meaning                              | Typical cause                                                                                                                                                                                 |
+| ---- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Finished successfully                | A one-shot job, or a clean shutdown after `SIGTERM`                                                                                                                                           |
+| 1    | General error                        | The application failed; read the logs                                                                                                                                                         |
+| 2    | Misuse of a shell command (often)    | A script or a CLI got bad arguments                                                                                                                                                           |
+| 126  | Command found but cannot be executed | Missing execute bit, wrong file type                                                                                                                                                          |
+| 127  | Command not found                    | Typo, wrong `PATH`, missing binary, or a missing interpreter                                                                                                                                  |
+| 137  | 128 + 9: killed by `SIGKILL`         | OOM kill, `docker kill`, or `docker stop` after the timeout                                                                                                                                   |
+| 143  | 128 + 15: ended by `SIGTERM`         | PID 1 handled or forwarded `SIGTERM` (a handler that exits 143, or `--init`), or a child was ended by `TERM`. A PID 1 with no handler ignores `TERM` and ends with 137 after the grace period |
 
-Exit 137 does not prove an out-of-memory kill. Check `OOMKilled` in `docker inspect` before you say so. And 143 on a stop is usually fine: the process obeyed `SIGTERM` and ended. A program that catches it can choose to exit 0.
+Exit 137 does not prove an out-of-memory kill. Check `OOMKilled` in `docker inspect` before you say so. And 143 on a stop is usually fine: the process received `SIGTERM` and ended. A PID 1 without a handler ignores it and ends with 137 instead. A program that catches it can choose to exit 0.
 
 ### Cleaning up
 
@@ -350,7 +353,7 @@ Do these in your Ubuntu VM with Docker. Names start with `c2-`. Image tags are e
    ```
 
    Expected: the stop takes about 10 seconds (`real 0m10...`) and the exit code is `137`.
-   If you see something else: a quick stop with code `143` means your shell handled the signal; this can differ by image and shell. Use `docker stop -t 2 NAME` to shorten the wait while experimenting.
+   If you see something else: a quick stop with code `143` means something handled or forwarded the signal (for example a shell that execs the app, or `--init`); this can differ by image and shell. Use `docker stop -t 2 NAME` to shorten the wait while experimenting.
 
 7. **Return a specific exit code.**
 
@@ -501,7 +504,7 @@ Do these in your Ubuntu VM with Docker. Names start with `c2-`. Image tags are e
 > [!question]- Answers
 >
 > 1. `docker kill`, a `docker stop` whose grace period ran out, or the host's own OOM killer acting on a container with no memory limit (check `dmesg`). A manual `kill -9` from the host also fits.
-> 2. Not by itself. 143 is 128 + 15: the process ended because of `SIGTERM`, which is what `docker stop` sends. A program that handles the signal may exit 0 instead. It is a failure only if the program should have shut down cleanly with 0 and your alerts depend on it.
+> 2. Not by itself. 143 is 128 + 15: the process ended because of `SIGTERM`, which is what `docker stop` sends. A program that handles the signal may exit 0 instead, and a PID 1 with no handler would end with 137, not 143. It is a failure only if the program should have shut down cleanly with 0 and your alerts depend on it.
 > 3. In shell form, `sh -c` is PID 1 and does not pass `SIGTERM` to `node`, so nothing reacts until `SIGKILL` after the 10-second grace period. Use exec form (`CMD ["node", "server.js"]`) and make the app handle `SIGTERM`. You can also use `--init` or `exec` in a wrapper script.
 > 4. The file has CRLF line endings, so the kernel looks for an interpreter named `/bin/sh` plus a carriage return. Convert it (`sed -i 's/\r$//' script.sh`) and prevent a repeat with `.gitattributes` (`*.sh text eol=lf`).
 > 5. A sidecar container started with `--pid=container:NAME --network=container:NAME` and a tools image, and `nsenter` from the host using the container's PID.

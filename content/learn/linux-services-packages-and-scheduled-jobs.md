@@ -270,6 +270,11 @@ SystemMaxUse=500M
 
 ```bash
 sudo mkdir -p /etc/systemd/journald.conf.d
+sudo tee /etc/systemd/journald.conf.d/persistent.conf >/dev/null <<'EOF'
+[Journal]
+Storage=persistent
+SystemMaxUse=500M
+EOF
 sudo systemctl restart systemd-journald
 journalctl --list-boots
 ```
@@ -551,12 +556,12 @@ Run these in the lab VM (Option A), never on a shared or production host. Most n
    systemctl show -p RestartUSec crash-demo
    sudo mkdir -p /etc/systemd/system/crash-demo.service.d
    printf '[Service]\nRestartSec=10\n' | sudo tee /etc/systemd/system/crash-demo.service.d/override.conf
-   systemctl show -p RestartUSec crash-demo     # still the old value: not reloaded yet
+   systemctl show -p RestartUSec crash-demo     # may still show the old value: not reloaded yet
    sudo systemctl daemon-reload
    systemctl show -p RestartUSec crash-demo
    ```
 
-   Expected: `RestartUSec=100ms` first and after the edit before the reload, then `RestartUSec=10s` after `daemon-reload`. The `systemctl cat crash-demo` output shows the base file followed by the drop-in.
+   Expected: `RestartUSec=100ms` first, the same value (or possibly already the new one, with a warning from `systemctl` that the unit file changed on disk) after the edit, then `RestartUSec=10s` after `daemon-reload`. The `systemctl cat crash-demo` output shows the base file followed by the drop-in.
    If you see something else: if the first value is not `100ms`, your systemd default differs, which is fine. If the value never changes, check the folder name: it must be exactly `crash-demo.service.d`.
 
 5. **Read a timer calendar.** Run:
@@ -597,11 +602,12 @@ Run these in the lab VM (Option A), never on a shared or production host. Most n
 7. **Score a unit and harden it.** Run `systemd-analyze security hello-loop.service | tail -1`, then add hardening and score again:
 
    ```bash
+   sudo mkdir -p /etc/systemd/system/hello-loop.service.d
    printf '[Service]\nNoNewPrivileges=true\nProtectSystem=strict\nProtectHome=true\nPrivateTmp=true\nDynamicUser=true\n' \
      | sudo tee /etc/systemd/system/hello-loop.service.d/hardening.conf
    ```
 
-   If the folder does not exist yet, create it first with `sudo mkdir -p /etc/systemd/system/hello-loop.service.d`. Then `sudo systemctl daemon-reload && sudo systemctl restart hello-loop`, check `systemctl is-active hello-loop`, and score again.
+   Then `sudo systemctl daemon-reload && sudo systemctl restart hello-loop`, check `systemctl is-active hello-loop`, and score again.
    Expected: the "Overall exposure level" number is lower after the change (for example from about 9.6 UNSAFE to about 6 MEDIUM), and the service is still `active`.
    If you see something else: if the service fails after the change, read `journalctl -u hello-loop -n 20`; a directive your kernel does not support is the usual cause. Remove the last line you added and retry. The numbers vary a lot between systemd versions.
 
@@ -680,7 +686,7 @@ Run these in the lab VM (Option A), never on a shared or production host. Most n
     Expected: one or two lines about two minutes apart, not one per minute, for example `2026-10-17_10:31` and then `2026-10-17_10:33`: the job sleeps for 90 seconds, so the next start finds the lock held and `flock -n` exits at once.
     If you see something else: one line per minute means the lock is not shared; check the lock path is identical. No file means the quote handling broke; check `crontab -l` for the exact line. When done, remove the job with `crontab -r`. That removes **all** of your cron jobs, which is what you want for a fresh lab user.
 
-15. **Optional, RHEL family: undo a dnf transaction.** In a throwaway container:
+15. **Optional, RHEL family: undo a dnf transaction.** In a throwaway container (verify the image name; `rockylinux/rockylinux:9` is the project-maintained image, and `rockylinux:9` is the Docker Hub official one):
 
     ```bash
     docker run --rm -it rockylinux:9 bash -c '

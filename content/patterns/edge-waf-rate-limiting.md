@@ -132,6 +132,10 @@ resource "cloudflare_ruleset" "waf_custom" {
     expression  = "(ip.src in $uptime_probes)"
     action_parameters {
       ruleset = "current"
+      # `ruleset = "current"` skips only the rest of this custom phase. To keep the
+      # managed WAF from blocking the probes as well, also skip that phase
+      # (not verified: field names and whether both can be combined).
+      phases = ["http_request_firewall_managed"]
     }
   }
 
@@ -198,7 +202,7 @@ resource "cloudflare_ruleset" "rate_limit" {
     expression  = "(http.request.uri.path eq \"/api/login\" and http.request.method eq \"POST\" and not ip.src in $uptime_probes)"
 
     ratelimit {
-      characteristics     = ["ip.src"] # some plans need "cf.colo.id" as well; check the docs
+      characteristics     = ["cf.colo.id", "ip.src"] # Cloudflare docs list cf.colo.id as required; check for your plan
       period              = 60         # seconds
       requests_per_period = 10
       mitigation_timeout  = 600 # seconds blocked after the limit is hit; allowed values depend on plan

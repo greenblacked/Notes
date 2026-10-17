@@ -51,7 +51,7 @@ Failure modes to avoid:
 
 A StatefulSet replaces pods one at a time, in reverse ordinal order, when `updateStrategy` is `RollingUpdate`. Two fields give you control.
 
-- `podManagementPolicy: OrderedReady` (the default) starts and stops pods one by one and waits for each to be Ready. Keep it for quorum systems. `Parallel` starts and stops everything at once and breaks the one-at-a-time assumption behind the PDB.
+- `podManagementPolicy: OrderedReady` (the default) starts and stops pods one by one and waits for each to be Ready. Keep it for quorum systems. `podManagementPolicy` controls scale-up and scale-down ordering only: `Parallel` starts or removes several members at once during scaling. Updates stay one at a time under `RollingUpdate`, and a PDB acts only on evictions.
 - `rollingUpdate.partition` holds back every pod with an ordinal below the partition number. Set it to the replica count to pause an update, then lower it step by step to roll one member at a time with a check in between. This is the canary mechanism for stateful sets.
 
 ```yaml title="statefulset-fragment.yaml"
@@ -171,7 +171,8 @@ for i in 0 1 2; do
     -p "{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"${NEW_SIZE}\"}}}}"
 done
 
-kubectl -n "$NAMESPACE" get pvc -l app.kubernetes.io/name="$STS" -w
+kubectl -n "$NAMESPACE" get pvc -l app.kubernetes.io/name="$STS"
+# To watch, run the same command with -w in a separate terminal; Ctrl-C to stop.
 kubectl -n "$NAMESPACE" describe pvc "data-${STS}-0" | grep -i -A3 conditions
 ```
 
@@ -259,12 +260,14 @@ fi
 kubectl -n "$NAMESPACE" exec "${STS}-0" -- \
   etcdctl endpoint health --cluster --command-timeout=5s
 
-# 4. Members spread across zones: no zone holds more than one member.
+# 4. Members spread across zones.
+#    Change MAX_PER_ZONE for 5 members over 3 zones (2) or a two-zone layout.
+MAX_PER_ZONE=1
 kubectl -n "$NAMESPACE" get pods -l "app.kubernetes.io/name=${STS}" \
   -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' |
   while read -r node; do
     kubectl get node "$node" -o jsonpath='{.metadata.labels.topology\.kubernetes\.io/zone}{"\n"}'
-  done | sort | uniq -c | awk '$1 > 1 { print "NOT SAFE: zone " $2 " holds " $1 " members" > "/dev/stderr"; bad=1 } END { exit bad }'
+  done | sort | uniq -c | awk -v max="$MAX_PER_ZONE" '$1 > max { print "NOT SAFE: zone " $2 " holds " $1 " members" > "/dev/stderr"; bad=1 } END { exit bad }'
 
 echo "OK: ${READY}/${REPLICAS_EXPECTED} Ready, PDB allows ${ALLOWED}, quorum healthy, spread correct"
 ```

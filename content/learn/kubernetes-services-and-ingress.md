@@ -133,7 +133,7 @@ If `targetPort` is left out it defaults to the value of `port`. If your containe
 
 ### The virtual IP is not on any machine
 
-A `ClusterIP` is a virtual IP. No network interface owns it, and no process listens on it. You cannot `ping` it either: the rules that handle it only translate TCP and UDP connections to the Service's ports. If you ping a Service and get no reply, that is normal, not a fault.
+A `ClusterIP` is a virtual IP. In `iptables` and `nftables` mode (the kind default; verify for your cluster), no network interface owns it and no process listens on it, so you cannot `ping` it either: the rules that handle it only translate TCP and UDP connections to the Service's ports. If you ping a Service and get no reply, that is normal, not a fault. In IPVS mode the IP is bound to a dummy interface and may answer ping, which still tells you nothing about the backends.
 
 What does the work is a component on every node, usually `kube-proxy`. It watches Services and EndpointSlices through the API server and programs the node's kernel so that a connection to the Service's IP and port is rewritten (destination NAT) to the address of one ready Pod. Which Pod is picked, and how, depends on the mode:
 
@@ -373,7 +373,7 @@ Forwarding from 127.0.0.1:8080 -> 8080
 Forwarding from [::1]:8080 -> 8080
 ```
 
-It binds to `127.0.0.1` by default, so only your machine can use it. It needs only the access to Pods that `kubectl` already gives you, which is why it is perfect for a quick look. It is not a production path: it carries one connection stream at a time through the API server, it ends when your terminal does, it picks a single Pod when you give it a Service (it does not balance), and it bypasses any Ingress, authentication or policy in front of the app. Do not script it as a way for users to reach a service, and do not bind it to `0.0.0.0` on a shared machine.
+It binds to `127.0.0.1` by default, so only your machine can use it. It needs only the access to Pods that `kubectl` already gives you, which is why it is perfect for a quick look. It is not a production path: all its connections go through one tunnel via the API server to a single Pod, so it does not balance and does not scale, it ends when your terminal does, it picks a single Pod when you give it a Service (it does not balance), and it bypasses any Ingress, authentication or policy in front of the app. Do not script it as a way for users to reach a service, and do not bind it to `0.0.0.0` on a shared machine.
 
 ## Debugging a Service: a fixed order
 
@@ -420,7 +420,7 @@ Do these in the kind cluster `lab`. Check `kubectl config current-context` print
 2. **Start a client Pod and reach the Service by name.** A long-running curl Pod is a reusable "inside the cluster" viewpoint.
 
    ```bash
-   kubectl run client --image=curlimages/curl --restart=Never --command -- sleep 3600
+   kubectl run client --image=curlimages/curl:8.10.1 --restart=Never --command -- sleep 3600
    kubectl wait --for=condition=Ready pod/client --timeout=60s
    kubectl exec client -- curl -sS http://web | head -n 5
    ```
@@ -484,7 +484,7 @@ Do these in the kind cluster `lab`. Check `kubectl config current-context` print
 
    ```bash
    kubectl create namespace other
-   kubectl -n other run client --image=curlimages/curl --restart=Never --command -- sleep 3600
+   kubectl -n other run client --image=curlimages/curl:8.10.1 --restart=Never --command -- sleep 3600
    kubectl -n other wait --for=condition=Ready pod/client --timeout=60s
    kubectl -n other exec client -- sh -c 'curl -sS --max-time 3 http://web; echo "exit=$?"'
    kubectl -n other exec client -- curl -sS -o /dev/null -w '%{http_code}\n' http://web.default.svc.cluster.local

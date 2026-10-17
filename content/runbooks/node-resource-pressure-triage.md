@@ -56,15 +56,19 @@ Option A, a node debug pod. It runs on the node, shares its PID and network name
 ```bash
 kubectl debug node/"$NODE" -it --image="$DEBUG_IMAGE" --profile=sysadmin -- bash
 # Inside: processes and network are the node's. Host files are under /host.
-# Host /proc and /sys are visible as /proc and /sys when the node's PID namespace is shared.
+# Host /proc is visible as /proc when the node's PID namespace is shared. The host's /sys,
+# including cgroups, is under /host/sys: on cgroup v2 the debug container has a private
+# cgroup namespace, so its own /sys/fs/cgroup shows only its own subtree.
 ```
 
 The `--profile` flag exists in newer kubectl versions; on older ones the debug pod is unprivileged and sees less. Check `kubectl debug --help` (not verified for your version). Delete the pod when done:
 
 ```bash
 kubectl get pods -A | grep node-debugger
-kubectl delete pod node-debugger-<suffix> -n default
+kubectl delete pod node-debugger-<suffix> -n <namespace>
 ```
+
+The debug pod is created in the namespace of your current kubectl context, not necessarily `default`; use that namespace here and in the Rollback section.
 
 Option B, SSH and `toolbox`. COS has a small read-only root and no package manager. Its `toolbox` command starts a container with the host file systems mounted where you can install tools.
 
@@ -192,11 +196,20 @@ If `/proc/pressure/*` does not exist, PSI is disabled or the kernel is too old. 
 
 Node-level PSI says the node is stressed. Per-cgroup PSI says which pod is stalled or causing stalls. On cgroup v2 every cgroup has `cpu.pressure`, `memory.pressure` and `io.pressure`, plus `cpu.stat` for throttling and `memory.current` and `memory.events` for usage and OOM kills.
 
+On your workstation (kubectl is not available inside the node shell), get the pod UID:
+
+```bash
+kubectl get pod my-pod-abc123 -n "$NS" -o jsonpath='{.metadata.uid}'
+```
+
+Then paste it into the node shell:
+
 ```bash
 # Find the pod's cgroup directory from its UID (dashes become underscores).
-POD_UID=$(kubectl get pod my-pod-abc123 -n "$NS" -o jsonpath='{.metadata.uid}')
+# Use the host's cgroup tree under /host, not the debug container's private /sys/fs/cgroup.
+POD_UID=<uid from the command above>
 UID_US=${POD_UID//-/_}
-CG=$(find /sys/fs/cgroup -type d -name "*pod${UID_US}*" | head -1)
+CG=$(find /host/sys/fs/cgroup -type d -name "*pod${UID_US}*" | head -1)
 echo "$CG"
 
 cat "$CG/cpu.pressure"
@@ -210,7 +223,7 @@ cat "$CG/memory.events"   # oom, oom_kill counts
 A typical path (illustrative; it depends on the cgroup driver, the QoS class and the node image):
 
 ```text
-/sys/fs/cgroup/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod1a2b3c4d_5e6f_7a8b_9c0d_1e2f3a4b5c6d.slice/cpu.pressure
+/host/sys/fs/cgroup/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod1a2b3c4d_5e6f_7a8b_9c0d_1e2f3a4b5c6d.slice/cpu.pressure
 ```
 
 Reading the result:
@@ -332,7 +345,7 @@ Watch for at least one kubelet eviction-monitoring period plus a few minutes, an
 
 ## Rollback
 
-- Debug pods: delete them (`kubectl delete pod node-debugger-... -n default`).
+- Debug pods: delete them (`kubectl delete pod node-debugger-... -n <namespace of your kubectl context>`).
 - A cordoned node: `kubectl uncordon "$NODE"`.
 - Limit or request changes made in Git: revert the commit and let the pipeline apply it. A manual `kubectl edit` is reverted with `kubectl rollout undo deployment/<name> -n "$NS"`, but a GitOps controller will undo manual edits anyway.
 - A drained node cannot be restored; its pods are already rescheduled. Check capacity before draining: another node needs room for them.

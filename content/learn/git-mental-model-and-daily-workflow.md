@@ -207,7 +207,7 @@ git config --global init.defaultBranch main
 git config --global --list
 ```
 
-Use the email your hosting service associates with your account, or the "no-reply" address it offers, if you do not want to publish a personal one. These values are only labels. Anyone can write any name into a commit, so a name in `git log` proves nothing. Cryptographic signing proves who made a commit, and it comes in [[learn/security-basics-for-devops|Security 01]].
+Use the email your hosting service associates with your account, or the "no-reply" address it offers, if you do not want to publish a personal one. These values are only labels. Anyone can write any name into a commit, so a name in `git log` proves nothing. A cryptographic signature shows that a commit was signed with a key you trust, and it comes in [[learn/security-basics-for-devops|Security 01]].
 
 ## Hands-on exercises
 
@@ -218,7 +218,8 @@ Start with these lines, which keep every exercise away from your real Git settin
 ```bash
 export LAB_HOME="$(mktemp -d)"   # a throwaway home directory for this lesson
 export HOME="$LAB_HOME"
-cd "$(mktemp -d)"
+export LAB_WORK="$(mktemp -d)"   # where git-lab, remote.git and teammate live
+cd "$LAB_WORK"
 git config --global user.name "Lab User"
 git config --global user.email "lab@example.com"
 git config --global init.defaultBranch main
@@ -405,7 +406,7 @@ Expected: no output. If you see something else: an error from `mktemp` means `/t
    git log --oneline --graph --all
    ```
 
-   Expected: `branch 'main' set up to track 'origin/main'.` after the first push; `## main...origin/main` (in sync); `git branch -vv` shows `[origin/main]` next to `main`. Before the fetch, `git status -sb` still says in sync, because your bookmark is stale. After `git fetch`, it says `## main...origin/main [behind 1]`, and the `main..origin/main` log lists `Teammate change`. `git pull` prints `Fast-forward` and the new file, and the graph is a straight line.
+   Expected: `branch 'main' set up to track 'origin/main'.` after the first push; `## main...origin/main` (in sync); `git branch -vv` shows `[origin/main]` next to `main`. Before the fetch, `git status -sb` still says in sync, because your bookmark is stale. After `git fetch`, it says `## main...origin/main [behind 1]`, and the `main..origin/main` log lists `Teammate change`. `git pull` prints `Fast-forward` and the new file, and `main` and `origin/main` now point at `Teammate change` on one straight line (the `rescued-idea` branch from exercise 5 still branches off `Add line four`, so `--all` shows that side line).
    If you see something else: `fatal: 'origin' does not appear to be a git repository` means the relative path is wrong, so run `pwd` and `ls ..`. If `git pull` asks how to reconcile divergent branches, you made a local commit that the remote lacks; the next lesson explains merge versus rebase.
 
 10. **Check your identity.**
@@ -418,7 +419,7 @@ Expected: no output. If you see something else: an error from `mktemp` means `/t
     Expected: `user.name Lab User` and `user.email lab@example.com`, then two lines: the teammate's commit (`Mate <mate@example.com> Teammate change`) on top and yours (`Lab User <lab@example.com> Add health endpoint note and sample`) below it. Each commit carries the identity of whoever made it.
     If you see something else: if the output is empty, the identity was not set in this shell (see the setup block). In your real environment, set it once with `git config --global`.
 
-Cleanup: close the terminal, or run `cd ~ && rm -rf "$LAB_HOME"`. The scratch repositories live in a temporary directory under `/tmp` and can be removed with the system's normal cleanup.
+Cleanup: close the terminal, or run `cd / && rm -rf "$LAB_WORK" "$LAB_HOME"` and then close the terminal so `HOME` is restored.
 
 ## Common mistakes
 

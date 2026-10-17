@@ -173,6 +173,7 @@ diff app.conf.bak app.conf | head -4
 1,3c1,3
 < 203.0.113.10 - - [17/Oct/2026:10:00:01 +0000] "GET /index.html HTTP/1.1" 200 512
 < 203.0.113.10 - - [17/Oct/2026:10:00:02 +0000] "GET /api/orders HTTP/1.1" 500 87
+< 198.51.100.7 - - [17/Oct/2026:10:00:03 +0000] "GET /api/orders HTTP/1.1" 200 1310
 ```
 
 _Illustrative: your diff may show more lines._
@@ -300,6 +301,8 @@ Useful flags: `-r` prints raw strings without quotes, `-c` prints compact one-li
 jq -r '.[] | select(.status=="RUNNING") | .name' instances.json
 ```
 
+Against a real project the same filter runs on live data: `gcloud compute instances list --format=json | jq -r '.[] | select(.status=="RUNNING") | .name'` (needs a project with instances, which cost money while they run).
+
 ```text
 web-1
 web-2
@@ -409,7 +412,7 @@ print(m.groupdict())
 {'ip': '203.0.113.10', 'method': 'GET', 'path': '/a', 'status': '200', 'bytes': '5'}
 ```
 
-Scripting with Python continues in [[learn/python-for-ops|Python 17]].
+Scripting with Python continues in [[learn/python-for-ops|Scripting 03: Python for ops]].
 
 ### Why a regex is not an IP check
 
@@ -454,7 +457,7 @@ Run these in the lab VM in `~/lab03`, with the `access.log` and `instances.json`
    If you see something else: if you get no output, the status field is not field 9 in your file. Run `awk '{print $9}' access.log` and compare with the lesson.
 
 5. **Status code counts.** Run `awk '{print $9}' access.log | sort | uniq -c | sort -rn`.
-   Expected: the code `200` with count 3 first, then the others with count 1 in any order.
+   Expected: `3 200` first, then `2 500`, then `503`, `401` and `304` with count 1 in any order.
    If you see something else: if counts are all `1`, you forgot the first `sort`. `uniq -c` only counts adjacent duplicates.
 
 6. **Edit with a backup.** Run `cp access.log app.conf && sed -i.bak 's/GET/FETCH/' app.conf && diff app.conf.bak app.conf | head -4`.
@@ -525,7 +528,7 @@ Next lesson: [[learn/linux-processes-memory-and-disk|Linux 04: Processes, memory
 To go deeper:
 
 - [[standards/bash-scripts]] for the conventions that make a script built from these tools safe to run unattended.
-- [[learn/python-for-ops|Python 17]] for when the pipeline becomes a program.
+- [[learn/python-for-ops|Scripting 03: Python for ops]] for when the pipeline becomes a program.
 - The whole path is mapped in [[learn/index|the learning path]].
 
 ## Sources

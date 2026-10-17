@@ -187,7 +187,14 @@ An illustrative record for a fictional `orders-api` service. The service names, 
 
 - SLO: 99.9% of requests not 5xx over 30 days. Burn rate alerts tested on staging.
 - Load test reached 1.5 times the expected peak of 400 requests per second.
-- Rollback rehearsed twice. Restore from Cloud SQL backup tested on 2026-10-09.
+- Rollback rehearsed in each of the last three releases. Restore from Cloud SQL backup tested on 2026-10-09.
+
+| Item                                       | Yes / No | Evidence link                                      |
+| ------------------------------------------ | -------- | -------------------------------------------------- |
+| Burn rate alerts tested                    | Yes      | https://example.com/prr/orders-api/burn-test       |
+| Load test reached expected peak + headroom | Yes      | https://example.com/prr/orders-api/load-2026-10-12 |
+| Rollback rehearsed in the last 3 releases  | Yes      | https://example.com/prr/orders-api/rollbacks       |
+| Restore tested in the last quarter         | Yes      | https://example.com/prr/orders-api/restore-test    |
 
 ## Dependencies
 

@@ -81,6 +81,9 @@ resource "google_kms_crypto_key" "gke_secrets" {
   purpose         = "ENCRYPT_DECRYPT"
   rotation_period = "7776000s" # 90 days
 
+  # Set at creation and not changeable afterwards (not verified); 30 days here.
+  destroy_scheduled_duration = "2592000s"
+
   version_template {
     algorithm        = "GOOGLE_SYMMETRIC_ENCRYPTION"
     protection_level = "SOFTWARE" # CHANGE to HSM if your policy requires it.
@@ -92,7 +95,7 @@ resource "google_kms_crypto_key" "gke_secrets" {
 }
 ```
 
-`rotation_period` in Terraform is in seconds; 7,776,000 seconds is 90 days. KMS keys and key rings cannot be deleted, so a destroyed Terraform resource only leaves state; confirm how the provider treats key versions in its documentation. `prevent_destroy` guards against an accidental plan, not against someone calling the API.
+`rotation_period` in Terraform is in seconds; 7,776,000 seconds is 90 days. Destroying a `google_kms_crypto_key` in Terraform removes it from state and schedules every key version for destruction (check the provider documentation for your version). Once the scheduled period ends, the key is unusable and the data it protects is lost. `prevent_destroy` guards the plan, not the API.
 
 ## Rotation
 
@@ -187,7 +190,9 @@ variable "org_id" {
   description = "Organization ID that the policy applies to. CHANGE for your org."
 }
 
-# Not verified: constraint name and parameter format. Check them in the
+# Not verified: constraint name and value format. As far as known this is a
+# list constraint that takes values such as `in:30d`, not a boolean with
+# `parameters` (those are for managed or custom constraints). Check it in the
 # organization policy constraints reference and with
 # `gcloud org-policies describe` before applying.
 resource "google_org_policy_policy" "kms_min_destroy_duration" {
@@ -196,12 +201,11 @@ resource "google_org_policy_policy" "kms_min_destroy_duration" {
 
   spec {
     rules {
-      enforce = "TRUE"
-      parameters = jsonencode({
+      values {
         # CHANGE: a minimum that leaves time to notice a mistake.
         # Format and allowed values: not verified.
-        minimumDestroyScheduledDuration = "2592000s"
-      })
+        allowed_values = ["in:30d"]
+      }
     }
   }
 }
@@ -260,6 +264,7 @@ Disabling or destroying this key can stop the control plane from reading Secrets
 CMEK on Cloud SQL is chosen when the instance is created and, as far as known, cannot be added to an existing instance later; confirm in the current Cloud SQL documentation. Create the service identity, grant the role, then reference the key.
 
 ```hcl title="cloudsql.tf (excerpt)"
+# google_kms_crypto_key.cloudsql_orders is defined like gke_secrets above, with its own name.
 resource "google_project_service_identity" "sqladmin" {
   provider = google-beta
   project  = var.workload_project
@@ -295,10 +300,10 @@ Admin Activity audit logs for Cloud KMS are always on. Data access logs for KMS 
 
 ```text title="Logs Explorer / log sink filter"
 protoPayload.serviceName="cloudkms.googleapis.com"
-protoPayload.methodName=~"DestroyCryptoKeyVersion|DisableCryptoKeyVersion|UpdateCryptoKey|UpdateCryptoKeyPrimaryVersion|SetIamPolicy"
+protoPayload.methodName=~"DestroyCryptoKeyVersion|UpdateCryptoKeyVersion|UpdateCryptoKey|UpdateCryptoKeyPrimaryVersion|SetIamPolicy"
 ```
 
-Page on `DestroyCryptoKeyVersion` in production and open a ticket for `SetIamPolicy` on a key. Method name strings are written as known; confirm them in an entry from your own logs.
+Disabling a version is an `UpdateCryptoKeyVersion` call with the state set to `DISABLED`, so that method covers it. Page on `DestroyCryptoKeyVersion` in production and open a ticket for `SetIamPolicy` on a key. Method name strings are written as known; confirm them in an entry from your own logs.
 
 Check for keys that are not rotated at least every 90 days. This reads key metadata; the output below is illustrative only.
 

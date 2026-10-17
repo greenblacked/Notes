@@ -36,7 +36,7 @@ What is **not** toil, even when it is annoying:
 - **Engineering work with lasting value.** Writing the automation itself, designing a system, building a dashboard, fixing the root cause of an incident.
 - **Work that needs judgement.** Capacity planning decisions, security triage, reviewing a design, a first-time investigation of a new failure.
 - **A one-off task.** Migrating a service once is a project. Migrating it every quarter is toil.
-- **Incident response itself.** Responding to a page is on-call work. The repeated manual fix you apply during most pages is toil. See [[on-call-health]] for load and alert hygiene.
+- **On-call response.** The SRE book counts on-call (urgent) response as operational work under the 50% goal, so log it as toil (category: alerts), and note separately the parts that needed real judgement, such as a first-time investigation. The repeated manual fix you apply during most pages is toil in any case. See [[on-call-health]] for load and alert hygiene.
 
 If the team argues about whether something is toil, apply the checklist in the next section and write down the answer. The point is consistency over time, not a perfect verdict on each item.
 
@@ -110,7 +110,7 @@ payback_weeks = 480 / 120 = 4 weeks
 About four weeks, so it pays back within a quarter and is a clear yes. Then re-check the numbers, because the estimate is rarely right:
 
 - Engineers tend to underestimate automation effort. If the real effort is two or three days, payback is eight to twelve weeks. Still worth it for a task that will exist for years, doubtful for one that will disappear soon.
-- Count upkeep. An automation that breaks monthly and needs an hour to fix costs 12 hours a year; subtract that from the saving.
+- Check the upkeep estimate. It is already in the effort figure of the formula: an automation that breaks monthly and needs an hour to fix costs 12 hours a year, so include those hours there and do not subtract them from the saving a second time.
 - Count the non-time benefits: fewer errors, no knowledge held by one person, no pages at night. They justify automation that has a longer payback.
 - Count the interruption cost. Twenty minutes of work often costs more than twenty minutes, because it breaks focus. Do not invent a multiplier; use it as a reason to favour the interrupt-driven task when two candidates tie.
 - Re-check after you ship. If the log shows the task still takes time, the automation did not cover the real work.

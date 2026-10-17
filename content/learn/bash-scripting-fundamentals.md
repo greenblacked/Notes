@@ -100,7 +100,7 @@ Your scripts follow the same convention: exit `0` when everything worked, `1` wh
 `&&` runs the next command only if the previous one succeeded. `||` runs it only if the previous one failed. `;` runs it regardless.
 
 ```bash
-mkdir -p proj && cd proj && echo "inside proj"
+(mkdir -p proj && cd proj && echo "inside proj")
 false && echo "A" || echo "B"
 ```
 
@@ -108,6 +108,8 @@ false && echo "A" || echo "B"
 inside proj
 B
 ```
+
+The parentheses on the first line run it in a subshell, so the `cd` does not change your own shell's directory. Without them you would stay in `proj` and the later files would land there.
 
 `a && b || c` looks like `if a then b else c`, but it is not the same: if `a` succeeds and `b` fails, `c` runs too. Use a real `if` when both branches matter.
 
@@ -125,7 +127,7 @@ fi
 found
 ```
 
-`-q` makes `grep` print nothing and only set the exit code, which is exactly what an `if` wants. The square brackets in `if [[ ... ]]` are also a command (more on that below).
+`-q` makes `grep` print nothing and only set the exit code, which is exactly what an `if` wants. `[` is a command and `[[` is a shell keyword; both set an exit code that `if` reads (more on that below).
 
 ## Variables
 
@@ -715,7 +717,7 @@ In the first form the `while` loop is the right-hand side of a pipe, so it runs 
 
 Work in `~/lab15`. The scripts are the ones created above. Output is illustrative where it depends on your machine.
 
-1. **Shebang and execute bit.** Run `bash hello.sh`, then `./hello.sh`, then `chmod +x hello.sh` and `./hello.sh` again. Print `$?` after the second command.
+1. **Shebang and execute bit.** First remove the execute bit you added above with `chmod -x hello.sh`. Then run `bash hello.sh`, then `./hello.sh; echo "exit=$?"`, then `chmod +x hello.sh` and `./hello.sh` again.
    Expected: `hello from hello.sh`; then `bash: ./hello.sh: Permission denied` with `exit=126`; then `hello from ./hello.sh`.
    If you see something else: `bad interpreter` means a typo in the shebang. `No such file or directory` on a script that exists can mean Windows line endings. Run `file hello.sh` and convert with `sed -i 's/\r$//' hello.sh`.
 

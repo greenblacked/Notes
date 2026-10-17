@@ -90,7 +90,7 @@ error: externally-managed-environment
     ...
 ```
 
-_Illustrative and abridged: the wording is quoted from memory and was not produced on the lab machine._
+_Illustrative and abridged: the wording is abridged and was not produced on the lab machine._
 
 The fix is the venv you just made. Do not use `--break-system-packages` to silence the error.
 
@@ -465,14 +465,14 @@ Points to notice:
 - `status_forcelist` names the statuses worth retrying. `allowed_methods` limits retries to `GET` and `HEAD`. A `POST` that fails is not repeated, so you cannot create the thing twice. If you need to retry a `POST`, the API must support an idempotency key, and you must read its documentation first.
 - `backoff_factor` makes the waits grow (roughly `0.2`, `0.4`, `0.8` seconds, and so on). The exact formula can differ between `urllib3` versions (verify for yours). The server's own `Retry-After: 0` was honoured here.
 - When the retries run out on a status in `status_forcelist`, `requests` raises `RetryError`. It is a `RequestException`, so the handler above catches it.
-- `urllib3` logs each retry at warning level to stderr. That noise is useful when you debug, so leave it on.
+- `urllib3` logs retries after connection errors at warning level; retries on a status code (such as the 503s in the demo) are logged only at debug level. That noise is useful when you debug, so leave it on.
 
 > [!warning] Check before relying on this
 > Library behaviour changes between versions. This lesson ran with requests 2.34.2 and urllib3 2.8.0. Older tutorials use the argument `method_whitelist`, which newer `urllib3` versions no longer accept; the current name is `allowed_methods`. Check the `Retry` documentation for the version in your `requirements.txt`.
 
 ### Pagination
 
-Many APIs return one page at a time and tell you where the next page is. GitHub-style APIs use a `Link` header, which `requests` parses for you into `response.links`. This loop follows `next` links until none remains. It refuses to send the token to a different host, in case a malicious or buggy response points the `next` link somewhere else.
+Many APIs return one page at a time and tell you where the next page is. GitHub-style APIs use a `Link` header, which `requests` parses for you into `response.links`. This loop follows `next` links until none remains. It refuses to send the token to a different host, or to the same host over a different scheme (an `https` to `http` downgrade), in case a malicious or buggy response points the `next` link somewhere else.
 
 ```python title="get_all (excerpt)"
 from urllib.parse import urlparse
@@ -481,15 +481,16 @@ from urllib.parse import urlparse
 def get_all(session, url, token, timeout=5):
     """Follow rel="next" links and return every item."""
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    host = urlparse(url).netloc
+    start = urlparse(url)
+    origin = (start.scheme, start.netloc)
     items = []
     while url:
         response = session.get(url, headers=headers, timeout=timeout)
         response.raise_for_status()
         items.extend(response.json()["items"])
         url = response.links.get("next", {}).get("url")
-        if url and urlparse(url).netloc != host:
-            raise ValueError("refusing to send the token to another host")
+        if url and (urlparse(url).scheme, urlparse(url).netloc) != origin:
+            raise ValueError("refusing to send the token to another host or scheme")
     return items
 ```
 

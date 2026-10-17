@@ -95,7 +95,7 @@ Save the diagram source with the register, in Git, so it is reviewed like code.
 
 ## Trust boundaries in this stack
 
-A trust boundary is where data or a credential moves between parties with different levels of trust. These five are the starting set for the owner's stack (GitLab, runners on GKE, Artifactory, GCP, GKE, Cloudflare). Add your own.
+A trust boundary is where data or a credential moves between parties with different levels of trust. These five are the starting set for this stack (GitLab, runners on GKE, Artifactory, GCP, GKE, Cloudflare). Add your own.
 
 1. **Developer to GitLab.** A person (and their laptop, tokens and browser) pushes code into the system that decides what is built and deployed. Trust is placed in identity (SSO, MFA, signed commits) and in review rules (protected branches, required approvals), see [[code-review]].
 2. **CI runner to GCP through Workload Identity Federation.** A job proves who it is with an OIDC identity token from GitLab and exchanges it for a short-lived Google access token. The trust decision is the attribute condition on the pool provider: which project, branch, ref or environment may impersonate which service account. See [[iam-groups-and-ci-workload-identity-federation]] and [[gitlab-runners-on-gke]].
@@ -103,7 +103,7 @@ A trust boundary is where data or a credential moves between parties with differ
 4. **Registry promotion.** An artifact moves from a build repository to a repository that production pulls from. The trust decision is the evidence required to promote: scans, tests, signatures. See [[artifact-promotion-artifactory]] and [[image-signing-and-admission-verification]].
 5. **Cloudflare to origin.** Internet traffic is filtered at Cloudflare and then reaches your GCP load balancer. The trust decision is that only Cloudflare can reach the origin, and that the origin treats forwarded headers correctly. See [[cloudflare-access-service-tokens]].
 
-Other boundaries to consider when they apply: pod to pod across namespaces (see [[kubernetes-network-policies]]), user to internal tools (see [[zero-trust-access-iap-and-vpc-service-controls]]), cluster to internet egress (see [[private-gke-and-controlled-egress]]), tenant to tenant, cluster admin to workload, on-premises to cloud, and your platform to each SaaS it calls.
+Other boundaries to consider when they apply: pod to pod across namespaces (see [[kubernetes-network-policies]]), user to internal tools (see [[zero-trust-access-iap-and-vpc-service-controls]]), cluster to internet egress (see [[private-gke-and-controlled-egress]]), AI agents and assistants in CI (see [[ai/securing-ai-agents-in-ci-and-cloud]] and [the owner's AI skills catalogue](https://ai.szolotov.com)), tenant to tenant, cluster admin to workload, on-premises to cloud, and your platform to each SaaS it calls.
 
 ## STRIDE per boundary
 
@@ -186,7 +186,7 @@ kubectl run mds-check -n "$NS" --rm -it --restart=Never --image=curlimages/curl:
   "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
 ```
 
-With Workload Identity working, the answer is the Google service account bound to the pod's Kubernetes service account, or a clear error if none is bound, and **not** the node's account (usually ending in `-compute@developer.gserviceaccount.com` for the default account). The image tag is an example; pin the current tag you trust. If you see the node account, the control is not working and the register entry is `open`, not `mitigated`.
+With Workload Identity working, the answer is the Google service account bound to the pod's Kubernetes service account, or, if no Google service account is bound, the workload identity pool name (`PROJECT_ID.svc.id.goog`; not verified), and **not** the node's account (usually ending in `-compute@developer.gserviceaccount.com` for the default account). The image tag is an example; pin the current tag you trust. If you see the node account, the control is not working and the register entry is `open`, not `mitigated`.
 
 **Residual risk.** Low for pods on the standard network path. Remaining: `hostNetwork` pods if admission policy is missing, a mis-bound Kubernetes service account that grants a pod more than it should have, and attackers who already hold the node. These become their own register rows.
 
@@ -210,3 +210,10 @@ When a threat is accepted instead of mitigated, record who accepted it, when, an
 - **Do not model alone.** A model written only by the security team misses how things really run; one written only by the platform team misses attacker thinking. Both in the room.
 - **Track actions as work.** Every `open` row gets a ticket with an owner and a date, and the register shows the ticket link. A register nobody acts on is documentation, not security.
 - **Check what Google publishes.** Whether Google publishes a threat model for GKE is not verified. If it does, use it to cross-check your boundaries and do not copy it as your own.
+
+## Related notes
+
+- [[vulnerability-management-slas]]: findings that expose a boundary and the deadlines to fix them.
+- [[kubernetes-network-policies]] and [[private-gke-and-controlled-egress]]: controls for pod and egress boundaries.
+- [[zero-trust-access-iap-and-vpc-service-controls]]: access to internal tools.
+- [[ai/securing-ai-agents-in-ci-and-cloud]]: limiting what AI agents can read and write.
