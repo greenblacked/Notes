@@ -172,7 +172,10 @@ def parse_atom(tokens, pos, policy):
 
 def rank_expression(expression, policy):
     tokens = re.findall(r"\(|\)|[^\s()]+", expression)
-    value, _ = parse_or(tokens, 0, policy)
+    value, pos = parse_or(tokens, 0, policy)
+    if pos != len(tokens):
+        # Leftover tokens ("MIT unexpected AGPL-3.0-only", a stray ")"): do not trust the parse.
+        return RANK["unknown"]
     return value
 
 
@@ -232,6 +235,8 @@ set -euo pipefail
 
 python3 scripts/check_licenses.py --sbom sbom.cdx.json --policy license-policy.yaml
 ```
+
+An expression the parser cannot consume completely is ranked unknown, so it fails the gate instead of passing on its first licence. Test inputs to keep: `MIT OR Apache-2.0` ranks allow, `MIT AND AGPL-3.0-only` ranks deny, and `MIT unexpected AGPL-3.0-only` ranks unknown (fail), not allow.
 
 The script only looks at top-level `components`; nested components and the root component in `metadata` are not checked. Extend it if your generator nests components.
 
