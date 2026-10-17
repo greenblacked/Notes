@@ -5,7 +5,7 @@ tags:
   - management
   - leadership
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-10-17
 draft: false
 ---
 
@@ -32,6 +32,7 @@ These notes cover the engineering manager's side of a platform or DevOps team. T
 - [[dora-metrics|DORA metrics for a platform team]]: definitions of the DORA software delivery metrics, how to measure them from GitLab CI, Jenkins and incident data, and how to avoid gaming them.
 - [[tech-debt-management|Tech debt management]]: how to identify, record, score and pay down infrastructure tech debt, with a debt register format, capacity budgeting and a way to make the case to leadership.
 - [[stakeholder-communication|Stakeholder communication]]: communicating up and across as a DevOps lead, with copy-paste templates for status updates, incident comms, RFC summaries, migration expectations and risk registers.
+- [[ai/rolling-out-ai-tools-in-a-team|Rolling out AI coding tools in a DevOps team]]: piloting AI coding and review assistants with a baseline, outcome metrics, security review and a go or no-go decision.
 
 ## Operations
 

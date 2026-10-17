@@ -5,7 +5,7 @@ tags:
   - runbooks
   - meta
 created: 2026-10-11
-modified: 2026-10-16
+modified: 2026-10-17
 draft: false
 ---
 
@@ -23,10 +23,13 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 - [[helm-release-rollback|Helm release rollback]]: roll back a Helm release with history and rollback, recover failed or pending-upgrade states, use atomic and wait, and revert in Git when Argo CD manages it.
 - [[gke-cluster-upgrade|GKE cluster upgrade]]: upgrade a GKE control plane and node pools safely: channels, maintenance windows, deprecated API checks, surge or blue-green, PDBs, validation and rollback limits.
 - [[argocd-sync-failure-and-drift|Argo CD sync failure and drift]]: diagnose an Argo CD application that is OutOfSync, Degraded or failing to sync, tell drift from bad manifests, fix it in Git, and roll back safely.
+- [[network-troubleshooting-dns-mtu-tls-load-balancers|Network troubleshooting, DNS, MTU, TLS and load balancer health checks]]: a symptom-first runbook for the four common network failure classes on GKE and GCP, with commands, expected output and a troubleshooting table.
+- [[policy-rollout-audit-to-enforce|Rolling out a new policy from audit to enforce]]: step-by-step rollout of a new admission or CI policy on GKE with Argo CD, from audit and warn to per-namespace and cluster-wide enforcement, with rollback.
 
 ## Infrastructure as code
 
 - [[terraform-state-recovery|Terraform state recovery]]: recover from stuck locks, corrupted or lost state, refactors with state mv/rm/import, drift and provider upgrade breakage, with a backup before every destructive step.
+- [[chef-to-immutable-images-migration|Migrating from Chef convergence to immutable images and Terraform]]: a staged, per-service migration of a Chef-managed VM estate to baked Packer images or containers, deployed with Terraform instance templates and managed instance groups.
 
 ## This site
 

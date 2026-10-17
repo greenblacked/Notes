@@ -5,7 +5,7 @@ tags:
   - standards
   - meta
 created: 2026-10-10
-modified: 2026-10-16
+modified: 2026-10-17
 draft: false
 ---
 
@@ -21,6 +21,9 @@ Standards say how the team works: how notes are written, how production changes 
 
 > [!warning] Commands are examples
 > Commands in these notes use example project and cluster names. Read them before you run them.
+
+- [[structured-logging-conventions|Structured logging conventions]]: one JSON log schema for services on GKE, with required fields, severity mapping, trace correlation, data that must never be logged, and a CI check.
+- [[change-freezes-and-maintenance-windows|Change freezes and maintenance windows]]: standard for when to freeze changes and how to enforce freezes in GKE, Argo CD and GitLab, with an override path and a security fast path.
 
 ## Changing this site
 
