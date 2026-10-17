@@ -5,7 +5,7 @@ tags:
   - standards
   - meta
 created: 2026-10-10
-modified: 2026-10-16
+modified: 2026-10-17
 draft: false
 ---
 
@@ -21,6 +21,16 @@ Standards say how the team works: how notes are written, how production changes 
 
 > [!warning] Commands are examples
 > Commands in these notes use example project and cluster names. Read them before you run them.
+
+- [[structured-logging-conventions|Structured logging conventions]]: one JSON log schema for services on GKE, with required fields, severity mapping, trace correlation, data that must never be logged, and a CI check.
+- [[change-freezes-and-maintenance-windows|Change freezes and maintenance windows]]: standard for when to freeze changes and how to enforce freezes in GKE, Argo CD and GitLab, with an override path and a security fast path.
+- [[production-readiness-review|Production readiness review]]: a once-per-service launch gate with a checklist, evidence links, a go, conditional-go or no-go record, and a re-review schedule for critical services.
+- [[error-budget-policy|Error budget policy and release gating]]: a written policy that turns SLO error budgets into tiers, approvals, an exception flow, a CI release gate and a quarterly review.
+- [[toil-budget|Toil measurement and the toil budget]]: define toil strictly, track it, cap it, rank automation by payback and report it with SLO and on-call data, with a worked certificate renewal example.
+- [[vulnerability-management-slas|Vulnerability management lifecycle and remediation SLAs]]: intake, triage order, a proposed SLA matrix, expiring exceptions, a Trivy CI gate with an allowlist, and weekly reporting for container and cloud findings.
+- [[platform-threat-modelling|Threat modelling for GKE, GCP and CI/CD platforms]]: a repeatable STRIDE-per-boundary process for platform changes, with a data flow diagram, a threat register template and a worked metadata server example.
+- [[artifact-retention-policy|Artifact retention and cleanup policy]]: retention rules for CI artifacts, images, packages and caches across GitLab, GCS, Artifact Registry and Artifactory, with automated cleanup that protects anything deployed.
+- [[bash-scripts|Bash script standard]]: structure, safety rules and ShellCheck CI gating for Bash in ops repositories, with copy-ready templates and a rule for when to switch to Python.
 
 ## Changing this site
 

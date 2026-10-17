@@ -18,6 +18,13 @@ export const SECTIONS: Section[] = [
     description: "Numbered, immutable records of significant decisions and their context.",
   },
   {
+    folder: "architecture",
+    title: "Architecture",
+    label: "Architecture",
+    description:
+      "Reference designs for the platform: cloud foundations, networking, cluster topology, reliability and cost, with the trade-offs behind them.",
+  },
+  {
     folder: "patterns",
     title: "Patterns",
     label: "Patterns",
@@ -36,6 +43,20 @@ export const SECTIONS: Section[] = [
     description: "Step-by-step operational procedures: release, roll back, recover.",
   },
   {
+    folder: "compliance",
+    title: "Compliance",
+    label: "Compliance",
+    description:
+      "Controls, audit evidence, access reviews and the software supply chain, and how the platform produces proof of them.",
+  },
+  {
+    folder: "ai",
+    title: "AI in DevOps",
+    label: "AI",
+    description:
+      "Using AI agents and assistants in delivery and operations safely: access, review, provenance, incidents and rollout.",
+  },
+  {
     folder: "management",
     title: "Engineering management",
     label: "Management",
@@ -46,5 +67,12 @@ export const SECTIONS: Section[] = [
     title: "Standards",
     label: "Standards",
     description: "How the team works: notes, production changes, code review and postmortems.",
+  },
+  {
+    folder: "learn",
+    title: "Learning path",
+    label: "Learn",
+    description:
+      "Lessons from first steps to middle level: Linux, networking, Git, containers, Kubernetes, GCP, CI/CD, Terraform and on-call.",
   },
 ]

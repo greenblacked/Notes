@@ -5,7 +5,7 @@ tags:
   - management
   - leadership
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-10-17
 draft: false
 ---
 
@@ -16,6 +16,7 @@ These notes cover the engineering manager's side of a platform or DevOps team. T
 - [[first-90-days-as-em|First 90 days as an EM of an infra team]]: a practical plan for a new engineering manager of a DevOps or infra team: listening tour, mapping risks, early wins, trust and what not to change yet.
 - [[delegation-and-ownership|Delegation and service ownership for a new EM]]: levels of delegation, service ownership, avoiding the prod-access bottleneck and a RACI for platform work, for EMs coming from a hands-on DevOps role.
 - [[platform-team-operating-model|Platform team operating model]]: how to run a DevOps platform team as a product team, with Team Topologies interaction modes, golden paths, intake, a shield rotation and adoption metrics.
+- [[team-charter|Writing a team charter]]: a one-page operating contract for a team, with mission, ownership, decision rights, working agreements, intake and on-call commitments, a full template and a platform team example.
 
 ## People
 
@@ -32,6 +33,11 @@ These notes cover the engineering manager's side of a platform or DevOps team. T
 - [[dora-metrics|DORA metrics for a platform team]]: definitions of the DORA software delivery metrics, how to measure them from GitLab CI, Jenkins and incident data, and how to avoid gaming them.
 - [[tech-debt-management|Tech debt management]]: how to identify, record, score and pay down infrastructure tech debt, with a debt register format, capacity budgeting and a way to make the case to leadership.
 - [[stakeholder-communication|Stakeholder communication]]: communicating up and across as a DevOps lead, with copy-paste templates for status updates, incident comms, RFC summaries, migration expectations and risk registers.
+- [[ai/rolling-out-ai-tools-in-a-team|Rolling out AI coding tools in a DevOps team]]: piloting AI coding and review assistants with a baseline, outcome metrics, security review and a go or no-go decision.
+- [[cross-team-dependencies|Managing cross-team dependencies]]: identify, record, track and escalate dependencies between teams, with a register, request template, escalation path and a worked Helm chart example.
+- [[inner-source-platform|Inner-source contribution model for platform code]]: how product teams change platform-owned Helm charts, Terraform modules and pipeline templates through merge requests while the platform team keeps ownership and review standards.
+- [[engineering-budget-planning|Engineering budget planning and forecasting]]: how an engineering manager builds an annual budget, forecasts monthly, explains variance and tracks vendor renewals, with templates and a worked hire example.
+- [[quarterly-engineering-review|Quarterly engineering review and roadmap]]: a one-page quarterly review for engineering managers covering commitments, DORA and incidents, capacity split, risks, a Now/Next/Later roadmap and blameless reporting.
 
 ## Operations
 
@@ -40,3 +46,5 @@ These notes cover the engineering manager's side of a platform or DevOps team. T
 
 > [!note] Adapt the numbers
 > Percentages, scores and templates in these guides are starting points. Replace them with your own team's data, and check anything about pay, working time or performance processes against your company policy and local law.
+
+- [[team-reorg-runbook|Splitting, merging and reorganising teams]]: a checklist-driven runbook for the change event of a team reorg, covering readiness, ownership and on-call re-cut, access moves, communication, a week -2 to week 4 timeline and rollback triggers.

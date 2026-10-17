@@ -7,7 +7,7 @@ tags:
   - reliability
   - delivery
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-10-17
 draft: false
 ---
 
@@ -85,7 +85,7 @@ Prefer forward-compatible changes (expand, migrate, contract) so rollback of cod
 - High changes run in the agreed window, in business hours with the team present, not on Friday afternoons or before holidays.
 - Low changes may run at any time the pipeline allows, provided on-call is not handling an incident.
 - Change freezes (peak trading periods, major launches, year end) are announced in advance. During a freeze only emergency changes proceed, approved by a manager and recorded as such.
-- Emergency changes (to stop an active incident) skip the window but not the log, and get a retrospective review within a week.
+- Emergency changes (to stop an active incident) skip the window but not the log, and get a retrospective review within a week. See [[standards/change-freezes-and-maintenance-windows]] for the freeze rules, and [[compliance/change-management-controls-and-pipeline-evidence]] for the evidence these changes leave.
 
 ## Copy-paste checklist
 
