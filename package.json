@@ -32,7 +32,7 @@
     "@clack/prompts": "^1.8.1",
     "@floating-ui/dom": "^1.8.0",
     "@myriaddreamin/rehype-typst": "^0.7.0",
-    "@napi-rs/simple-git": "0.1.22",
+    "@napi-rs/simple-git": "1.2.0",
     "ansi-truncate": "^1.4.0",
     "async-mutex": "^0.5.0",
     "chokidar": "^5.0.0",
