@@ -190,7 +190,7 @@ Kubernetes assigns each Pod a **Quality of Service class** from its requests and
 
 A frequent mistake is to think that setting requests and a memory limit gives `Guaranteed`. It does not: requests plus only a memory limit is `Burstable`. Guaranteed needs CPU **and** memory, for requests **and** limits, equal, on every container (including init and sidecar containers, verify for your version).
 
-When a node runs short of memory or disk, the kubelet **evicts** Pods to protect the node. In rough order, Pods that are using more than they requested go first, and `BestEffort` and `Burstable` Pods are in that group, while `Guaranteed` Pods are the last to be evicted. Within a class, Pod priority and how far above its request a Pod is also matter. QoS also influences which process the kernel's OOM killer picks. So: `BestEffort` is evicted first, `Burstable` next, `Guaranteed` last.
+When a node runs short of memory or disk, the kubelet **evicts** Pods to protect the node. The kubelet ranks Pods by whether their usage is above their requests, then by Pod priority, then by how far above the request they are. QoS only predicts the outcome: `BestEffort` Pods (zero request) are usually first, `Burstable` next, and `Guaranteed` Pods are normally last. QoS also influences which process the kernel's OOM killer picks.
 
 > [!warning] Check before relying on this
 > The precise eviction ranking (priority, usage over request, the exact thresholds) is documented under "Node-pressure Eviction" and has changed between versions. Use the class order above as the mental model and read the page for your version for the details.
@@ -504,12 +504,12 @@ Do these in the kind cluster `lab`. Names start with `k5-`. Check `kubectl confi
    kubectl describe pod k5-big | grep -A3 Events
    ```
 
-   Expected: `STATUS Pending`, and an event from the scheduler such as `0/1 nodes are available: 1 Insufficient cpu`:
+   Expected: `STATUS Pending`, and an event from the scheduler such as the illustrative 3-node message below:
 
    ```text
    NAME     READY   STATUS    RESTARTS   AGE
    k5-big   0/1     Pending   0          6s
-     Warning  FailedScheduling  6s  default-scheduler  0/1 nodes are available: 1 Insufficient cpu. ...
+     Warning  FailedScheduling  6s  default-scheduler  0/3 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 2 Insufficient cpu. ...
    ```
 
    If you see something else: if the Pod runs, your machine reports 100 or more CPUs; use a larger value. The number of nodes and the tail of the message differ with the cluster. The `cpu: "100"` request is 100 whole cores. Compare with `100m`, which is a tenth of a core: the missing `m` is the classic typo.
@@ -521,7 +521,7 @@ Do these in the kind cluster `lab`. Names start with `k5-`. Check `kubectl confi
    kubectl debug -it "$POD" --image=busybox:1.36 --target=web -- sh
    ```
 
-   Inside the debug shell run `ps` and then `exit`.
+   The nginx image is used here only for convenience: it has a shell, so `kubectl exec` would also work. An ephemeral container is needed for images without a shell (distroless or minimal images), where `kubectl exec ... -- sh` fails with `executable file not found`; the technique is the same. Inside the debug shell run `ps` and then `exit`.
    Expected: `ps` lists the nginx processes (`nginx: master process ...`) next to the debug shell, because the process namespace is shared. After `exit`, `kubectl get pod "$POD" -o jsonpath='{.spec.ephemeralContainers[*].name}'` prints the debug container name, and the Pod was not restarted.
    If you see something else: if you see only your own `sh`, the runtime did not share the process namespace; check that you passed `--target` with the real container name. `error: ephemeral containers are disabled` or a forbidden error means your cluster or RBAC does not allow it.
 
@@ -562,13 +562,13 @@ Do these in the kind cluster `lab`. Names start with `k5-`. Check `kubectl confi
 > 1. A failing liveness probe makes the kubelet kill and restart the container; it is for a process that is stuck. A failing readiness probe removes the Pod from the Service endpoints without restarting it; it is for a Pod that cannot take traffic right now. A startup probe delays the other two until the application has started.
 > 2. If the database fails, every Pod fails liveness at the same time and is restarted. The restarts add load, slow the recovery and turn a dependency problem into an outage of your own service. Liveness should check only that the local process is responsive.
 > 3. A CPU limit throttles the container even when the node has idle CPU, which can hurt latency; a CPU request still gives it a fair share. Memory cannot be reclaimed by slowing a process down, so without a limit one Pod can use up the node's memory and cause OOM kills or evictions for others. Whether to set CPU limits is a team policy.
-> 4. `Burstable`: Guaranteed needs CPU and memory requests equal to limits on every container. `BestEffort` Pods (no requests or limits) are evicted first, then `Burstable` Pods using more than they requested; `Guaranteed` Pods last.
+> 4. `Burstable`: Guaranteed needs CPU and memory requests equal to limits on every container. `BestEffort` Pods are usually evicted first because any usage exceeds their zero request; the kubelet ranks by usage over request, then priority, so `Guaranteed` Pods are normally last.
 > 5. `kubectl get pod NAME` for status and restarts, `kubectl logs NAME --previous` for the run that crashed, and `kubectl describe pod NAME` for `Last State`, the exit code and the Events (newest at the bottom). Then fix the cause that the logs and exit code show.
 > 6. At the ReplicaSet: `kubectl describe replicaset` (or `kubectl get events`) in the same namespace. A ResourceQuota that is exceeded, an admission policy that rejected the Pod, or a missing ServiceAccount stops Pods from being created, so the Pod itself never exists to describe.
 
 ## Next steps
 
-Next lesson: [[learn/helm-basics-and-capstone|Kubernetes 06: Helm basics and the capstone]]. Previous lesson: [[learn/kubernetes-config-secrets-and-namespaces|Kubernetes 04: ConfigMaps, Secrets and Namespaces]].
+Next lesson: [[learn/helm-basics-and-capstone|Kubernetes 06: Helm basics and the stage capstone]]. Previous lesson: [[learn/kubernetes-config-secrets-and-namespaces|Kubernetes 04: ConfigMaps, Secrets and Namespaces]].
 
 To go deeper:
 

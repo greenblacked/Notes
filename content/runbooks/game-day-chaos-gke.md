@@ -175,6 +175,9 @@ kubectl get podchaos -n "$NS"
 
 This drill tests the question every regional GKE cluster asks: what happens when one zone is gone? You cannot switch off a Google zone, so you simulate it. Cordon every node in one zone so nothing new lands there, then drain them so their pods move.
 
+> [!warning] This drill is not limited to one namespace
+> Draining every node in a zone evicts every workload on those nodes, in every namespace, including `kube-system` and other teams' pods. The one-namespace blast-radius rule does not hold here. Run it only in staging, or on a dedicated node pool selected with a `nodeSelector`, and tell the other tenants before you start.
+
 ```bash
 NS=payments-staging
 APP=payments-api
@@ -183,8 +186,10 @@ ZONE=europe-west1-b   # CHANGE: the zone to "lose"
 # 1. List the nodes in that zone
 kubectl get nodes -l topology.kubernetes.io/zone="$ZONE" -o name
 
-# 2. Cordon: no new pods are scheduled there
+# 2. Cordon: no new pods are scheduled there. Also stop the cluster autoscaler from
+#    removing the drained, empty nodes during the drill (removed again in the rollback).
 kubectl cordon -l topology.kubernetes.io/zone="$ZONE"
+kubectl annotate nodes -l topology.kubernetes.io/zone="$ZONE" cluster-autoscaler.kubernetes.io/scale-down-disabled=true
 
 # 3. Drain: evict pods, respecting PodDisruptionBudgets
 for n in $(kubectl get nodes -l topology.kubernetes.io/zone="$ZONE" -o name); do
@@ -239,6 +244,7 @@ kubectl delete podchaos game-day-payments-api-pod-failure -n "$NS"
 
 # Zonal drill: let nodes take pods again
 kubectl uncordon -l topology.kubernetes.io/zone="$ZONE"
+kubectl annotate nodes -l topology.kubernetes.io/zone="$ZONE" cluster-autoscaler.kubernetes.io/scale-down-disabled-
 
 # Confirm recovery
 kubectl rollout status deployment/"$APP" -n "$NS" --timeout=300s

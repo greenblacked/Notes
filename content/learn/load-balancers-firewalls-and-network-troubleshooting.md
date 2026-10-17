@@ -405,7 +405,7 @@ Things to change and why: nothing, for the lab. In production, `proxy_read_timeo
    Expected: `502` for the first request, and the log shows `connect() failed (111: Connection refused)` or `no live upstreams while connecting to upstream`. After restarting, the `/slow` request returns `504` after about 10 seconds (illustrative: `504 10.0s`), because nginx waits 5 s for each of two backends. The log shows `upstream timed out (110: Connection timed out) while reading response header from upstream`.
    If you see something else: if `/slow` returns `200` after 10 s, `proxy_read_timeout` was not set to 5 s. If `/slow` returns `502`, a backend is not running. The point to keep: `502` came fast and meant "refused", `504` came slowly and meant "no answer in time".
 
-5. **Forge a client address.** Compare the safe location with the unsafe one:
+5. **Forge a client address.** Wait 10 seconds after exercise 4, because its `/slow` test marks both upstreams failed for 10 s and nginx may return `502` (no live upstreams) until then. Compare the safe location with the unsafe one:
 
    ```bash
    curl -s -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:8081/headers
@@ -429,7 +429,7 @@ Things to change and why: nothing, for the lab. In production, `proxy_read_timeo
 
    Expected: `nft list ruleset` shows the table, the established-and-related rule and a rule `tcp dport 9002 counter packets N bytes M drop`. One request is slow (about 2 s, the `proxy_connect_timeout`) and still returns `200`, served by backend `a`. The error log shows `upstream timed out (110: Connection timed out) while connecting to upstream` for port 9002. Compare with exercise 3: a `drop` gives a timeout, a stopped listener gives _refused_.
    If you see something else: if no request is slow, nginx had already marked `b` down; wait 10 s and repeat. If `nft` complains about the `ct` rule, the kernel module may be missing; this is unusual on Ubuntu.
-   Clean up: `sudo nft delete table inet lab`.
+   Leave the table in place for exercise 7, which needs conntrack active; delete it at the end of that exercise.
 
 7. **Look at connection tracking.** Generate a few requests and list tracked flows:
 
@@ -440,7 +440,8 @@ Things to change and why: nothing, for the lab. In production, `proxy_read_timeo
    ```
 
    Expected: lines like `tcp 6 117 TIME_WAIT src=127.0.0.1 dst=127.0.0.1 sport=51234 dport=8081 src=127.0.0.1 dst=127.0.0.1 sport=8081 dport=51234 [ASSURED] mark=0 use=1` (illustrative). Each shows the original direction, then the expected reply direction. `conntrack -C` prints the number of tracked flows.
-   If you see something else: no output means conntrack is not tracking traffic on this host, which happens when no firewall or NAT rule uses it. Repeat exercise 6 first (its rule loads the module), run this exercise, then delete the table.
+   If you see something else: no output means conntrack is not tracking traffic on this host, which happens when no firewall or NAT rule uses it. Load the exercise 6 table again first (its rule loads the module), then repeat this exercise.
+   Clean up: `sudo nft delete table inet lab`.
 
 8. **Check the firewall file.** Save the `lab-fw.nft` example from this lesson and run `sudo nft -c -f lab-fw.nft; echo "exit: $?"`.
    Expected: no output and `exit: 0`. Edit one keyword to something invalid (for example change `accept` to `acept`) and run it again.
@@ -464,7 +465,7 @@ Things to change and why: nothing, for the lab. In production, `proxy_read_timeo
 
     ```bash
     umask 077
-    sudo tcpdump -i lo -nn -s 96 -c 20 -w /tmp/lab-lb.pcap 'tcp port 8081'
+    sudo tcpdump -Z root -i lo -nn -s 96 -c 20 -w /tmp/lab-lb.pcap 'tcp port 8081'
     ```
 
     In a second terminal run `curl -s http://127.0.0.1:8081/ >/dev/null`. When `tcpdump` stops (after 20 packets or Ctrl-C), read the file:
@@ -475,7 +476,7 @@ Things to change and why: nothing, for the lab. In production, `proxy_read_timeo
 
     Expected (illustrative): the first lines are the TCP handshake, `Flags [S]`, `Flags [S.]`, `Flags [.]`, then `Flags [P.]` with a `GET`-sized `length`, and `Flags [F.]` at the end. That is SYN, SYN-ACK, ACK, the request, and the close, all against port 8081.
     If you see something else: no packets means the filter or interface is wrong. Traffic to `127.0.0.1` goes over `lo`, not `eth0`. Fewer than 20 packets is fine; press Ctrl-C.
-    Clean up: `sudo rm /tmp/lab-lb.pcap`. This is the routine for every real capture: small, restricted, deleted.
+    Clean up: `sudo rm /tmp/lab-lb.pcap`. This is the routine for every real capture: small, restricted, deleted. Writing to `/tmp` is acceptable here only because `umask 077` makes the file mode `600` (readable by its owner only), and `-Z root` keeps tcpdump from switching to another user; for a real capture use a private directory.
 
 11. **Write the runbook for "502 from the LB".** Using the template below and exercises 3 and 4, write a one-page runbook for your lab service. Each step names the command and what each result means.
     Expected: a file where someone who has never seen your lab can follow the first ten minutes: check, decide, mitigate, escalate.

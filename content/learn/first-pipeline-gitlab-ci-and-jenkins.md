@@ -10,7 +10,6 @@ tags:
   - security
 created: 2026-10-17
 modified: 2026-10-17
-verified: 2026-10-17
 draft: false
 ---
 
@@ -60,18 +59,18 @@ The wording is different in every parser, but the problem and the fix are the sa
 
 ### Implicit typing: the parser guesses
 
-An unquoted value is not always a string. The parser looks at it and guesses a type. This is the source of the most surprising bugs. The classic examples, with the result I got from PyYAML 6.0.1 (which follows the older YAML 1.1 rules):
+An unquoted value is not always a string. The parser looks at it and guesses a type. This is the source of the most surprising bugs. The classic examples, with the result from PyYAML 6.0.1 (YAML 1.1 rules):
 
 | You write (unquoted) | You may get      | Why it bites                                             |
 | -------------------- | ---------------- | -------------------------------------------------------- |
-| `country: NO`        | `false`          | "Norway problem": `NO`, `no`, `N` can be booleans        |
-| `flag: yes`          | `true`           | `yes`, `on`, `y` can be booleans too                     |
+| `country: NO`        | `false`          | "Norway problem": `NO` and `no` can be booleans          |
+| `flag: yes`          | `true`           | `yes` and `on` can be booleans too                       |
 | `python: 3.10`       | `3.1` (a number) | The trailing zero is lost, so `3.10` becomes `3.1`       |
 | `mask: 0x1F`         | `31`             | A `0x` prefix reads as a hexadecimal number              |
 | `q: "1.10"`          | `"1.10"` string  | Quotes force a string, which is the fix                  |
 | `n: '0x1F'`          | `'0x1F'` string  | Single quotes work the same way and do not interpret `\` |
 
-The newer YAML 1.2 specification removed most of these boolean words, but many parsers and tools still follow the 1.1 rules, and you do not control which parser reads your file. The safe habit is simple: **quote any value that is a version, a code, an ID, or a word that could be a boolean or number.** A Python version in CI (`image: python:3.10`) is inside a longer string and is fine; a bare `version: 3.10` is the trap.
+In the YAML 1.1 specification `y`, `n`, `Y` and `N` are booleans too, but PyYAML 6.0.1 keeps them as strings; other parsers differ. The newer YAML 1.2 specification removed most of these boolean words, but many parsers and tools still follow the 1.1 rules, and you do not control which parser reads your file. The safe habit is simple: **quote any value that is a version, a code, an ID, or a word that could be a boolean or number.** A Python version in CI (`image: python:3.10`) is inside a longer string and is fine; a bare `version: 3.10` is the trap.
 
 ### Strings, block scalars and chomping
 
@@ -534,7 +533,7 @@ If you see something else: an empty value (`in `) means the variable name in the
 1. Start Jenkins in Docker, bound to your own machine only:
 
    ```bash
-   docker run -d --name jenkins-lab -p 127.0.0.1:8080:8080 -v jenkins_home:/var/jenkins_home jenkins/jenkins:lts
+   docker run -d --name jenkins-lab -p 127.0.0.1:8080:8080 -v jenkins_home:/var/jenkins_home jenkins/jenkins:<lts-version>-jdk21   # Change: an LTS tag you checked on Docker Hub
    docker exec jenkins-lab cat /var/jenkins_home/secrets/initialAdminPassword
    ```
 

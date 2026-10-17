@@ -103,7 +103,7 @@ git check-ignore -v build/x
 .gitignore:1:/build/	build/x
 ```
 
-The output is `source file : line number : pattern`, a tab, then the path you asked about. Exit code `0` means ignored, `1` means not ignored. Exercise 1 uses it.
+(That is the output for a `.gitignore` whose first line is `/build/`; the line number is the line of the matching pattern in your file.) The output is `source file : line number : pattern`, a tab, then the path you asked about. Exit code `0` means ignored, `1` means not ignored. Exercise 1 uses it.
 
 ## Scanners and hooks: layers, not guarantees
 
@@ -266,7 +266,7 @@ An AI assistant is a third party. What you paste into it leaves your control.
 - **Treat generated code and commands as untrusted** until you have read and understood them, especially anything that runs `curl | sh`, changes IAM, or disables a check.
 - **Do not give an agent more access than you would give a new intern**: read-only by default, no production credentials ([[ai/securing-ai-agents-in-ci-and-cloud]]).
 
-The owner's catalogue of AI skills is at <https://ai.szolotov.com>. It is a good place to look for ready-made skills, but apply the rules above to anything you use from it.
+The owner's catalogue of AI skills is at <https://ai.szolotov.com>. Apply the rules above to anything you use from any catalogue, this one included.
 
 ## Hands-on exercises
 

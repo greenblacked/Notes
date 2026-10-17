@@ -1,7 +1,7 @@
 ---
 title: Splitting, merging and reorganising teams
 description: A checklist-driven runbook for the change event of a team reorg, covering readiness, ownership and on-call re-cut, access moves, communication, a week -2 to week 4 timeline and rollback triggers.
-type: runbook
+type: guide
 tags:
   - management
   - team-process
@@ -51,7 +51,7 @@ Ownership has to be explicit, singular and recorded in a place systems can read.
 
 1. **One owning team per service.** Where a service is genuinely shared, name the team that holds the pager and the team that is a contributor. Write the split in the service's README and in the team charters.
 2. **Re-cut the rotations before you re-cut the people.** Decide the rotation membership from the readiness assessment, then schedule it. Do not rely on "we will sort out who is on call after".
-3. **Overlap for one cycle.** For one full rotation cycle (often one week), the outgoing owner stays as a secondary on services they handed over. This is a deliberate overlap, with an end date, not an open-ended favour.
+3. **Overlap until the end of week 2.** For at least one full rotation cycle, from cutover (week 0) to the end of week 2, the outgoing owner stays as a secondary on services they handed over. This is a deliberate overlap, with an end date, not an open-ended favour.
 4. **Handover per service.** The previous owner gives the new owner a short written handover: what breaks, what the noisy alerts are, what is fragile, what was promised to other teams, where the runbooks live. Use the handover template in [[on-call-health]].
 5. **Keep scope honest.** If the new team is too small to cover everything with a healthy rotation, narrow the scope (business-hours only for low-impact services, agreed with stakeholders) rather than pretending.
 6. **Record it in code.** Ownership lives in `CODEOWNERS`, alert labels, service catalogue entries and the charter. Update them in the same change set. Do not leave it in a slide.
@@ -99,7 +99,7 @@ Access and alerts are where a reorg turns into an outage or a security gap, so m
 
 **Access: grant first, remove later.**
 
-1. Create the new groups and add the new members on the day of cutover (or the day before, if the groups carry no access yet).
+1. Create the new groups and add the new members in week -1, as in the timeline (the groups carry no access yet).
 2. Grant the new groups the access they need. Do it in code, not by hand, using the same mechanism as the old groups, so it appears in review.
 3. Keep the old access for the overlap period (see the timeline). People who handed over a service may still need to help.
 4. Remove the old access at the end of the overlap, then run an access review. The method is in [[access-reviews-gcp-and-gke]].
@@ -168,15 +168,15 @@ Keep a single transition thread or channel for questions and fixes. It doubles a
 
 Suggested defaults, not rules. Shorten for a small move, lengthen for a large one.
 
-| When    | What happens                                                                                                                                 | Owner                      |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| Week -2 | Readiness assessment finished. Service map, rotation gaps and IAM remap drafted. Decision makers aligned.                                    | Engineering manager        |
-| Week -1 | One to ones held. Teams told. Test alerts sent to new routes. New groups created. CODEOWNERS and routing merge requests open and reviewed.   | Managers, leads            |
-| Week 0  | Cutover day: CODEOWNERS merged, primary alert routes switched, rotations start, new access granted. Old routes and access stay as secondary. | Engineering manager        |
-| Week 1  | Overlap: outgoing owners are secondary on handed-over services. Daily check of the transition thread. Fix routing and access gaps same day.  | Leads                      |
-| Week 2  | First on-call review of the new rotations: pages per shift, missed or misrouted alerts. Handover gaps fixed. Open MRs all resolved.          | Leads, engineering manager |
-| Week 3  | Overlap ends: old alert routes and old access removed. Access review run on the new groups.                                                  | Leads, security            |
-| Week 4  | 30-day check preparation: collect numbers, run a short retrospective, update the charters and runbooks.                                      | Engineering manager        |
+| When    | What happens                                                                                                                                               | Owner                      |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| Week -2 | Readiness assessment finished. Service map, rotation gaps and IAM remap drafted. Decision makers aligned.                                                  | Engineering manager        |
+| Week -1 | One to ones held. Teams told. Test alerts sent to new routes. New groups created. CODEOWNERS and routing merge requests open and reviewed.                 | Managers, leads            |
+| Week 0  | Cutover day: CODEOWNERS merged, primary alert routes switched, rotations start, new access granted. Old routes and access stay as secondary.               | Engineering manager        |
+| Week 1  | Overlap (weeks 0 to 2): outgoing owners are secondary on handed-over services. Daily check of the transition thread. Fix routing and access gaps same day. | Leads                      |
+| Week 2  | First on-call review of the new rotations: pages per shift, missed or misrouted alerts. Handover gaps fixed. Open MRs all resolved.                        | Leads, engineering manager |
+| Week 3  | Overlap ends: old alert routes and old access removed. Access review run on the new groups.                                                                | Leads, security            |
+| Week 4  | 30-day check preparation: collect numbers, run a short retrospective, update the charters and runbooks.                                                    | Engineering manager        |
 
 The cutover day is best chosen away from release freezes and busy periods. See [[change-freezes-and-maintenance-windows]].
 

@@ -124,11 +124,11 @@ pwd
 ```
 
 ```text
-/etc ~/lab-linux01
-/var/log /etc ~/lab-linux01
-/etc ~/lab-linux01
-~/lab-linux01
-/home/alice/lab-linux01
+/etc ~/lab-linux01/projects/web
+/var/log /etc ~/lab-linux01/projects/web
+/etc ~/lab-linux01/projects/web
+~/lab-linux01/projects/web
+/home/alice/lab-linux01/projects/web
 ```
 
 `pushd` changes directory and remembers where you were; `popd` goes back. They are useful in scripts that must return to where they started.
@@ -177,7 +177,7 @@ echo "exit status: $?"
 ```
 
 ```text
-bash: line 1: type: nosuchcmd: not found
+bash: type: nosuchcmd: not found
 exit status: 1
 ```
 

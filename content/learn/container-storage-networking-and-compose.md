@@ -261,7 +261,7 @@ A container can join several networks, each with its own IP and its own DNS view
 ```bash
 docker network create backnet
 docker network connect backnet c4-b
-docker inspect c4-b --format '{{json .NetworkSettings.Networks}}' | jq 'keys'
+docker inspect c4-b --format '{{json .NetworkSettings.Networks}}' | jq -c 'keys'
 ```
 
 ```json
@@ -340,7 +340,7 @@ services:
       POSTGRES_DB: shop
       POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
     ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432" # loopback only so you can try POSTGRES_PORT in E5; in a real stack the db publishes nothing
     volumes:
       - dbdata:/var/lib/postgresql/data
     healthcheck:
@@ -615,7 +615,7 @@ You need the lab VM from [[learn/lab-setup|Start 01]] with Docker and the Compos
    ```
 
    Expected: `1 packets transmitted, 1 packets received, 0% packet loss`, and a `resolv.conf` with `nameserver 127.0.0.11`.
-   If you see something else: `bad address` again means the pinging container was not on `appnet`; check for `--network appnet` on _both_ the target and the client. If `resolv.conf` shows another nameserver, the container used the host network or an older network type; run `docker inspect c4-b --format '{{json .NetworkSettings.Networks}}' | jq 'keys'`.
+   If you see something else: `bad address` again means the pinging container was not on `appnet`; check for `--network appnet` on _both_ the target and the client. If `resolv.conf` shows another nameserver, the container used the host network or an older network type; run `docker inspect c4-b --format '{{json .NetworkSettings.Networks}}' | jq -c 'keys'`.
 
 7. **Publish a port on 127.0.0.1 only, and compare with all interfaces.**
 
@@ -639,7 +639,7 @@ You need the lab VM from [[learn/lab-setup|Start 01]] with Docker and the Compos
    docker network inspect appnet --format '{{(index .IPAM.Config 0).Subnet}}'
    docker network create backnet
    docker network connect backnet c4-b
-   docker inspect c4-b --format '{{json .NetworkSettings.Networks}}' | jq 'keys'
+   docker inspect c4-b --format '{{json .NetworkSettings.Networks}}' | jq -c 'keys'
    ```
 
    Expected: two lines with `c4-b` and `c4-web` and their addresses, a subnet such as `172.18.0.0/16` (whatever Docker chose), and `["appnet","backnet"]`.

@@ -295,7 +295,7 @@ All output below is illustrative: names, versions, addresses and ages will diffe
    capstone-6d8f7c9b5d-h7w9p   1/1     Running   0          2m
    ```
 
-   If you see something else: `ImagePullBackOff` or `ErrImagePull` with a 403 or "not found" in `kubectl describe pod` means the nodes cannot read the repository. Check the image path and tag, and that the node service account may read Artifact Registry in this project (grant `roles/artifactregistry.reader` to the account the node uses; check which one in the cluster details). Pods `Pending` for several minutes, with an event such as `Insufficient cpu`, usually means a node is being added; wait, then read `kubectl describe pod`. A Helm error `unknown field` or `<nil>` means a key in `values-gke.yaml` does not exist in your chart; fix the key names. `--atomic` rolls the release back on failure, so `helm list -n lab` may show nothing.
+   If you see something else: `ImagePullBackOff` or `ErrImagePull` with a 403 or "not found" in `kubectl describe pod` means the nodes cannot read the repository. Check the image path and tag, and that the node service account may read Artifact Registry in this project (grant `roles/artifactregistry.reader` to the account the node uses; check which one in the cluster details). Pods `Pending` for several minutes, with an event such as `Insufficient cpu`, usually means a node is being added; wait, then read `kubectl describe pod`. A Helm error `unknown field` or `<nil>` means a key in `values-gke.yaml` does not exist in your chart; fix the key names. `--atomic` rolls the release back on failure, so `helm list -n lab` may show nothing. `exec format error` in the Pod logs means the image was built for another CPU architecture (for example on an ARM laptop); rebuild with `docker buildx build --platform linux/amd64`.
 
 5. **Expose a Pod with a real load balancer, then remove it.** Use a throwaway Deployment so that your chart stays internal. The Service limits who can connect with `loadBalancerSourceRanges`.
 
@@ -356,6 +356,7 @@ All output below is illustrative: names, versions, addresses and ages will diffe
    ```
 
    ```bash
+   sed -i "s|203.0.113.10/32|${MY_IP}/32|" lb-test.yaml   # GNU sed; on macOS use sed -i ''
    kubectl apply -f lb-test.yaml
    kubectl get svc lb-test -n lab --watch
    ```
@@ -455,7 +456,7 @@ All output below is illustrative: names, versions, addresses and ages will diffe
    ```text
    pod/wi-test condition met
    gs://lab-yourname-123456-wi-lab/hello.txt
-   kube-api-access-xxxxx tmp
+   tmp kube-api-access-xxxxx
    ```
 
    The last line lists the volumes: only a service-account token volume and `tmp`, and no Secret with a key file.

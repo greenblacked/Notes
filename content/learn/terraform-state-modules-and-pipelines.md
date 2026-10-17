@@ -155,8 +155,21 @@ terraform state list
 terraform state show google_storage_bucket.lab
 ```
 
+`state list` prints one address per line:
+
 ```text
 google_storage_bucket.lab
+```
+
+`state show` prints the attributes of that one resource (illustrative, shortened):
+
+```text
+# google_storage_bucket.lab:
+resource "google_storage_bucket" "lab" {
+    location = "EUROPE-WEST4"
+    name     = "lab-yourname-123456-first"
+    # ... more attributes ...
+}
 ```
 
 `state show` prints the attributes the same way a plan does. It is the quickest way to answer "what does Terraform think this bucket looks like?".
@@ -660,9 +673,9 @@ If you see something else: if the second command did not stop, the lock is not w
 
 ### Exercise 7: A pipeline sketch, then clean up
 
-1. Put the module repository in a GitLab project (a practice one) and add the `.gitlab-ci.yml` sketch with `TF_ROOT: envs/dev`. Use a lab-only service account with the minimum roles for the dev bucket and the state bucket, as in [[learn/gcp-iam-and-service-accounts]]. Open a merge request that adds a label to the dev bucket.
+1. Treat this step as a read-through unless you have set up the identity part. Put the module repository in a GitLab project (a practice one) and add the `.gitlab-ci.yml` sketch with `TF_ROOT: envs/dev`. The sketch has no authentication step, so on shared runners `init` and `plan` fail with a credentials error against the GCS backend; that is the point at which the identity setup is required. To finish the exercise, add Workload Identity Federation for a lab-only service account with the minimum roles for the dev bucket and the state bucket ([[learn/gcp-iam-and-service-accounts]], [[architecture/iam-groups-and-ci-workload-identity-federation]]; the GitLab side of it is not verified here). Then open a merge request that adds a label to the dev bucket.
 
-   Expected (illustrative): the `validate` and `plan` jobs pass, and `plan.txt` shows `Plan: 0 to add, 1 to change, 0 to destroy.` After you merge, the `apply` job waits as `manual`; after you start it, it ends with `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.`
+   Expected without WIF configured: `init` fails with a credentials error. Expected (illustrative) with a working WIF setup: the `validate` and `plan` jobs pass, and `plan.txt` shows `Plan: 0 to add, 1 to change, 0 to destroy.` After you merge, the `apply` job waits as `manual`; after you start it, it ends with `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.`
 
 2. Clean up everything, in this order:
 

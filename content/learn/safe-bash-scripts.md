@@ -429,7 +429,7 @@ Why it is built this way:
 - **Dry run.** `-n` shows what would happen. For destructive scripts, make the dry run the default and require an explicit flag to apply.
 - **No `eval`, no unquoted variables, no parsing `ls`.**
 
-Run it against a lab directory:
+Save the script above as `archive_logs.sh` and run `chmod +x archive_logs.sh`. Then run it against a lab directory:
 
 ```bash
 mkdir -p logs && cd logs
@@ -681,7 +681,7 @@ Work in `~/lab16`. The scripts are the ones created above; ShellCheck needs to b
    If you see something else: a ShellCheck finding on a pasted copy usually means a quote was lost in copying. Compare with the original line by line.
 
 10. **ShellCheck until silent.** Create `cleanup_bad.sh`, run `shellcheck cleanup_bad.sh`, and fix one finding at a time until the output is empty and `echo $?` prints `0`.
-    Expected: `SC2086` is reported first (for `cd $target`), then `SC2034`, `SC2045` and a second `SC2086`. The finished script resembles `cleanup_good.sh`.
+    Expected: `SC2086` is reported first (for `cd $target`), then `SC2034`, `SC2045`, `SC2035` and a second `SC2086`. The finished script resembles `cleanup_good.sh`.
     If you see something else: a different set of codes means a different ShellCheck version. Fix whatever it reports; the codes' wiki pages explain each.
 
 11. **A suppression with a reason.** Create `disable.sh`, run `shellcheck disable.sh` (expect silence), then delete the `# shellcheck disable=` line and run it again.

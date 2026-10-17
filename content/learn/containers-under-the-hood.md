@@ -285,7 +285,7 @@ Containers 02 shows the signal problem with a real `trap` and a real 10-second d
 
 Run these in your Ubuntu VM with Docker (Linux host). Use `sudo` where shown. The names start with `c1-` so cleanup is easy.
 
-> [!warning] Exercises 1 to 6 are not verified
+> [!warning] The exercises are not verified
 > The commands and outputs below were written from the tools' documentation and not run on a machine for this page (no `verified` date). Output is illustrative: IDs, PIDs, sizes and inode numbers will differ. Read each "If you see something else" line before assuming something is broken.
 
 1. **See a container's process from the host.**
@@ -351,7 +351,7 @@ Run these in your Ubuntu VM with Docker (Linux host). Use `sudo` where shown. Th
    ```
 
    Expected: `3 layers` (the Alpine base layer plus one per `RUN`). `docker history` lists the two `RUN` steps with tiny sizes on top of the base, and each layer has a digest in the inspect output.
-   If you see something else: if the layer count is not 3, the base image may itself have more layers, or the build merged steps; what matters is that each `RUN` that changes files adds one. If `docker history` shows `<missing>` for base layers, that is normal for images pulled from a registry. Dockerfile lines may not be indented in your file: with a heredoc the text must start at column 0 (remove the leading spaces if your editor added them).
+   If you see something else: if the layer count is not 3, the base image may itself have more layers, or the build merged steps; what matters is that each `RUN` that changes files adds one. If `docker history` shows `<missing>` for base layers, that is normal for images pulled from a registry. With a heredoc, the closing `DOCKER` line must start at column 0 or the heredoc does not end (remove any leading spaces your editor added).
 
 6. **Read the writable layer with `docker diff`.**
 
@@ -441,4 +441,4 @@ To go deeper:
 - Linux man-pages: `namespaces(7)`, `pid_namespaces(7)`, `cgroups(7)`, `unshare(1)`, `nsenter(1)` (https://man7.org/linux/man-pages/). Not run on a lab machine for this page.
 - Linux kernel documentation: "Control Group v2" (https://docs.kernel.org/admin-guide/cgroup-v2.html) and "Overlay Filesystem" (https://docs.kernel.org/filesystems/overlayfs.html).
 - Open Container Initiative, "Image Format Specification" (https://github.com/opencontainers/image-spec).
-- Docker documentation, "Resource constraints" (https://docs.docker.com/engine/containers/resource_constraints/) for `--memory`, `--cpus` and `--pids-limit`. Image tags and the Docker version used (29.8.2 client is installed on the writing machine, but its daemon was not running) were not verified.
+- Docker documentation, "Resource constraints" (https://docs.docker.com/engine/containers/resource_constraints/) for `--memory`, `--cpus` and `--pids-limit`. Image tags and the Docker version were not verified; the `alpine:3.20` tag in the examples is only an example, so replace it with a tag that is currently supported.

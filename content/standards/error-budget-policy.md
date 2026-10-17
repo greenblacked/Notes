@@ -31,11 +31,11 @@ Both sides must sign it: engineering, product and the director who breaks ties. 
 
 The tiers are based on how much of the budget remains in the rolling window. The window is the same one as the SLO, normally 30 days.
 
-| Budget remaining    | Tier      | Allowed changes                                                                 | Approver                                        |
-| ------------------- | --------- | ------------------------------------------------------------------------------- | ----------------------------------------------- |
-| 25% or more         | Healthy   | All changes, normal release cadence                                             | Normal code review                              |
-| Under 25%, above 0% | At risk   | Feature releases continue with a canary and a named watcher; risky changes wait | Service owner for each release                  |
-| 0% or less          | Exhausted | Reliability fixes, security fixes, rollbacks and incident mitigations only      | Engineering manager; director for any exception |
+| Budget remaining    | Tier      | Allowed changes                                                                     | Approver                                                                                               |
+| ------------------- | --------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 25% or more         | Healthy   | All changes, normal release cadence                                                 | Normal code review                                                                                     |
+| Under 25%, above 0% | At risk   | Feature releases continue with a canary and a named watcher; risky changes wait     | Service owner for each release                                                                         |
+| 0% or less          | Exhausted | Reliability fixes, approved security fixes, rollbacks and incident mitigations only | Service owner and engineering manager for any exception; director only for revenue or contract changes |
 
 "Risky" means High under [[production-change-checklist]]. In the at-risk tier, the team spends the next sprint's first slice on the biggest cause of burn from the last incident reviews (see [[blameless-postmortems]]).
 
@@ -47,7 +47,7 @@ Tier changes are announced in the team channel when the budget crosses a line. D
 - **At risk**: the owner of the service signs off each release in the MR. A canary stage is mandatory (see [[progressive-delivery-argo-rollouts]]). The owner may choose to delay a feature, with a reason in the MR.
 - **Exhausted**: the pipeline blocks deploys that are not reliability or security changes. The following still go out:
   - fixes that reduce the cause of burn;
-  - security patches (the fast path in [[change-freezes-and-maintenance-windows]] applies);
+  - security fixes for actively exploited or critical issues, approved by the security lead or on-call lead before the deploy (the review may run in parallel), as in the fast path in [[change-freezes-and-maintenance-windows]]; routine dependency updates wait;
   - rollbacks;
   - mitigations during an active incident, which skip the gate but not the log.
 
@@ -65,7 +65,7 @@ budget used       = 20 / 43.2               = 0.463, about 46%
 budget remaining  = 100% - 46% = about 54%
 ```
 
-One 20-minute outage uses about 46% of the budget. The service stays in the healthy tier (54% remaining), but a second similar incident in the same window would take it to about 8%, in the at-risk tier. A third 20-minute outage would overspend it and move the service to exhausted. The numbers assume full outage. A partial outage burns less: if half the requests fail for 20 minutes, the burn is about half.
+One 20-minute outage uses about 46% of the budget. The service stays in the healthy tier (54% remaining), but a second similar incident in the same window would take it to about 7%, in the at-risk tier. A third 20-minute outage would overspend it and move the service to exhausted. The numbers assume full outage. A partial outage burns less: if half the requests fail for 20 minutes, the burn is about half.
 
 The budget in "minutes" is a simplification that only works for total outage. Real services are measured in request ratios, which is what the query below does.
 
@@ -94,7 +94,7 @@ groups:
 
 A 30-day `increase` over raw metrics is expensive. Compute it from the recorded ratios in [[slo-burn-rate-alerting]] or pre-aggregate if your Prometheus is slow, and check retention covers 30 days. Counter resets are handled by `increase`, but gaps in scraping make the number optimistic.
 
-Show the value on the service dashboard with the three tier lines at 0.25 and 0.
+Show the value on the service dashboard with the two tier lines at 0.25 and 0.
 
 ## Exception flow
 
@@ -155,10 +155,18 @@ error-budget-gate:
     - |
       set -euo pipefail
 
-      # Reliability, security and rollback commits pass the gate.
-      # An approved exception passes it too, by id.
+      # Reliability and rollback commits pass the gate. A security commit passes only
+      # with the approval id of the security lead or on-call lead (set through a
+      # protected environment approval or a restricted variable). An approved
+      # exception passes it too, by id. GitLab revert commits are titled Revert "...".
       case "$CI_COMMIT_TITLE" in
-        reliability:*|security:*|revert:*) echo "Change type allowed in every tier."; exit 0 ;;
+        reliability:*|revert:*|Revert*) echo "Change type allowed in every tier."; exit 0 ;;
+        security:*)
+          if [ -n "${SECURITY_FIX_APPROVAL_ID:-}" ]; then
+            echo "Security fix approval ${SECURITY_FIX_APPROVAL_ID} recorded for this pipeline."
+            exit 0
+          fi
+          echo "Security commit without SECURITY_FIX_APPROVAL_ID: the budget check applies." ;;
       esac
       if [ -n "${ERROR_BUDGET_EXCEPTION_ID:-}" ]; then
         echo "Error budget exception ${ERROR_BUDGET_EXCEPTION_ID} recorded for this pipeline."
@@ -168,7 +176,7 @@ error-budget-gate:
       response="$(curl --silent --show-error --fail --max-time 10 \
         --get "$PROMETHEUS_URL/api/v1/query" \
         --data-urlencode "query=$BUDGET_QUERY")" || response=""
-      remaining="$(printf '%s' "$response" | jq -r '.data.result[0].value[1] // empty')"
+      remaining="$(printf '%s' "$response" | jq -r '.data.result[0].value[1] // empty' 2>/dev/null)" || remaining=""
 
       if [ -z "$remaining" ]; then
         echo "WARNING: could not read the error budget for $SERVICE."
@@ -178,7 +186,7 @@ error-budget-gate:
 
       echo "Error budget remaining for $SERVICE: $remaining (1 = untouched, 0 = exhausted)"
       if awk -v r="$remaining" 'BEGIN { exit !(r <= 0) }'; then
-        echo "Budget exhausted. Only reliability:, security: and revert: changes deploy."
+        echo "Budget exhausted. Only reliability:, approved security: and revert: changes deploy."
         echo "Need an exception? Follow the exception flow and set ERROR_BUDGET_EXCEPTION_ID."
         exit 1
       fi
@@ -195,6 +203,7 @@ deploy-production:
 Know the limits of this gate:
 
 - A commit prefix is a convention, not a proof. Anyone can write `reliability:`. The control is the review: protect the default branch, require an approval, and have the approver check the claim (see [[code-review]]).
+- `SECURITY_FIX_APPROVAL_ID` records the security lead's or on-call lead's approval for an actively exploited or critical fix. Set it the same restricted way (or replace it with a protected-environment approval), and keep it in the incident or ticket record.
 - `ERROR_BUDGET_EXCEPTION_ID` should be set only by people allowed to run pipelines with variables. Restrict who can do that in GitLab and keep the id in the exception record.
 - Fail open or closed is a policy choice. Failing open means a broken monitoring stack does not stop a fix. Failing closed means a monitoring outage blocks every deploy. Write the choice down.
 - Check that your `stage: gate` exists in the `stages:` list, and the variable names against your GitLab version.
@@ -217,7 +226,7 @@ Two rules decide whether a change can go out: the calendar and the budget.
 
 - [[change-freezes-and-maintenance-windows]] blocks changes by **time** (holidays, launches, maintenance windows). The budget policy blocks by **service health**.
 - Both can apply at once. The stricter one wins.
-- Both leave the same fast path: security fixes, rollbacks and incident mitigations go through with a log entry and a review afterwards. If one policy blocked what the other allows, a person would have to guess. They must not contradict each other, so review both when you change either.
+- Both leave the same fast path: security fixes for actively exploited or critical issues (approved by the security lead or on-call lead before the deploy, with the review allowed to run in parallel), rollbacks and incident mitigations go through with a log entry and a review afterwards. If one policy blocked what the other allows, a person would have to guess. They must not contradict each other, so review both when you change either.
 - The pipeline evidence for the gate result, exceptions and approvers is useful for audit. See [[change-management-controls-and-pipeline-evidence]].
 
 ## Related notes

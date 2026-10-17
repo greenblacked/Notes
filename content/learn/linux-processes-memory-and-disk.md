@@ -162,7 +162,7 @@ while true; do sleep 1; done
 
 ### Priority: nice, renice and ionice
 
-When CPUs are busy the scheduler shares time out by **niceness**, from -20 (greediest) to 19 (most polite). Start a batch job politely with `nice -n 10 ./job.sh`, or change a running one with `renice -n 10 -p <pid>`. Only root can lower a niceness below 0. For disk, `ionice -c 3 ./job.sh` runs a command in the idle I/O class, so it only uses the disk when nobody else wants it (the effect depends on the I/O scheduler; verify for your kernel). These are good ways to run a backup without hurting the service.
+When CPUs are busy the scheduler shares time out by **niceness**, from -20 (greediest) to 19 (most polite). Start a batch job politely with `nice -n 10 ./job.sh`, or change a running one with `renice -n 10 -p <pid>`. Ordinary users can only raise niceness (be nicer); lowering it needs root (`CAP_SYS_NICE`). For disk, `ionice -c 3 ./job.sh` runs a command in the idle I/O class, so it only uses the disk when nobody else wants it (the effect depends on the I/O scheduler; verify for your kernel). These are good ways to run a backup without hurting the service.
 
 ### Zombies and D state
 
@@ -284,7 +284,7 @@ df -i /
 
 ```text
 Filesystem      Size  Used Avail Use% Mounted on
-/dev/vda        252G   32G  7.6G  81% /
+/dev/vda         40G   31G  7.6G  81% /
 Filesystem        Inodes   IUsed    IFree IUse% Mounted on
 /dev/vda        16777216  980787 15796429    6% /
 ```
@@ -357,7 +357,7 @@ Run these in the lab VM. Some commands need `sudo` and some tools (`iostat`, `pi
    ```
 
    Expected: one line with state `Z`. Its PPID is the process running `sleep 30`, which never reaps it.
-   If you see something else: no output means the child was reaped. Try again with a longer `sleep 0.1`. The zombie disappears when you run `pkill -f 'sleep 30'`.
+   If you see something else: no output means the child was reaped. Run the `ps` line again within 30 seconds, because the zombie only exists while the parent runs. The zombie disappears when you run `pkill -f 'sleep 30'`.
 
 **Part 2**
 
@@ -387,6 +387,7 @@ Run these in the lab VM. Some commands need `sudo` and some tools (`iostat`, `pi
     df -h /tmp
     tail -f /tmp/big.bin > /dev/null &
     T=$!
+    sleep 1
     rm /tmp/big.bin
     df -h /tmp
     sudo lsof +L1 | grep big.bin
@@ -396,7 +397,7 @@ Run these in the lab VM. Some commands need `sudo` and some tools (`iostat`, `pi
     ```
 
     Expected: `Used` goes up by about 500M after `dd`, stays the same after `rm`, `lsof +L1` lists `/tmp/big.bin (deleted)`, and `Used` drops after `kill`.
-    If you see something else: if `Used` drops right after `rm`, `/tmp` is probably a RAM-backed `tmpfs` on your system, or `tail` did not start in time. Check with `df /tmp`, and use `/var/tmp` instead.
+    If you see something else: if `Used` drops right after `rm`, `/tmp` is probably a RAM-backed `tmpfs` on your system, or `tail` had not opened the file yet (a `tmpfs` also keeps a deleted file while it is open, so this is the likelier cause). Check with `df /tmp`, repeat with the `sleep 1` in place, and use `/var/tmp` if `/tmp` is a `tmpfs`.
 
 11. **Write the disk-100% runbook.** Using the four causes above, write a six-line checklist in `~/lab04/disk-full.md` that a colleague could follow at 3 a.m. Each line is a command and what the output means.
     Expected: your checklist starts with `df -h` and `df -i`, then `du -xh --max-depth=1`, then `lsof +L1`, and says what to do for each result.

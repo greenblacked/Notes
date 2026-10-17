@@ -76,13 +76,13 @@ Prefer **groups** for people, for three reasons. When someone joins or leaves a 
 
 Basic roles are a trap because their names sound harmless. `Editor` reads like "can edit things" and in fact it can change most resources in the project, including reading and writing all your data. A service account with `Editor` that is compromised gives the attacker a great deal. Use a predefined role scoped to one service, granted on the narrowest resource that works.
 
-To find which predefined role you need, look up the permission you are missing:
+To see which roles can be granted on a resource:
 
 ```bash
 gcloud iam list-grantable-roles //storage.googleapis.com/projects/_/buckets/BUCKET_NAME --format='value(name)'
 ```
 
-The role's own page in the IAM documentation (the "roles and permissions" reference) is more readable for choosing.
+This lists roles that can be granted on the resource; it does not find the roles that contain a given permission. For that, use the IAM "permissions reference" page, which lists the roles that contain each permission, and the role's own page in the IAM documentation.
 
 ### Inheritance: access flows down
 
@@ -175,7 +175,7 @@ gcloud projects get-iam-policy "$PROJECT_ID" \
    ```
 
 > [!warning] Check before relying on this
-> Policy Troubleshooter and the recommender are separate APIs that must be enabled in the project, and the caller needs permission to use them. The recommender identifier `google.iam.policy.Recommender` and the output fields are written from memory and were not run here. Run `gcloud recommender recommendations list --help` and the documentation to confirm. A recommendation is advice, not an order: check what a role is used for before you remove it.
+> Policy Troubleshooter and the recommender are separate APIs that must be enabled in the project, and the caller needs permission to use them. The recommender identifier `google.iam.policy.Recommender` and the output fields were not run for this page (verify). Run `gcloud recommender recommendations list --help` and the documentation to confirm. A recommendation is advice, not an order: check what a role is used for before you remove it.
 
 Changes to IAM are **eventually consistent**. A new grant usually works within a couple of minutes, and the documentation says it can take longer in some cases (verify the current figure). If a command fails with a permission error right after a grant, wait and retry before you change anything else.
 
@@ -244,7 +244,7 @@ Two roles sound alike and do different things.
 
 **3. Workload Identity Federation (for software outside Google Cloud).** A pipeline that runs in GitLab CI, GitHub Actions or another cloud already has an identity there, usually an OIDC token. Workload Identity Federation lets Google trust that token and exchange it for a short-lived Google token, bound to a service account or directly to a principal. No key is stored in the CI variables. This is the right answer for CI that deploys to GCP. The pattern for GitLab CI and the group model behind it are in [[architecture/iam-groups-and-ci-workload-identity-federation]].
 
-**4. Workload Identity on GKE (for Pods).** A Kubernetes service account in a cluster is mapped to a Google identity, so a Pod gets access to Google APIs without a key and without sharing the node's identity. You will build it in [[learn/gke-for-beginners|GCP 04]]; the production pattern is [[patterns/gke-workload-identity]]. This lesson only introduces the idea; I have not described the setup steps because they depend on cluster settings.
+**4. Workload Identity on GKE (for Pods).** A Kubernetes service account in a cluster is mapped to a Google identity, so a Pod gets access to Google APIs without a key and without sharing the node's identity. You will build it in [[learn/gke-for-beginners|GCP 04]]; the production pattern is [[patterns/gke-workload-identity]]. This lesson only introduces the idea; the setup steps depend on cluster settings and are covered in GCP 04.
 
 **Last resort: a service account key.** A key is a JSON file that contains a private key for the account. Anyone who has the file _is_ the service account, from anywhere, until the key is deleted. Keys do not expire unless you set a policy that makes them. They get copied into repositories, chat messages, Docker images and CI variables, and they leak. Most credential incidents in Google Cloud involve a key. Use the first three methods, and if a tool really cannot, treat the key as a secret with an owner, an expiry and a rotation date ([[runbooks/leaked-credential-rotation]] is what happens when one leaks).
 
@@ -304,6 +304,9 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
 
 2. **Create a service account and a locked-down bucket with a file in it.**
 
+   > [!warning] Costs money
+   > The bucket is billed while it exists. Delete it with: `gcloud storage rm --recursive --all-versions "gs://${BUCKET}" && gcloud iam service-accounts delete "$SA_EMAIL" --project="$PROJECT_ID" --quiet`.
+
    ```bash
    gcloud iam service-accounts create "$SA_NAME" \
      --project="$PROJECT_ID" \
@@ -311,7 +314,8 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
      --description="Reads one lab bucket. Created for the GCP 02 lesson."
    gcloud storage buckets create "gs://${BUCKET}" \
      --project="$PROJECT_ID" --location="$REGION" \
-     --uniform-bucket-level-access --public-access-prevention
+     --uniform-bucket-level-access --public-access-prevention \
+     --soft-delete-duration=0 # lab only: no retention of deleted objects (verify flag)
    printf 'hello\n' > hello.txt
    gcloud storage cp hello.txt "gs://${BUCKET}/hello.txt"
    ```
@@ -425,7 +429,7 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
      required_providers {
        google = {
          source  = "hashicorp/google"
-         version = "~> 8.0" # Change: pin the current major version from the Terraform Registry.
+         version = "~> 6.0" # Change: pin the current major version from the Terraform Registry.
        }
      }
    }
@@ -479,7 +483,7 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
    If you see something else: `Error: Invalid provider version` or an init error means the version constraint does not match a published release; look up the current major version on the Registry and change it. `could not find default credentials` means you did not run `gcloud auth application-default login`. A `403` on plan means the account lacks permission to read the project.
 
    > [!warning] Check before relying on this
-   > I pinned the provider to `~> 8.0` because the tags I could see for the provider repository went up to a version 8 release when I checked, but I could not reach the Terraform Registry from the writing environment, so the current major version is not verified. Other notes on this site use `~> 6.0`. Pin whatever the Registry shows as current and read the provider's upgrade guide when you change majors. I did not run `terraform` for this exercise.
+   > The provider major version on this page (`~> 6.0`, the same as in the Terraform lessons) was not checked against the Terraform Registry. Pin the current major version shown there and read the provider's upgrade guide when you change majors. `terraform` was not run for this exercise.
 
 10. **Clean up.** Remove the grant, the bucket, the service account and the local files.
 
@@ -551,4 +555,4 @@ To go deeper:
 - Google Cloud documentation, "Workload Identity Federation" (https://docs.cloud.google.com/iam/docs/workload-identity-federation) and "Create short-lived credentials for a service account" (https://docs.cloud.google.com/iam/docs/create-short-lived-credentials-direct).
 - Google Cloud documentation, "Restricting service accounts" for the organization policy constraints `iam.disableServiceAccountKeyCreation` and `iam.automaticIamGrantsForDefaultServiceAccounts` (https://docs.cloud.google.com/resource-manager/docs/organization-policy/restricting-service-accounts).
 - Checked in this environment: `gcloud` 570.0.0, offline, by reading `--help` for `iam service-accounts create`, `keys list` (including `--managed-by`), `delete`, `undelete`, `add-iam-policy-binding`, `storage buckets add-iam-policy-binding`, `policy-troubleshoot iam`, `recommender recommendations list`, `auth print-access-token` and `projects get-iam-policy`. Nothing was run against a real project, so every cloud output is illustrative.
-- Not verified: the `docs.cloud.google.com` URLs (the host was not reachable from the writing environment, so the paths are from memory); the default state of `iam.automaticIamGrantsForDefaultServiceAccounts` for new organizations; how long IAM changes take to propagate; the undelete window for service accounts; the Policy Troubleshooter and recommender output fields and the recommender ID; whether `allUsers` on a public-access-prevention bucket fails with the text described; the Terraform provider's current major version and the `terraform plan` attribute list; and that the default Compute Engine service account gets Editor in your project.
+- Not verified: the `docs.cloud.google.com` URLs (the host was not reachable from the writing environment, so the paths are unchecked); the default state of `iam.automaticIamGrantsForDefaultServiceAccounts` for new organizations; how long IAM changes take to propagate; the undelete window for service accounts; the Policy Troubleshooter and recommender output fields and the recommender ID; whether `allUsers` on a public-access-prevention bucket fails with the text described; the Terraform provider's current major version and the `terraform plan` attribute list; and that the default Compute Engine service account gets Editor in your project.

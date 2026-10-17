@@ -198,7 +198,8 @@ go 1.22
 # syntax=docker/dockerfile:1
 
 # ---- build stage: has the compiler, is thrown away ----
-FROM golang:1.23-alpine AS build
+ARG GO_VERSION=1.23 # change: a supported Go release, see the official golang image page
+FROM golang:${GO_VERSION}-alpine AS build
 WORKDIR /src
 COPY go.mod ./
 RUN go mod download
@@ -206,7 +207,8 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/hello .
 
 # ---- final stage: small, non-root ----
-FROM alpine:3.20
+ARG ALPINE_VERSION=3.20 # change: a supported Alpine release, see the official alpine image page
+FROM alpine:${ALPINE_VERSION}
 RUN addgroup -g 10001 -S app && adduser -S -u 10001 -G app -H -s /sbin/nologin app
 COPY --from=build /out/hello /usr/local/bin/hello
 USER 10001:10001
@@ -220,7 +222,7 @@ ENTRYPOINT ["hello"]
 The final image contains Alpine, one small binary and one unprivileged user. It does not contain the Go toolchain, the source or the module cache. `CGO_ENABLED=0` makes the binary static, so it does not depend on glibc or musl.
 
 > [!warning] Check before relying on this
-> The tags `golang:1.23-alpine` and `alpine:3.20` are examples. Go and Alpine have newer releases, and old release lines stop receiving security fixes. Pick currently supported tags from the official image pages before you use this in a real project.
+> The tags `golang:1.23-alpine`, `alpine:3.20` and `debian:bookworm-slim` here and in the exercises are examples that may already be out of support. Go, Alpine and Debian release new lines, and old lines stop receiving security fixes. Before you use any of this, replace each tag with a currently supported one from the official image pages (and the exercises still work with any supported tag). Do not copy these tags into a real project.
 
 ## Part 2: shipping an image
 
@@ -370,13 +372,14 @@ Kubernetes has the same controls in `securityContext` and Pod Security admission
 For the lab stack, use Artifact Registry. These commands create a Docker repository and push the image. Replace `PROJECT_ID` with your sandbox project and choose a region close to you.
 
 > [!warning] Costs money
-> An Artifact Registry repository stores images and charges for storage and network egress beyond free allowances. A few small test images cost very little, but delete the repository when you finish. Cleanup: `gcloud artifacts repositories delete lab-images --location=europe-west1 --project=PROJECT_ID`. Check current pricing before you leave anything running.
+> An Artifact Registry repository stores images and charges for storage and network egress beyond free allowances. A few small test images cost very little, but delete the repository when you finish. Cleanup: `gcloud artifacts repositories delete "$REPO" --location="$REGION" --project="$PROJECT_ID"` (with the variables set below). Check current pricing before you leave anything running.
 
 ```bash
 export PROJECT_ID="my-sandbox-project"      # change: your sandbox project ID
 export REGION="europe-west1"                # change: a region near you
 export REPO="lab-images"
 
+gcloud services enable artifactregistry.googleapis.com --project="$PROJECT_ID"
 gcloud artifacts repositories create "$REPO" \
   --repository-format=docker --location="$REGION" --project="$PROJECT_ID"
 gcloud auth configure-docker "${REGION}-docker.pkg.dev"
@@ -427,7 +430,8 @@ Use your Ubuntu VM with Docker. Work in `~/c3`. Names start with `c3-`.
 
    ```bash
    cat > Dockerfile.single <<'DOCKER'
-   FROM golang:1.23-alpine
+   ARG GO_VERSION=1.23 # change: a supported Go release, see the official golang image page
+   FROM golang:${GO_VERSION}-alpine
    WORKDIR /src
    COPY . .
    RUN CGO_ENABLED=0 go build -o /usr/local/bin/hello .
@@ -466,10 +470,11 @@ Use your Ubuntu VM with Docker. Work in `~/c3`. Names start with `c3-`.
    docker run -d --name c3-exec c3-hello:2
    docker exec c3-shell ps -o pid,args
    docker exec c3-exec ps -o pid,args
+   time docker stop c3-shell c3-exec
    ```
 
-   Expected: in `c3-shell`, PID 1 is `/bin/sh -c echo starting && hello` and `hello` is a child with a higher PID. In `c3-exec`, PID 1 is `hello`.
-   If you see something else: if the shell variant also shows `hello` as PID 1, your shell replaced itself with the last command; that is allowed but not guaranteed, so do not rely on it. If `ps -o` is unsupported, run `docker top NAME`. Then `time docker stop c3-shell c3-exec`: the exec one stops at once because `hello` handles `SIGTERM`, while the shell one waits about ten seconds.
+   Expected: in `c3-shell`, PID 1 is `/bin/sh -c echo starting && hello` and `hello` is a child with a higher PID. In `c3-exec`, PID 1 is `hello`. The `time docker stop` step takes about ten seconds in total: `c3-exec` stops at once because `hello` handles `SIGTERM`, while `c3-shell` waits for the grace period and is then killed (if your shell replaced itself with `hello`, both stop quickly).
+   If you see something else: if the shell variant also shows `hello` as PID 1, your shell replaced itself with the last command; that is allowed but not guaranteed, so do not rely on it. If `ps -o` is unsupported, run `docker top NAME`.
 
 6. **Shrink the context.**
 
@@ -513,13 +518,15 @@ Use your Ubuntu VM with Docker. Work in `~/c3`. Names start with `c3-`.
    ```bash
    mkdir -p ~/c3/size && cd ~/c3/size
    cat > Dockerfile.bad <<'DOCKER'
-   FROM debian:bookworm-slim
+   ARG DEBIAN_VERSION=bookworm-slim # change: a supported Debian release, see the official debian image page
+   FROM debian:${DEBIAN_VERSION}
    RUN apt-get update
    RUN apt-get install -y curl
    RUN rm -rf /var/lib/apt/lists/*
    DOCKER
    cat > Dockerfile.good <<'DOCKER'
-   FROM debian:bookworm-slim
+   ARG DEBIAN_VERSION=bookworm-slim # change: a supported Debian release, see the official debian image page
+   FROM debian:${DEBIAN_VERSION}
    RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -539,7 +546,8 @@ Use your Ubuntu VM with Docker. Work in `~/c3`. Names start with `c3-`.
     mkdir -p ~/c3/secret && cd ~/c3/secret
     printf 'not-a-real-secret-123' > token.txt
     cat > Dockerfile.leak <<'DOCKER'
-    FROM alpine:3.20
+    ARG ALPINE_VERSION=3.20 # change: a supported Alpine release, see the official alpine image page
+    FROM alpine:${ALPINE_VERSION}
     ARG API_TOKEN
     ENV API_TOKEN_COPY=$API_TOKEN
     RUN echo "token length: ${#API_TOKEN}" || true
@@ -550,11 +558,12 @@ Use your Ubuntu VM with Docker. Work in `~/c3`. Names start with `c3-`.
 
     cat > Dockerfile.fixed <<'DOCKER'
     # syntax=docker/dockerfile:1
-    FROM alpine:3.20
+    ARG ALPINE_VERSION=3.20 # change: a supported Alpine release, see the official alpine image page
+    FROM alpine:${ALPINE_VERSION}
     RUN --mount=type=secret,id=api_token \
         wc -c < /run/secrets/api_token
     DOCKER
-    docker build -f Dockerfile.fixed --secret id=api_token,src=./token.txt -t c3-secret:ok .
+    docker build --no-cache --progress=plain -f Dockerfile.fixed --secret id=api_token,src=./token.txt -t c3-secret:ok .
     docker history --no-trunc c3-secret:ok | grep -c 'not-a-real-secret-123'
     ```
 
@@ -566,13 +575,13 @@ Use your Ubuntu VM with Docker. Work in `~/c3`. Names start with `c3-`.
     ```bash
     cd ~/c3
     docker save c3-hello:2 -o hello.tar
-    docker run --rm -v "$PWD:/work:ro" aquasec/trivy:latest \
+    docker run --rm -v "$PWD:/work:ro" aquasec/trivy:<PINNED_VERSION>@sha256:<digest> \
       image --input /work/hello.tar --severity HIGH,CRITICAL
     echo "exit=$?"
     ```
 
     Expected: Trivy downloads its vulnerability database on the first run, then prints a summary such as `Total: N (HIGH: x, CRITICAL: y)` or no findings. The exit code is `0` by default, even with findings. Add `--exit-code 1` to make a finding fail the command, as a CI gate does.
-    If you see something else: `latest` is used here for brevity; in a pipeline pin the Trivy version. A download or rate-limit error means the database could not be fetched (check network access or use a mirror). The output format (table, columns) and database sources vary by Trivy version, so not verified. Never paste real finding output into a public place if it names your internal packages.
+    If you see something else: Replace the placeholder with a Trivy release you have checked, and pin it the same way in a pipeline; do not use `latest`. A download or rate-limit error means the database could not be fetched (check network access or use a mirror). The output format (table, columns) and database sources vary by Trivy version, so not verified. Never paste real finding output into a public place if it names your internal packages.
 
 12. **Run the image hardened and watch a write fail.**
 
@@ -636,14 +645,14 @@ Use your Ubuntu VM with Docker. Work in `~/c3`. Names start with `c3-`.
 
 ## Next steps
 
-Next lesson: [[learn/container-storage-networking-and-compose|Containers 04: Storage, networking and Compose]]. Previous lesson: [[learn/running-and-debugging-containers|Containers 02: Running, inspecting and debugging containers]].
+Next lesson: [[learn/container-storage-networking-and-compose|Containers 04: Volumes, networks and Docker Compose]]. Previous lesson: [[learn/running-and-debugging-containers|Containers 02: Running, inspecting and debugging containers]].
 
 To go deeper:
 
 - [[patterns/dockerfile-hardening]] is the team pattern for small, non-root, reproducible images with scanning and signing.
 - [[patterns/artifact-promotion-artifactory]] shows how one image digest moves from dev to production without being rebuilt.
 - [[patterns/automated-dependency-updates]] covers keeping pinned base images current.
-- [[learn/first-pipeline-gitlab-ci-and-jenkins|CI/CD 02: Your first pipeline]] for building and pushing an image in a pipeline.
+- [[learn/first-pipeline-gitlab-ci-and-jenkins|Delivery 02: Your first pipeline in GitLab CI and Jenkins, artifacts and YAML pitfalls]] for building and pushing an image in a pipeline.
 - The whole path is mapped in [[learn/index|the learning path]].
 
 ## Sources
@@ -652,5 +661,5 @@ To go deeper:
 - Docker documentation: `docker buildx imagetools inspect` and `docker run` (https://docs.docker.com/reference/cli/docker/) for the runtime flags.
 - OCI Image Specification and Distribution Specification (https://github.com/opencontainers/image-spec, https://github.com/opencontainers/distribution-spec) for tags, digests and image indexes.
 - Google Cloud documentation: "Artifact Registry" quickstart for Docker, and Artifact Registry pricing (https://cloud.google.com/artifact-registry/docs). Prices and features were not verified.
-- Trivy documentation (https://trivy.dev/) and Grype (https://github.com/anchore/grype); cosign (https://docs.sigstore.dev/). Output formats, flags and the `latest` tag were not verified.
+- Trivy documentation (https://trivy.dev/) and Grype (https://github.com/anchore/grype); cosign (https://docs.sigstore.dev/). Output formats and flags were not verified.
 - Not verified: base image tags (`golang`, `alpine`, `debian`), buildx flags, Trivy output format, and whether `ARG` values appear in history under your BuildKit version.

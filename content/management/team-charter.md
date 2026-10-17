@@ -336,7 +336,7 @@ What the example shows:
 - **Every decision row has one approver.** Where two roles seem to be needed (security and platform for a WAF rule), one approves and the other contributes.
 - **The numbers are the team's own.** The 15-minute acknowledgement time, the 400 lines and the 40% toil share are examples. Choose numbers you can measure and meet.
 
-Related: how the team's service levels and edge rules are written is in [[edge-waf-rate-limiting]] and [[cloudflare-cache-strategy]], and the dependencies that cross team boundaries are managed in [[cross-team-dependencies]].
+Related: how the edge rules are managed is in [[edge-waf-rate-limiting]] and [[cloudflare-cache-strategy]], service levels are in [[slo-burn-rate-alerting]] and [[error-budget-policy]], and the dependencies that cross team boundaries are managed in [[cross-team-dependencies]].
 
 ## Introducing the charter
 

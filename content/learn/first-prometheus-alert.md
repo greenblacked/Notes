@@ -244,7 +244,7 @@ spec:
 
 New alerts are wrong more often than you expect. Ship them in this order.
 
-1. **Write the test first.** Unit-test the rule (below) so you know what it is supposed to do.
+1. **Write the test first.** Unit-test the rule (exercises 3 and 4) so you know what it is supposed to do.
 2. **Ship it as a ticket.** Set `severity: ticket` so nobody is woken. Watch it for about a week of normal traffic.
 3. **Read what it did.** Did it fire when nothing was wrong (too noisy: lengthen `for:` or raise the threshold)? Was there an incident it missed (too quiet)? Did the description give the responder what they needed?
 4. **Promote it.** Change `severity` to `page`, in a pull request, with the test still passing.

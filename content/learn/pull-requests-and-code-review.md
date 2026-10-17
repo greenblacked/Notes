@@ -159,7 +159,7 @@ For GitLab, the same idea uses sections in square brackets, and can require a nu
 [Terraform]
 /terraform/ @example-group/platform
 
-[IAM changes] 2
+[IAM changes][2]
 /terraform/iam/ @example-group/security @example-group/platform
 ```
 
@@ -181,7 +181,7 @@ Mark the shared branches as **protected**, so nobody can push to them directly o
 | Conversations resolved                     | "Require conversation resolution before merging"                          | "All threads must be resolved"                                          |
 | Even admins follow the rules               | Do not allow bypassing the settings                                       | Do not allow admins or maintainers to bypass (where the settings allow) |
 
-The labels in this table are paraphrased from memory of the products and are likely to have changed. Treat it as a map of which feature to look for, then read the live settings page.
+The labels in this table were not checked against the current settings pages and are likely to have changed. Treat it as a map of which feature to look for, then read the live settings page.
 
 > [!warning] Check before relying on this
 > Which of these features are available depends on the plan tier (for example, some branch protection and approval features are limited on free plans for private repositories, and GitLab approval rules and code owner features differ by tier). Verify on the current pricing and documentation pages of your provider.
@@ -383,7 +383,7 @@ Expected: no output. If you see something else: an error from `mktemp` means `/t
    ```
 
    Expected outcome of the review: **request changes** (blocking). The author narrows the range, you re-check the new plan, and you approve.
-   If you see something else: if you want to be sure what the fix looks like, restore the original with `git diff main...HEAD -- terraform/network.tf` and see that the old line was the narrow range.
+   If you see something else: if you want to be sure what the fix looks like, see the original line with `git diff main...HEAD -- terraform/network.tf` and see that the old line was the narrow range.
 
 4. **Review a bucket rename that forces replacement.** Read the diff for `terraform/storage.tf` with `git diff main...HEAD -- terraform/storage.tf`.
 
@@ -407,7 +407,7 @@ Expected: no output. If you see something else: an error from `mktemp` means `/t
    do not move. If you only want a different Terraform resource label, rename the
    resource and add a `moved` block, which changes the address and not the bucket.
    If the bucket itself must have a new name: create the new bucket as a separate
-   resource, copy the objects (for example with `gcloud storage cp` or `rsync`),
+   resource, copy the objects (for example with `gcloud storage cp --recursive` or `gcloud storage rsync`),
    switch the readers over, and remove the old one in a later pull request after
    checking nothing uses it. Please attach the plan once changed.
    ```
@@ -422,8 +422,8 @@ Expected: no output. If you see something else: an error from `mktemp` means `/t
    ```text
    should: app/Dockerfile, line 1. `nginx:latest` is not reproducible. Pin to a version you
    have tested, and optionally the digest, so a rebuild gives the same image and updates are a
-   reviewed change. For example, pass the version in as a build argument:
-   `ARG NGINX_VERSION` then `FROM nginx:${NGINX_VERSION}`, with the value set in CI. Also, why
+   reviewed change. For example, `FROM nginx:<tested-version>@sha256:<digest>` in the Dockerfile,
+   updated by a dependency bot. Also, why
    the change from debian:stable-slim to nginx? The description does not say.
    See patterns/dockerfile-hardening.
    ```
@@ -476,7 +476,7 @@ Cleanup: close the terminal, or delete the temporary directory. Delete the pract
 
 ## Next steps
 
-Next stage: scripting, starting with [[learn/bash-scripting-fundamentals|Scripting 01: Bash scripting fundamentals]]. Previous lesson: [[learn/git-merge-rebase-and-undo|Git 02: Merge, rebase, conflicts and undoing mistakes]].
+Next stage: scripting, starting with [[learn/bash-scripting-fundamentals|Scripting 01: Bash fundamentals]]. Previous lesson: [[learn/git-merge-rebase-and-undo|Git 02: Merge, rebase, conflicts and undoing mistakes]].
 
 For going deeper as a senior engineer:
 

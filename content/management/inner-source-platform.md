@@ -34,7 +34,7 @@ It fits when the platform has many consumers, a clear public interface (module i
 Ownership stays with the platform team. The mechanism is a `CODEOWNERS` file combined with a protected default branch and merge request approval rules, so that a change under platform-owned paths cannot merge without a platform approval.
 
 ```text title="CODEOWNERS"
-# Everything not listed below needs a platform approval by default.
+# Default section: applies to every path, in addition to any named section below (not verified for your tier).
 * @example-org/platform
 
 [Terraform modules][1]
@@ -48,7 +48,7 @@ Ownership stays with the platform team. The mechanism is a `CODEOWNERS` file com
 /ci-templates/ @example-org/platform-maintainers
 
 [Security-critical, platform only][2]
-# Two approvals, and no contributor path. Not part of inner source.
+# Needs approval from platform-security. Not part of inner source.
 /modules/org-policy/ @example-org/platform-security
 /modules/network-foundation/ @example-org/platform-security
 ```
@@ -56,8 +56,8 @@ Ownership stays with the platform team. The mechanism is a `CODEOWNERS` file com
 How to read it:
 
 - `[Section][N]` is a GitLab-style section requiring `N` approvals from that section's code owners. The numbers shown are examples. Set them from your own review policy.
-- The first block is a safety net. A path with no explicit owner falls to the platform team, never to nobody.
-- The security-critical paths need two approvals from a smaller group. This keeps inner source out of the places where a mistake is hard to reverse.
+- The first block is a safety net. A path with no explicit owner falls to the platform team, never to nobody. Sections are additive, so a path that matches the default and a named section needs approval from both.
+- The security-critical paths need approval from a smaller group. This keeps inner source out of the places where a mistake is hard to reverse. CODEOWNERS only requires approvals and does not stop anyone from opening a merge request; to prevent contributor changes entirely, keep these modules in a separate repository with restricted Developer access.
 - A contributor from a product team opens the merge request and gets feedback. They do **not** become a code owner by contributing. Add a contributor to a section only through a deliberate decision, for example after repeated good changes to one module.
 
 Repository settings that make the file binding:
@@ -86,7 +86,7 @@ templates in this repository. The platform team reviews and releases it.
       problem, not the solution. A platform engineer (your sponsor) will reply
       within the review service level below.
 - [ ] Check that the change is not in a platform-only area (see CODEOWNERS).
-      Those paths are changed by the platform team only.
+      Those paths need approval from platform-security.
 
 ## Making the change
 
@@ -233,7 +233,7 @@ A GitLab API query idea for merged merge requests from non-platform authors per 
 #!/usr/bin/env bash
 # Count merged MRs per author in a quarter, excluding platform team members.
 # Needs: curl, jq. Read-only token with the read_api scope, kept in the environment.
-set -euo pipefail
+set -Eeuo pipefail
 
 GITLAB_URL="https://gitlab.example.com"   # change to your GitLab host
 GROUP_ID="1234"                            # change to the numeric ID of the group that holds the platform repositories
@@ -248,6 +248,8 @@ api() { curl -fsS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "$@"; }
 # paginate if your group is larger).
 platform_users="$(api "${GITLAB_URL}/api/v4/groups/${PLATFORM_GROUP_ID}/members/all?per_page=100" \
   | jq -r '[.[].username]')"
+
+trap 'rm -f "${resp:-}" "${hdr:-}"' EXIT
 
 page=1
 all='[]'

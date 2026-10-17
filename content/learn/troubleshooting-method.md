@@ -189,13 +189,13 @@ kubectl -n shop describe svc checkout | grep -E 'Selector|Port|TargetPort|Endpoi
 ```
 
 ```text
-09:25Z all 6 checkout Pods are Running and Ready (3 old v1.7 were replaced, so 6 new v1.8). Not Pending: H4 dead.
-09:27Z Service checkout: TargetPort 8080. EndpointSlice lists 6 Pod IPs, all ready.
-09:28Z from a debug Pod: curl -sS -m 3 http://<pod-ip>:8080/ -> curl: (7) Failed to connect ... Connection refused.
+09:25Z all 5 checkout Pods are Running and Ready: 3 on v1.7, 2 on v1.8 (the canary replaced 2 of 5, so 2/5 = 40%). Not Pending: H4 dead.
+09:27Z Service checkout: TargetPort 8080. EndpointSlice lists 5 Pod IPs, all ready.
+09:28Z from a debug Pod, against a v1.8 Pod: curl -sS -m 3 http://<pod-ip>:8080/ -> curl: (7) Failed to connect ... Connection refused.
          curl http://<pod-ip>:8081/ -> HTTP/1.1 200 OK
 ```
 
-The prediction of H1 held (connection refused on 8080, an answer on 8081), and it could have failed: if 8080 had answered, H1 would be dead. The "40%, not 100%" in the symptom needs its own explanation. In this made-up story the ingress retries a failed request on another Pod, and only some of the retried requests failed twice, which is why the visible share is lower than the share of bad Pods. Do not over-fit an explanation like this; a number is a hint, not proof, and the notes below record it as a belief.
+The prediction of H1 held (connection refused on 8080, an answer on 8081), and it could have failed: if 8080 had answered, H1 would be dead. The "40%, not 100%" in the symptom follows from the setup: 2 of the 5 Pods run v1.8 and refuse connections on 8080, and the 3 v1.7 Pods are healthy. A number is a hint, not proof, and the notes below record the cause as a belief.
 
 ```text
 09:30Z cause (believed): v1.8 listens on 8081 (PORT env changed in the chart), Service targets 8080. Readiness probe uses the admin port 9000, so Pods are "Ready".

@@ -341,7 +341,7 @@ An AI assistant can be a good study partner: ask it to quiz you, to explain a mi
 
 3. **Write a one-page design doc.** Choose a decision in your lab with a real trade-off (for example "Helm or Kustomize for the lab app", see [[tools/helm-vs-kustomize]]). Use the skeleton above, with at least two options plus "do nothing", and a rollback section.
 
-   Expected: one page with all seven headings, a Decision section of no more than three sentences and a rollback that someone else could follow.
+   Expected: one page with the title and all six section headings, a Decision section of no more than three sentences and a rollback that someone else could follow.
    If you see something else: if the Context section describes the solution, move that to Decision; context states the problem and the forces.
 
 4. **Kubernetes speed drills on the kind cluster.** Time yourself with the docs open. This exercise was **not run** for this page; the outputs are what you should expect, not captured output.

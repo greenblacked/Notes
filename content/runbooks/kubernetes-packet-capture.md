@@ -30,7 +30,7 @@ Do not capture just to look: a capture is a data-handling event. Have a question
 ## Preconditions
 
 - A ticket or incident reference. Captures are tied to one, and the file is stored under it.
-- `kubectl` access, with `update` on `pods/ephemeralcontainers` for a pod capture, and rights to run a privileged pod for a node capture. In many clusters this is limited to a break-glass role; use it and record it.
+- `kubectl` access, with `patch` on `pods/ephemeralcontainers` (plus `get` on pods and `create` on `pods/attach` for an interactive session; not verified for your version) for a pod capture, and rights to run a privileged pod for a node capture. In many clusters this is limited to a break-glass role; use it and record it.
 - An approved debug image, pinned by digest and mirrored into your own registry (Artifactory or Artifact Registry). Pulling `latest` from a public registry during an incident is a supply chain risk. `nicolaka/netshoot` is a common choice that has `tcpdump`, `tshark`, `ss` and `ip`; resolve its digest once and mirror it.
 - Disk space where the capture is written, and a time limit. Know the traffic rate before you start.
 - The variables below, set once per shell.
@@ -144,8 +144,9 @@ To capture on the node side of the pod's link, map the pod's `eth0` to its host-
 
 ```bash
 # Inside the pod namespace: the index of the peer interface.
-nsenter -t "$PID" -n cat /sys/class/net/eth0/iflink
-# Illustrative output: 47
+nsenter -t "$PID" -n ip -o link show eth0
+# Illustrative output: 3: eth0@if47: <BROADCAST,MULTICAST,UP,LOWER_UP> ...
+# The number after "@if" (47) is the index of the host-side peer.
 
 # In the host namespace: which interface has that index.
 ip -o link | awk -F': ' '$1 == 47 {print $2}'
@@ -167,7 +168,7 @@ Interface naming depends on the CNI. Treat this table as a starting point and co
 | GKE Dataplane V2 (Cilium based)        | `eth0`             | A generated name, often `gke` + a hash (**not verified**)          | Cilium interfaces may be present under the same names; check the node |
 | GKE default (no network policy engine) | `eth0`             | `veth` + a hash, attached to a bridge or routed (**not verified**) | `cbr0` on some node images                                            |
 
-The host-side name is only a label. The `iflink` method above works for every CNI that uses veth pairs, so prefer it over guessing the pattern. A CNI that does not use veth pairs (some cloud-native ones) will not show a peer; read its documentation.
+The host-side name is only a label. The `@if` peer-index method above works for every CNI that uses veth pairs, so prefer it over guessing the pattern. A CNI that does not use veth pairs (some cloud-native ones) will not show a peer; read its documentation.
 
 ### 4. Filters and rotation
 
@@ -181,11 +182,12 @@ tcpdump -nni any -s 128 -C 100 -W 5 -w "/tmp/${TICKET}.pcap" 'host 192.0.2.50 an
 # Stop after N packets.
 tcpdump -nni any -s 128 -c 50000 -w "/tmp/${TICKET}.pcap" 'port 53'
 
-# Rotate every 60 seconds and keep the last 10 files.
+# Rotate every 60 seconds; with -G, -W 10 stops the capture after 10 files (about 10 minutes).
+# For a time-based ring, combine with -C or rotate externally.
 tcpdump -nni any -s 128 -G 60 -W 10 -w "/tmp/${TICKET}-%H%M%S.pcap" 'host 192.0.2.50'
 ```
 
-When the file is rotating, stop the capture soon after the event, or the ring will overwrite it. Note the exact time of the failure from your logs (in UTC) so you can find the right file.
+When the capture is rotating, stop it soon after the event and note the time of the failure. Note the exact time of the failure from your logs (in UTC) so you can find the right file.
 
 Useful filters (BPF syntax, used by `tcpdump` and by `tshark -f`):
 
@@ -234,6 +236,9 @@ Illustrative `io,stat` output, where the gap shows a stall of about five seconds
 | 1  <> 2   |   1502 | 2.0M  |
 | 2  <> 3   |      4 | 312   |
 | 3  <> 4   |      0 | 0     |
+| 4  <> 5   |      0 | 0     |
+| 5  <> 6   |      0 | 0     |
+| 6  <> 7   |      0 | 0     |
 | 7  <> 8   |   1430 | 1.8M  |
 ```
 

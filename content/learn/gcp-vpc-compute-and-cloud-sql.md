@@ -447,40 +447,40 @@ Exercises 10 to 13 are optional. They are the part that costs most, because Clou
 
 10. **Optional, costs money: allow a private range for Cloud SQL and create the instance.** Cloud SQL private IP needs a reserved range and a peering with Google's service network. The instance can take several minutes to create.
 
-```bash
-gcloud services enable servicenetworking.googleapis.com sqladmin.googleapis.com
+    ```bash
+    gcloud services enable servicenetworking.googleapis.com sqladmin.googleapis.com
 
-gcloud compute addresses create lab-psa-range \
-  --global --purpose=VPC_PEERING --prefix-length=24 --network=lab-vpc
+    gcloud compute addresses create lab-psa-range \
+      --global --purpose=VPC_PEERING --prefix-length=24 --network=lab-vpc
 
-gcloud services vpc-peerings connect \
-  --service=servicenetworking.googleapis.com \
-  --ranges=lab-psa-range --network=lab-vpc
+    gcloud services vpc-peerings connect \
+      --service=servicenetworking.googleapis.com \
+      --ranges=lab-psa-range --network=lab-vpc
 
-gcloud sql instances create lab-pg \
-  --database-version=POSTGRES_16 \
-  --edition=enterprise \
-  --tier=db-f1-micro \
-  --region="$REGION" \
-  --network=lab-vpc \
-  --no-assign-ip \
-  --ssl-mode=ENCRYPTED_ONLY \
-  --availability-type=zonal \
-  --no-deletion-protection
+    gcloud sql instances create lab-pg \
+      --database-version=POSTGRES_16 \
+      --edition=enterprise \
+      --tier=db-f1-micro \
+      --region="$REGION" \
+      --network=lab-vpc \
+      --no-assign-ip \
+      --ssl-mode=ENCRYPTED_ONLY \
+      --availability-type=zonal \
+      --no-deletion-protection
 
-gcloud sql users set-password postgres --instance=lab-pg --prompt-for-password
-gcloud sql instances list --format="table(name,databaseVersion,state,ipAddresses[].ipAddress,ipAddresses[].type)"
-```
+    gcloud sql users set-password postgres --instance=lab-pg --prompt-for-password
+    gcloud sql instances list --format="table(name,databaseVersion,state,ipAddresses[].ipAddress,ipAddresses[].type)"
+    ```
 
-Expected, illustrative:
+    Expected, illustrative:
 
-```text
-NAME    DATABASE_VERSION  STATE     ADDRESS      TYPE
-lab-pg  POSTGRES_16       RUNNABLE  10.30.0.3    PRIVATE
-```
+    ```text
+    NAME    DATABASE_VERSION  STATE     ADDRESS      TYPE
+    lab-pg  POSTGRES_16       RUNNABLE  10.30.0.3    PRIVATE
+    ```
 
-The address is from the range you reserved (Google picks it), and there is no `PRIMARY` public address. The password prompt takes input without echo; use a long random value from your password manager.
-If you see something else: errors about the version, edition or tier mean the value is not offered any more; run `gcloud sql tiers list` and check the supported versions, then change the flag. An error that the peering range is too small or invalid means the `--prefix-length=24` was not enough for your chosen options: check the minimum size in the private services access documentation. If the instance stays in a `PENDING_CREATE` state for a long time, wait, and read `gcloud sql operations list --instance=lab-pg`.
+    The address is from the range you reserved (Google picks it), and there is no `PRIMARY` public address. The password prompt takes input without echo; use a long random value from your password manager.
+    If you see something else: errors about the version, edition or tier mean the value is not offered any more; run `gcloud sql tiers list` and check the supported versions, then change the flag. An error that the peering range is too small or invalid means the `--prefix-length=24` was not enough for your chosen options: check the minimum size in the private services access documentation. If the instance stays in a `PENDING_CREATE` state for a long time, wait, and read `gcloud sql operations list --instance=lab-pg`.
 
 11. **Optional, costs money: create a NAT gateway so the VM can install software, and recreate the VM.** The VM has no external IP, so without NAT it cannot download the proxy or install a client.
 
@@ -571,7 +571,7 @@ If you see something else: errors about the version, edition or tier mean the va
     gcloud sql instances list
     ```
 
-    Expected: each final list shows nothing. If you skipped exercises 10 to 13, the SQL, NAT and router lines will report that the resource was not found, which is fine.
+    Expected: each final list shows nothing. If you skipped exercises 10 to 13, the lab-vm, SQL, NAT, router, peering and lab-psa-range lines report that the resource was not found, which is fine.
     If you see something else: deleting the peering can fail for some minutes after the Cloud SQL instance is gone; wait and retry. A network that cannot be deleted names the resource that still uses it. Remember the role binding from exercise 11 is removed when its service account is deleted, but check `gcloud projects get-iam-policy "$LAB_PROJECT_ID"` for a leftover `deleted:serviceAccount` member if you want a clean policy.
 
 ## Common mistakes
@@ -611,7 +611,7 @@ Next lesson: [[learn/gke-for-beginners|GCP 04: GKE for beginners]]. Previous les
 
 To go deeper:
 
-- [[patterns/terraform-module-and-state-layout]] shows how to keep a VPC like this as code, which you will practise in [[learn/terraform-basics-on-gcp|Terraform 01]].
+- [[patterns/terraform-module-and-state-layout]] shows how to keep a VPC like this as code; the Terraform basics come in [[learn/terraform-basics-on-gcp|Delivery 04: Terraform basics with a first GCP project]] and Delivery 05.
 - [[architecture/shared-vpc-hub-and-spoke]], [[architecture/private-gke-and-controlled-egress]] and [[architecture/environment-separation-on-gcp]] cover the network designs that grow out of this lesson.
 - [[architecture/finops-cost-allocation-and-guardrails]] covers labels, budgets and reports for the cost traps above.
 - [[learn/load-balancers-firewalls-and-network-troubleshooting|Networking 05]] for firewall thinking and troubleshooting in general.

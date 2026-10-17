@@ -16,7 +16,7 @@ draft: false
 [[zero-downtime-deployments-kubernetes]] covers how to roll out application Pods without dropping requests. It stops at the database. A schema change on a large live table can still cause an outage, because many DDL statements take locks that block every query on the table. This note covers the schema side: how to change a large Postgres or Cloud SQL database in small, safe, reversible steps. Rollout mechanics for the application are not repeated here.
 
 > [!info] Not verified
-> This was written from knowledge of the PostgreSQL and Flyway documentation and was not run against a live database. Check these against the Postgres major version you run and the Flyway version in use before relying on them: which `ALTER` forms rewrite the table; whether `SET NOT NULL` skips the table scan when a validated `CHECK (col IS NOT NULL)` constraint exists (I believe this holds from PostgreSQL 12, not verified); the current Flyway setting name `executeInTransaction` and where it goes; and the exact lock level of each statement. The PostgreSQL manual page "Explicit Locking" lists lock modes and which statements take them. Cloud SQL runs standard PostgreSQL, but check its docs for flags you cannot set.
+> This was written from knowledge of the PostgreSQL and Flyway documentation and was not run against a live database. Check these against the Postgres major version you run and the Flyway version in use before relying on them: which `ALTER` forms rewrite the table; whether `SET NOT NULL` skips the table scan when a validated `CHECK (col IS NOT NULL)` constraint exists (PostgreSQL 12 and later; not verified); the current Flyway setting name `executeInTransaction` and where it goes; and the exact lock level of each statement. The PostgreSQL manual page "Explicit Locking" lists lock modes and which statements take them. Cloud SQL runs standard PostgreSQL, but check its docs for flags you cannot set.
 
 ## Expand, migrate, contract
 
@@ -31,16 +31,16 @@ Example used throughout: replace `orders.total numeric(10,2)` with `orders.total
 ## Ordering rule
 
 > [!warning] The app must tolerate both schema versions
-> Before the contract step, every version of the application that can still run (old Pods during a rollout, a rollback target, a batch job, a replica reader) must work with both the old and the new schema. Before the expand step, the old code must work with the new schema. Order every release around that rule.
+> Before the contract step, every version of the application that can still run (old Pods during a rollout, a rollback target, a batch job, a replica reader) must work with both the old and the new schema. After the expand step, the old code must still work with the new schema. Order every release around that rule.
 
 In practice:
 
-| Step | Schema state                          | Code that must work                                       |
-| ---- | ------------------------------------- | --------------------------------------------------------- |
-| 1    | Expand applied (new column, empty)    | Release N (ignores the column), release N+1 (writes both) |
-| 2    | Backfill and constraints done         | Release N+1 and N+2 (reads the new column)                |
-| 3    | Release N+2 is the only one running   | Only N+2 and later                                        |
-| 4    | Contract applied (old column dropped) | N+2 and later. Release N+1 and older now break.           |
+| Step | Schema state                          | Code that must work                                                                  |
+| ---- | ------------------------------------- | ------------------------------------------------------------------------------------ |
+| 1    | Expand applied (new column, empty)    | Release N (ignores the column), release N+1 (writes both)                            |
+| 2    | Backfill and constraints done         | Release N+1 and N+2 (reads the new column, still writes both)                        |
+| 3    | Release N+2 is the only one running   | Only N+2 and later. A later release stops writing `total`, before the contract step. |
+| 4    | Contract applied (old column dropped) | N+2 and later. Release N+1 and older now break.                                      |
 
 Run the migration before the code that needs it (expand), and after the code that stops using the old structure (contract). Keep the contract migration out of the same release as the code change. A rollback of the code then never lands on a schema that no longer has the column. See [[production-change-checklist]] for the rollback plan each phase needs.
 
@@ -68,18 +68,18 @@ ALTER TABLE orders ADD COLUMN total_cents bigint;
 
 "Rewrite" means Postgres copies the whole table while holding a strong lock. On a table with millions of rows, that is an outage. This table is a starting point, not a substitute for testing on a copy of production size data.
 
-| Statement                                  | Risk                                                    | Safe form                                                                        |
-| ------------------------------------------ | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `ADD COLUMN` nullable, no default          | Brief lock, no rewrite                                  | Use as is, with `lock_timeout`                                                   |
-| `ADD COLUMN ... DEFAULT <constant>`        | No rewrite on modern Postgres (11 and later, I believe) | Check your version; with a volatile default (for example `random()`) it rewrites |
-| `ADD COLUMN ... NOT NULL` without default  | Fails on existing rows                                  | Add nullable, backfill, then constrain                                           |
-| `ALTER COLUMN ... TYPE`                    | Usually rewrites the table and blocks reads and writes  | New column, backfill, switch, drop old                                           |
-| `SET NOT NULL`                             | Scans the table under a strong lock                     | Validated `CHECK (col IS NOT NULL)` first, then `SET NOT NULL`                   |
-| `CREATE INDEX`                             | Blocks writes while it builds                           | `CREATE INDEX CONCURRENTLY`                                                      |
-| `ADD CONSTRAINT ... CHECK` / `FOREIGN KEY` | Scans the table under a lock                            | `NOT VALID`, then `VALIDATE CONSTRAINT`                                          |
-| `RENAME COLUMN` / `RENAME TABLE`           | Quick, but breaks old code instantly                    | Add new, migrate, drop old                                                       |
-| `DROP COLUMN`                              | Quick, but breaks any code that still reads it          | Only in a later release, after nothing uses it                                   |
-| `DROP TABLE`, `TRUNCATE`                   | Data loss, strong lock                                  | Take a backup, wait a release, then drop                                         |
+| Statement                                  | Risk                                                       | Safe form                                                                        |
+| ------------------------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `ADD COLUMN` nullable, no default          | Brief lock, no rewrite                                     | Use as is, with `lock_timeout`                                                   |
+| `ADD COLUMN ... DEFAULT <constant>`        | No rewrite on modern Postgres (11 and later; not verified) | Check your version; with a volatile default (for example `random()`) it rewrites |
+| `ADD COLUMN ... NOT NULL` without default  | Fails on existing rows                                     | Add nullable, backfill, then constrain                                           |
+| `ALTER COLUMN ... TYPE`                    | Usually rewrites the table and blocks reads and writes     | New column, backfill, switch, drop old                                           |
+| `SET NOT NULL`                             | Scans the table under a strong lock                        | Validated `CHECK (col IS NOT NULL)` first, then `SET NOT NULL`                   |
+| `CREATE INDEX`                             | Blocks writes while it builds                              | `CREATE INDEX CONCURRENTLY`                                                      |
+| `ADD CONSTRAINT ... CHECK` / `FOREIGN KEY` | Scans the table under a lock                               | `NOT VALID`, then `VALIDATE CONSTRAINT`                                          |
+| `RENAME COLUMN` / `RENAME TABLE`           | Quick, but breaks old code instantly                       | Add new, migrate, drop old                                                       |
+| `DROP COLUMN`                              | Quick, but breaks any code that still reads it             | Only in a later release, after nothing uses it                                   |
+| `DROP TABLE`, `TRUNCATE`                   | Data loss, strong lock                                     | Take a backup, wait a release, then drop                                         |
 
 ## Concurrent indexes
 
@@ -109,29 +109,51 @@ Put one concurrent statement per migration file. If the tool runs several statem
 Adding a constraint normally checks all existing rows while holding a strong lock. Split it in two:
 
 - `ADD CONSTRAINT ... NOT VALID` takes a short lock and enforces the rule for new and updated rows only.
-- `VALIDATE CONSTRAINT` scans the existing rows with a weaker lock that, as I understand it, does not block normal reads and writes. Not verified: check the lock mode for your version.
+- `VALIDATE CONSTRAINT` scans the existing rows with a weaker lock that does not block normal reads and writes (not verified: check the lock mode for your version).
 
-```sql title="V20261024__constrain_orders_total_cents.sql"
+> [!warning] Never put `NOT VALID` and `VALIDATE` in the same transaction
+> Flyway wraps a migration file in one transaction by default. `ADD CONSTRAINT` takes a strong lock that is held until the transaction ends, so if `VALIDATE CONSTRAINT` runs in the same file, the lock is held for the whole validation scan and all traffic on the table waits. Use one file per step, and run the `VALIDATE` file outside a transaction (or at least alone in its own transaction).
+
+Step (a): add the constraint for new writes only. Quick.
+
+```sql title="V20261024_1__add_orders_total_cents_check.sql"
 SET lock_timeout = '3s';
-SET statement_timeout = '0';
 
--- 1. Enforce for new writes only. Quick.
 ALTER TABLE orders
   ADD CONSTRAINT orders_total_cents_not_null
   CHECK (total_cents IS NOT NULL) NOT VALID;
+```
 
--- 2. Check the old rows. Slow on a big table, but does not block normal traffic.
+Step (b): check the old rows. Slow on a big table, but it does not block normal traffic. Keep it alone in its file, and tell Flyway not to wrap it in a transaction (a `V20261024_2__validate_orders_total_cents_check.sql.conf` file with `executeInTransaction=false`; not verified: check the setting name and file naming for your Flyway version).
+
+```sql title="V20261024_2__validate_orders_total_cents_check.sql"
+SET statement_timeout = '0';
+
 ALTER TABLE orders VALIDATE CONSTRAINT orders_total_cents_not_null;
+```
 
--- 3. With a validated CHECK in place, SET NOT NULL can skip its own scan
---    on PostgreSQL 12 and later (not verified for your version).
+Step (c): with a validated CHECK in place, `SET NOT NULL` can skip its own scan on PostgreSQL 12 and later (not verified for your version).
+
+```sql title="V20261024_3__set_orders_total_cents_not_null.sql"
+SET lock_timeout = '3s';
+
 ALTER TABLE orders ALTER COLUMN total_cents SET NOT NULL;
 ALTER TABLE orders DROP CONSTRAINT orders_total_cents_not_null;
+```
 
--- The same two-step form works for a foreign key.
+The same split applies to a foreign key: one file for `ADD CONSTRAINT ... FOREIGN KEY ... NOT VALID`, and a separate non-transactional file for `VALIDATE CONSTRAINT`.
+
+```sql title="V20261024_4__add_orders_customer_fk.sql"
+SET lock_timeout = '3s';
+
 ALTER TABLE orders
   ADD CONSTRAINT orders_customer_fk
   FOREIGN KEY (customer_id) REFERENCES customers (id) NOT VALID;
+```
+
+```sql title="V20261024_5__validate_orders_customer_fk.sql"
+SET statement_timeout = '0';
+
 ALTER TABLE orders VALIDATE CONSTRAINT orders_customer_fk;
 ```
 
@@ -220,7 +242,7 @@ while IFS= read -r -d '' file; do
 
   allowed() { grep -qiE "^[[:space:]]*-- migration-lint: allow $1 .+" "$file"; }
 
-  if echo "$sql" | grep -qiE 'ALTER[[:space:]]+COLUMN[[:space:]]+[^;]*[[:space:]]TYPE[[:space:]]' && ! allowed alter-type; then
+  if echo "$sql" | grep -qiE 'ALTER[[:space:]]+TABLE[[:space:]]+[^;]*ALTER[[:space:]]+(COLUMN[[:space:]]+)?[^;]*[[:space:]]TYPE[[:space:]]' && ! allowed alter-type; then
     report "$file" "ALTER COLUMN TYPE can rewrite the table; add a new column instead" alter-type
   fi
   if echo "$sql" | grep -qiE 'CREATE[[:space:]]+(UNIQUE[[:space:]]+)?INDEX[[:space:]]+(IF[[:space:]]+NOT[[:space:]]+EXISTS[[:space:]]+)?[^;]*' \
@@ -258,12 +280,12 @@ Notes on the lint:
 
 ## Rollback per phase
 
-| Phase    | What changed                            | How to roll back                                                                | Data risk                                              |
-| -------- | --------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Expand   | New nullable column, new empty index    | Drop the new column or index. Old code never used it.                           | None                                                   |
-| Migrate  | Code writes both, backfill, constraints | Roll back the code to release N. Keep the new column. Stop the backfill script. | Low: new column holds partial data; it can be refilled |
-| Switch   | Code reads only the new column          | Roll back to N+1 (reads old, writes both). Old column is still current.         | Low                                                    |
-| Contract | Old column dropped                      | Restore from backup or a point-in-time restore. No quick path.                  | High                                                   |
+| Phase    | What changed                            | How to roll back                                                                                                                                                                                                                        | Data risk                                              |
+| -------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Expand   | New nullable column, new empty index    | Drop the new column or index. Old code never used it.                                                                                                                                                                                   | None                                                   |
+| Migrate  | Code writes both, backfill, constraints | Roll back the code to release N only before the `NOT NULL`/`CHECK` step; after it, release N's inserts fail, so roll back to N+1, or run `ALTER COLUMN total_cents DROP NOT NULL` first. Keep the new column. Stop the backfill script. | Low: new column holds partial data; it can be refilled |
+| Switch   | Code reads only the new column          | Roll back to N+1 (reads old, writes both). Old column is still current.                                                                                                                                                                 | Low                                                    |
+| Contract | Old column dropped                      | Restore from backup or a point-in-time restore. No quick path.                                                                                                                                                                          | High                                                   |
 
 This is why the contract step is last and separate: every earlier phase has a cheap rollback. Before the contract step, confirm that you have a tested restore and that the on-call engineer knows the point of no return.
 

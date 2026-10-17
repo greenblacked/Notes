@@ -315,7 +315,7 @@ With the default, `app` (0 dots) is tried as `app.lab.internal` first. `www.exam
 
 ### Kubernetes service DNS
 
-A pod's DNS is the same model with different settings. Kubernetes runs a cluster DNS service (CoreDNS in current clusters, though GKE can also offer kube-dns or Cloud DNS for the cluster; verify for your cluster) and writes a `resolv.conf` into each pod.
+A pod's DNS is the same model with different settings. Kubernetes runs a cluster DNS service (CoreDNS in most clusters; GKE uses kube-dns by default or Cloud DNS for GKE, so verify for your cluster) and writes a `resolv.conf` into each pod.
 
 ```text title="/etc/resolv.conf inside a pod in namespace shop"
 search shop.svc.cluster.local svc.cluster.local cluster.local
@@ -398,7 +398,7 @@ First install the tools: `sudo apt install -y bind9-dnsutils`. (If the package n
    dig +noall +authority nothing-here-lab-test.example.com A
    ```
 
-   Expected: `status: NXDOMAIN`, `ANSWER: 0` and `AUTHORITY: 1` or more. The authority section carries the `SOA` record of the parent zone. Its TTL is the longest time a resolver will remember "this name does not exist", together with the `MINIMUM` field of the `SOA` (RFC 2308).
+   Expected: `status: NXDOMAIN`, `ANSWER: 0` and `AUTHORITY: 1` or more. The authority section carries the `SOA` record of the enclosing zone, `example.com`. Its TTL is the longest time a resolver will remember "this name does not exist", together with the `MINIMUM` field of the `SOA` (RFC 2308).
    If you see something else: if you see `NOERROR` with no answer, that is `NODATA`, a different case (the name exists but not for this type). If the status is `NXDOMAIN` but no `SOA` line appears, the resolver may have filtered it; try `dig @1.1.1.1` with the same options.
 
 8. **Ask for the other record types.** Run `dig +short example.com NS`, `dig +short example.com MX`, `dig +short example.com TXT` and `dig +noall +answer example.com SOA`.

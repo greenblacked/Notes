@@ -199,7 +199,7 @@ Install the tools with your package manager (`brew`, `apt`, `snap`) or each proj
 From [[learn/gcp-foundations]] onward you use Google Cloud. Set up a safe place for it now.
 
 > [!warning] Costs money
-> A GCP project is free to create, but the resources you start in it (VMs, GKE clusters, Cloud SQL, load balancers) are billed while they exist. Billing needs a billing account with a payment method. Never leave lab resources running overnight. The rule is: **when a lesson ends, delete what it created**, and every cloud lesson prints its cleanup command next to the step that costs money. This page does not quote prices; check the current pricing page for anything you start.
+> A GCP project is free to create, but the resources you start in it (VMs, GKE clusters, Cloud SQL, load balancers) are billed while they exist. Billing needs a billing account with a payment method. Never leave lab resources running overnight. The rule is: **when a lesson ends, delete what it created**, and every cloud lesson prints its cleanup command next to the step that costs money. This page does not quote prices; check the current pricing page for anything you start. To remove everything at once, run `gcloud projects delete "$LAB_PROJECT_ID"` (see the cleanup rule below).
 
 ### One project, used for nothing else
 
@@ -359,6 +359,9 @@ You need [[learn/kubernetes-services-and-ingress]] and [[learn/helm-basics-and-c
 
 Describe a small piece of GCP infrastructure in Terraform (a Cloud Storage bucket is enough), run it from a CI pipeline, and deploy the P3 app to your cluster with Argo CD or Flux reading a Git repository.
 
+> [!warning] Costs money
+> A Cloud Storage bucket is billed for what it stores. Clean up with `terraform destroy`, and if objects remain and the bucket will not delete, `gsutil rm -r gs://BUCKET` (use your bucket name), or delete the whole project: `gcloud projects delete "$LAB_PROJECT_ID"`.
+
 Done when:
 
 ```bash
@@ -383,7 +386,9 @@ Done when:
 
 ```bash
 kubectl -n monitoring port-forward svc/prometheus 9090:9090 &
+sleep 2
 curl -s http://localhost:9090/api/v1/alerts | jq -r '.data.alerts[].labels | "\(.alertname) \(.severity)"'
+kill %1
 ```
 
 ```text
@@ -427,8 +432,8 @@ Do these in order, in your lab.
 
    ```text
    git        git version 2.43.0
-   docker     Docker version 29.8.2, build 7fc2dff
-   kind       kind v0.31.0 go1.25.0 linux/amd64
+   docker     Docker version 2x.y.z, build xxxxxxx
+   kind       kind v0.x.y go1.x.y linux/amd64
    ...
    exit=0
    ```
@@ -452,6 +457,8 @@ Do these in order, in your lab.
    If you see something else: `NotReady` for the first minute is normal, so wait and repeat. If `kind` cannot reach the Docker daemon, start Docker and check `docker ps`. If `kubectl` talks to a different cluster, run `kubectl config current-context`; it should be `kind-lab`. The Kubernetes version comes from the kind release's default node image, which differs per release (verify with `kind --help` and the release notes).
 
 3. **Create a gcloud configuration and see the budget.**
+
+   If you skipped the section above, set `LAB_PROJECT_ID` and `BILLING_ACCOUNT_ID` again in this shell first; variables do not survive a new shell.
 
    ```bash
    gcloud config configurations create lab

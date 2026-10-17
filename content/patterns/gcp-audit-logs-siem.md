@@ -21,10 +21,9 @@ How to write application logs is in [[structured-logging-conventions]]. Personal
 > [!warning] Not legal or audit advice
 > This is general engineering guidance. Your auditor, assessor or legal counsel decides which logs, which retention period and which controls satisfy a framework or a law. Check control wording against the current edition.
 
-> [!info] Scope and assumptions
+> [!info] Scope, assumptions and what is not verified
 > Google Cloud with an organization, GKE, Terraform and a SIEM that can read from Pub/Sub or BigQuery. Project IDs, the organization ID, regions and retention periods are placeholders. Example addresses use the documentation ranges and `example.com`.
-
-> [!note] Not verified
+>
 > Written from documentation knowledge, not checked against a live organization or the current docs. Check before relying on this: which Data Access log types are on by default for each service and for GKE, the default and maximum retention of log buckets and of Pub/Sub messages, cost per GiB of ingestion and storage, what Security Command Center can export and at which tier, the exact GKE audit `methodName` strings, and the Terraform provider argument names (they change between provider versions).
 
 ## Which logs are on by default and which need enabling
@@ -347,14 +346,17 @@ Worked example with made-up numbers: 20 workloads each decrypt about 5 times a s
 - **Never exclude** `SetIamPolicy`, key destruction, service account key creation, or anything a detection in this note uses.
 - **Reduce at the source** by caching, by reading secrets once at start-up (see [[external-secrets-with-secret-manager]]), and by not polling.
 
-```hcl title="exclusion-example.tf"
+Add the `exclusions` block as an edit to the existing `google_logging_organization_sink.siem` resource. Do not create a second sink to the same topic: it would duplicate every event, and a new sink has its own writer identity that needs its own `roles/pubsub.publisher` grant.
+
+```hcl title="sinks.tf (edit to the siem sink)"
 # CHANGE: the caller and method. Add only after you have shown the traffic is benign.
-resource "google_logging_organization_sink" "siem_with_exclusion" {
-  name             = "audit-to-siem-v2"
+resource "google_logging_organization_sink" "siem" {
+  name             = "audit-to-siem"
   org_id           = var.org_id
   include_children = true
   destination      = "pubsub.googleapis.com/projects/${var.log_project_id}/topics/${google_pubsub_topic.audit_events.name}"
   filter           = local.siem_filter
+  description      = "Audit events the SIEM alerts on."
 
   exclusions {
     name        = "exclude-known-health-checker"
@@ -387,9 +389,16 @@ protoPayload.methodName="io.k8s.core.v1.secrets.get"
 protoPayload.methodName:("SetIamPolicy" OR "CreateServiceAccountKey" OR "CreateRole" OR "UpdateRole")
 ```
 
-```text title="KMS: key destruction, disable and cryptographic reads (needs DATA_READ)"
+```text title="KMS: key destruction, disable and primary changes (Admin Activity)"
 protoPayload.serviceName="cloudkms.googleapis.com"
-protoPayload.methodName:("DestroyCryptoKeyVersion" OR "DisableCryptoKeyVersion" OR "UpdateCryptoKeyPrimaryVersion")
+protoPayload.methodName:("DestroyCryptoKeyVersion" OR "UpdateCryptoKeyVersion" OR "UpdateCryptoKeyPrimaryVersion")
+```
+
+Disabling a key version is an `UpdateCryptoKeyVersion` call with the state set to `DISABLED`, so that method covers it (confirm the method names in an entry from your own logs).
+
+```text title="KMS: cryptographic use (needs DATA_READ)"
+protoPayload.serviceName="cloudkms.googleapis.com"
+protoPayload.methodName:("Decrypt" OR "Encrypt")
 ```
 
 ```text title="Audit pipeline tampering"

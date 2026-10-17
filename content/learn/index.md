@@ -1,6 +1,6 @@
 ---
 title: Learning path
-description: Forty-three lessons from first steps to middle level in DevOps (Linux, networking, Git, containers, Kubernetes, GCP, CI/CD, Terraform and on-call), with milestones and a weekly plan.
+description: Forty-three lessons from first job to middle level in DevOps, in stages with milestones, a self-assessment and a weekly plan.
 tags:
   - learning
   - meta
@@ -16,7 +16,7 @@ This is a structured path for someone who has started a DevOps or platform job, 
 It is for people from their first job to middle level: new engineers, developers moving towards operations, and system administrators who want the cloud-native side. It assumes you can use a computer comfortably and have no prior Linux, Kubernetes or cloud knowledge. Where a lesson needs earlier material, it says so in its opening line.
 
 - **Go in order.** Later lessons build on earlier ones. A plan of about 8 to 10 hours a week finishes in about 14 weeks (see the week-by-week map below).
-- **Or jump in.** Do the self-assessment below. If you score 2 or more on every row of a stage, skip that stage's lessons and read only the milestone. Start at the first stage where you score below 2.
+- **Or jump in.** Do the self-assessment below. If you score 3 on every row of a stage, skip that stage's lessons and read only the milestone. At 2, do the exercises as a test. Start at the first stage where you score below 3.
 - **Do the exercises.** Reading is not learning. Every lesson has numbered exercises with expected output and an "If you see something else" line for when it goes wrong.
 - **Keep a notes file** with the commands that worked. It becomes your own runbook.
 
@@ -70,7 +70,7 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 
 **Goal:** automate repetitive work safely.
 
-- `junior` [[learn/bash-scripting-fundamentals|Scripting 01: Bash scripting fundamentals]]
+- `junior` [[learn/bash-scripting-fundamentals|Scripting 01: Bash fundamentals]]
 - `junior-middle` [[learn/safe-bash-scripts|Scripting 02: Safe Bash scripts]]
 - `junior-middle` [[learn/python-for-ops|Scripting 03: Python for ops]]
 
@@ -81,7 +81,7 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 
 **Goal:** understand what a container is and build, run and debug one.
 
-- `junior` [[learn/containers-under-the-hood|Containers 01: Containers under the hood]]
+- `junior` [[learn/containers-under-the-hood|Containers 01: What a container really is]]
 - `junior` [[learn/running-and-debugging-containers|Containers 02: Running and debugging containers]]
 - `junior-middle` [[learn/building-and-shipping-images|Containers 03: Building and shipping images]]
 - `junior-middle` [[learn/container-storage-networking-and-compose|Containers 04: Storage, networking and Compose]]
@@ -117,11 +117,11 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 
 **Goal:** put changes through a pipeline and describe infrastructure in code.
 
-- `junior` [[learn/ci-cd-concepts-and-branching|CI/CD 01: Concepts and branching]]
-- `junior-middle` [[learn/first-pipeline-gitlab-ci-and-jenkins|CI/CD 02: Your first pipeline (GitLab CI and Jenkins)]]
-- `middle` [[learn/environments-releases-and-rollbacks|CI/CD 03: Environments, releases and rollbacks]]
-- `junior-middle` [[learn/terraform-basics-on-gcp|Terraform 01: Basics on GCP]]
-- `middle` [[learn/terraform-state-modules-and-pipelines|Terraform 02: State, modules and pipelines]]
+- `junior` [[learn/ci-cd-concepts-and-branching|Delivery 01: CI and CD from the ground up, with branching strategies]]
+- `junior-middle` [[learn/first-pipeline-gitlab-ci-and-jenkins|Delivery 02: Your first pipeline in GitLab CI and Jenkins]]
+- `middle` [[learn/environments-releases-and-rollbacks|Delivery 03: Environments, releases, approvals and rollbacks]]
+- `junior-middle` [[learn/terraform-basics-on-gcp|Delivery 04: Terraform basics with a first GCP project]]
+- `middle` [[learn/terraform-state-modules-and-pipelines|Delivery 05: Terraform state, remote backends, modules and pipelines]]
 
 **Homelab P4** after this stage: Terraform, CI and GitOps on one repository.
 
@@ -178,8 +178,8 @@ Score yourself honestly on each row: **0** I have not done it; **1** I have foll
 | Kubernetes workloads    |            | You deploy, expose and configure an app, and debug a Pod stuck in `Pending` or `CrashLoopBackOff`. | [[learn/kubernetes-probes-resources-and-debugging\|Kubernetes 05]]            |
 | Helm                    |            | You package an app as a chart, upgrade it and roll back.                                           | [[learn/helm-basics-and-capstone\|Kubernetes 06]]                             |
 | GCP identity            |            | You give a workload the least privilege it needs with a service account and no downloaded key.     | [[learn/gcp-iam-and-service-accounts\|GCP 02]]                                |
-| CI/CD                   |            | You build a pipeline with stages, caching and a manual production gate, and you explain each part. | [[learn/first-pipeline-gitlab-ci-and-jenkins\|CI/CD 02]]                      |
-| Terraform               |            | You write a module, review a plan and manage remote state without editing state by hand.           | [[learn/terraform-state-modules-and-pipelines\|Terraform 02]]                 |
+| CI/CD                   |            | You build a pipeline with stages, caching and a manual production gate, and you explain each part. | [[learn/first-pipeline-gitlab-ci-and-jenkins\|Delivery 02]]                   |
+| Terraform               |            | You write a module, review a plan and manage remote state without editing state by hand.           | [[learn/terraform-state-modules-and-pipelines\|Delivery 05]]                  |
 | Security basics         |            | You keep secrets out of Git, scan for them and rotate one that leaks.                              | [[learn/security-basics-for-devops\|Security 01]]                             |
 | Observability           |            | You build a dashboard from the golden signals and search logs for one request.                     | [[learn/observability-signals-and-dashboards\|Observability 01]]              |
 | Alerting                |            | You write an alert on user impact, test it and attach a runbook.                                   | [[learn/first-prometheus-alert\|Observability 03]]                            |

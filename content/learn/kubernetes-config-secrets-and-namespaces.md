@@ -476,6 +476,7 @@ Do these in the kind cluster `lab`. Check `kubectl config current-context` print
    kubectl apply -f app.yaml -n team-a
    kubectl rollout status deployment/app -n team-a --timeout=60s
    kubectl get deployments --all-namespaces | grep -E 'NAMESPACE|app'
+   kubectl -n team-a exec deploy/app -- printenv LOG_LEVEL
    ```
 
    Expected: two Deployments called `app`, one in `default` and one in `team-a`. In `team-a`, `printenv LOG_LEVEL` prints `info`, because that namespace has its own ConfigMap from the file, not the changed one in `default`:
@@ -486,7 +487,7 @@ Do these in the kind cluster `lab`. Check `kubectl config current-context` print
    team-a      app    1/1     1            1           30s
    ```
 
-   If you see something else: if the second `apply` says `unchanged`, you forgot `-n team-a` and applied to the namespace you were already in. If the Deployment is `0/1`, read `kubectl -n team-a describe pod`.
+   If you see something else: if `apply` printed `configmap/app-config configured` and `deployment.apps/app unchanged`, you forgot `-n team-a` and reset the default namespace's ConfigMap. If the Deployment is `0/1`, read `kubectl -n team-a describe pod`.
 
 6. **Switch your default namespace and switch back.**
 

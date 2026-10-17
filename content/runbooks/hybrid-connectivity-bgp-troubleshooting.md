@@ -68,14 +68,14 @@ flowchart TD
     G -->|Yes| H[Application layer: MTU, DNS, TLS, see network troubleshooting]
 ```
 
-| Layer           | What fails                                     | First evidence                                         |
-| --------------- | ---------------------------------------------- | ------------------------------------------------------ |
-| Tunnel / IKE    | Negotiation never completes                    | `vpn-tunnels describe` detailed status, gateway logs   |
-| IPsec / ESP     | Tunnel up, no data, or one direction only      | Packet counters on both ends, on-prem `show crypto`    |
-| BGP session     | Session stuck in `Idle`, `Active` or `Connect` | `routers get-status`, on-prem `show ip bgp summary`    |
-| Route exchange  | Session up, prefix missing                     | `routers get-status` best routes, advertised routes    |
-| Route selection | Traffic uses another path or no path           | `gcloud compute routes list`, on-prem routing table    |
-| Firewall        | Route exists, packets die                      | VPC firewall logs, Connectivity Test, on-prem firewall |
+| Layer           | What fails                                     | First evidence                                                                                    |
+| --------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Tunnel / IKE    | Negotiation never completes                    | `vpn-tunnels describe` detailed status, gateway logs                                              |
+| IPsec / ESP     | Tunnel up, no data, or one direction only      | Packet counters on both ends, on-prem `show crypto`                                               |
+| BGP session     | Session stuck in `Idle`, `Active` or `Connect` | `routers get-status`, on-prem `show ip bgp summary`                                               |
+| Route exchange  | Session up, prefix missing                     | `routers get-status` best routes, advertised routes                                               |
+| Route selection | Traffic uses another path or no path           | `routers get-status` bestRoutes; `routes list` for static/peering overlaps; on-prem routing table |
+| Firewall        | Route exists, packets die                      | VPC firewall logs, Connectivity Test, on-prem firewall                                            |
 
 ### 2. Tunnel and IKE checks
 
@@ -198,14 +198,14 @@ Illustrative `bgpPeerStatus` for a healthy session:
 
 BGP uses a link-local /30 inside the tunnel for the session; the Cloud Router address and the peer address in the output must be the two ends of that /30, and the on-prem device must have the other one configured on its tunnel interface. The standard BGP states tell you what is wrong:
 
-| State         | Meaning                                              | Look at                                                                                      |
-| ------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `Idle`        | No attempt in progress (or waiting after a failure). | Tunnel down, peer disabled, peer address missing on the interface.                           |
-| `Connect`     | TCP connection to port 179 is being attempted.       | The tunnel carries no traffic, or a firewall blocks TCP 179 inside the tunnel on the peer.   |
-| `Active`      | TCP failed, retrying.                                | Same as `Connect`; also a wrong peer IP or ASN reachable only after the tunnel is fixed.     |
-| `OpenSent`    | TCP is up, waiting for the peer's OPEN message.      | Peer ASN mismatch or an authentication (MD5) mismatch often shows as a cycle between states. |
-| `OpenConfirm` | OPEN received, waiting for KEEPALIVE.                | Capability or hold-timer mismatch.                                                           |
-| `Established` | Session up, routes can be exchanged.                 | Go to route advertisement.                                                                   |
+| State         | Meaning                                              | Look at                                                                                                                |
+| ------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `Idle`        | No attempt in progress (or waiting after a failure). | Tunnel down, peer disabled, peer address missing on the interface.                                                     |
+| `Connect`     | TCP connection to port 179 is being attempted.       | The tunnel carries no traffic, a firewall blocks TCP 179 inside the tunnel, or an MD5 mismatch drops the TCP segments. |
+| `Active`      | TCP failed, retrying.                                | Same as `Connect`; also a wrong peer IP, or an MD5 mismatch (the session never gets past this state).                  |
+| `OpenSent`    | TCP is up, waiting for the peer's OPEN message.      | Peer ASN mismatch often shows as a cycle between states.                                                               |
+| `OpenConfirm` | OPEN received, waiting for KEEPALIVE.                | Capability or hold-timer mismatch.                                                                                     |
+| `Established` | Session up, routes can be exchanged.                 | Go to route advertisement.                                                                                             |
 
 Checks:
 
@@ -261,9 +261,12 @@ gcloud compute routers get-status "$ROUTER" --region "$REGION" \
 gcloud compute routers get-status "$ROUTER" --region "$REGION" \
   --format="table(result.bestRoutes[].destRange,result.bestRoutes[].nextHopIp,result.bestRoutes[].priority,result.bestRoutes[].routeType)"
 
+# Dynamic routes learned by Cloud Router are not listed by `gcloud compute routes list`.
+# The bestRoutes output above is where they appear (not verified for your version).
 gcloud compute routes list \
-  --filter="network:${NETWORK} AND nextHopVpnTunnel:*" \
-  --format="table(name,destRange,priority,nextHopVpnTunnel.basename())"
+  --filter="network:${NETWORK}" \
+  --format="table(name,destRange,priority,nextHopGateway,nextHopPeering)"
+# The second command is only for finding static, subnet or peering routes that overlap.
 ```
 
 Things to check:
@@ -290,7 +293,7 @@ gcloud compute interconnects attachments list \
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Attachment state      | For a Partner attachment, it must be activated after the service provider has configured their side (state names are **not verified**).                                                                          |
 | Dedicated connection  | Light levels, link state and LACP on the router. Google's interconnect status shows the circuit; ask the colocation or carrier if it is down.                                                                    |
-| VLAN ID and addresses | The VLAN tag and the BGP /29 or link-local addresses on the on-prem interface must match the attachment output.                                                                                                  |
+| VLAN ID and addresses | The VLAN tag and the link-local /29 BGP addresses on the on-prem interface must match the attachment output.                                                                                                     |
 | BGP                   | Same states and checks as the VPN case, over the VLAN interface.                                                                                                                                                 |
 | Redundancy            | The documented redundant topologies need attachments in different edge availability domains and metros. Which topology gives which availability target is **not verified**; read the Interconnect documentation. |
 
@@ -302,7 +305,7 @@ Connectivity Tests simulate a path through the configuration (routes, firewall r
 
 ```bash
 SRC_INSTANCE="projects/${PROJECT}/zones/${REGION}-b/instances/app-vm-1"   # example VM
-DEST_IP="198.51.100.25"                                                   # example on-prem host
+DEST_IP="10.20.0.25"                                                   # example on-prem host
 
 gcloud network-management connectivity-tests create hybrid-to-onprem-db \
   --source-instance="$SRC_INSTANCE" \
@@ -366,7 +369,7 @@ gcloud compute routers get-status "$ROUTER" --region "$REGION" \
 
 - The tunnel status is `ESTABLISHED` (or the attachment `ACTIVE`) and every BGP session is `Established` and `UP`.
 - Learned and advertised prefixes match the design. Compare with the agreed list, not with the previous state, since the previous state may have been wrong.
-- A real test from an application host works end to end, for example `nc -vz 198.51.100.25 5432` from a VM in the VPC, and the equivalent from on-prem.
+- A real test from an application host works end to end, for example `nc -vz 10.20.0.25 5432` from a VM in the VPC, and the equivalent from on-prem.
 - Both tunnels (or both attachments) of a redundant pair are up. A link that works on one path only has lost its redundancy and will fail on the next incident; do not close the ticket until both are up.
 - Watch for a full BGP hold timer and one IKE rekey interval without a flap.
 
@@ -377,7 +380,7 @@ Look first, change second. When you do change something, change one thing at a t
 - A change to the Cloud Router, tunnel or peer: revert the Terraform commit and apply, or reapply the previous values. Keep the previous `describe` output from this runbook as the reference.
 - Do not delete and recreate a tunnel to "reset" it unless the peer is coordinated. A recreated HA VPN tunnel needs the same shared secret and configuration on the peer, and recreating gateway resources can change their public addresses, which the on-prem side has allow-listed.
 - Changing the advertisement mode or the dynamic routing mode of the VPC changes what every peer learns. Treat it as a network-wide change with review and a rollback plan, because it can drop or add routes for other environments.
-- During an outage, if a second path exists (the other tunnel, another attachment, or an HA VPN as backup for Interconnect), fail traffic over by raising the priority of the broken path rather than editing the broken one.
+- During an outage, if a second path exists (the other tunnel, another attachment, or an HA VPN as backup for Interconnect), fail traffic over by raising the advertised route priority value (making it less preferred) on the broken path rather than editing the broken one.
 
 ## Troubleshooting
 

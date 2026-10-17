@@ -44,12 +44,12 @@ Memory is the other half of the limit. Each backend process uses memory, so rais
 
 Assume `max_connections` is **200** on this instance (an assumption for the example; read yours), a reserve of **20**, and an HPA that can reach **30** pods.
 
-| Layout                                                      | Per-pod ceiling | Pods or poolers | Server connections | Plus reserve | Fits in 200? |
-| ----------------------------------------------------------- | --------------- | --------------- | ------------------ | ------------ | ------------ |
-| App pool of 20, no pooler                                   | 20              | 30              | 600                | 620          | No           |
-| PgBouncer sidecar, `default_pool_size 20`, reserve 5        | 25              | 30              | 750                | 770          | No           |
-| PgBouncer sidecar, pool 4, reserve 1                        | 5               | 30              | 150                | 170          | Yes          |
-| Shared PgBouncer Deployment, 3 replicas, pool 20, reserve 5 | 25 per pooler   | 3               | 75                 | 95           | Yes          |
+| Layout                                                                | Per-pod ceiling | Pods or poolers | Server connections | Plus reserve | Fits in 200? |
+| --------------------------------------------------------------------- | --------------- | --------------- | ------------------ | ------------ | ------------ |
+| App pool of 20, no pooler                                             | 20              | 30              | 600                | 620          | No           |
+| PgBouncer sidecar, `default_pool_size 20`, reserve 5                  | 25              | 30              | 750                | 770          | No           |
+| PgBouncer sidecar, pool 4, reserve 1                                  | 5               | 30              | 150                | 170          | Yes          |
+| Shared PgBouncer Deployment, 3 replicas + 1 surge, pool 20, reserve 5 | 25 per pooler   | 4               | 100                | 120          | Yes          |
 
 The sidecar with the sample pool settings does not fit: a sidecar multiplies the pool by the number of pods, which is exactly what you are trying to avoid. The shared pooler fits because its size depends on the number of poolers, not the number of application pods. This is the main reason to prefer a shared pooler for autoscaled services.
 
@@ -119,6 +119,9 @@ appdb_migrate = host=127.0.0.1 port=5432 dbname=appdb pool_mode=session pool_siz
 [pgbouncer]
 listen_addr = 0.0.0.0
 listen_port = 6432
+; Disable the unix socket: with readOnlyRootFilesystem the default socket directory
+; (/tmp) is not writable. Alternatively mount an emptyDir at /tmp.
+unix_socket_dir =
 
 auth_type = scram-sha-256
 auth_file = /etc/pgbouncer-auth/userlist.txt
@@ -141,7 +144,7 @@ stats_users = pgbouncer_stats
 server_tls_sslmode = disable
 ```
 
-`max_client_conn 2000` is the number of application connections PgBouncer accepts; it is cheap compared with server connections. `default_pool_size 20` and `reserve_pool_size 5` apply per database and user pair. `max_db_connections` caps the server connections per database from one PgBouncer and is the number you multiply by the pooler replicas for the budget. For 3 poolers at 40 that is 120, so with a reserve of 20 it fits in 200 and is tighter than the pool settings alone. Set it deliberately.
+`max_client_conn 2000` is the number of application connections PgBouncer accepts; it is cheap compared with server connections. `default_pool_size 20` and `reserve_pool_size 5` apply per database and user pair. `max_db_connections` caps the server connections per database from one PgBouncer and is the number you multiply by the pooler replicas for the budget. It is the hard cap per database across all users, so it is the number to budget: set it equal to or below what the pool settings add up to. With the pool settings above (20 plus a reserve of 5, so 25 per pooler), 4 poolers during a rollout give 100; a cap of 40 per pooler would allow up to 160 and, with a reserve of 20, still fits in 200, but it is looser than the pool settings alone unless several users share the database. Set it deliberately.
 
 The `auth_file` holds the database users and their password verifiers. Mount it from a Kubernetes Secret created by [[external-secrets-with-secret-manager]], never from the repository. Check the PgBouncer documentation for the file format and which verifier forms `scram-sha-256` accepts. Not verified here.
 
@@ -326,7 +329,7 @@ Also watch the database side: the number of backends on the Cloud SQL instance a
 ## Rollout
 
 1. **Measure first.** Record current connection use per service and the database `max_connections`. Compute the budget with `maxReplicas` and surge.
-2. **Stage.** Deploy the pooler to staging with the staging flag values. Run the application's load test ([[timeouts-retries-load-shedding]] for client timeouts) and check for session-state failures in the table above.
+2. **Stage.** Deploy the pooler to staging with the staging flag values. Run the application's load test ([[load-and-performance-testing]]; [[timeouts-retries-load-shedding]] for client timeouts) and check for session-state failures in the table above.
 3. **Shrink the application pool.** Lower each pod's pool size to the small value you budgeted. Leaving a large pool in the application just moves the queue inside the pod.
 4. **Canary.** Point one service at the pooler by changing only its connection string, in a Helm value ([[helm-chart-conventions]]). Watch `cl_waiting`, error rate and latency for a full business cycle.
 5. **Move services one at a time**, and recompute the budget after each.
