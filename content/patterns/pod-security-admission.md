@@ -8,7 +8,7 @@ tags:
   - gke
   - security
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-10-17
 draft: false
 ---
 
@@ -176,3 +176,4 @@ If the namespace is managed by Argo CD, revert the label change in Git as well, 
 - [[kubernetes-network-policies]]
 - [[dockerfile-hardening]]
 - [[helm-chart-conventions]]
+- [[tools/gatekeeper-vs-kyverno]]: choosing a policy engine for what Pod Security admission cannot express.
