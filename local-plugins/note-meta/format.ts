@@ -7,6 +7,7 @@ export const TYPE_LABELS: Record<string, string> = {
   standard: "Standard",
   runbook: "Runbook",
   guide: "Guide",
+  reference: "Reference",
   note: "Note",
 }
 
