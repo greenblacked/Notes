@@ -1,6 +1,6 @@
 ---
 title: Private GKE clusters and controlled egress
-description: A reference design for GKE clusters with private nodes, a restricted control-plane endpoint, Cloud NAT, Google API access without public egress and an egress allowlist.
+description: Reference design for GKE with private nodes, a restricted control-plane endpoint, Cloud NAT, private Google API access and an egress allowlist.
 type: reference
 tags:
   - architecture

@@ -1,6 +1,6 @@
 ---
 title: Gatekeeper vs Kyverno vs ValidatingAdmissionPolicy
-description: Choose an admission policy engine for GKE by comparing OPA Gatekeeper, Kyverno and the built-in ValidatingAdmissionPolicy on language, mutation, reporting and availability.
+description: "Choose a GKE admission policy engine: OPA Gatekeeper, Kyverno or built-in ValidatingAdmissionPolicy, compared on language, mutation, reporting and availability."
 type: tool
 tags:
   - tools

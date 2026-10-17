@@ -1,6 +1,6 @@
 ---
 title: "Observability pipeline with OpenTelemetry: collectors, sampling and retention"
-description: A reference design for metrics, logs and traces through OpenTelemetry Collector agent and gateway tiers, with tail sampling, cardinality controls and retention tiers.
+description: Reference design for metrics, logs and traces via OpenTelemetry Collector agent and gateway tiers, with tail sampling, cardinality limits and retention tiers.
 type: reference
 tags:
   - architecture

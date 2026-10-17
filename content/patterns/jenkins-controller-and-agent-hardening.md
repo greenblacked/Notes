@@ -1,6 +1,6 @@
 ---
 title: Jenkins controller and agent hardening
-description: Harden a Jenkins controller and its Kubernetes pod agents with zero executors, configuration as code, scoped credentials, reviewed script approvals and auditable production approvals.
+description: "Harden a Jenkins controller and Kubernetes pod agents: zero executors, configuration as code, scoped credentials, reviewed script approvals, audited approvals."
 type: pattern
 tags:
   - patterns

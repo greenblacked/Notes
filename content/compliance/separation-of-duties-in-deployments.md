@@ -1,6 +1,6 @@
 ---
 title: Separation of duties in deployments
-description: Standard for who may author, review, approve and deploy, and how to enforce it in GitLab, Jenkins and Argo CD, with break-glass and a small-team compensating control.
+description: Standard for who may author, review, approve and deploy, enforced in GitLab, Jenkins and Argo CD, with break-glass and a small-team compensating control.
 type: standard
 tags:
   - compliance

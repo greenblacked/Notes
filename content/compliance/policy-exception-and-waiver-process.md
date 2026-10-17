@@ -61,19 +61,19 @@ package waivers
 import rego.v1
 
 deny contains msg if {
-	some w in data.waivers
+	some w in input.waivers
 	time.parse_rfc3339_ns(w.expires) < time.now_ns()
 	msg := sprintf("waiver %s for policy %s expired on %s", [w.id, w.policy, w.expires])
 }
 
 deny contains msg if {
-	some w in data.waivers
+	some w in input.waivers
 	not w.approved_by
 	msg := sprintf("waiver %s has no approver", [w.id])
 }
 
 deny contains msg if {
-	some w in data.waivers
+	some w in input.waivers
 	w.approved_by == w.owner
 	msg := sprintf("waiver %s is approved by its owner", [w.id])
 }
@@ -89,24 +89,24 @@ import rego.v1
 import data.waivers
 
 test_expired_waiver_is_denied if {
-	result := waivers.deny with data.waivers as [{
+	result := waivers.deny with input as {"waivers": [{
 		"id": "W-1",
 		"policy": "p",
 		"owner": "a",
 		"approved_by": "b",
 		"expires": "2020-01-01T00:00:00Z",
-	}]
+	}]}
 	count(result) == 1
 }
 
 test_valid_waiver_is_allowed if {
-	result := waivers.deny with data.waivers as [{
+	result := waivers.deny with input as {"waivers": [{
 		"id": "W-2",
 		"policy": "p",
 		"owner": "a",
 		"approved_by": "b",
 		"expires": "2999-01-01T00:00:00Z",
-	}]
+	}]}
 	count(result) == 0
 }
 ```
@@ -114,14 +114,13 @@ test_valid_waiver_is_allowed if {
 ```bash
 set -euo pipefail
 
-# Convert the YAML waiver file to JSON data and run the rule and its tests
-yq -o=json policy/waivers.yaml > /tmp/waivers.json   # change: where the data is written
+# Run the rule tests, then check the real waiver file (Conftest reads YAML natively)
 opa test policy/waivers/ -v
-conftest test --policy policy/waivers --data /tmp/waivers.json /tmp/waivers.json --namespace waivers
+conftest test policy/waivers.yaml --policy policy/waivers --namespace waivers
 ```
 
 > [!note] Not verified
-> The flags of `conftest test` for passing data, and the way the `data.waivers` document is loaded, were written from documentation knowledge and not run. Check them against the Conftest version you pin.
+> The waiver file is passed as `input` (not as data, which would collide with the `waivers` package). The Conftest flags were written from documentation knowledge and not run. Check them against the Conftest version you pin.
 
 ## Applying waivers at admission
 

@@ -1,6 +1,6 @@
 ---
 title: Secret scanning in pre-commit hooks and CI
-description: Layer gitleaks in a pre-commit hook, a GitLab merge request job and a scheduled history scan, with baselines, reasoned allowlists and a clear hand-off to rotation.
+description: Layer gitleaks in a pre-commit hook, a GitLab merge request job and a scheduled history scan, with baselines, reasoned allowlists and a hand-off to rotation.
 type: pattern
 tags:
   - patterns
@@ -221,7 +221,7 @@ git init -q .
 git config user.email "test@example.com"
 git config user.name "Scanner Test"
 
-# A made-up token in the GitLab personal access token format (glpat- plus 20 characters).
+# A deliberately fake, recognisable token in the GitLab personal access token format (glpat- plus 20 characters).
 # It authenticates nowhere. The AWS documentation example keys are not used because
 # the default rules likely allowlist values ending in EXAMPLE.
 printf 'token = glpat-FAKEFAKEFAKEFAKEFAKE\n' > config.ini
