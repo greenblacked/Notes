@@ -198,7 +198,8 @@ go 1.22
 # syntax=docker/dockerfile:1
 
 # ---- build stage: has the compiler, is thrown away ----
-ARG GO_VERSION=1.23 # change: a supported Go release, see the official golang image page
+# change: a supported Go release, see the official golang image page
+ARG GO_VERSION=1.23
 FROM golang:${GO_VERSION}-alpine AS build
 WORKDIR /src
 COPY go.mod ./
@@ -207,7 +208,8 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/hello .
 
 # ---- final stage: small, non-root ----
-ARG ALPINE_VERSION=3.20 # change: a supported Alpine release, see the official alpine image page
+# change: a supported Alpine release, see the official alpine image page
+ARG ALPINE_VERSION=3.20
 FROM alpine:${ALPINE_VERSION}
 RUN addgroup -g 10001 -S app && adduser -S -u 10001 -G app -H -s /sbin/nologin app
 COPY --from=build /out/hello /usr/local/bin/hello
@@ -430,7 +432,8 @@ Use your Ubuntu VM with Docker. Work in `~/c3`. Names start with `c3-`.
 
    ```bash
    cat > Dockerfile.single <<'DOCKER'
-   ARG GO_VERSION=1.23 # change: a supported Go release, see the official golang image page
+   # change: a supported Go release, see the official golang image page
+   ARG GO_VERSION=1.23
    FROM golang:${GO_VERSION}-alpine
    WORKDIR /src
    COPY . .
@@ -518,14 +521,16 @@ Use your Ubuntu VM with Docker. Work in `~/c3`. Names start with `c3-`.
    ```bash
    mkdir -p ~/c3/size && cd ~/c3/size
    cat > Dockerfile.bad <<'DOCKER'
-   ARG DEBIAN_VERSION=bookworm-slim # change: a supported Debian release, see the official debian image page
+   # change: a supported Debian release, see the official debian image page
+   ARG DEBIAN_VERSION=bookworm-slim
    FROM debian:${DEBIAN_VERSION}
    RUN apt-get update
    RUN apt-get install -y curl
    RUN rm -rf /var/lib/apt/lists/*
    DOCKER
    cat > Dockerfile.good <<'DOCKER'
-   ARG DEBIAN_VERSION=bookworm-slim # change: a supported Debian release, see the official debian image page
+   # change: a supported Debian release, see the official debian image page
+   ARG DEBIAN_VERSION=bookworm-slim
    FROM debian:${DEBIAN_VERSION}
    RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates \
@@ -546,7 +551,8 @@ Use your Ubuntu VM with Docker. Work in `~/c3`. Names start with `c3-`.
     mkdir -p ~/c3/secret && cd ~/c3/secret
     printf 'not-a-real-secret-123' > token.txt
     cat > Dockerfile.leak <<'DOCKER'
-    ARG ALPINE_VERSION=3.20 # change: a supported Alpine release, see the official alpine image page
+    # change: a supported Alpine release, see the official alpine image page
+    ARG ALPINE_VERSION=3.20
     FROM alpine:${ALPINE_VERSION}
     ARG API_TOKEN
     ENV API_TOKEN_COPY=$API_TOKEN
@@ -558,7 +564,8 @@ Use your Ubuntu VM with Docker. Work in `~/c3`. Names start with `c3-`.
 
     cat > Dockerfile.fixed <<'DOCKER'
     # syntax=docker/dockerfile:1
-    ARG ALPINE_VERSION=3.20 # change: a supported Alpine release, see the official alpine image page
+    # change: a supported Alpine release, see the official alpine image page
+    ARG ALPINE_VERSION=3.20
     FROM alpine:${ALPINE_VERSION}
     RUN --mount=type=secret,id=api_token \
         wc -c < /run/secrets/api_token

@@ -1,6 +1,6 @@
 ---
 title: Splitting, merging and reorganising teams
-description: A checklist-driven runbook for the change event of a team reorg, covering readiness, ownership and on-call re-cut, access moves, communication, a week -2 to week 4 timeline and rollback triggers.
+description: "A checklist runbook for a team reorg: readiness, ownership and on-call re-cut, access moves, communication, a week -2 to week 4 timeline and rollback triggers."
 type: guide
 tags:
   - management

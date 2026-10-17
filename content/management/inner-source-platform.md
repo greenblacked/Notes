@@ -1,6 +1,6 @@
 ---
 title: Inner-source contribution model for platform code
-description: How product teams change platform-owned Helm charts, Terraform modules and pipeline templates through merge requests while the platform team keeps ownership and review standards.
+description: "How product teams change platform-owned Helm charts, Terraform modules and pipeline templates by merge request while the platform team keeps ownership."
 type: guide
 tags:
   - management

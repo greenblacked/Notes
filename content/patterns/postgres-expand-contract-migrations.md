@@ -1,6 +1,6 @@
 ---
 title: Zero-downtime Postgres schema migrations (expand and contract)
-description: Change a large live Postgres or Cloud SQL schema without outages using expand, migrate and contract phases, lock timeouts, concurrent indexes, NOT VALID constraints and batched backfills.
+description: "Change a large live Postgres or Cloud SQL schema without outages: expand, migrate and contract phases, lock timeouts, concurrent indexes and batched backfills."
 type: pattern
 tags:
   - patterns
