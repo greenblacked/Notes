@@ -134,6 +134,10 @@ def classify(identifier, policy):
     return RANK["unknown"]
 
 
+class ParseError(ValueError):
+    """The expression is malformed (missing operand or missing closing parenthesis)."""
+
+
 def parse_or(tokens, pos, policy):
     value, pos = parse_and(tokens, pos, policy)
     while pos < len(tokens) and tokens[pos].upper() == "OR":
@@ -151,14 +155,14 @@ def parse_and(tokens, pos, policy):
 
 
 def parse_atom(tokens, pos, policy):
-    if pos >= len(tokens):
-        return RANK["unknown"], pos
+    if pos >= len(tokens) or tokens[pos] in (")",) or tokens[pos].upper() in ("AND", "OR"):
+        raise ParseError("missing operand")
     token = tokens[pos]
     if token == "(":
         value, pos = parse_or(tokens, pos + 1, policy)
-        if pos < len(tokens) and tokens[pos] == ")":
-            pos += 1
-        return value, pos
+        if pos >= len(tokens) or tokens[pos] != ")":
+            raise ParseError("missing closing parenthesis")
+        return value, pos + 1
     pos += 1
     if pos + 1 < len(tokens) and tokens[pos].upper() == "WITH":
         combined = f"{token} WITH {tokens[pos + 1]}"
@@ -172,9 +176,12 @@ def parse_atom(tokens, pos, policy):
 
 def rank_expression(expression, policy):
     tokens = re.findall(r"\(|\)|[^\s()]+", expression)
-    value, pos = parse_or(tokens, 0, policy)
+    try:
+        value, pos = parse_or(tokens, 0, policy)
+    except ParseError:
+        return RANK["unknown"]
     if pos != len(tokens):
-        # Leftover tokens ("MIT unexpected AGPL-3.0-only", a stray ")"): do not trust the parse.
+        # Leftover tokens ("MIT unexpected AGPL-3.0-only", a stray ")"); malformed input raises ParseError above: do not trust the parse.
         return RANK["unknown"]
     return value
 
@@ -236,7 +243,7 @@ set -euo pipefail
 python3 scripts/check_licenses.py --sbom sbom.cdx.json --policy license-policy.yaml
 ```
 
-An expression the parser cannot consume completely is ranked unknown, so it fails the gate instead of passing on its first licence. Test inputs to keep: `MIT OR Apache-2.0` ranks allow, `MIT AND AGPL-3.0-only` ranks deny, and `MIT unexpected AGPL-3.0-only` ranks unknown (fail), not allow.
+An expression the parser cannot consume completely is ranked unknown, so it fails the gate instead of passing on its first licence. Test inputs to keep: `MIT OR Apache-2.0` ranks allow, `MIT AND AGPL-3.0-only` ranks deny, `MIT unexpected AGPL-3.0-only`, `MIT OR`, `MIT OR ()` and the unclosed `(MIT` rank unknown (fail), not allow.
 
 The script only looks at top-level `components`; nested components and the root component in `metadata` are not checked. Extend it if your generator nests components.
 
