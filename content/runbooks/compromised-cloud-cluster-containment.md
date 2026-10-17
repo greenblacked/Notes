@@ -189,12 +189,12 @@ spec:
 kubectl apply -f quarantine-deny-all.yaml
 kubectl label pod "$POD" -n "$NS" quarantine=true
 # Also drop the labels that allow policies and the Service select (see "Replacement pods").
-kubectl label pod "$POD" -n "$NS" app=quarantined-<name> --overwrite
+kubectl label pod "$POD" -n "$NS" app=quarantined-payments --overwrite
 ```
 
 Points that matter:
 
-- **Replacement pods.** A pod owned by a Deployment keeps its place in the ReplicaSet while it carries the quarantine label, so no replacement starts and capacity drops. If you need a clean replacement to take traffic, remove the pod from the controller instead by changing the label the ReplicaSet selects on (for example `kubectl label pod "$POD" -n "$NS" app-` or setting `app=quarantined-<name>`). The pod is orphaned but keeps running, and the ReplicaSet creates a new one. Do this only after you know the replacement will not run the same compromised image or credentials.
+- **Replacement pods.** The relabel in the quarantine step (`app=quarantined-payments` is an example; use a valid label value for your workload) changes the label the ReplicaSet selects on, so the pod is orphaned but keeps running, and the ReplicaSet starts a replacement. Before you relabel, scale or pause the Deployment if the replacement could run the same compromised image or credentials.
 - **Service traffic.** The quarantined pod is cut off by the policy; also remove it from Service endpoints (the relabel above does that) so users stop hitting it.
 - **Existing connections.** Whether a policy terminates connections that are already established depends on the dataplane; this is not verified. Test it in a lab. If it matters, assume an established session may survive and rely on cutting the credentials in the previous section.
 - **Policy enforcement (mandatory).** Confirm the quarantine works: exec into a different pod in the namespace and check that the quarantined pod's IP is unreachable, or test egress from the pod with a debug container. Record the result in the log.

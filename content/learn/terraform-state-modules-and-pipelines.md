@@ -179,7 +179,7 @@ resource "google_storage_bucket" "lab" {
 The commands above change state **immediately**, with no plan, no review and no record in Git. Recent Terraform versions have code-based alternatives that go through a plan and a pull request. Prefer them.
 
 > [!warning] Check before relying on this
-> The versions are from memory of the release notes and are **not verified**: `moved` blocks (1.1), `import` blocks with `terraform plan -generate-config-out` (1.5), `removed` blocks (1.7). Check the Terraform changelog and the language documentation for the version you pin. If your `required_version` is older than a feature, the feature will not parse.
+> The versions below were not checked against the release notes and are **not verified**: `moved` blocks (1.1), `import` blocks with `terraform plan -generate-config-out` (1.5), `removed` blocks (1.7). Check the Terraform changelog and the language documentation for the version you pin. If your `required_version` is older than a feature, the feature will not parse.
 
 **Renaming a resource: `moved`.** If you rename `google_storage_bucket.lab` to `google_storage_bucket.main` in code, Terraform sees "one resource gone, one new" and plans to destroy the bucket and create another. A `moved` block tells it these are the same object:
 

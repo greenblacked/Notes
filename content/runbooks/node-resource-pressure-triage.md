@@ -145,13 +145,18 @@ Short reading guide for the tools:
 - `iostat -xz 1`: `-z` hides idle devices. On cloud disks `%util` is misleading; watch `await` and queue size against the disk's IOPS and throughput limits.
 - `ss -s`: counts of TCP states. Thousands of `timewait` or `orphaned` sockets point to short-lived connections without keep-alive.
 
-Match a process to a pod:
+Match a process to a pod. In the node shell:
 
 ```bash
 PID=12345
 cat /proc/$PID/cgroup
 # Example (illustrative): 0::/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod1a2b3c4d_....slice/cri-containerd-<id>.scope
 # The pod UID appears with underscores instead of dashes.
+```
+
+On your workstation (kubectl is not available inside the node shell):
+
+```bash
 kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.uid}{" "}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{end}' | grep 1a2b3c4d
 ```
 
@@ -235,7 +240,7 @@ Reading the result:
 
 Pod-level numbers are also available without a node shell through cAdvisor metrics in Prometheus, for example `container_cpu_cfs_throttled_periods_total` and `container_memory_working_set_bytes` (check the names in your setup).
 
-cgroup v1 nodes have no per-cgroup PSI and a different layout (`/sys/fs/cgroup/cpu/kubepods/...`). Check which one you run: `stat -fc %T /sys/fs/cgroup` prints `cgroup2fs` on v2.
+cgroup v1 nodes have no per-cgroup PSI and a different layout (`/host/sys/fs/cgroup/cpu/kubepods/...`). Check which one you run: `stat -fc %T /host/sys/fs/cgroup` prints `cgroup2fs` on v2.
 
 ### 6. Map to kubelet eviction signals
 
@@ -374,7 +379,7 @@ Use this table to decide which graph to open, and which alert to add so the next
 | `kubectl debug node` denied or pod stuck `Pending` | Pod Security Admission or policy blocks privileged pods, or the image cannot be pulled. Use the approved namespace and a mirrored image. |
 | `vmstat: command not found` on the node            | COS has no sysstat. Use the debug image or `toolbox`.                                                                                    |
 | `/proc/pressure` missing                           | PSI is off or the kernel is old. Use USE columns and node_exporter instead.                                                              |
-| No `cpu.pressure` file in the cgroup               | cgroup v1 node, or the pod is in another path. Check `stat -fc %T /sys/fs/cgroup` and search by pod UID.                                 |
+| No `cpu.pressure` file in the cgroup               | cgroup v1 node, or the pod is in another path. Check `stat -fc %T /host/sys/fs/cgroup` and search by pod UID.                            |
 | `nodes/proxy` forbidden                            | No RBAC on `nodes/proxy`. Read the same data from Cloud Monitoring or Prometheus, or ask the platform team.                              |
 | Pressure returns right after a drain               | The load follows the pods (a bad rollout). Roll the workload back first, see [[helm-release-rollback]].                                  |
 | Only one node is bad and everything looks normal   | Suspect the VM (steal, disk): replace the node, then compare. Keep the old instance's logs for the support case.                         |

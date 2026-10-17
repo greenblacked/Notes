@@ -535,7 +535,7 @@ Run these in the lab VM, never on a shared or production host. Some need `sudo`.
    Expected: a host key prompt on first connect (answer `yes` here, because this is your own VM), your key passphrase prompt, then `labuser`. `PreferredAuthentications=publickey` stops ssh from falling back to a password prompt.
    Now run `sudo chmod 777 /home/labuser/.ssh` and repeat the `ssh` line.
    Expected: a failure with `Permission denied (publickey).` and, in `sudo journalctl -u ssh -n 5`, a line about bad ownership or modes. Restore with `sudo chmod 700 /home/labuser/.ssh`.
-   If you see something else: if the first login asks for a password instead, the key was not appended or `~/.ssh` is not mode 700. Run `sudo namei -l /home/labuser/.ssh/authorized_keys`. On RHEL use `-u sshd` for the log.
+   If you see something else: if the first login fails with `Permission denied (publickey)`, the key was not appended or `~/.ssh` is not mode 700. Run `sudo namei -l /home/labuser/.ssh/authorized_keys`. On RHEL use `-u sshd` for the log.
 
 10. **Check a bastion config without a bastion.** Save the `~/.ssh/config` example (change nothing), then run `ssh -G app-1 | grep -E '^(hostname|user|proxyjump|identitiesonly) '`.
     Expected: `hostname 198.51.100.21`, `user ubuntu`, `proxyjump bastion` and `identitiesonly yes`.

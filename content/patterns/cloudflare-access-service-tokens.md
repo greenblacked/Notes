@@ -214,7 +214,7 @@ If the call is redirected to a login page or returns an Access denial page inste
 
 The pipeline for a site like this one deploys to stage and then takes screenshots or runs a smoke test against it. Those jobs need the two headers on every request, and only for the stage origin. In Playwright, add them with request routing scoped to the stage origin:
 
-```ts title="playwright.config.ts (excerpt)"
+```ts title="tests/fixtures.ts"
 import { test as base } from "@playwright/test"
 
 const STAGE_URL = process.env.STAGE_URL ?? "https://stage.example.com"
@@ -239,6 +239,8 @@ export const test = base.extend({
   },
 })
 ```
+
+Specs import `test` from this file instead of from `@playwright/test`.
 
 Rules for these runs:
 
