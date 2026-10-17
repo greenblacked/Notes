@@ -18,7 +18,7 @@ This note is for senior DevOps engineers who must decide what to back up on a GK
 > Written against Backup for GKE, Cloud SQL automated backups and point-in-time recovery, and Cloud Storage versioning and retention, using the public product documentation on cloud.google.com and the Terraform Google provider documentation. No RTO figures are given: they depend on data size and must be measured.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: what Backup for GKE excludes, its minimum schedule and achievable RPO, the Terraform resource and field names shown, and the point-in-time recovery retention limits. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: what Backup for GKE excludes, its minimum schedule and achievable RPO, the Terraform resource and field names shown, the point-in-time recovery retention limits, the backup plan project and schedule time zone, and that Bucket Lock retention policies and Object Versioning cannot be combined. Check them before relying on them.
 
 ## What needs a backup and what does not
 
@@ -46,19 +46,19 @@ Backups live in a separate project with its own, much smaller set of administrat
 flowchart LR
   subgraph W[Workload project]
     G[GKE cluster]
+    BP[Backup for GKE plan with delete lock]
     S[(Cloud SQL)]
     O[(Cloud Storage)]
   end
   subgraph B[Backup project - restricted access]
-    BG[Backup for GKE plan and backups]
     SB[(Exported SQL dumps)]
     OB[(Replica bucket with retention)]
   end
-  G --> BG
+  G --> BP
   S -->|automated backups and PITR in place| S
   S -->|scheduled export| SB
   O -->|copy job| OB
-  R[Restore drill project] -.->|restore| BG
+  R[Restore drill project] -.->|restore| BP
   R -.->|restore| SB
   R -.->|restore| OB
 ```
@@ -79,7 +79,7 @@ resource "google_gke_backup_backup_plan" "daily" {
   name     = "prod-daily"
   cluster  = google_container_cluster.primary.id
   location = "europe-west1" # change: region of the backup plan
-  project  = var.backup_project_id
+  project  = var.workload_project_id # the plan lives in the cluster's project
 
   backup_config {
     include_volume_data = true
@@ -88,7 +88,7 @@ resource "google_gke_backup_backup_plan" "daily" {
   }
 
   backup_schedule {
-    cron_schedule = "0 2 * * *" # change: daily at 02:00 in the plan's time zone
+    cron_schedule = "0 2 * * *" # change: 02:00 UTC (check the time zone the schedule uses)
   }
 
   retention_policy {
@@ -100,6 +100,7 @@ resource "google_gke_backup_backup_plan" "daily" {
 
 Notes:
 
+- A plain backup plan lives in the same project as the cluster. The delete lock and tight IAM on that project protect the backups there. Storing backups in a separate project needs a backup channel (`google_gke_backup_backup_channel`), which is not shown here and not verified; check the current documentation.
 - Excluding secrets is a deliberate choice here: restored secrets would bypass your secret manager. Decide this explicitly for your own setup.
 - A delete lock stops anyone from deleting a backup before its lock expires. Treat it as a safety feature and do not set it so long that it blocks cleaning up after a mistake.
 - A restore of Kubernetes resources into a cluster that Argo CD also manages can fight with Argo CD. Restore volumes and data-bearing resources, and let GitOps reapply the rest.
@@ -160,7 +161,7 @@ Automated backups live with the instance and are tied to it. For protection agai
 
 ## Cloud Storage
 
-Versioning keeps noncurrent versions after overwrite or delete. A retention policy blocks deletion and overwrite until objects reach a minimum age. Lifecycle rules then expire what you no longer need, so versioning does not grow forever.
+A retention policy blocks deletion and overwrite until objects reach a minimum age. Object Versioning keeps noncurrent versions after overwrite or delete. A bucket with a retention policy (Bucket Lock) cannot also have Object Versioning enabled, so choose one approach per bucket. The backup bucket below uses retention, which already blocks overwrite and delete, plus an age-based lifecycle rule that removes objects once they are old enough to delete. Use versioning (with soft delete) on buckets that need undo for application writes and do not need a lock.
 
 ```hcl title="modules/storage/backup-bucket.tf"
 resource "google_storage_bucket" "backup" {
@@ -170,10 +171,6 @@ resource "google_storage_bucket" "backup" {
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
 
-  versioning {
-    enabled = true
-  }
-
   retention_policy {
     retention_period = 2592000 # 30 days in seconds; change: your retention
     is_locked        = false   # keep false until the period is agreed (see warning)
@@ -181,8 +178,7 @@ resource "google_storage_bucket" "backup" {
 
   lifecycle_rule {
     condition {
-      num_newer_versions = 5
-      with_state         = "ARCHIVED"
+      age = 90 # change: longer than the retention period above
     }
     action {
       type = "Delete"
@@ -194,7 +190,7 @@ resource "google_storage_bucket" "backup" {
 > [!danger] Locking a retention policy is irreversible
 > Setting `is_locked = true` permanently locks the retention period: you cannot shorten or remove it, and the bucket cannot be deleted until every object has aged out. Lock only after the period is agreed with the data owner, and never in a test project you intend to delete.
 
-Do not rely on versioning alone for important data: someone with enough rights can delete versions. Retention plus a separate project is what protects against that.
+Do not rely on versioning alone for important data: someone with enough rights can delete versions. Retention plus a separate project is what protects against that. Because versioning and retention cannot be combined on one bucket, the replica bucket relies on retention, and the source bucket can use versioning.
 
 ## Isolation and retention locks
 

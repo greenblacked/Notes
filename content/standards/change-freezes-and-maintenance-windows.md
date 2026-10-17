@@ -16,7 +16,7 @@ draft: false
 A freeze that lives only in a chat message fails the first time someone is in a hurry. This standard is for senior DevOps engineers and engineering managers: it says when to freeze, how to enforce the freeze in code on GKE, Argo CD and GitLab, how to override it with a review, and how to keep security fixes moving. Change classes are in [[standards/production-change-checklist]], cluster upgrades in [[runbooks/gke-cluster-upgrade]], and the evidence side in [[compliance/change-management-controls-and-pipeline-evidence]].
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: GKE maintenance exclusion scopes and maximum durations, the Terraform attribute names, the Argo CD sync window fields, and the GitLab freeze period API path and the `CI_DEPLOY_FREEZE` variable name. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: GKE maintenance exclusion scopes and maximum durations, the minimum maintenance availability per 32 days, the Terraform attribute names, the Argo CD sync window fields, and the GitLab freeze period API path and the `CI_DEPLOY_FREEZE` variable name. Check them before relying on them.
 
 ## Rules
 
@@ -54,8 +54,8 @@ resource "google_container_cluster" "primary" {
   maintenance_policy {
     recurring_window {
       start_time = "2026-01-03T01:00:00Z" # anchor date; the recurrence sets the repeat
-      end_time   = "2026-01-03T05:00:00Z"
-      recurrence = "FREQ=WEEKLY;BYDAY=SA"
+      end_time   = "2026-01-03T07:00:00Z" # change: 6 hours per occurrence
+      recurrence = "FREQ=WEEKLY;BYDAY=SA,SU"
     }
 
     maintenance_exclusion {
@@ -73,6 +73,7 @@ resource "google_container_cluster" "primary" {
 
 Practical points:
 
+- GKE enforces a minimum amount of maintenance availability within a rolling 32-day period, made of blocks of at least a few hours (about 48 hours in total; check the current figure). A single 4-hour weekly window is below that and is likely to be rejected, so the example uses two 6-hour occurrences a week.
 - Keep the window at a time when on-call is staffed and traffic is low, and long enough for the upgrade to finish.
 - Put exclusions into Terraform with an end date so they cannot outlive the freeze.
 - An exclusion does not stop your own deploys; it only stops automatic cluster maintenance. Pair it with the Argo CD and GitLab controls below.
@@ -147,7 +148,7 @@ deploy-production:
     - ./ci/deploy.sh production
 ```
 
-Restrict who can set `FREEZE_OVERRIDE_TICKET` (use a protected variable or a manual pipeline run limited to release approvers), or the check is a formality. See [[compliance/separation-of-duties-in-deployments]].
+Anyone who can run a pipeline can pass a variable when starting it, so a protected variable alone does not stop a developer from supplying the override. Restrict pipeline variables to Maintainers or above (the project setting for the minimum role allowed to set pipeline variables; setting name not verified), and pair the override with the production protected-environment deployment approval, so a second person still approves during a freeze. Otherwise the check is a formality. See [[compliance/separation-of-duties-in-deployments]].
 
 ## Override flow
 

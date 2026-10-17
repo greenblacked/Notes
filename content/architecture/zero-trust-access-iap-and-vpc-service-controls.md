@@ -157,23 +157,27 @@ resource "google_access_context_manager_service_perimeter" "prod" {
       allowed_services   = ["RESTRICTED-SERVICES"]
     }
 
+    # CI ingress example: only the CI build service account, coming from the CI project,
+    # may write to Artifact Registry in this perimeter. Values to change: the account and both project numbers.
     ingress_policies {
       ingress_from {
-        identity_type = "ANY_SERVICE_ACCOUNT"
+        identities = ["serviceAccount:ci-build@ci-project.iam.gserviceaccount.com"] # change
 
         sources {
-          access_level = google_access_context_manager_access_level.corp_network.name
+          resource = "projects/222222222222" # change: CI project number
         }
       }
 
       ingress_to {
-        resources = ["*"]
+        resources = ["projects/111111111111"] # change: project inside the perimeter
 
         operations {
           service_name = "artifactregistry.googleapis.com"
 
+          # Placeholder method, not verified as the image upload method. Replace it with the
+          # upload/write methods your dry-run violation log shows, and check the names in the current docs.
           method_selectors {
-            method = "*"
+            method = "google.devtools.artifactregistry.v1.ArtifactRegistry.CreateRepository"
           }
         }
       }
@@ -225,10 +229,22 @@ set -euo pipefail
 PROJECT_ID="team-a-prod"   # change: your project ID
 POLICY_ID="123456789"      # change: access policy ID
 
-# Who can tunnel to the instance?
-gcloud compute instances get-iam-policy ops-vm-1 \
-  --project "$PROJECT_ID" --zone europe-west1-b \
-  --format "yaml(bindings)"
+PROJECT_NUMBER="123456789012"  # change: number of the project
+ZONE="europe-west1-b"
+INSTANCE="ops-vm-1"
+
+# Who can tunnel to the instance? The tunnel policy is on the IAP resource,
+# not the Compute Engine instance policy. Endpoint not verified; check the IAP API reference.
+curl -sS -X POST \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "Content-Type: application/json" -d '{}' \
+  "https://iap.googleapis.com/v1/projects/${PROJECT_NUMBER}/iap_tunnel/zones/${ZONE}/instances/${INSTANCE}:getIamPolicy"
+
+# For project-level grants instead:
+gcloud projects get-iam-policy "$PROJECT_ID" \
+  --flatten="bindings[].members" \
+  --filter="bindings.role:roles/iap.tunnelResourceAccessor" \
+  --format="table(bindings.role, bindings.members)"
 
 # What does the perimeter look like, enforced and dry run?
 gcloud access-context-manager perimeters describe prod \

@@ -1,5 +1,5 @@
 ---
-title: Service mesh on GKE, whether to adopt and which model
+title: "Service mesh on GKE: whether to adopt and which model"
 description: How to decide whether a service mesh is worth it on GKE, and how Istio sidecar, Istio ambient, Linkerd and Cloud Service Mesh compare, with Gateway API as the shared traffic API.
 type: tool
 tags:
@@ -109,6 +109,8 @@ spec:
           weight: 10
 ```
 
+The Gateway's listeners must allow routes from the `shop` namespace (`allowedRoutes`), or the route will not attach.
+
 ## Adoption plan
 
 1. Pick one non-critical namespace with a few services and an owner who will be on call for it.
@@ -120,7 +122,7 @@ spec:
 7. Roll out namespace by namespace. Keep a documented way to remove a workload from the mesh.
 
 ```yaml title="peer-authentication-strict.yaml"
-apiVersion: security.istio.io/v1beta1
+apiVersion: security.istio.io/v1 # check that your Istio or Cloud Service Mesh version serves v1
 kind: PeerAuthentication
 metadata:
   name: default

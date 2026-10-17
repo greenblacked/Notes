@@ -195,7 +195,7 @@ If your project squashes on merge, the second command can be dropped, because th
 - Scope commits to a package by path, not by a scope word in the message: release-please-style tools decide a package's version from the files a commit touches. A commit touching two packages affects both.
 - Dependent packages (a chart that pins the service image) need a rule: either the chart's `appVersion` is bumped by the release of the service, or the chart is released separately and the image tag is a values input. Choose one and write it down.
 - Use `separate-pull-requests` when teams own packages independently, one combined MR when packages ship together.
-- Keep `chore(deps)` commits from the dependency bot hidden from the changelog but not from versioning rules: see [[patterns/automated-dependency-updates]] for how those updates arrive.
+- Decide how dependency bot commits are typed. Use `fix(deps)` when an update should cut a patch release and appear in the changelog, or `chore(deps)` when it should neither bump the version nor appear; pick one. See [[patterns/automated-dependency-updates]] for how those updates arrive.
 
 ## Tokens and downstream CI
 
@@ -211,12 +211,14 @@ publish:
   stage: release
   image: registry.example.com/ci/build-tools:1.4.2 # change: your pinned tools image
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+    # Component tags from the monorepo config above, such as api-v1.5.0 or web-chart-v0.10.0.
+    # A single-package repository without component tags uses /^v\d+\.\d+\.\d+$/ instead.
+    - if: $CI_COMMIT_TAG =~ /^[a-z0-9-]+-v\d+\.\d+\.\d+$/
   script:
     - ./scripts/publish.sh "$CI_COMMIT_TAG"
 ```
 
-Mark `v*` as a protected tag pattern in the project settings, and allow only the release role to create it.
+Mark the tag pattern as protected in the project settings and allow only the release role to create it: `*-v*` for component tags (or one entry per component prefix such as `api-v*`), `v*` for a single-package repository.
 
 ## Reviewing changelog text before publishing
 
@@ -270,10 +272,12 @@ echo "feat(api): add retry budget" | npx --no-install commitlint && echo "valid 
 echo "added stuff" | npx --no-install commitlint && echo "UNEXPECTED: invalid message accepted" || echo "invalid message rejected"
 
 # Dry run of the push model: prints the next version and notes without tagging or pushing.
-npx --no-install semantic-release --dry-run
+# The scratch branch is not in "branches", so pass it explicitly. verifyConditions
+# needs GITLAB_TOKEN in the environment (a token with read access is enough for a dry run).
+npx --no-install semantic-release --dry-run --no-ci --branches "$(git branch --show-current)"
 ```
 
-Expected: the first message is accepted, the second is rejected, and the dry run reports the version you expect from the commits since the last tag (or "no release" if there are none). For the MR model, merge a `fix:` commit on a test repository and confirm the release MR proposes a patch bump with the right changelog line. Dry runs may need a token with read access to the repository.
+Expected: the first message is accepted, the second is rejected, and the dry run reports the version you expect from the commits since the last tag (or "no release" if there are none). For the MR model, merge a `fix:` commit on a test repository and confirm the release MR proposes a patch bump with the right changelog line. The dry run fails at verifyConditions without a token in the environment, so export one first.
 
 ## Rollback
 

@@ -1,5 +1,5 @@
 ---
-title: GKE platform topology, clusters, node pools, fleets and tenancy
+title: "GKE platform topology: clusters, node pools, fleets and tenancy"
 description: How many GKE clusters to run, how to lay out node pools, and how to isolate tenants with namespaces, quotas and policy.
 type: reference
 tags:
@@ -41,7 +41,7 @@ Pick the topology from these constraints, in this order:
 | One cluster per team              | Strong between teams                                         | High; headroom and add-ons repeated per team  | High; many clusters, drift risk              | One team; many upgrades to schedule            |
 | Cluster per team and environment  | Strongest                                                    | Highest                                       | Highest; needs a fleet and strong automation | Smallest, but the most upgrades                |
 
-Start with one cluster per environment class (production, non-production) per region, and split further only when a driver above forces it. Moving a team out of a shared cluster later is easy if tenancy was built with namespaces and Workload Identity from the start; merging many clusters back together is hard.
+Start with one cluster per environment (dev, stage, production), each in its own project as in [[architecture/environment-separation-on-gcp]], per region, and split further only when a driver above forces it. Moving a team out of a shared cluster later is easy if tenancy was built with namespaces and Workload Identity from the start; merging many clusters back together is hard.
 
 ### Regional or zonal control plane
 
@@ -61,24 +61,29 @@ Autopilot is a good default for teams that want to run applications and not node
 
 ## Recommended starting topology
 
-A fleet host project holds fleet-level configuration. Workload clusters live in environment projects. Production and non-production are separate clusters in separate projects, repeated per region only when latency or resilience requires it.
+A fleet host project holds fleet-level configuration. Workload clusters live in environment projects. Each environment (dev, stage, production) is its own cluster in its own project, repeated per region only when latency or resilience requires it.
 
 ```mermaid
 flowchart LR
   subgraph Fleet["Fleet host project"]
     FH[Fleet membership and shared config]
   end
-  subgraph NonProd["Non-production project"]
-    NP1[GKE regional cluster: dev and stage namespaces]
+  subgraph Dev["Dev project"]
+    D1[GKE regional cluster: dev]
+  end
+  subgraph Stage["Stage project"]
+    S1[GKE regional cluster: stage]
   end
   subgraph Prod["Production project"]
     P1[GKE regional cluster: region A]
     P2[GKE regional cluster: region B]
   end
-  NP1 --> FH
+  D1 --> FH
+  S1 --> FH
   P1 --> FH
   P2 --> FH
-  GIT[GitOps config repository] --> NP1
+  GIT[GitOps config repository] --> D1
+  GIT --> S1
   GIT --> P1
   GIT --> P2
 ```
@@ -179,7 +184,9 @@ resource "google_container_cluster" "this" {
     recurring_window {
       start_time = "2026-01-03T01:00:00Z"
       end_time   = "2026-01-03T07:00:00Z"
-      recurrence = "FREQ=WEEKLY;BYDAY=SA"
+      # GKE enforces a minimum availability per rolling 32 days (documented as
+      # 48 hours); two 6 h weekly windows give about 52 h. Check the current docs.
+      recurrence = "FREQ=WEEKLY;BYDAY=SA,SU"
     }
   }
 
@@ -307,6 +314,10 @@ spec:
       labels:
         app: batch-worker
     spec:
+      securityContext: # required by the restricted Pod Security level of the namespace
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       nodeSelector:
         pool: spot
       tolerations:
@@ -314,7 +325,7 @@ spec:
           operator: Equal
           value: spot
           effect: NoSchedule
-      terminationGracePeriodSeconds: 25
+      terminationGracePeriodSeconds: 15 # check the current Spot graceful-termination period for non-system Pods
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
@@ -325,6 +336,11 @@ spec:
       containers:
         - name: worker
           image: europe-docker.pkg.dev/my-project/apps/batch-worker:1.4.2 # change: pin by tag or digest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           resources:
             requests:
               cpu: 250m

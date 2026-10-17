@@ -15,6 +15,9 @@ draft: false
 
 This note shows how to manage GCP organization policy constraints as code: a baseline set at the organization, overrides at folder or project level, custom constraints for settings the built-in ones do not cover, a dry-run rollout and a recorded way to grant exceptions. It is written for senior DevOps engineers. It covers preventive controls on GCP resources only; in-cluster policy is in [[patterns/pod-security-admission]] and [[tools/gatekeeper-vs-kyverno]], and checks on a Terraform plan before apply are in [[patterns/terraform-plan-policy-checks]].
 
+> [!warning] Not legal or audit advice
+> This is general engineering guidance. Your auditor, assessor or legal counsel decides what satisfies a control or a legal obligation; check control numbers and wording against the current edition of the framework.
+
 > [!info] Scope and sources
 > Written against the Organization Policy Service and the `google_org_policy_policy` and `google_org_policy_custom_constraint` resources of the Google Terraform provider, based on the Google Cloud Organization Policy and Terraform provider documentation. Constraint names are the ones commonly documented; check the current list before use.
 
@@ -41,7 +44,7 @@ A starting set, to adapt and test in your own organization:
 | ---------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------- |
 | `iam.disableServiceAccountKeyCreation`         | Creating user-managed service account keys            | A legacy integration that cannot federate, time-boxed |
 | `iam.disableServiceAccountCreation` (optional) | Creating service accounts outside the project factory | The project that holds factory-created accounts       |
-| `compute.vmExternalIpAccess`                   | VM instances with external IP addresses               | A bastion or NAT host in the network project          |
+| `compute.vmExternalIpAccess`                   | VM instances with external IP addresses               | A legacy appliance VM pending replacement, time-boxed |
 | `gcp.resourceLocations`                        | Creating resources outside approved regions           | Global or multi-region services, see pitfalls         |
 | `iam.allowedPolicyMemberDomains`               | Granting IAM to identities outside your organization  | A partner domain for one shared project               |
 | `compute.skipDefaultNetworkCreation`           | Creating the default network in new projects          | A sandbox that needs a quick network                  |
@@ -238,7 +241,7 @@ Keep the exception list short enough to read in one sitting. If it grows, the ba
 ## Pitfalls
 
 - Blast radius. An organization-level policy applies to every project in the tree, including ones nobody remembers. Dry-run or apply to a folder first.
-- Applying before importing. Policies that already exist in the console and are not imported will be replaced on first apply. Import what exists, or list it with `gcloud org-policies list` and match it in code first.
+- Applying before importing. Policies that already exist in the console and are not imported make the first apply fail with an already-exists error, or you overwrite settings you did not review. Import what exists, or list it with `gcloud org-policies list` and match it in code first.
 - Using the deprecated `google_organization_policy` resource. Use `google_org_policy_policy`, which supports the current API, dry-run and custom constraints; check the provider documentation for the status of the old resources.
 - Giving the Terraform service account `roles/orgpolicy.policyAdmin` in the same pipeline that creates ordinary projects. Whoever controls that pipeline can switch off any guardrail.
 - `gcp.resourceLocations` breaking global or multi-region services. Some services and resources have no region or use a multi-region, and a location policy can block them. Test each service you use in a sandbox before you enforce.

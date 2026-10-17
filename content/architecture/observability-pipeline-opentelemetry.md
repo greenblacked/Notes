@@ -1,5 +1,5 @@
 ---
-title: Observability pipeline with OpenTelemetry, collectors, sampling and retention
+title: "Observability pipeline with OpenTelemetry: collectors, sampling and retention"
 description: A reference design for metrics, logs and traces through OpenTelemetry Collector agent and gateway tiers, with tail sampling, cardinality controls and retention tiers.
 type: reference
 tags:
@@ -70,6 +70,10 @@ processors:
     limit_mib: 400
     spike_limit_mib: 100
   k8sattributes:
+    # Watch only Pods on this node. Set K8S_NODE_NAME from spec.nodeName
+    # with the downward API in the DaemonSet.
+    filter:
+      node_from_env_var: K8S_NODE_NAME
     extract:
       metadata:
         - k8s.namespace.name
@@ -86,7 +90,9 @@ exporters:
     protocol:
       otlp:
         tls:
-          insecure: false
+          ca_file: /certs/ca.crt # change: CA that signed the gateway certificate
+          # Pod IPs from the headless Service are dialled, so name the certificate subject.
+          server_name_override: otel-gateway.observability.svc
     resolver:
       dns:
         hostname: otel-gateway-headless.observability.svc.cluster.local # change: your gateway headless Service
@@ -95,7 +101,8 @@ exporters:
   otlp/gateway:
     endpoint: otel-gateway.observability.svc.cluster.local:4317 # change: your gateway Service
     tls:
-      insecure: false
+      ca_file: /certs/ca.crt # change: CA that signed the gateway certificate
+      server_name_override: otel-gateway.observability.svc
 
 service:
   pipelines:
@@ -125,6 +132,9 @@ receivers:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
+        tls:
+          cert_file: /certs/tls.crt # from a Secret, for example issued by cert-manager
+          key_file: /certs/tls.key
 
 extensions:
   health_check:
@@ -178,6 +188,10 @@ exporters:
     endpoint: metrics.example.com:4317 # change: your metrics backend OTLP endpoint
     tls:
       insecure: false
+  otlp/logs:
+    endpoint: logs.example.com:4317 # change: your log backend OTLP endpoint
+    tls:
+      insecure: false
 
 service:
   extensions: [health_check]
@@ -190,6 +204,10 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, transform/metric_labels, batch]
       exporters: [otlp/metrics]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/drop_noise, batch]
+      exporters: [otlp/logs]
 ```
 
 Deploy it with explicit requests and limits (see [[patterns/kubernetes-resource-requests-and-limits]]). Tail sampling holds traces in memory for `decision_wait`, so memory scales with trace rate and trace size, not just span rate.
@@ -266,11 +284,19 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /conf
+            - name: tls
+              mountPath: /certs
+              readOnly: true
       volumes:
         - name: config
           configMap:
-            name: otel-gateway-config
+            name: otel-gateway-config # change: the key inside must be otel-gateway.yaml
+        - name: tls
+          secret:
+            secretName: otel-gateway-tls # change: Secret with tls.crt and tls.key
 ```
+
+The agent DaemonSet mounts the CA certificate at `/certs/ca.crt` the same way. If mesh mTLS already secures this traffic, you can instead set `insecure: true` on the agent exporters and restrict access with a NetworkPolicy, but keep that choice consistent with the TLS pitfall below.
 
 The CPU and memory numbers are starting points. Measure under real load and adjust.
 

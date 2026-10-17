@@ -150,7 +150,11 @@ build {
 
   # Provisioner name and arguments: check the Packer documentation for the Chef
   # provisioner available in your Packer version, or replace this block with a
-  # shell provisioner that runs chef-client in local mode.
+  # shell provisioner that runs chef-client in local mode. Either way the build installs
+  # Chef Infra Client, and recent clients require licence acceptance: set CHEF_LICENSE
+  # (for example through the provisioner's environment settings or in the shell provisioner)
+  # as your organisation's licence terms require, or the build fails or hangs. Licensing is
+  # not verified here; check Progress Chef's current terms.
   provisioner "chef-solo" {
     cookbook_paths = ["cookbooks"]
     run_list       = ["recipe[web::default]"]
@@ -304,6 +308,7 @@ PROJECT_ID="my-project"        # change: your project ID
 REGION="europe-west1"          # change: your region
 BACKEND_SERVICE="web-backend"  # change: the backend service behind the load balancer
 
+# Use --global for a global load balancer backend service, or --region "$REGION" for a regional one.
 gcloud compute backend-services get-health "$BACKEND_SERVICE" \
   --project "$PROJECT_ID" --global
 gcloud compute instance-groups managed list-instances web \
@@ -340,8 +345,9 @@ SERVICE_ACCOUNT="web-sa@my-project.iam.gserviceaccount.com"  # change: the servi
 gcloud secrets create "$SECRET_NAME" --project "$PROJECT_ID" --replication-policy=automatic
 
 # The value goes through a pipe, never through arguments, files or shell history.
+# jq -e fails the pipeline when the key is missing, instead of storing the string "null".
 knife data bag show "$DATA_BAG" "$DATA_BAG_ITEM" -F json --secret-file "$SECRET_FILE" \
-  | jq -j '.db_password' \
+  | jq -jre '.db_password' \
   | gcloud secrets versions add "$SECRET_NAME" --project "$PROJECT_ID" --data-file=-
 
 gcloud secrets add-iam-policy-binding "$SECRET_NAME" --project "$PROJECT_ID" \
@@ -386,7 +392,7 @@ Expected: the CLI reporter ends with a summary such as `Profile Summary: N succe
 Also check:
 
 - `gcloud compute instance-groups managed list-instances web --region <region>` shows every instance `RUNNING` with `HEALTHY` autohealing status.
-- `gcloud compute backend-services get-health <backend> --global` shows the new instances `HEALTHY`.
+- `gcloud compute backend-services get-health <backend> --global` (or `--region <region>` for a regional load balancer) shows the new instances `HEALTHY`.
 - Error rate, latency and saturation on the new pool match the old pool during the soak period.
 - A reboot of one instance returns it to service without manual steps, and a replaced instance does not register in the Chef server.
 

@@ -141,7 +141,7 @@ A pipeline fragment in the Spinnaker model with a deploy stage followed by a man
 
 Argo Rollouts is one controller per cluster. It has CRDs to upgrade, a plugin for operators, and a metrics provider to keep reachable. Its failure mode is local: if the controller is down, existing Pods keep running and new rollouts do not progress.
 
-Spinnaker is a set of services (for pipelines, cloud provider integration, authorization, the UI and the API) with persistent storage and often a Redis-style cache. Someone owns upgrades, credentials for every cloud account, and backups of pipeline definitions. That work is justified only when the platform gives you something the in-cluster controller cannot. Check the project's release cadence and maintenance status before betting a new estate on it; The 2026 status was not verified.
+Spinnaker is a set of services (for pipelines, cloud provider integration, authorization, the UI and the API) with persistent storage and often a Redis-style cache. Someone owns upgrades, credentials for every cloud account, and backups of pipeline definitions. That work is justified only when the platform gives you something the in-cluster controller cannot. Check the project's release cadence and maintenance status before betting a new estate on it. The 2026 status was not verified.
 
 Access control also differs. In Argo CD, permissions come from AppProjects, RBAC policy and Git permissions. In Spinnaker, they come from its own authorization service and per-account roles. If your audit story for production approvals depends on a pipeline UI, plan how the equivalent evidence (merge request approval, change record) is produced in the Git model. The compliance angle is covered in the compliance notes, not here.
 
@@ -169,10 +169,13 @@ For Kubernetes-only estates that already use or plan to use GitOps, use Argo Rol
 
 Use Spinnaker when you must deploy to VMs or several clouds from one place, when release approvals must be done in a pipeline UI that the organisation already trusts, or when a team already runs it well and the migration cost has no payback.
 
-This would change if:
+Drop Spinnaker if:
 
 - Spinnaker's maintenance status or release cadence becomes a risk for your support needs;
-- your estate becomes Kubernetes-only, which removes Spinnaker's main advantage;
+- your Spinnaker estate becomes Kubernetes-only, which removes its main advantage.
+
+Prefer something other than Argo Rollouts if:
+
 - you adopt Flux, in which case evaluate Flagger first;
 - Argo Rollouts needs a traffic router your clusters cannot provide, such as a Gateway integration that is not mature enough.
 

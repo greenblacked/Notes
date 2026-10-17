@@ -90,7 +90,7 @@ organization
     └── acme-sbx-jdoe-01
 ```
 
-The pattern is `<org-prefix>-<workload>-<environment>`. Put the owning team, cost centre and environment in labels, not in the name, because labels can change and names cannot.
+The pattern is `<org-prefix>-<workload>-<environment>`. The environment is a stable part of the name; put the owning team and cost centre in labels, not in the name, because labels can change and names cannot.
 
 ## Bootstrap project and seed identity
 
@@ -100,7 +100,7 @@ The bootstrap (seed) project holds:
 
 - The Cloud Storage bucket for Terraform state, with versioning on and uniform bucket-level access. Layout of state across the repository is covered in [[patterns/terraform-module-and-state-layout]].
 - The service account (or Workload Identity Federation pool) that CI uses to run Terraform at organization scope. The federation setup is in [[architecture/iam-groups-and-ci-workload-identity-federation]].
-- Only the APIs that Terraform needs: Resource Manager, Service Usage, IAM, Cloud Billing, Cloud Storage.
+- Only the APIs that Terraform needs: Resource Manager, Service Usage, IAM, IAM Credentials, Security Token Service (both needed for keyless Workload Identity Federation), Cloud Billing, Cloud Storage.
 
 Rules for the seed identity:
 
@@ -132,11 +132,6 @@ terraform {
       version = "~> 6.0" # change: pin to the provider version you have tested
     }
   }
-}
-
-variable "org_id" {
-  type        = string
-  description = "Organization ID, numeric. Used only to build folder parents."
 }
 
 variable "parent_folder_id" {
@@ -254,7 +249,7 @@ New projects have historically come with defaults that are convenient and unsafe
 - The default Compute Engine service account, which in many setups has a broad role on the project. Prefer an organization policy that stops it getting that role, and use dedicated service accounts per workload. See [[architecture/iam-groups-and-ci-workload-identity-federation]].
 - Service account key creation, blocked by organization policy.
 - External IPs on VMs, blocked by organization policy.
-- Owner granted to whoever created the project. Projects are created by the pipeline, and the pipeline identity is not an owner afterwards.
+- Owner granted to whoever created the project. Projects are created by the pipeline, and the creating identity is usually granted Owner on the new project (not verified, check). The factory must remove that binding (for example with an authoritative project IAM policy or a follow-up removal), or the seed identity's Owner on every project must be accepted as a known risk.
 
 How each default behaves today depends on when the organization was created and on which constraints are enforced, so test it: create a project in the sandbox folder with your factory and list what it contains.
 
@@ -314,7 +309,7 @@ gcloud projects list --filter="parent.type=organization AND parent.id=${ORG_ID}"
 - One Terraform state for the whole organization. A plan then takes long, a lock blocks everyone and one mistake touches all. Split by folder or by layer.
 - Folders that mirror the org chart. Re-orgs then force project moves and IAM rewrites.
 - Putting production and non-production in the same folder, so that stricter production policy cannot be applied by inheritance.
-- Choosing project IDs that contain environment names or people's names that later change. Project IDs cannot be changed.
+- Choosing project IDs that contain team or people names that later change. Project IDs cannot be changed.
 - Deleting a project in a hurry. A deleted project is only scheduled for deletion and may be recoverable for a period; that period and the reuse of project IDs are documented by Google, so read them before relying on either.
 - Forgetting billing: a project with no billing link cannot use most services, and a project linked to the wrong account bills the wrong team.
 - Granting roles on the organization to individuals "temporarily". Use groups and a reviewed change.

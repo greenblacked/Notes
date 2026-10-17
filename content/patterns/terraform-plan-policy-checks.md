@@ -48,8 +48,9 @@ conftest test plan.json --policy ../../policy/terraform --namespace terraform.gc
 
 ## Rego over resource_changes
 
-Three habits keep these rules correct:
+Four habits keep these rules correct:
 
+- Filter on the action. `resource_changes` also lists unchanged resources (actions `["no-op"]`) and data sources (`mode` `"data"`, action `["read"]`). A rule on `after` must apply only to managed resources that are being created or updated, or every plan fails on legacy resources.
 - Guard `change.after`. On a delete it is `null`, and a rule that reads `after.something` must not fire (or crash) on it.
 - Respect `after_unknown`. A value computed at apply time is absent from `after`; flagging it as missing would block valid changes.
 - Read `before` for deletions, because `after` is gone.
@@ -64,10 +65,18 @@ labelled_types := {"google_storage_bucket", "google_compute_instance", "google_p
 
 unknown(rc, attr) if rc.change.after_unknown[attr] == true
 
+# Only managed resources that this plan creates or updates; skips no-op, read and delete.
+changing(rc) if {
+  rc.mode == "managed"
+  some a in rc.change.actions
+  a in {"create", "update"}
+}
+
 # Cloud Storage buckets must use uniform bucket-level access.
 deny contains msg if {
   some rc in input.resource_changes
   rc.type == "google_storage_bucket"
+  changing(rc)
   rc.change.after != null
   not rc.change.after.uniform_bucket_level_access == true
   not unknown(rc, "uniform_bucket_level_access")
@@ -88,12 +97,18 @@ deny contains msg if {
 # Labelled resource types need a non-empty cost-center label.
 has_cost_center(rc) if count(rc.change.after.labels["cost-center"]) > 0
 
+# Google provider v5 and later: labels set through provider default_labels appear in
+# terraform_labels and effective_labels, not in labels (not verified for your pinned provider version).
+has_cost_center(rc) if count(object.get(rc.change.after, "terraform_labels", {})["cost-center"]) > 0
+
 deny contains msg if {
   some rc in input.resource_changes
   rc.type in labelled_types
+  changing(rc)
   rc.change.after != null
   not has_cost_center(rc)
   not unknown(rc, "labels")
+  not unknown(rc, "terraform_labels")
   msg := sprintf("%s: missing cost-center label", [rc.address])
 }
 ```
@@ -116,6 +131,13 @@ bucket(after) := {"resource_changes": [{
   "mode": "managed",
   "type": "google_storage_bucket",
   "change": {"actions": ["create"], "before": null, "after": after, "after_unknown": {}},
+}]}
+
+noop_bucket(after) := {"resource_changes": [{
+  "address": "google_storage_bucket.legacy",
+  "mode": "managed",
+  "type": "google_storage_bucket",
+  "change": {"actions": ["no-op"], "before": after, "after": after, "after_unknown": {}},
 }]}
 
 sql_delete(before) := {"resource_changes": [{
@@ -141,6 +163,18 @@ test_bucket_without_uniform_access_fails if {
 
 test_bucket_without_cost_center_fails if {
   count(gcp.deny) == 1 with input as bucket({"uniform_bucket_level_access": true, "labels": {}})
+}
+
+test_noop_legacy_bucket_is_ignored if {
+  count(gcp.deny) == 0 with input as noop_bucket({"uniform_bucket_level_access": false, "labels": {}})
+}
+
+test_default_label_in_terraform_labels_passes if {
+  count(gcp.deny) == 0 with input as bucket({
+    "uniform_bucket_level_access": true,
+    "labels": {},
+    "terraform_labels": {"cost-center": "cc-1234"},
+  })
 }
 
 test_sql_delete_without_label_fails if {
@@ -193,6 +227,9 @@ terraform:plan:
     name: ${TERRAFORM_IMAGE}
     entrypoint:
       - ""
+  # change: add the Workload Identity Federation setup (id_tokens plus the credential
+  # config) from [[architecture/iam-groups-and-ci-workload-identity-federation]];
+  # without GCP credentials, init against a GCS backend fails
   script:
     - cd "${TF_ROOT}"
     - terraform init -input=false
@@ -200,7 +237,7 @@ terraform:plan:
     - terraform show -json tfplan > plan.json
   artifacts:
     access: developer # plan files can contain secrets; limit who can download them
-    expire_in: 1 hour
+    expire_in: 1 hour # change: must cover the time until a manual apply that reuses this tfplan
     paths:
       - ${TF_ROOT}/tfplan
       - ${TF_ROOT}/plan.json

@@ -123,9 +123,9 @@ spec:
           - list:
               elements:
                 - env: dev
-                  cluster: gke-nonprod-europe-west1
+                  cluster: gke-dev-europe-west1
                 - env: stage
-                  cluster: gke-nonprod-europe-west1
+                  cluster: gke-stage-europe-west1
           - git:
               repoURL: https://gitlab.example.com/platform/gitops-config.git # change: your config repository
               revision: main
@@ -162,6 +162,8 @@ metadata:
 spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
+  syncPolicy:
+    preserveResourcesOnDeletion: true # deleting the ApplicationSet must not delete live prod resources; check the field in your Argo CD version
   generators:
     - matrix:
         generators:
@@ -246,7 +248,7 @@ After the merge, Argo CD shows the production Applications `OutOfSync`. Sync the
 
 ## Rollback by revert
 
-Rollback is a commit. Reverting the promotion commit restores the previous digest, and Argo CD sees it as an ordinary change. Do not use `argocd app rollback` for this: it diverges from Git, and with automated sync it is overwritten at once.
+Rollback is a commit. Reverting the promotion commit restores the previous digest, and Argo CD sees it as an ordinary change. Do not use `argocd app rollback` for this: it diverges from Git, and Argo CD refuses a rollback on an Application with automated sync enabled.
 
 ```bash
 set -euo pipefail
@@ -282,6 +284,7 @@ During an incident the merge request still applies, but agree in advance who may
 - **Promoting tags.** A tag can move. Promote digests, and let a human-readable tag live in a label or in the merge request title.
 - **Environment drift inside overlays.** If prod overlays accumulate patches that dev never has, dev stops predicting prod. Review overlay size regularly.
 - **Auto-sync with prune in production.** A bad path or a deleted directory prunes live resources. Keep production manual until there is a strong reason.
+- **Deleting or renaming the production ApplicationSet.** Without `preserveResourcesOnDeletion`, the generated Applications are deleted and, through their finalizer, so are the live production resources. Set it (field to check in your version) and review ApplicationSet deletions as platform changes.
 - **One giant ApplicationSet.** A template change affects every app. Split by environment class and review changes to it as platform changes.
 - **Directory generator picks up stray directories.** A scratch overlay under `apps/*/overlays/` becomes an Application. Restrict the glob and protect the layout with CODEOWNERS.
 - **Promotion not tied to tests.** The manual promotion button should only exist after the build and the test stages passed on the same commit.

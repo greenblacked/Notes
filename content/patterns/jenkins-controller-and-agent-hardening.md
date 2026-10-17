@@ -99,6 +99,7 @@ jenkins:
             entries:
               - group: "team-a-maintainers"
 security:
+  # Needs the Job DSL plugin: JCasC fails to load this file if the plugin is not installed.
   globalJobDslSecurityConfiguration:
     useScriptSecurity: true
 unclassified:
@@ -210,6 +211,10 @@ Notes:
 - `agent none` at the top and an `agent` per stage means the approval wait runs without a pod and without an executor.
 - The deploy stage uses its own Kubernetes service account that has the deploy rights through [[patterns/gke-workload-identity]]. The build stage uses the default account that has none.
 - `submitter` limits who can press the button to a group (or user list). `submitterParameter` records who did it.
+- The pod YAML and `serviceAccount` in a Jenkinsfile are controlled by whoever edits that Jenkinsfile, and a feature branch can request the deploy service account, set `privileged: true` or a `hostPath` mount in any stage, or drop the `when { branch 'main' }` guard. Per-stage service accounts are therefore not a control by themselves. Enforce the limits where the author cannot change them:
+  - Apply Pod Security Admission `restricted` to the agent namespace ([[patterns/pod-security-admission]]), so privileged, host mounts and host namespaces are rejected whatever the Jenkinsfile asks for.
+  - Keep the deploy service account in a separate namespace, reachable only through a separate Kubernetes cloud that just the protected-branch job or folder may use (check the plugin's folder restriction setting for the cloud), or define the deploy pod in the trusted library instead of in the Jenkinsfile.
+  - Scope deploy credentials to that protected folder or job so branch builds cannot bind them.
 - A pod agent that mounts the Docker socket or runs `privileged: true` defeats this whole note. Build images with an unprivileged builder, as described in [[patterns/gitlab-runners-on-gke]] (the same options apply).
 
 ## Script approval
@@ -230,6 +235,35 @@ Credentials can live in the system store, the global domain or a folder. Prefer 
 - **Folder scope**: create team credentials in the team folder's own store (the folder's **Credentials** page). Only jobs under that folder, and only people with `Credentials/View` there, can use them.
 - Use the narrowest type: a deploy token with one repository scope, not a personal account; a short-lived token minted by Workload Identity where you can, not a stored JSON key.
 - Reference credentials only through `withCredentials` (or the `credentials()` helper) so Jenkins masks the value in logs. Never echo, `set -x` or write them to files in the workspace.
+
+Plain JCasC cannot declare folder-scoped credentials in a convenient way; they are created through Job DSL or the folder UI. A Job DSL form, loaded from the same `jenkins.yaml` (needs the Job DSL and Folders plugins; the key names below are from documentation knowledge, so check them against the plugin version you run):
+
+```yaml title="jenkins.yaml (fragment)"
+jobs:
+  - script: >
+      folder('team-a') {
+        description('Team A pipelines and credentials')
+        properties {
+          folderCredentialsProperty {
+            domainCredentials {
+              domainCredentials {
+                domain { name('team-a') }
+                credentials {
+                  string {
+                    scope('GLOBAL')
+                    id('team-a-registry-token')
+                    description('Registry token for team-a pipelines only')
+                    secret('${TEAM_A_REGISTRY_TOKEN}')
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+```
+
+The secret value arrives as an environment reference fed from a Kubernetes Secret, never as a literal in Git.
 
 Credential IDs are part of a pipeline's interface, so use a convention that tells a reader the scope, for example `team-a-registry-token`. A pipeline in another folder cannot resolve it, which is the point.
 
@@ -309,6 +343,7 @@ An approval that the author can click, or that any logged-in user can click, is 
 - **Global credentials by default.** One leaked token is then valid for every team.
 - **Approving signatures to end the noise.** Every approval widens the sandbox for all scripts.
 - **Trusted library overridable from a branch.** A branch build can then run unreviewed code with full rights.
+- **Trusting the Jenkinsfile to pick its own service account.** A feature-branch Jenkinsfile can name the deploy account or a privileged pod. Enforce with admission policy, a separate cloud and namespace, and scoped credentials.
 - **Long `input` waits on an agent.** The pod or executor stays reserved while a human sleeps.
 - **Plugin updates applied on the production controller first.** Test on a restored copy.
 

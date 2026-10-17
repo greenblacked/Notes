@@ -32,7 +32,7 @@ A CIS benchmark is a consensus list of configuration recommendations for one pro
 - A fail is a recommendation that does not hold, not an incident. Some recommendations do not fit your design, and that is a legitimate exception when recorded.
 - Passing the benchmark is not the same as being compliant with any framework. Auditors usually care that you chose a recognised baseline, ran it on a schedule, and handled the gaps.
 
-On GKE the control plane is run by Google, so checks about API server flags, etcd and controller manager are not testable by you. The worker node checks (kubelet configuration, file permissions) and the policy checks (RBAC, Pod security, network policy, secrets handling) are where your results come from. GKE also has its own posture features, such as security posture scanning and Shielded Nodes, which cover related ground. Treat them as extra signals, not as a replacement for a benchmark run you can version and store.
+On GKE the control plane is run by Google, so checks about API server flags, etcd and controller manager are not testable by you. The worker node checks (kubelet configuration, file permissions) and the policy checks (RBAC, Pod security, network policy, secrets handling) are where your results come from. The Job below runs only the node target; the policy checks are mostly manual and are covered by the linked notes (add `policies` to `--targets`, for example `node,policies`, only after checking that the pinned benchmark supports it). GKE also has its own posture features, such as security posture scanning and Shielded Nodes, which cover related ground. Treat them as extra signals, not as a replacement for a benchmark run you can version and store.
 
 ## Choosing the benchmark
 
@@ -135,6 +135,8 @@ OUT_DIR="evidence/kube-bench/$(date +%Y-%m-%d)"    # change: where evidence is s
 mkdir -p "${OUT_DIR}"
 
 kubectl --context "${CONTEXT}" apply -f kube-bench/job.yaml
+# Remove the privileged Job and namespace even if the wait below fails
+trap 'kubectl --context "${CONTEXT}" delete -f kube-bench/job.yaml --ignore-not-found' EXIT
 kubectl --context "${CONTEXT}" -n kube-bench wait --for=condition=complete job/kube-bench-node --timeout=300s
 
 # Save the raw result with the image used
@@ -142,15 +144,15 @@ kubectl --context "${CONTEXT}" -n kube-bench logs job/kube-bench-node > "${OUT_D
 kubectl --context "${CONTEXT}" -n kube-bench get job kube-bench-node \
   -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}' > "${OUT_DIR}/image.txt"
 
-# Remove the scanner and its host access
-kubectl --context "${CONTEXT}" delete -f kube-bench/job.yaml
+# Remove the scanner and its host access (the EXIT trap does the same if the script stops early)
+kubectl --context "${CONTEXT}" delete -f kube-bench/job.yaml --ignore-not-found
 ```
 
 To run the tool outside a cluster, for example on a node you reach over SSH, the same flags apply: `kube-bench run --targets node --benchmark gke-X.Y.Z --json`. Use the cluster Job for evidence because it records what ran and where.
 
 ## Reading results
 
-The JSON output groups checks into sections and gives each a state. Read it by state, not by total score.
+The JSON output groups checks into sections and gives each a `status`. Read it by status, not by total score. A `Totals` object (`total_pass`, `total_fail` and so on) also exists and is quicker to compare between runs.
 
 - `PASS`: the check passed. Keep it in the evidence.
 - `FAIL`: the recommendation does not hold. Each one needs a decision.
@@ -164,11 +166,11 @@ set -euo pipefail
 
 RESULT="evidence/kube-bench/2026-10-17/kube-bench-node.json"  # change: the saved result file
 
-# Count of checks per state (the field layout may differ by kube-bench version; check your output)
-jq -r '[.. | objects | select(has("state")) | .state] | group_by(.) | map({state: .[0], count: length})' "${RESULT}"
+# Count of checks per status (the field layout may differ by kube-bench version; check your output)
+jq -r '[.. | objects | select(has("status") and has("test_number")) | .status] | group_by(.) | map({status: .[0], count: length})' "${RESULT}"
 
 # List failing checks with their ID and description
-jq -r '.. | objects | select(.state? == "FAIL") | [.test_number, .test_desc] | @tsv' "${RESULT}"
+jq -r '.. | objects | select(.status? == "FAIL" and has("test_number")) | [.test_number, .test_desc] | @tsv' "${RESULT}"
 ```
 
 Do the manual items once per release of the benchmark and keep the written answer next to the result.
@@ -191,7 +193,7 @@ Fix through code (Terraform for node pool settings, Git for manifests), then re-
 
 ## Exceptions register
 
-Some checks will keep failing for good reasons: a managed component cannot be changed, a control is met another way, or the change would break a workload. Record these, do not hide them.
+Some checks will keep failing for good reasons: a managed component cannot be changed, a control is met another way, or the change would break a workload. Record these, do not hide them. Exceptions follow [[compliance/policy-exception-and-waiver-process]]; the YAML below is the benchmark-specific record that process refers to.
 
 For each exception keep: the check ID and the benchmark identifier, the node pool or cluster it applies to, the reason, the compensating control (what covers the risk instead), an owner, a review-by date and the person who accepted it. Store the register in Git next to the benchmark results, and review it every time you run the benchmark. An exception with no review date is an unmanaged risk.
 
@@ -247,5 +249,6 @@ The scan changes nothing on the nodes, so there is nothing to roll back from the
 - [[patterns/kubernetes-network-policies]]: default deny and explicit allows for namespaces.
 - [[patterns/gke-workload-identity]]: removes the need for key files in Pods.
 - [[compliance/access-reviews-gcp-and-gke]]: the review that covers RBAC findings.
+- [[compliance/policy-exception-and-waiver-process]]: the approval process behind the exceptions register.
 - [[patterns/linux-host-hardening-with-chef-and-inspec]]: the same idea for VM hosts and build agents.
 - [[compliance/audit-evidence-collection-and-retention]]: where to keep the results.

@@ -45,19 +45,19 @@ A Pod asks the cluster DNS first. Names under `cluster.local` are answered insid
 
 ## Zone layout
 
-| Zone                   | Visibility                    | Project              | Owner            |
-| ---------------------- | ----------------------------- | -------------------- | ---------------- |
-| `example.com`          | Public                        | dns-hub              | Platform team    |
-| `prod.gcp.example.com` | Private, attached to prod VPC | dns-hub              | Platform team    |
-| `dev.gcp.example.com`  | Private, attached to non-prod | dns-hub              | Platform team    |
-| `corp.example.com`     | Forwarding to on-prem         | dns-hub              | Network team     |
-| `svc.prod.example.com` | Private, per team             | team service project | Application team |
-| `googleapis.com`       | Private, API steering         | dns-hub              | Platform team    |
+| Zone                          | Visibility                    | Project              | Owner            |
+| ----------------------------- | ----------------------------- | -------------------- | ---------------- |
+| `example.com`                 | Public                        | dns-hub              | Platform team    |
+| `prod.gcp.example.com`        | Private, attached to prod VPC | dns-hub              | Platform team    |
+| `dev.gcp.example.com`         | Private, attached to non-prod | dns-hub              | Platform team    |
+| `corp.example.com`            | Forwarding to on-prem         | dns-hub              | Network team     |
+| `team-a.prod.gcp.example.com` | Private, per team             | team service project | Application team |
+| `googleapis.com`              | Private, API steering         | dns-hub              | Platform team    |
 
 Rules for the layout:
 
 - One central DNS project (the hub) owns shared and forwarding zones. Spokes get names through peering and do not create their own zones for shared names.
-- Delegate narrow sub-zones (`svc.prod.example.com`) to application teams in their own projects, with IAM on the zone, so they can manage records without touching shared zones.
+- Delegate narrow sub-zones (`team-a.prod.gcp.example.com`) to application teams in their own projects, with IAM on the zone, so they can manage records without touching shared zones.
 - Use a different parent name for each environment (`prod.gcp.example.com`, `dev.gcp.example.com`). Same names with different answers per environment are tempting and confusing.
 
 ## Terraform
@@ -97,6 +97,27 @@ resource "google_dns_managed_zone" "prod_peering" {
   name        = "peer-to-hub-prod"
   dns_name    = "prod.gcp.example.com." # change: same name as the hub zone
   description = "Peering zone to the hub"
+  visibility  = "private"
+
+  private_visibility_config {
+    networks {
+      network_url = var.prod_network
+    }
+  }
+
+  peering_config {
+    target_network {
+      network_url = var.hub_network
+    }
+  }
+}
+
+# In the spoke: queries for on-prem names also go to the hub, where the forwarding zone lives.
+resource "google_dns_managed_zone" "corp_peering" {
+  project     = "net-prod-host" # change: spoke host project
+  name        = "peer-to-hub-corp"
+  dns_name    = "corp.example.com." # change: your on-prem domain
+  description = "Peering zone for on-prem names"
   visibility  = "private"
 
   private_visibility_config {
@@ -168,6 +189,18 @@ A DNS peering zone is created in the consuming network and points at the produci
 To steer Google API traffic to private ranges, create a private zone for the API domain with records pointing at the chosen range, as described in [[architecture/private-gke-and-controlled-egress]]. The two documented targets are `private.googleapis.com` and `restricted.googleapis.com`.
 
 ```hcl title="dns/googleapis.tf"
+variable "nonprod_network" {
+  type        = string
+  description = "Self link of the non-prod spoke VPC"
+  default     = "projects/net-nonprod-host/global/networks/nonprod" # change: your non-prod VPC
+}
+
+# The GKE nodes live in the spoke VPCs, so the zone must be attached to them too
+# (cross-project binding), not only to the hub. Alternative: peering zones in each spoke.
+locals {
+  api_zone_networks = [var.hub_network, var.prod_network, var.nonprod_network]
+}
+
 resource "google_dns_managed_zone" "googleapis" {
   project     = "dns-hub" # change: DNS hub project
   name        = "googleapis-restricted"
@@ -176,10 +209,52 @@ resource "google_dns_managed_zone" "googleapis" {
   visibility  = "private"
 
   private_visibility_config {
-    networks {
-      network_url = var.hub_network
+    dynamic "networks" {
+      for_each = local.api_zone_networks
+      content {
+        network_url = networks.value
+      }
     }
   }
+}
+
+# Artifact Registry pulls use pkg.dev and gcr.io, not googleapis.com. Add equivalent zones
+# (same shape as above, one each, with a CNAME of *.pkg.dev. and *.gcr.io. to
+# restricted.googleapis.com.). Confirm the names in the current VPC-SC and Artifact Registry docs.
+resource "google_dns_managed_zone" "pkg_dev" {
+  project     = "dns-hub" # change: DNS hub project
+  name        = "pkg-dev-restricted"
+  dns_name    = "pkg.dev."
+  description = "Steer Artifact Registry names to the restricted range"
+  visibility  = "private"
+
+  private_visibility_config {
+    dynamic "networks" {
+      for_each = local.api_zone_networks
+      content {
+        network_url = networks.value
+      }
+    }
+  }
+}
+
+resource "google_dns_record_set" "pkg_dev_wildcard" {
+  project      = "dns-hub" # change: DNS hub project
+  managed_zone = google_dns_managed_zone.pkg_dev.name
+  name         = "*.pkg.dev."
+  type         = "CNAME"
+  ttl          = 300
+  rrdatas      = ["restricted.googleapis.com."]
+}
+
+# The restricted range is reached through the default internet gateway route.
+resource "google_compute_route" "restricted_googleapis" {
+  project          = "net-prod-host" # change: host project; repeat per VPC that uses the range
+  name             = "restricted-googleapis"
+  network          = "prod" # change: VPC name
+  dest_range       = "199.36.153.4/30" # confirm in current docs
+  next_hop_gateway = "default-internet-gateway"
+  priority         = 1000
 }
 
 resource "google_dns_record_set" "restricted_a" {
@@ -201,7 +276,7 @@ resource "google_dns_record_set" "wildcard" {
 }
 ```
 
-The restricted range serves only APIs that VPC Service Controls supports. Any other Google API name that resolves through this zone stops working. See the pitfalls.
+The restricted range serves only APIs that VPC Service Controls supports. A `gcr.io.` zone follows the same pattern as `pkg.dev.` if you still use Container Registry names. The restricted range also needs the route above, because the addresses are not reachable through a default route to an on-prem gateway. Any other Google API name that resolves through this zone stops working. See the pitfalls.
 
 ## Pitfalls
 

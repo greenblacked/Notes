@@ -18,7 +18,7 @@ This note helps senior DevOps engineers choose a disaster recovery (DR) tier for
 > Written against GKE, Cloud SQL and Cloud Storage as a general design, not a specific product version. It follows the structure of Google Cloud's public disaster recovery planning guidance and the Cloud SQL, Cloud Load Balancing and Cloud Storage documentation on cloud.google.com.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the names and URLs of Google's DR guides, the dual-region bucket syntax in the current Terraform provider, the behaviour of Cloud SQL replica promotion, and the names of replication lag metrics. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the names and URLs of Google's DR guides, the dual-region bucket syntax in the current Terraform provider, the behaviour of Cloud SQL replica promotion and of Enterprise Plus DR replica switchover, and the names of replication lag metrics. Check them before relying on them.
 
 ## Context and goals
 
@@ -40,15 +40,15 @@ Goals of this design:
 
 The tiers below are a common ladder. The RPO and RTO columns are deliberately examples to replace with your own targets, not guarantees of any product.
 
-| Tier               | Typical use                      | Data approach                               | Relative cost | Operational burden |
-| ------------------ | -------------------------------- | ------------------------------------------- | ------------- | ------------------ |
-| Backup and restore | Internal tools, batch, dev       | Backups copied to another region or project | Lowest        | Low, restore slow  |
-| Pilot light        | Services that tolerate hours     | Replicated data, compute scaled to zero     | Low           | Medium             |
-| Warm standby       | Customer-facing, moderate impact | Replicated data, small running footprint    | Medium        | Medium to high     |
-| Active-passive     | Revenue-critical services        | Replicated data, full-size idle standby     | High          | High               |
-| Active-active      | Services that cannot go down     | Multi-writer or partitioned data            | Highest       | Highest            |
+| Tier               | Typical use                      | Data approach                               | Example RPO (change) | Example RTO (change) | Relative cost | Operational burden |
+| ------------------ | -------------------------------- | ------------------------------------------- | -------------------- | -------------------- | ------------- | ------------------ |
+| Backup and restore | Internal tools, batch, dev       | Backups copied to another region or project | Hours                | A day                | Lowest        | Low, restore slow  |
+| Pilot light        | Services that tolerate hours     | Replicated data, compute scaled to zero     | Minutes to hours     | Hours                | Low           | Medium             |
+| Warm standby       | Customer-facing, moderate impact | Replicated data, small running footprint    | Minutes              | Under an hour        | Medium        | Medium to high     |
+| Active-passive     | Revenue-critical services        | Replicated data, full-size idle standby     | Minutes              | Tens of minutes      | High          | High               |
+| Active-active      | Services that cannot go down     | Multi-writer or partitioned data            | Near zero            | Minutes              | Highest       | Highest            |
 
-Example targets to change (not defaults): backup and restore may mean an RPO of hours and an RTO of a day; active-passive may aim for an RPO of minutes and an RTO of tens of minutes. Active-active changes the application: it needs conflict handling or data partitioning, which is a design problem, not an infrastructure toggle.
+The table values are hedged examples, not defaults. Active-active changes the application: it needs conflict handling or data partitioning, which is a design problem, not an infrastructure toggle.
 
 Choose the cheapest tier whose measured RPO and RTO meet the target. Most internal services belong in the first two tiers.
 
@@ -74,7 +74,7 @@ Key points:
 
 - **One global entry point.** A global load balancer with health checks and a backend in each region lets traffic move without DNS changes. With DNS-based failover, remember that resolver caching extends your RTO.
 - **Same code, two clusters.** Both clusters sync from the same GitOps repository (see [[adr/0001-gitops-with-argocd]]), so the standby is not a hand-built copy. The standby can run with fewer replicas, scaled up during failover.
-- **Replica promotion is the point of no return.** The standby database is a read replica until you promote it. After promotion it becomes an independent primary; the old primary does not rejoin on its own.
+- **Replica promotion is the point of no return.** The standby database is a read replica until you promote it with `promote-replica`. After promotion it becomes an independent primary; the old primary does not rejoin on its own. Cloud SQL Enterprise Plus offers a designated DR replica with switchover and replica failover that behaves differently; check the current docs (not verified).
 - **Stateless first.** Keep session state, queues and caches either replicated or rebuildable. Anything stateful that is not in the database or the bucket must be named and handled.
 
 ## Data layer choices
@@ -186,7 +186,7 @@ gcloud sql instances describe "${REPLICA}" \
 ```
 
 > [!danger] Replica promotion cannot be undone
-> Promoting a replica detaches it from its primary and makes it a standalone instance. You cannot turn it back into a replica of the old primary; failback means building a new replica and promoting again in the other direction. Do not run this command for a test against production. Rehearse on a copy.
+> Promoting a replica with `gcloud sql instances promote-replica` detaches it from its primary and makes it a standalone instance. You cannot turn it back into a replica of the old primary; failback means building a new replica and promoting again in the other direction. Do not run this command for a test against production. Rehearse on a copy.
 
 ```bash
 set -euo pipefail

@@ -113,10 +113,8 @@ resource "google_storage_bucket" "audit_archive" {
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
 
-  versioning {
-    enabled = true
-  }
-
+  # No versioning block: Object Versioning cannot be combined with a retention policy.
+  # The retention policy is what protects the records from overwrite and delete.
   retention_policy {
     retention_period = 63072000 # seconds; two years here, change per your policy
     is_locked        = false    # see the warning below before setting true
@@ -147,12 +145,12 @@ Grant read access to the audit project narrowly (a group for auditors with viewe
 
 On GKE, Admin Activity audit entries for the Kubernetes API are written to Cloud Logging by default. Data Access entries (reads and non-admin writes) are a separate setting, and the control-plane audit policy itself is managed by Google, so you cannot tune it per verb the way you can on a self-managed cluster. Both points are not verified here; check the GKE audit logging documentation for your version.
 
-If a control needs Data Access entries, enable them with an IAM audit config, and estimate the volume first, because they can be large.
+If a control needs Data Access entries, enable them with an IAM audit config, and estimate the volume first, because they can be large. The audit config below for `container.googleapis.com` covers the GKE API (cluster and node pool operations), not the Kubernetes API (`k8s.io`). Kubernetes API audit entries are controlled differently on GKE; this is not verified, so check the GKE audit logging documentation.
 
 ```hcl title="audit/gke-data-access.tf"
 resource "google_project_iam_audit_config" "gke" {
   project = var.workload_project_id # change: the project that hosts the clusters
-  service = "container.googleapis.com"
+  service = "container.googleapis.com" # GKE management API, not the Kubernetes API (k8s.io)
 
   audit_log_config {
     log_type = "DATA_WRITE"

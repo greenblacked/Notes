@@ -1,5 +1,5 @@
 ---
-title: Policy for AI-generated code - review, provenance and audit trail
+title: "Policy for AI-generated code: review, provenance and audit trail"
 description: A team policy for code written with AI assistants covering ownership, review rules, optional provenance records, licence questions and evidence for auditors.
 type: standard
 tags:
@@ -122,7 +122,7 @@ PROJECT_ID = os.environ["CI_PROJECT_ID"]
 MR_IID = os.environ["CI_MERGE_REQUEST_IID"]
 TOKEN = os.environ["POLICY_CHECK_TOKEN"]  # masked read_api token, no write scope
 LABEL = os.environ.get("AI_LABEL", "ai-assisted")
-MIN_APPROVALS = int(os.environ.get("MIN_HUMAN_APPROVALS", "1"))
+MIN_HUMAN_APPROVALS = int(os.environ.get("MIN_HUMAN_APPROVALS", "1"))
 
 
 def get(path):

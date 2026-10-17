@@ -86,9 +86,9 @@ A pipeline needs at least two identities, and for sensitive environments more:
 | `deploy-<env>`   | Deploy stage                   | `roles/container.developer` on the environment cluster, `roles/artifactregistry.reader` where used                                                      |
 | `build`          | Build stage                    | Write on the artifact registry only                                                                                                                     |
 
-Two things matter more than the exact roles. First, the plan account cannot change anything, so a merge request from a branch cannot alter infrastructure even if its pipeline is compromised. Second, only the pipeline on a protected branch or tag can impersonate the apply account; this is enforced in the federation condition below, not in a CI variable.
+Two things matter more than the exact roles. First, the plan account cannot change anything, so a merge request from a branch cannot alter infrastructure even if its pipeline is compromised. Second, only the pipeline on a protected branch or tag can impersonate the apply account; this is enforced in the federation binding below, not in a CI variable.
 
-The state bucket needs the plan account to read and the apply account to write. Grant bucket-level roles, not project-level storage roles.
+The state bucket needs the plan account to read state and the apply account to write it. The GCS backend also writes a lock object, so a read-only plan account needs object create and delete on the lock path, or plan must run with `-lock=false` (accepting that concurrent runs are not serialised). Grant bucket-level roles, not project-level storage roles.
 
 ## Federation for GitLab CI
 
@@ -147,10 +147,16 @@ resource "google_iam_workload_identity_pool_provider" "gitlab" {
     "attribute.project_path" = "assertion.project_path"
     "attribute.ref"          = "assertion.ref"
     "attribute.ref_protected" = "assertion.ref_protected"
+    # Combined value so a binding can require project AND protected ref.
+    "attribute.project_ref_protected" = "assertion.project_path + ':' + assertion.ref_protected"
   }
 
-  # Only jobs of one group, and only on protected refs, get a token at all.
-  attribute_condition = "assertion.namespace_path == '${var.gitlab_group_path}' && assertion.ref_protected == 'true'"
+  # Only jobs of one group get a token at all. Protected refs are enforced
+  # per service account below, so merge request pipelines can still plan.
+  # namespace_path is the full group path: a project in a subgroup has
+  # `group/sub`; use assertion.namespace_path.startsWith('my-group/') ||
+  # assertion.namespace_path == 'my-group' if subgroups are needed.
+  attribute_condition = "assertion.namespace_path == '${var.gitlab_group_path}'"
 
   oidc {
     issuer_uri        = "https://gitlab.com" # change for self-managed GitLab
@@ -168,15 +174,28 @@ data "google_project" "this" {
   project_id = var.project_id
 }
 
-# Only jobs of this one GitLab project may impersonate the account.
+# Apply: only jobs of this one GitLab project on a protected ref.
 resource "google_service_account_iam_member" "tf_apply_prod_wif" {
   service_account_id = google_service_account.tf_apply_prod.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.ci.workload_identity_pool_id}/attribute.project_ref_protected/${var.gitlab_project_path}:true"
+}
+
+resource "google_service_account" "tf_plan_prod" {
+  project      = var.project_id
+  account_id   = "tf-plan-prod"
+  display_name = "Terraform plan for prod (read-only)"
+}
+
+# Plan: any pipeline of the same project, including merge requests.
+resource "google_service_account_iam_member" "tf_plan_prod_wif" {
+  service_account_id = google_service_account.tf_plan_prod.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.ci.workload_identity_pool_id}/attribute.project_path/${var.gitlab_project_path}"
 }
 ```
 
-The attribute condition is the real security boundary. Without it, any GitLab project in the world could present a valid token to your provider. The condition above limits the namespace and requires a protected ref. The `principalSet` binding then narrows to one project. Use both.
+The attribute condition is the real security boundary. Without it, any GitLab project in the world could present a valid token to your provider. The condition above limits the namespace. The `principalSet` bindings then narrow each service account: apply requires the project and a protected ref (through the combined `project_ref_protected` attribute), plan accepts the project on any ref so merge request pipelines can run. Protected refs are therefore enforced per service account, not for the whole provider. Use both layers. If you prefer a hard split, use two providers (one for plan, one for apply).
 
 ### The CI job
 
@@ -197,17 +216,20 @@ variables:
       aud: "gcp-wif-my-org" # must match allowed_audiences in the provider
   before_script:
     - umask 077
-    - echo "${GCP_ID_TOKEN}" > "${CI_BUILDS_DIR}/gcp_id_token.jwt"
+    - export CRED_DIR="${CI_BUILDS_DIR}/${CI_JOB_ID}"
+    - mkdir -p "${CRED_DIR}"
+    - echo "${GCP_ID_TOKEN}" > "${CRED_DIR}/gcp_id_token.jwt"
     - >
       gcloud iam workload-identity-pools create-cred-config
       "projects/${GCP_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GCP_WIF_POOL}/providers/${GCP_WIF_PROVIDER}"
       --service-account="${GCP_SERVICE_ACCOUNT}"
-      --credential-source-file="${CI_BUILDS_DIR}/gcp_id_token.jwt"
+      --credential-source-file="${CRED_DIR}/gcp_id_token.jwt"
       --credential-source-type=text
-      --output-file="${CI_BUILDS_DIR}/gcp_cred.json"
-    - gcloud auth login --cred-file="${CI_BUILDS_DIR}/gcp_cred.json" --quiet
+      --output-file="${CRED_DIR}/gcp_cred.json"
+    - export GOOGLE_APPLICATION_CREDENTIALS="${CRED_DIR}/gcp_cred.json" # Terraform reads this
+    - gcloud auth login --cred-file="${CRED_DIR}/gcp_cred.json" --quiet # gcloud steps only
   after_script:
-    - rm -f "${CI_BUILDS_DIR}/gcp_id_token.jwt" "${CI_BUILDS_DIR}/gcp_cred.json"
+    - rm -rf "${CI_BUILDS_DIR}/${CI_JOB_ID}"
 
 terraform-apply:
   stage: apply
@@ -226,7 +248,7 @@ That image does not contain `gcloud`. In practice use your own pinned runner ima
 
 - The token is a secret for its lifetime. Write it with `umask 077`, delete it in `after_script` and never print it.
 - `id_tokens` is per job. Jobs that do not need cloud access do not get a token.
-- For Terraform you can instead export `GOOGLE_APPLICATION_CREDENTIALS` pointing at the credential file; the provider then uses the federated credentials directly. Check the provider docs for the current behaviour.
+- Terraform needs `GOOGLE_APPLICATION_CREDENTIALS` pointing at the credential file (set in `before_script`); the provider reads Application Default Credentials, not the `gcloud auth login` store. `gcloud auth login` is only for `gcloud` steps. The paths are per job (`CI_JOB_ID`) so concurrent jobs on a shared runner do not collide. Check the provider docs for the current behaviour.
 - Pipeline structure and where this authentication belongs is covered in [[patterns/gitlab-ci-pipeline-structure]].
 
 ## Federation for Jenkins
@@ -251,7 +273,7 @@ Several single bindings quietly give someone every permission of another identit
 - `roles/iam.serviceAccountKeyAdmin` or key creation permissions: allow creating a key for any account. Block key creation by organization policy (see [[compliance/gcp-organization-policy-guardrails]]).
 - `roles/owner` or `roles/editor` on the default Compute Engine service account: any workload that runs as it has broad project access. Do not use the default account; create dedicated ones, and prevent the broad grant by policy.
 - `roles/resourcemanager.projectIamAdmin` and similar setIamPolicy permissions: whoever holds them can grant themselves anything. Treat them as admin.
-- Attribute conditions that trust a branch name. A branch called `main` can exist in any fork or unprotected clone. Require `ref_protected == 'true'`, or check the token's project and ref type, not just a name.
+- Attribute conditions that trust a branch name. A branch called `main` can exist in any fork or unprotected clone. Require `ref_protected == 'true'` (in the apply binding), or check the token's project and ref type, not just a name.
 - A `principalSet` for a whole pool (no attribute segment). That lets every identity in the pool impersonate the account.
 
 ## Verify
@@ -286,7 +308,7 @@ gcloud iam service-accounts get-iam-policy "${SA_EMAIL}" \
   --format="yaml(bindings)"
 ```
 
-For federation, run a job on an unprotected branch and one on the protected branch. The first must fail at token exchange because of the attribute condition; the second must authenticate and show the service account as the active identity with `gcloud auth list`.
+For federation, run a plan job on an unprotected branch, an apply job on an unprotected branch and an apply job on the protected branch. The apply job on the unprotected branch must fail at impersonation (the `project_ref_protected` binding does not match) while the plan job on a merge request must succeed as `tf-plan-<env>`; the apply job on the protected branch must authenticate and show the service account as the active identity with `gcloud auth list`.
 
 If a leaked credential is suspected, follow [[runbooks/leaked-credential-rotation]].
 

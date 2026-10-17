@@ -64,7 +64,7 @@ Decide the scope now: kinds, namespaces to exclude, and the exact message people
 
 ### 2. Deploy in audit or warn through Argo CD
 
-Commit the policy with the non-blocking action. For Gatekeeper, the ConstraintTemplate goes in an earlier sync wave than the Constraint, because the Constraint CRD does not exist until the template is applied:
+Commit the policy with the non-blocking action. For Gatekeeper, the ConstraintTemplate goes in an earlier sync wave than the Constraint. Waves alone are not enough: Argo CD dry-runs every manifest before it applies any wave, and the Constraint CRD is created by the Gatekeeper controller after the template is applied, not from Git, so the dry run fails with "could not find the requested resource". Add `SkipDryRunOnMissingResource=true` to the Constraint, keep the waves, and enable retry on the Application:
 
 ```yaml title="policies/templates/k8srequiredlabels.yaml (metadata excerpt)"
 metadata:
@@ -80,6 +80,7 @@ metadata:
   name: deployments-need-team
   annotations:
     argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   enforcementAction: dryrun # audit only: records violations, blocks nothing
   match:
@@ -122,8 +123,9 @@ kubectl get "${CONSTRAINT_KIND}" "${CONSTRAINT_NAME}" -o json |
   sort -rn
 
 # Kyverno: failing results per namespace from PolicyReports
+# (recent versions write one report per resource, so sum per namespace)
 kubectl get policyreports -A -o json |
-  jq -r '.items[] | select(.summary.fail > 0) | "\(.summary.fail) \(.metadata.namespace)"' |
+  jq -r '[.items[] | {ns: .metadata.namespace, fail: (.summary.fail // 0)}] | group_by(.ns)[] | "\(map(.fail) | add) \(.[0].ns)"' |
   sort -rn
 
 # Map namespaces to owners
@@ -147,6 +149,7 @@ metadata:
   name: deployments-need-team-enforced
   annotations:
     argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   enforcementAction: deny
   match:
@@ -181,7 +184,7 @@ Keep a namespace in this stage for at least a few deploy cycles. Watch for the f
 
 ### 6. Enforce cluster-wide
 
-When every owner is either clean or on a recorded exception, flip the remaining scope: merge the enforced namespace list into one Constraint with `deny` and no namespace list (still excluding `kube-system` and the engine namespace), delete the `dryrun` twin, or change the Kyverno policy to `Enforce` without overrides. Announce the date a week ahead, merge during working hours and not before a freeze ([[standards/production-change-checklist]]), and watch Argo CD sync status for the next hour.
+When every owner is either clean or on a recorded exception, flip the remaining scope: keep the `deployments-need-team` Constraint, change it to `enforcementAction: deny` (it already has no namespace list and excludes `kube-system` and the engine namespace), and delete the `deployments-need-team-enforced` twin, so one Constraint named `deployments-need-team` survives. For Kyverno, change the Kyverno policy to `Enforce` without overrides. Announce the date a week ahead, merge during working hours and not before a freeze ([[standards/production-change-checklist]]), and watch Argo CD sync status for the next hour.
 
 Add the policy to the baseline for new namespaces so it is enforced from creation, alongside [[patterns/pod-security-admission]] labels.
 
@@ -215,7 +218,7 @@ kubectl create deployment policy-probe --image=docker.io/library/nginx:latest \
 
 ```text
 0
-Error from server (Forbidden): admission webhook "validation.gatekeeper.sh" denied the request: [deployments-need-team-enforced] missing or empty required label "team"
+Error from server (Forbidden): admission webhook "validation.gatekeeper.sh" denied the request: [deployments-need-team] missing or empty required label "team"
 ```
 
 The exact webhook name and message vary with the engine and policy. Also check that Argo CD shows the policy Application as `Synced` and `Healthy`, and that your own applications still sync.
@@ -228,7 +231,7 @@ Rollback is a Git change; no workload is redeployed. Set the action back and let
 2. Sync the policy Application in Argo CD (automatic sync does this if enabled).
 3. Confirm the action took effect with the validation commands above. Blocked deployments proceed on their next sync or retry.
 
-If the engine itself is blocking all admission (webhook down or timing out) and Git-based rollback cannot get through because Argo CD is blocked too, relax the webhook directly as a break-glass step:
+If the engine itself is blocking all admission (webhook down or timing out) and Git-based rollback cannot get through because Argo CD is blocked too, relax the webhook directly as a break-glass step. First check the current `failurePolicy` (`kubectl get validatingwebhookconfiguration "${WEBHOOK}" -o jsonpath='{.webhooks[*].failurePolicy}'`); Gatekeeper's default may already be `Ignore`, in which case the webhook is not the cause. Then pause automatic sync and self-heal for the engine's Argo CD Application, or Argo CD reverts the patch within minutes. Kyverno manages its own webhook configurations and rewrites them, so a patch there is reverted too; for Kyverno use its documented webhook cleanup or scale-down procedure instead (check the docs for your version).
 
 ```bash
 set -euo pipefail
@@ -240,20 +243,20 @@ kubectl patch validatingwebhookconfiguration "${WEBHOOK}" --type=json \
   -p='[{"op":"replace","path":"/webhooks/0/failurePolicy","value":"Ignore"}]'
 ```
 
-Record the change, then restore the committed configuration through Git as soon as the engine is healthy. Argo CD will report drift until you do; see [[runbooks/argocd-sync-failure-and-drift]].
+Record the change, then re-enable auto-sync and self-heal and restore the committed configuration through Git as soon as the engine is healthy. Argo CD will report drift until you do; see [[runbooks/argocd-sync-failure-and-drift]].
 
 ## Troubleshooting
 
-| Symptom                                                     | Cause                                                                                | Fix                                                                                               |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| Argo CD Application stuck `OutOfSync` or retrying forever   | Policy denies a resource the Application creates; the retry reapplies the same thing | Fix the manifest or add an exception; pause automatic sync for that Application while you decide  |
-| Constraint fails to sync: no matches for kind               | Constraint applied before its ConstraintTemplate created the CRD                     | Put the template in an earlier sync wave; enable retry on the Application                         |
-| All deployments time out at admission                       | Engine pods down or overloaded and `failurePolicy: Fail`                             | Restore the engine; if urgent, use the break-glass step in Rollback                               |
-| Violations list looks too short                             | Per-constraint violation limit in Gatekeeper status, or audit interval not elapsed   | Check the documented limit and the audit interval; use metrics or reports for totals              |
-| `kube-system` workloads or the engine's own Pods are denied | Namespace not excluded                                                               | Add `kube-system` and the engine namespace to the exclusions                                      |
-| Policy shows no violations but bad objects exist            | Wrong `match` kinds or namespaces, or Kyverno background scan disabled               | Test with a known bad object; fix the match; enable background mode                               |
-| Owners report surprise denials after step 5                 | Namespace was enforced before their violations were fixed                            | Move the namespace back to audit, review the list with the owner, enforce again                   |
-| Job in CI passes but the cluster denies the same manifest   | CI rule and cluster rule differ                                                      | Align them with [[patterns/conftest-policy-gate-for-manifests]]; test both from the same fixtures |
+| Symptom                                                     | Cause                                                                                                   | Fix                                                                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Argo CD Application stuck `OutOfSync` or retrying forever   | Policy denies a resource the Application creates; the retry reapplies the same thing                    | Fix the manifest or add an exception; pause automatic sync for that Application while you decide          |
+| Constraint fails to sync: no matches for kind               | Argo CD dry-runs all manifests first, and the Constraint CRD is created by the controller, not from Git | Add the `SkipDryRunOnMissingResource=true` sync option to the Constraint; keep the waves and enable retry |
+| All deployments time out at admission                       | Engine pods down or overloaded and `failurePolicy: Fail`                                                | Restore the engine; if urgent, use the break-glass step in Rollback                                       |
+| Violations list looks too short                             | Per-constraint violation limit in Gatekeeper status, or audit interval not elapsed                      | Check the documented limit and the audit interval; use metrics or reports for totals                      |
+| `kube-system` workloads or the engine's own Pods are denied | Namespace not excluded                                                                                  | Add `kube-system` and the engine namespace to the exclusions                                              |
+| Policy shows no violations but bad objects exist            | Wrong `match` kinds or namespaces, or Kyverno background scan disabled                                  | Test with a known bad object; fix the match; enable background mode                                       |
+| Owners report surprise denials after step 5                 | Namespace was enforced before their violations were fixed                                               | Move the namespace back to audit, review the list with the owner, enforce again                           |
+| Job in CI passes but the cluster denies the same manifest   | CI rule and cluster rule differ                                                                         | Align them with [[patterns/conftest-policy-gate-for-manifests]]; test both from the same fixtures         |
 
 ## Related
 
