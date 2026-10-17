@@ -166,7 +166,7 @@ Do not hand out new broad credentials to "help the response". Responders use the
 Quarantine the suspect pods without killing them. A quarantine label selects a deny-all NetworkPolicy, and the pod's other labels are changed so no allow policy still selects it. The process keeps running (and its memory and filesystem stay intact) but it cannot reach the network. `kubectl exec` and `kubectl logs` still work because they go through the API server and kubelet, not the pod network.
 
 > [!warning] A NetworkPolicy cannot override another policy's allow
-> NetworkPolicies are allow-only and additive. If any other policy in the namespace (for example an `app=payments` allow) also selects the pod, its allows still apply, and the quarantine policy blocks nothing. In a namespace that already has policies this gives false containment. So the quarantine step is two actions: add `quarantine=true` and also remove or replace every label that other policies and the Service select (the relabel shown under "Replacement pods" below). A priority deny that is enforced first (a Calico GlobalNetworkPolicy or an AdminNetworkPolicy) is an alternative; whether either is supported on GKE Dataplane V2 is not verified. The enforcement test below is mandatory.
+> NetworkPolicies are allow-only and additive. If any other policy in the namespace (for example an `app=payments` allow) also selects the pod, its allows still apply, and the quarantine policy blocks nothing. In a namespace that already has policies this gives false containment. So isolation needs a check, then one of two methods. First list every policy that selects the pod: `kubectl get networkpolicy -n "$NS" -o yaml` and compare each `podSelector` (including an empty `podSelector: {}`, which selects every pod in the namespace and cannot be escaped by relabelling) with the pod's full label set (`kubectl get pod "$POD" -n "$NS" --show-labels`). Then either (a) strip every label that any policy or Service selects, keeping only `quarantine=true`, which works only if no policy selects all pods; or (b) use a priority deny that is evaluated before the allows, for example a Calico `GlobalNetworkPolicy` with a low `order` and `action: Deny`, or a Cilium deny policy. Option (b) depends on the CNI, and whether it is available on GKE Dataplane V2 is not verified. The pod counts as contained only after the connectivity probe below proves both directions blocked.
 
 Apply the policy once per affected namespace. It does nothing until a pod carries the label:
 
@@ -188,16 +188,20 @@ spec:
 ```bash
 kubectl apply -f quarantine-deny-all.yaml
 kubectl label pod "$POD" -n "$NS" quarantine=true
-# Also drop the labels that allow policies and the Service select (see "Replacement pods").
-kubectl label pod "$POD" -n "$NS" app=quarantined-payments --overwrite
+# (a) List the policies in the namespace and the pod's full label set, then check which policies select it.
+kubectl get networkpolicy -n "$NS" -o yaml
+kubectl get pod "$POD" -n "$NS" --show-labels
+# Strip every label that a policy or Service selects (example keys: app, tier); keep only quarantine=true.
+# Removing the controller's selector label also orphans the pod (see "Replacement pods").
+kubectl label pod "$POD" -n "$NS" app- tier-
 ```
 
 Points that matter:
 
-- **Replacement pods.** The relabel in the quarantine step (`app=quarantined-payments` is an example; use a valid label value for your workload) changes the label the ReplicaSet selects on, so the pod is orphaned but keeps running, and the ReplicaSet starts a replacement. Before you relabel, scale or pause the Deployment if the replacement could run the same compromised image or credentials.
-- **Service traffic.** The quarantined pod is cut off by the policy; also remove it from Service endpoints (the relabel above does that) so users stop hitting it.
+- **Replacement pods.** Removing the labels in the quarantine step (`app` and `tier` are examples; remove every label a policy or Service selects) changes the label the ReplicaSet selects on, so the pod is orphaned but keeps running, and the ReplicaSet starts a replacement. Before you relabel, scale or pause the Deployment if the replacement could run the same compromised image or credentials.
+- **Service traffic.** The quarantined pod is cut off by the policy; also remove it from Service endpoints (removing the selected labels above does that) so users stop hitting it.
 - **Existing connections.** Whether a policy terminates connections that are already established depends on the dataplane; this is not verified. Test it in a lab. If it matters, assume an established session may survive and rely on cutting the credentials in the previous section.
-- **Policy enforcement (mandatory).** Confirm the quarantine works: exec into a different pod in the namespace and check that the quarantined pod's IP is unreachable, or test egress from the pod with a debug container. Record the result in the log.
+- **Policy enforcement (mandatory).** Confirm the quarantine works in both directions: exec into a different pod in the namespace and check that the quarantined pod's IP is unreachable (ingress), and test egress from the pod with a debug container. Do not treat the pod as contained until both probes fail to connect. Record the result in the log.
 - **Scale to zero is not containment.** `kubectl scale --replicas=0` deletes the pods and their state. Do it only after evidence is saved.
 - **Namespace-wide compromise.** Apply a deny-all policy to the whole namespace and keep only the allows you need for the response, see [[kubernetes-network-policies]]. Also review the namespace for pods that run privileged or with host access, see [[pod-security-admission]].
 - Workload Identity bindings: remove the binding that lets the Kubernetes service account impersonate the Google service account, see [[gke-workload-identity]]. This cuts cloud access even if the pod keeps running.

@@ -48,12 +48,13 @@ waivers:
     ticket: PLAT-1234 # change: the ticket with the reason and the removal plan
     reason: Vendor image runs as root until version 4 ships.
     approved_by: security-lead
+    approved: "2026-10-01T00:00:00Z"
     expires: "2026-12-31T00:00:00Z"
 ```
 
 ## Enforcing expiry in CI
 
-Evaluate the waiver file with Conftest in the same pipeline that checks manifests (see [[patterns/conftest-policy-gate-for-manifests]]). The rule below denies any waiver whose `expires` timestamp has passed.
+Evaluate the waiver file with Conftest in the same pipeline that checks manifests (see [[patterns/conftest-policy-gate-for-manifests]]). The rules below deny any waiver whose `expires` timestamp has passed, and any waiver whose lifetime (from `approved` to `expires`) is longer than the 90-day maximum.
 
 ```rego title="policy/waivers/expiry.rego"
 package waivers
@@ -64,6 +65,20 @@ deny contains msg if {
 	some w in input.waivers
 	time.parse_rfc3339_ns(w.expires) < time.now_ns()
 	msg := sprintf("waiver %s for policy %s expired on %s", [w.id, w.policy, w.expires])
+}
+
+max_lifetime_ns := ((90 * 24) * 60) * 60 * 1000000000
+
+deny contains msg if {
+	some w in input.waivers
+	not w.approved
+	msg := sprintf("waiver %s has no approval date", [w.id])
+}
+
+deny contains msg if {
+	some w in input.waivers
+	time.parse_rfc3339_ns(w.expires) - time.parse_rfc3339_ns(w.approved) > max_lifetime_ns
+	msg := sprintf("waiver %s lasts longer than 90 days (approved %s, expires %s)", [w.id, w.approved, w.expires])
 }
 
 deny contains msg if {
@@ -94,18 +109,33 @@ test_expired_waiver_is_denied if {
 		"policy": "p",
 		"owner": "a",
 		"approved_by": "b",
+		"approved": "2019-12-01T00:00:00Z",
 		"expires": "2020-01-01T00:00:00Z",
 	}]}
 	count(result) == 1
 }
 
-test_valid_waiver_is_allowed if {
+test_far_future_waiver_is_denied if {
 	result := waivers.deny with input as {"waivers": [{
 		"id": "W-2",
 		"policy": "p",
 		"owner": "a",
 		"approved_by": "b",
+		"approved": "2026-10-01T00:00:00Z",
 		"expires": "2999-01-01T00:00:00Z",
+	}]}
+	count(result) == 1
+}
+
+test_30_day_waiver_is_allowed if {
+	now := time.now_ns()
+	result := waivers.deny with input as {"waivers": [{
+		"id": "W-3",
+		"policy": "p",
+		"owner": "a",
+		"approved_by": "b",
+		"approved": time.format(now),
+		"expires": time.format(now + (((30 * 24) * 60) * 60 * 1000000000)),
 	}]}
 	count(result) == 0
 }
@@ -120,7 +150,7 @@ conftest test policy/waivers.yaml --policy policy/waivers --namespace waivers
 ```
 
 > [!note] Not verified
-> The waiver file is passed as `input` (not as data, which would collide with the `waivers` package). The Conftest flags were written from documentation knowledge and not run. Check them against the Conftest version you pin.
+> The waiver file is passed as `input` (not as data, which would collide with the `waivers` package). The Rego was not run (`opa` was not available), including the `time.format` calls in the 30-day test. The Conftest flags were written from documentation knowledge and not run. Check them against the Conftest version you pin.
 
 ## Applying waivers at admission
 
