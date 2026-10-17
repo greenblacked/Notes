@@ -23,7 +23,7 @@
   },
   "engines": {
     "npm": ">=10.9.2",
-    "node": ">=22"
+    "node": ">=22.12.0"
   },
   "bin": {
     "quartz": "./quartz/bootstrap-cli.mjs"
@@ -32,7 +32,7 @@
     "@clack/prompts": "^1.8.1",
     "@floating-ui/dom": "^1.8.0",
     "@myriaddreamin/rehype-typst": "^0.7.0",
-    "@napi-rs/simple-git": "0.1.22",
+    "@napi-rs/simple-git": "1.2.0",
     "ansi-truncate": "^1.4.0",
     "async-mutex": "^0.5.0",
     "chokidar": "^5.0.0",
@@ -91,25 +91,27 @@
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/source-serif-4": "^5.3.1",
-    "@quartz-community/types": "github:quartz-community/types",
-    "@quartz-community/utils": "github:quartz-community/utils",
+    "@quartz-community/types": "^1.0.0",
+    "@quartz-community/utils": "^1.0.1",
     "@types/hast": "^3.0.4",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^25.0.10",
+    "@types/mdast": "^4.0.4",
+    "@types/node": "^26.6.3",
     "@types/pretty-time": "^1.1.5",
     "@types/source-map-support": "^0.5.10",
     "@types/ws": "^8.18.2",
     "@types/yargs": "^17.0.35",
     "d3": "7.9.0",
     "esbuild": "^0.28.2",
-    "mermaid": "11.17.2",
+    "mermaid": "12.0.0",
     "pixi.js": "8.22.0",
     "prettier": "3.9.10",
     "tsx": "^4.23.15",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "wrangler": "4.149.0"
   },
   "overrides": {
+    "lodash-es": "^4.18.1",
     "satori": {
       "fflate": "0.7.5"
     }

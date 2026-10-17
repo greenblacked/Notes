@@ -1,1 +1,1 @@
-export { escapeHTML, unescapeHTML } from "@quartz-community/utils"
+export { escapeHTML, unescapeHTML } from "@quartz-community/utils/escape"

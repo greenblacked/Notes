@@ -1,1 +1,1 @@
-export { capitalize, classNames } from "@quartz-community/utils"
+export { capitalize, classNames } from "@quartz-community/utils/lang"

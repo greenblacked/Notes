@@ -70,15 +70,7 @@ declare module "vfile" {
     blocks: Record<string, Element>
     htmlAst: HtmlRoot
     hasMermaidDiagram: boolean | undefined
-    // from frontmatter transformer (e.g. note-properties)
-    frontmatter: {
-      title: string
-      tags: string[]
-      description?: string
-      socialDescription?: string
-      lang?: string
-      [key: string]: unknown
-    }
+    // `frontmatter` is declared by @quartz-community/types (a direct devDependency, ^1.0.0)
     // from created-modified-date transformer
     dates: {
       created: Date
