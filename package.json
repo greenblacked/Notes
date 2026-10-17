@@ -111,7 +111,7 @@
     "wrangler": "4.149.0"
   },
   "overrides": {
-    "lodash-es": ">=4.18.1",
+    "lodash-es": "^4.18.1",
     "satori": {
       "fflate": "0.7.5"
     }
