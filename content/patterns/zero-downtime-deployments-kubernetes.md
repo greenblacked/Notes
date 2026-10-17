@@ -9,7 +9,7 @@ tags:
   - reliability
   - delivery
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-10-17
 draft: false
 ---
 
@@ -170,7 +170,7 @@ A plain rolling update shifts traffic by Pod count and cannot hold at 5 percent 
 | Blue-green by hand | Deploy a second Deployment and switch the Service selector or load balancer                                                    | Simple and fast to roll back; costs double capacity during the switch                                                                              |
 | Flagger            | Progressive delivery operator that works with Flux and common meshes                                                           | Comparable to Argo Rollouts; see [[argocd-vs-flux]] for the GitOps context                                                                         |
 
-Start with a well-configured rolling update. Add canary analysis when the cost of a bad release justifies the extra component, and base the analysis on the same SLIs you alert on ([[slo-burn-rate-alerting]]).
+Start with a well-configured rolling update. Add canary analysis when the cost of a bad release justifies the extra component, and base the analysis on the same SLIs you alert on ([[slo-burn-rate-alerting]]). Details for Argo Rollouts: [[patterns/progressive-delivery-argo-rollouts]].
 
 ## Verification checklist
 

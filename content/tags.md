@@ -4,7 +4,7 @@ description: How tags are used to classify notes, and where to browse them.
 tags:
   - meta
 created: 2026-10-10
-modified: 2026-10-10
+modified: 2026-10-17
 draft: false
 ---
 
@@ -21,6 +21,9 @@ Some entry points:
 - Google Cloud: [[tags/gcp|gcp]]
 - GitOps: [[tags/gitops|gitops]]
 - Security: [[tags/security|security]]
+- Compliance: [[tags/compliance|compliance]]
+- Architecture: [[tags/architecture|architecture]]
+- AI: [[tags/ai|ai]]
 
 ## Using tags
 

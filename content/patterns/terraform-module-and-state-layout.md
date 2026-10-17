@@ -9,7 +9,7 @@ tags:
   - gitlab-ci
   - ci-cd
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-10-17
 draft: false
 ---
 
@@ -248,7 +248,7 @@ Run these in the merge request before the plan is approved:
 - `terraform fmt -check` and `terraform validate` for hygiene.
 - `tflint` for provider-specific mistakes.
 - A static scanner such as Checkov or Trivy's config scanning for insecure defaults (public buckets, open firewall rules).
-- Policy-as-code on the plan JSON (`tfplan.json`) with OPA and Conftest: deny deletion of stateful resources, require labels, forbid public IPs. HashiCorp Sentinel does the same but is part of HCP Terraform and Terraform Enterprise.
+- Policy-as-code on the plan JSON (`tfplan.json`) with OPA and Conftest: deny deletion of stateful resources, require labels, forbid public IPs. HashiCorp Sentinel does the same but is part of HCP Terraform and Terraform Enterprise. Details: [[patterns/terraform-plan-policy-checks]].
 - Branch protection plus a required reviewer from the platform team for `live/production/**`, via CODEOWNERS.
 
 ## Pitfalls
@@ -273,3 +273,4 @@ Revert the merge request and re-apply through the same pipeline. If state itself
 
 - [[production-change-checklist]]: review items for any production infrastructure change.
 - [[kubernetes-resource-requests-and-limits]]: Autopilot and node sizing decisions that end up in this code.
+- [[patterns/terraform-testing]]: static checks, `terraform test` and Terratest for modules.
