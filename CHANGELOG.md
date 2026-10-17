@@ -16,6 +16,12 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
   - 3 tool comparisons: Argo Rollouts vs Spinnaker, Gatekeeper vs Kyverno vs ValidatingAdmissionPolicy, and service mesh on GKE;
   - 3 runbooks: network troubleshooting (DNS, MTU, TLS, load balancers), policy rollout from audit to enforce, and Chef to immutable images;
   - 2 standards: structured logging conventions, and change freezes and maintenance windows.
+- 30 senior and engineering-manager notes, all Markdown in `content/`, linked from their section indexes:
+  - 7 standards: production readiness review, error budget policy and release gating, toil budget, vulnerability management SLAs, platform threat modelling, artifact retention, and a Bash script standard;
+  - 12 patterns: zero-downtime Postgres migrations, Postgres connection pooling on GKE, stateful workloads on GKE, Kubernetes node sysctls, test sharding and flaky tests, timeouts, retries and load shedding, load and performance testing, Cloud KMS key management, GCP audit logs and SIEM feeds, Cloudflare cache strategy, edge WAF and rate limiting, and Cloudflare Access service tokens;
+  - 5 runbooks: compromised cloud cluster containment, node resource pressure triage, Kubernetes packet capture, game days and chaos experiments on GKE, and HA VPN and BGP troubleshooting;
+  - 6 management notes: team charter, cross-team dependencies, inner-source contribution model, engineering budget planning, quarterly engineering review, and team reorganisation.
+- A new **Learn** section (`content/learn/`, last in the top bar and on the home page) with a learning path index and 43 lessons from first steps to middle level: lab setup, Linux, networking, Git, scripting, containers, Kubernetes, Google Cloud, CI/CD and Terraform, security, observability and on-call. The lesson structure and the `learning` tag are documented in `content/standards/writing-notes.md`.
 - A `reference` note type (shown as "Reference") and new tags `architecture`, `compliance`, `ai`, `spinnaker`, `chef`, `opentelemetry`, `linux`, `supply-chain`, `policy-as-code` and `audit` in the taxonomy (see `content/standards/writing-notes.md`).
 
 ### Changed
