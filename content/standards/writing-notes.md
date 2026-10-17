@@ -16,7 +16,7 @@ This is the contract every note follows. It is deliberately short.
 ## File naming and layout
 
 - Lowercase kebab-case file names: `gke-workload-identity.md`, not `GKE Workload Identity.md`.
-- One note per file, in the folder that says what **kind** of note it is: `adr/`, `architecture/`, `patterns/`, `tools/`, `runbooks/`, `compliance/`, `ai/`, `management/`, `standards/`.
+- One note per file, in the folder that says what **kind** of note it is: `adr/`, `architecture/`, `patterns/`, `tools/`, `runbooks/`, `compliance/`, `ai/`, `management/`, `standards/`, `learn/`.
 - Each folder has an `index.md` that introduces the section and links to its notes.
 - ADRs use `NNNN-short-kebab-title.md` (see [[adr/index|the ADR index]]).
 - Images and attachments go next to the note that uses them, in a folder named after the note; avoid binary files when text or Mermaid will do.
@@ -75,7 +75,7 @@ Tags are lowercase and hyphen-separated. Use the existing ones before inventing 
 
 | Kind     | Tags                                                                                                                                                                                 |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Type     | `adr`, `patterns`, `tools`, `standards`, `runbooks`, `architecture`, `compliance`, `ai`, `management`, `meta`                                                                        |
+| Type     | `adr`, `patterns`, `tools`, `standards`, `runbooks`, `architecture`, `compliance`, `ai`, `management`, `learning`, `meta`                                                            |
 | Platform | `kubernetes`, `gitops`, `gke`, `gcp`, `terraform`, `helm`, `docker`, `gitlab-ci`, `jenkins`, `artifactory`, `sonarqube`, `prometheus`, `spinnaker`, `chef`, `opentelemetry`, `linux` |
 | Concern  | `security`, `networking`, `observability`, `reliability`, `ci-cd`, `incident-management`, `on-call`, `cost`, `supply-chain`, `policy-as-code`, `audit`                               |
 | People   | `leadership`, `hiring`, `career`, `team-process`, `delivery`                                                                                                                         |
@@ -113,6 +113,21 @@ Compliance notes carry a `> [!warning] Not legal or audit advice` callout, becau
 - Name the file a block belongs to with `title="..."` after the language: ` ```yaml title="wrangler.jsonc" `. The name is shown as a caption above the block.
 - Commands must be copy-pasteable. Put variables at the top and reference them.
 - Prefer Mermaid diagrams over images so they diff, review and theme properly.
+
+## Lesson structure
+
+Notes in `learn/` are lessons: `type: guide`, tag `learning` plus the platform and concern tags they teach, and a title `<Track> NN: <topic>` (for example "Linux 01: The shell and the filesystem"). The level is shown in the opening callout, not in a frontmatter field. Every lesson has these sections, in this order:
+
+1. An opening callout: `> [!info] Level: junior | Time: about N h | You need: [[prerequisite]] | Lab: <lab>`.
+2. `## What you will learn`: three to six bullets.
+3. Concept sections that build up from first principles, each with a real command and sample output, labelled illustrative where values differ per machine.
+4. `## Hands-on exercises`: numbered, each with the exact command, the expected output and an "If you see something else" line.
+5. `## Common mistakes`: why each bites, and the fix.
+6. `## Check your understanding`: four to six questions, with the answers in a folded `> [!question]- Answers` callout.
+7. `## Next steps`: the next lesson and the senior notes for going deeper.
+8. `## Sources`: official documentation first, with the version checked.
+
+Add `verified` only when the commands were actually run, and give the distro and tool versions. Paid cloud steps get a `> [!warning] Costs money` callout with the cleanup command next to them. Use example domains and the documentation address ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24), never real addresses.
 
 ## ADR lifecycle
 
