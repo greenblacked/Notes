@@ -1,6 +1,6 @@
 ---
 title: Rolling out AI coding tools in a DevOps team
-description: An engineering manager's guide to piloting AI coding and review assistants with a baseline, outcome metrics, security review, cost tracking and a go or no-go decision.
+description: "Pilot AI coding and review assistants as an engineering manager: baseline, outcome metrics, security review, cost tracking and a go or no-go decision."
 type: guide
 tags:
   - ai

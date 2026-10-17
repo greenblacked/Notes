@@ -1,6 +1,6 @@
 ---
 title: Shared VPC and hub-and-spoke networking on GCP
-description: A reference design for Shared VPC host and service projects, a hub for shared services and hybrid links, per-environment spokes, an IP plan and firewall policies.
+description: Reference design for Shared VPC host and service projects, a shared-services hub, per-environment spokes, an IP plan and firewall policies.
 type: reference
 tags:
   - architecture

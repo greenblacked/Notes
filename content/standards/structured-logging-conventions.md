@@ -36,16 +36,21 @@ This standard defines one JSON log line format for services running on GKE and s
 
 ## Required fields
 
-| Field      | Type   | Example                              | Why                                             |
-| ---------- | ------ | ------------------------------------ | ----------------------------------------------- |
-| `severity` | string | `ERROR`                              | Filtering, alerting, log-based metrics          |
-| `message`  | string | `payment authorisation failed`       | Human-readable, stable text                     |
-| `time`     | string | `2026-10-17T09:30:00.123Z`           | RFC 3339 UTC timestamp from the application     |
-| `service`  | string | `checkout`                           | Which workload wrote it                         |
-| `version`  | string | `1.14.2`                             | Which release; links an error to a deploy       |
-| `env`      | string | `production`                         | Separates environments when logs are aggregated |
-| trace      | string | `projects/my-project/traces/4bf9...` | Joins the line to a trace (special field below) |
-| span       | string | `00f067aa0ba902b7`                   | Joins the line to a span (special field below)  |
+| Field      | Type   | Example                        | Why                                             |
+| ---------- | ------ | ------------------------------ | ----------------------------------------------- |
+| `severity` | string | `ERROR`                        | Filtering, alerting, log-based metrics          |
+| `message`  | string | `payment authorisation failed` | Human-readable, stable text                     |
+| `time`     | string | `2026-10-17T09:30:00.123Z`     | RFC 3339 UTC timestamp from the application     |
+| `service`  | string | `checkout`                     | Which workload wrote it                         |
+| `version`  | string | `1.14.2`                       | Which release; links an error to a deploy       |
+| `env`      | string | `production`                   | Separates environments when logs are aggregated |
+
+Required inside a request (not checked by the CI job, which validates the six fields above; the on-call checklist covers trace correlation):
+
+| Field   | Type   | Example                              | Why                                             |
+| ------- | ------ | ------------------------------------ | ----------------------------------------------- |
+| `trace` | string | `projects/my-project/traces/4bf9...` | Joins the line to a trace (special field below) |
+| `span`  | string | `00f067aa0ba902b7`                   | Joins the line to a span (special field below)  |
 
 Optional but common: `event` (a stable machine name such as `payment.declined`), `request_id`, `duration_ms`, `path` (the request path or route), `http.status`, `error.type`.
 

@@ -1,6 +1,6 @@
 ---
 title: Release versioning and changelog automation
-description: Derive versions and changelogs from Conventional Commits, and choose between a release merge request model and release on push, with configuration, linting and token handling.
+description: Derive versions and changelogs from Conventional Commits; choose a release merge request model or release on push, with config, linting and tokens.
 type: pattern
 tags:
   - patterns

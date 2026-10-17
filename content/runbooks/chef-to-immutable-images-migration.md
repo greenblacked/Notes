@@ -1,6 +1,6 @@
 ---
 title: Migrating from Chef convergence to immutable images and Terraform
-description: A staged, per-service migration of a Chef-managed VM estate to baked Packer images or containers, deployed with Terraform instance templates and managed instance groups.
+description: A staged per-service migration from Chef-managed VMs to baked Packer images or containers, deployed with Terraform instance templates and MIGs.
 type: runbook
 tags:
   - runbooks

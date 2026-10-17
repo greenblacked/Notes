@@ -1,6 +1,6 @@
 ---
 title: "FinOps on GCP: cost allocation, budgets and guardrails"
-description: A reference design for allocating GCP and GKE cost with labels, billing export and budgets, plus guardrails in code and a monthly review for engineering managers.
+description: Allocate GCP and GKE cost with labels, billing export and budgets, add guardrails in code, and run a monthly review for engineering managers.
 type: reference
 tags:
   - architecture

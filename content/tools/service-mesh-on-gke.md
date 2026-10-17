@@ -1,6 +1,6 @@
 ---
 title: "Service mesh on GKE: whether to adopt and which model"
-description: How to decide whether a service mesh is worth it on GKE, and how Istio sidecar, Istio ambient, Linkerd and Cloud Service Mesh compare, with Gateway API as the shared traffic API.
+description: Decide whether a service mesh is worth it on GKE, and compare Istio sidecar, Istio ambient, Linkerd and Cloud Service Mesh, with Gateway API as the shared API.
 type: tool
 tags:
   - tools
