@@ -68,4 +68,11 @@ export const SECTIONS: Section[] = [
     label: "Standards",
     description: "How the team works: notes, production changes, code review and postmortems.",
   },
+  {
+    folder: "learn",
+    title: "Learning path",
+    label: "Learn",
+    description:
+      "Lessons from first steps to middle level: Linux, networking, Git, containers, Kubernetes, GCP, CI/CD, Terraform and on-call.",
+  },
 ]
