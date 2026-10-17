@@ -48,13 +48,13 @@ waivers:
     ticket: PLAT-1234 # change: the ticket with the reason and the removal plan
     reason: Vendor image runs as root until version 4 ships.
     approved_by: security-lead
-    approved: "2026-10-01T00:00:00Z"
+    approved: "2026-10-02T00:00:00Z"
     expires: "2026-12-31T00:00:00Z"
 ```
 
 ## Enforcing expiry in CI
 
-Evaluate the waiver file with Conftest in the same pipeline that checks manifests (see [[patterns/conftest-policy-gate-for-manifests]]). The rules below deny any waiver whose `expires` timestamp has passed, and any waiver whose lifetime (from `approved` to `expires`) is longer than the 90-day maximum.
+Evaluate the waiver file with Conftest in the same pipeline that checks manifests (see [[patterns/conftest-policy-gate-for-manifests]]). The rules below deny any waiver whose `expires` timestamp has passed, any waiver whose lifetime (from `approved` to `expires`) is longer than the 90-day maximum, and any waiver approved in the future, expiring before it was approved, or carrying a date that is not valid RFC 3339.
 
 ```rego title="policy/waivers/expiry.rego"
 package waivers
@@ -79,6 +79,25 @@ deny contains msg if {
 	some w in input.waivers
 	time.parse_rfc3339_ns(w.expires) - time.parse_rfc3339_ns(w.approved) > max_lifetime_ns
 	msg := sprintf("waiver %s lasts longer than 90 days (approved %s, expires %s)", [w.id, w.approved, w.expires])
+}
+
+deny contains msg if {
+	some w in input.waivers
+	time.parse_rfc3339_ns(w.approved) > time.now_ns()
+	msg := sprintf("waiver %s has an approval date in the future (%s)", [w.id, w.approved])
+}
+
+deny contains msg if {
+	some w in input.waivers
+	time.parse_rfc3339_ns(w.expires) <= time.parse_rfc3339_ns(w.approved)
+	msg := sprintf("waiver %s expires (%s) before it was approved (%s)", [w.id, w.expires, w.approved])
+}
+
+deny contains msg if {
+	some w in input.waivers
+	some field in ["approved", "expires"]
+	not time.parse_rfc3339_ns(w[field])
+	msg := sprintf("waiver %s has an invalid %s date", [w.id, field])
 }
 
 deny contains msg if {
@@ -125,6 +144,30 @@ test_far_future_waiver_is_denied if {
 		"expires": "2999-01-01T00:00:00Z",
 	}]}
 	count(result) == 1
+}
+
+test_future_approved_waiver_is_denied if {
+	result := waivers.deny with input as {"waivers": [{
+		"id": "W-4",
+		"policy": "p",
+		"owner": "a",
+		"approved_by": "b",
+		"approved": "2999-01-01T00:00:00Z",
+		"expires": "2999-03-01T00:00:00Z",
+	}]}
+	count(result) > 0
+}
+
+test_unparsable_date_is_denied if {
+	result := waivers.deny with input as {"waivers": [{
+		"id": "W-5",
+		"policy": "p",
+		"owner": "a",
+		"approved_by": "b",
+		"approved": "2026-10-02T00:00:00Z",
+		"expires": "never",
+	}]}
+	count(result) > 0
 }
 
 test_30_day_waiver_is_allowed if {
