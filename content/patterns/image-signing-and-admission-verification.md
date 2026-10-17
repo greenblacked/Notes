@@ -41,10 +41,13 @@ The signature must be bound to the digest. A policy that verifies a tag proves n
 | What you trust        | The CI identity and the Sigstore public infrastructure | The KMS key and who may use it               |
 | Policy expressed as   | Certificate identity and issuer                        | Public key                                   |
 | Fits                  | GitLab CI with `id_tokens`                             | Jenkins, or any system without an OIDC token |
-| Transparency log      | Entries recorded by default                            | Optional                                     |
+| Transparency log      | Entries recorded by default                            | Uploaded to public Rekor unless disabled     |
 | Air-gapped or private | Needs a private Sigstore deployment                    | Works with Google Cloud only                 |
 
-Use keyless for GitLab CI when public transparency log entries are acceptable. Use a KMS key where they are not, or where the build system cannot produce an OIDC token, as with Jenkins.
+Use keyless for GitLab CI when public transparency log entries are acceptable. Use a KMS key where they are not, or where the build system cannot produce an OIDC token, as with Jenkins. A KMS key alone does not keep entries out of the log: cosign uploads to the public Rekor log by default even with `--key`, so disable the upload explicitly (see the Jenkins section) or run a private Rekor.
+
+> [!warning] Not verified: which issuers public Fulcio accepts
+> Public Fulcio issues certificates only for OIDC issuers in its own configuration, and `https://gitlab.com` is one of them. A self-managed GitLab issuer such as the `https://gitlab.example.com` used in the examples below is normally not accepted, so keyless signing from it fails unless you run a private Sigstore deployment (Fulcio and Rekor, with `--fulcio-url` and `--rekor-url`, and a trust root that verifiers share) or use a KMS key. The examples assume a private Fulcio that trusts the issuer; if you use SaaS GitLab, use `https://gitlab.com` as the issuer instead. Check the current Fulcio issuer list.
 
 ## Signing in GitLab CI
 
@@ -66,6 +69,8 @@ sign-image:
     - cosign sign --yes "${IMAGE_REPO}@${IMAGE_DIGEST}"
 ```
 
+This assumes Fulcio trusts your GitLab issuer; see the callout under the comparison table.
+
 Restrict the job to protected branches or tags. If any branch can sign, the identity policy cannot tell reviewed code from an experiment.
 
 ## Signing in Jenkins with Cloud KMS
@@ -81,11 +86,14 @@ stage('Sign image') {
   steps {
     sh '''
       set -euo pipefail
-      cosign sign --yes --key "${KMS_KEY}" "${IMAGE_REPO}@${IMAGE_DIGEST}"
+      # --tlog-upload=false keeps the entry out of public Rekor (flag name: check for your pinned cosign version)
+      cosign sign --yes --tlog-upload=false --key "${KMS_KEY}" "${IMAGE_REPO}@${IMAGE_DIGEST}"
     '''
   }
 }
 ```
+
+Without the log entry, verification must skip the transparency log check: `cosign verify --key gcpkms://... --insecure-ignore-tlog=true`, or `rekor: {ignoreTlog: true}` on a Kyverno `keys` attestor. Check both option names against your versions.
 
 Keep signing in a stage or an agent pool that ordinary builds cannot influence, as discussed in [[compliance/slsa-build-provenance]].
 
@@ -127,7 +135,7 @@ kind: ClusterPolicy
 metadata:
   name: verify-image-signatures
 spec:
-  validationFailureAction: Audit # change to Enforce after the audit period
+  validationFailureAction: Audit # change to Enforce after the audit period, together with mutateDigest below
   webhookTimeoutSeconds: 30
   rules:
     - name: verify-my-app-keyless
@@ -141,7 +149,7 @@ spec:
       verifyImages:
         - imageReferences:
             - "europe-docker.pkg.dev/my-project/my-repo/my-app*"
-          mutateDigest: true
+          mutateDigest: false # change to true when you switch to Enforce; check your Kyverno version, mutation may be rejected or ignored in Audit mode
           required: true
           attestors:
             - entries:
@@ -200,6 +208,8 @@ resource "google_binary_authorization_policy" "policy" {
   global_policy_evaluation_mode = "ENABLE"
 
   default_admission_rule {
+    # ALWAYS_ALLOW is not secure by default: any cluster without its own rule accepts unsigned images.
+    # Use ALWAYS_DENY or REQUIRE_ATTESTATION plus admission_whitelist_patterns for system images once every cluster has a rule.
     evaluation_mode  = "ALWAYS_ALLOW"
     enforcement_mode = "ENFORCED_BLOCK_AND_AUDIT_LOG"
   }
@@ -226,7 +236,7 @@ The CI job that creates the attestation uses `gcloud container binauthz attestat
 ## Pitfalls
 
 - **Loose identity regex.** An unanchored pattern or one without the project path trusts more than intended.
-- **Public transparency log metadata.** Keyless signing records entries in a public log by default. For private images this can expose repository and project names. Decide this before rollout; use a KMS key or a private Sigstore instance if it is unacceptable.
+- **Public transparency log metadata.** Cosign uploads signature entries to the public Rekor log by default, with a keyless certificate or a KMS key. For private images this can expose repository and project names. Decide this before rollout; disable the upload (and ignore the log when verifying) or use a private Sigstore instance if it is unacceptable.
 - **Tags instead of digests.** Sign and verify digests. Use `mutateDigest` or deploy by digest so the verified image is the one that runs.
 - **Signing on every branch.** If feature branches can sign, the identity policy cannot distinguish them from release builds.
 - **Policy outage.** A failing admission webhook can block all deployments. Set a sensible timeout and decide the failure behaviour (fail open or closed) per namespace on purpose.

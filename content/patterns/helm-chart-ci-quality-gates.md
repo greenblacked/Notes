@@ -61,6 +61,8 @@ set -euo pipefail
 
 CHART_DIR="charts/app"  # change: path of the chart
 
+# Add every non-OCI dependency repository from Chart.yaml first, or the build fails.
+helm repo add example-charts https://charts.example.com  # change: repositories listed in Chart.yaml
 helm dependency build "$CHART_DIR"
 helm lint --strict "$CHART_DIR"
 for VALUES_FILE in "$CHART_DIR"/ci/*-values.yaml; do
@@ -118,7 +120,7 @@ Test decisions and edge cases. Do not write a test that repeats the template.
 
 A `values.schema.json` file next to `Chart.yaml` makes Helm validate values on `lint`, `template`, `install` and `upgrade`. It is the cheapest way to reject typos and wrong types, and it can enforce policy such as "images are pinned by digest".
 
-```json title="charts/app/values.schema.json"
+```json title="charts/app/values.schema.json (excerpt)"
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
@@ -160,7 +162,7 @@ A `values.schema.json` file next to `Chart.yaml` makes Helm validate values on `
 }
 ```
 
-`additionalProperties: false` at the top level catches misspelled keys, but it also rejects subchart values and global values unless you list them. Add `global` and each subchart name as properties.
+This is an excerpt. Every top-level key in your `values.yaml` (service, resources, ingress and so on) must be listed under `properties`, or `helm lint` fails on the default values. `additionalProperties: false` at the top level catches misspelled keys, but it also rejects subchart values and global values unless you list them. Add `global` and each subchart name as properties.
 
 ## Manifest validation
 
@@ -180,6 +182,7 @@ helm-render-and-validate:
       - VALUES: [default, ha, minimal]
         K8S_VERSION: ["1.30.0", "1.31.0"] # change: the Kubernetes versions of your clusters and the next upgrade target
   script:
+    # Dependencies from a classic repository need `helm repo add <name> <url>` here first.
     - helm dependency build "$CHART_DIR"
     - helm lint --strict "$CHART_DIR" -f "$CHART_DIR/ci/${VALUES}-values.yaml"
     - |
@@ -224,8 +227,9 @@ set -euo pipefail
 
 TARGET_BRANCH="main"  # change: the branch merge requests target
 
-# GitLab clones shallow by default. ct needs the target branch to diff against.
-git fetch --no-tags origin "$TARGET_BRANCH"
+# GitLab clones shallow by default, with a refspec for the pipeline ref only. An explicit
+# refspec creates origin/$TARGET_BRANCH, which ct needs to diff against.
+git fetch --no-tags origin "+refs/heads/${TARGET_BRANCH}:refs/remotes/origin/${TARGET_BRANCH}"
 
 CHANGED="$(ct list-changed --config ct.yaml)"
 if [ -z "$CHANGED" ]; then
@@ -239,7 +243,7 @@ echo "$CHANGED"
 ct lint --config ct.yaml
 ```
 
-In GitLab, set `GIT_DEPTH: "0"` on the job (or a depth large enough to include the merge base), otherwise `ct list-changed` sees no history and reports nothing. For the install test, add `ct install --config ct.yaml` in a job that has a Docker daemon and a kind cluster. That usually means Docker-in-Docker, which needs a privileged runner. That is a real risk on a shared runner: use a dedicated, isolated runner pool for it, or run the install test in a cluster namespace you create per pipeline instead of kind.
+In GitLab, set `GIT_DEPTH: "0"` on the job (or a depth large enough to include the merge base), otherwise `ct list-changed` sees no history and reports nothing. If you keep a shallow depth, run `git fetch --unshallow` when `git rev-parse --is-shallow-repository` prints `true`. For the install test, add `ct install --config ct.yaml` in a job that has a Docker daemon and a kind cluster. That usually means Docker-in-Docker, which needs a privileged runner. That is a real risk on a shared runner: use a dedicated, isolated runner pool for it, or run the install test in a cluster namespace you create per pipeline instead of kind.
 
 ## Pitfalls
 

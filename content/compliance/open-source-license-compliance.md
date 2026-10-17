@@ -255,7 +255,7 @@ Run it on merge requests as well as on the default branch, so the author finds o
 
 ## Exceptions
 
-An exception is a recorded, time-limited decision by legal, not a pipeline override. Store approved exceptions next to the policy (for example an `exceptions` section or file with package, version, licence, reason, approver and expiry) and have the gate skip only exact matches that have not expired. The script above does not implement exceptions on purpose: add them only when you have an owner for the file.
+An exception is a recorded, time-limited decision by legal, not a pipeline override. Licence exceptions follow [[compliance/policy-exception-and-waiver-process]], with legal as the approver; the request form below is the licence-specific record for that process. Store approved exceptions next to the policy (for example an `exceptions` section or file with package, version, licence, reason, approver and expiry) and have the gate skip only exact matches that have not expired. The script above does not implement exceptions on purpose: add them only when you have an owner for the file.
 
 ```text
 Licence exception request
@@ -292,6 +292,7 @@ A tool choice can also hinge on licence terms: see [[tools/terraform-vs-opentofu
 ## Related
 
 - [[compliance/sbom-generation-and-storage]]: produces the SBOM that this gate reads.
+- [[compliance/policy-exception-and-waiver-process]]: the general process that licence exceptions follow.
 - [[patterns/automated-dependency-updates]]: new versions can change licences; run the gate on update PRs.
 - [[tools/terraform-vs-opentofu]]: an example of a tool decision where licence terms matter.
 - [[patterns/image-signing-and-admission-verification]]: sign the images that passed the gate.

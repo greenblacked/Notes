@@ -176,7 +176,7 @@ resource "google_compute_subnetwork_iam_member" "gke_agent_network_user" {
 
 ## Hierarchical firewall policies
 
-A firewall policy attached to an organisation or folder is evaluated before project-level VPC firewall rules. Use it for rules that must hold everywhere: allow IAP and health checks, deny known-bad ranges, delegate everything else to the project with `goto_next`.
+A firewall policy attached to an organisation or folder is evaluated before project-level VPC firewall rules. Use it for rules that must hold everywhere: allow IAP, deny known-bad ranges, delegate everything else to the project with `goto_next`.
 
 ```hcl title="shared-vpc/firewall-policy.tf"
 variable "folder_id" {
@@ -191,6 +191,9 @@ resource "google_compute_firewall_policy" "baseline" {
   description = "Rules every project in the folder inherits"
 }
 
+# A hierarchical allow is terminal: it bypasses project rules for every VM in the folder.
+# If IAP access should be narrower, use action = "goto_next" and let project rules with
+# target tags allow it. Health-check ranges are not covered by this example.
 resource "google_compute_firewall_policy_rule" "allow_iap_ssh_rdp" {
   firewall_policy = google_compute_firewall_policy.baseline.name
   priority        = 1000
@@ -270,10 +273,11 @@ REGION="europe-west1"             # change: your region
 # Which projects are attached to the host?
 gcloud compute shared-vpc associated-projects list "$HOST_PROJECT"
 
-# Which subnets can the service project use?
+# Which subnets may the current caller use? Run it as the service project's deployer
+# or cluster service account to check that identity's view.
 gcloud compute networks subnets list-usable \
   --project "$HOST_PROJECT" \
-  --filter "region:$REGION" \
+  --filter "subnetwork~regions/$REGION/" \
   --format "table(subnetwork,ipCidrRange,secondaryIpRanges[].rangeName)"
 
 # Which firewall policies apply to the host project?

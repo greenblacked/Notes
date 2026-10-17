@@ -141,7 +141,7 @@ module "environment" {
 }
 ```
 
-The values per environment live in tfvars files that CI selects by directory:
+The values per environment live in tfvars files. Terraform loads only `terraform.tfvars` and `*.auto.tfvars` on its own, so CI selects the file by directory and passes it explicitly with `terraform plan -var-file=prod.tfvars`:
 
 ```hcl title="live/prod/prod.tfvars"
 environment          = "prod"
@@ -183,7 +183,7 @@ The dev root is a copy of `live/prod/main.tf` with its own backend `prefix` (`li
 Allowed, and each deliberately:
 
 - Container images and charts from the shared registry, pulled with read-only access. See [[patterns/artifact-promotion-artifactory]].
-- The CI identity pool, which is configured once. Each environment gets its own service account behind it, and the pool's attribute conditions decide which pipeline ref may impersonate which account. See [[architecture/iam-groups-and-ci-workload-identity-federation]].
+- The CI identity pool, which is configured once. Each environment gets its own service account behind it, the provider's attribute condition limits which tokens are accepted, and each service account's `roles/iam.workloadIdentityUser` principalSet binding decides who may impersonate it. See [[architecture/iam-groups-and-ci-workload-identity-federation]].
 - A tooling DNS zone for internal names that are not environment specific.
 - Monitoring that reads from all environments into a central project, if that is read-only.
 
@@ -204,7 +204,7 @@ Never allowed:
 
 ## Enforcing digests in prod
 
-Promotion by digest only works if prod rejects anything else. A Kyverno policy can refuse pods whose images are not pinned by digest in production namespaces:
+Promotion by digest only works if prod rejects anything else. A Kyverno policy can refuse pods whose images are not pinned by digest in the prod cluster (the policy is installed there only):
 
 ```yaml title="policies/require-image-digest.yaml"
 apiVersion: kyverno.io/v1
@@ -215,7 +215,7 @@ metadata:
     policies.kyverno.io/title: Require image digests in prod
     policies.kyverno.io/description: Images in prod namespaces must be pinned by digest.
 spec:
-  validationFailureAction: Enforce
+  validationFailureAction: Audit # switch to Enforce after existing workloads comply
   background: true
   rules:
     - name: containers-use-digest
@@ -225,7 +225,14 @@ spec:
               kinds:
                 - Pod
               namespaces:
-                - "prod-*"
+                - "*"
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - gmp-system
+                - gke-managed-system
       validate:
         message: "Containers in prod namespaces must use an image pinned by digest (name@sha256:...)."
         pattern:
@@ -239,7 +246,14 @@ spec:
               kinds:
                 - Pod
               namespaces:
-                - "prod-*"
+                - "*"
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - gmp-system
+                - gke-managed-system
       validate:
         message: "Init containers in prod namespaces must use an image pinned by digest (name@sha256:...)."
         pattern:

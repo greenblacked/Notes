@@ -20,6 +20,9 @@ This guide explains what the SLSA Build levels require in plain words, what you 
 > [!info] Scope and sources
 > Written against the SLSA specification ([slsa.dev](https://slsa.dev)), the in-toto statement format, and cosign attestations from [sigstore.dev](https://sigstore.dev). The level descriptions are paraphrased; the specification is the authority.
 
+> [!warning] Not legal or audit advice
+> This is general engineering guidance. Your auditor, assessor or legal counsel decides what satisfies a control or a legal obligation; check control numbers and wording against the current edition of the framework.
+
 > [!note] Not verified
 > The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the current SLSA specification version and the exact level wording, GitLab native provenance support, and slsa-verifier support for non-GitHub builders. Check them before relying on them.
 
@@ -101,7 +104,7 @@ Fill the fields from the CI environment rather than by hand. In GitLab, `CI_PROJ
 
 ```yaml title=".gitlab-ci.yml"
 provenance:
-  stage: provenance
+  stage: provenance # the 'provenance' stage must be listed in the top-level stages
   image: registry.example.com/ci-tools/supply-chain:1.0.0 # change: your internal image with cosign and jq; pin by digest
   needs:
     - job: build-image
@@ -114,24 +117,25 @@ provenance:
   script:
     - |
       jq -n \
-        --arg repo "$IMAGE_REPO" \
-        --arg digest "${IMAGE_DIGEST#sha256:}" \
         --arg source "$CI_PROJECT_URL" \
         --arg ref "$CI_COMMIT_REF_NAME" \
         --arg commit "$CI_COMMIT_SHA" \
         --arg job "$CI_JOB_URL" \
+        --arg builder "https://gitlab.example.com/my-group/my-app/-/runners/ephemeral-gke" \
         '{
-          buildType: "https://example.com/build-types/gitlab-ci/v1",
-          externalParameters: {source: $source, ref: $ref},
-          resolvedDependencies: [{uri: ("git+" + $source), digest: {gitCommit: $commit}}],
-          invocation: $job
-        }' > predicate.json
+          buildDefinition: {
+            buildType: "https://example.com/build-types/gitlab-ci/v1",
+            externalParameters: {source: $source, ref: $ref},
+            resolvedDependencies: [{uri: ("git+" + $source + "@" + $ref), digest: {gitCommit: $commit}}]
+          },
+          runDetails: {builder: {id: $builder}, metadata: {invocationId: $job}}
+        }' > predicate.json # change: the builder id value
     - cosign attest --yes --type https://slsa.dev/provenance/v1 --predicate predicate.json "${IMAGE_REPO}@${IMAGE_DIGEST}"
 ```
 
-GitLab has its own mechanisms for emitting build metadata and provenance for some artifact types. Whether and how they apply to container images on your GitLab version is not verified here; check the GitLab documentation before replacing the job above. This job is honest about its limit: it is a separate job and uses the platform OIDC token, which is close to level 2, but the runner that executes it is still yours (see the gaps below).
+GitLab has its own mechanisms for emitting build metadata and provenance for some artifact types. Whether and how they apply to container images on your GitLab version is not verified here; check the GitLab documentation before replacing the job above. The job signs keylessly against the public Sigstore instance, which accepts only the OIDC issuers it is configured for (`https://gitlab.com` is one). A self-managed GitLab such as `gitlab.example.com` needs a private Sigstore deployment (Fulcio and Rekor, with `--fulcio-url` and `--rekor-url`) or a KMS key; the verification below assumes the same. Not verified: check the current Fulcio issuer list. This job is honest about its limit: it is a separate job and uses the platform OIDC token, which is close to level 2, but the runner that executes it is still yours (see the gaps below).
 
-On Jenkins, produce the same predicate in a stage that runs on a dedicated, locked-down agent, and sign with a Cloud KMS key the build agents cannot reach, using `cosign attest --key gcpkms://...` as in the SBOM note.
+On Jenkins, produce the same predicate in a stage that runs on a dedicated, locked-down agent, and sign with a Cloud KMS key the build agents cannot reach, using `cosign attest --key gcpkms://...` as in the SBOM note. Cosign uploads to the public Rekor log by default even with a key; add `--tlog-upload=false` (flag name: check for your pinned cosign version) if that is unacceptable, and verify with `--insecure-ignore-tlog=true`.
 
 ## Verifying provenance
 

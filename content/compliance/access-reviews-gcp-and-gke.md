@@ -149,7 +149,7 @@ metadata:
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: Group
-    name: gke-security-groups-payments@example.com # change: group used with Google Groups for RBAC, check the exact format for your setup
+    name: payments-devs@example.com # change: the team's own group email; this group must be a member of the gke-security-groups@<your-domain> group for Google Groups for RBAC (not verified: check the setup for your cluster)
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -251,10 +251,12 @@ gcloud projects get-iam-policy "${PROJECT_ID}" \
   --format="table(bindings.role)"
 
 # Deployments still work: run the pipeline against stage and check the result
-kubectl --context "gke_my-project-stage_europe-west1_stage-1" auth can-i create deployments -n payments
+# Impersonation needs the permission to impersonate users and groups; replace the user and group
+kubectl --context "gke_my-project-stage_europe-west1_stage-1" auth can-i create deployments -n payments \
+  --as=dev@example.com --as-group=payments-devs@example.com
 ```
 
-Expected: the first command lists only the roles you meant to keep, and `kubectl auth can-i` prints `yes` for identities that must still deploy.
+Expected: the first command lists only the roles you meant to keep, and `kubectl auth can-i` prints `yes` for the impersonated identities that must still deploy (it shows the caller's own access without `--as`).
 
 ## Rollback
 

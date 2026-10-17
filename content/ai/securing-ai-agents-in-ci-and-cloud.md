@@ -37,7 +37,7 @@ OWASP's list for LLM applications names prompt injection, insecure output handli
 The rules are short on purpose, so a reviewer can check a pipeline against them.
 
 - An agent job gets the smallest token that does the task: read-only by default, scoped to one project, with an expiry.
-- Jobs that process untrusted content (fork merge requests, issues, comments, external logs, web pages) get no secrets and no write token. They may produce a comment through a separate, human-gated step.
+- Jobs that process untrusted content (fork merge requests, issues, comments, external logs, web pages) get no secrets and no write token. They write their output to an artifact; a separate poster job, with no agent and no repository code, holds the narrow write scope and posts that text, optionally after a human gate.
 - Never use `pull_request_target` or the GitLab equivalent of running fork code with project secrets for an agent job.
 - Cloud credentials are not present by default. When an agent needs cloud read access, use short-lived workload identity federation bound to a narrow service account, as in [[architecture/iam-groups-and-ci-workload-identity-federation]], never a long-lived key file.
 - Agent output is untrusted input to the next step. Do not pipe it into `bash`, `kubectl apply` or `terraform apply`.
@@ -53,14 +53,14 @@ Reusable agent prompts and workflows, with the guardrails above written into the
 
 Decide per trigger what the agent may read and what it may hold. Treat the matrix as the default and write down every exception.
 
-| Trigger                                 | Content trust               | Allowed token scope                                        | Allowed actions                                                    |
-| --------------------------------------- | --------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------ |
-| MR from a branch in the same project    | Medium (team member's code) | Read-only project token, no protected variables            | Read diff, post one advisory comment                               |
-| MR from a fork                          | Untrusted                   | None                                                       | Nothing automatic; a maintainer triggers a manual run              |
-| Issue or comment text                   | Untrusted                   | None, or read-only to the same project                     | Summarise to a human; no tool calls with side effects              |
-| Push to a protected branch              | High (reviewed code)        | Read-only; write only through a separate approval step     | Analyse, open an MR as a draft                                     |
-| Scheduled job on logs or alerts         | Untrusted (logs hold input) | Read-only cloud role, short-lived, one project             | Summarise and propose; a human runs the fix                        |
-| Manual job started by an on-call person | Medium                      | Read-only by default; write role only with a second person | Diagnose; changes follow [[standards/production-change-checklist]] |
+| Trigger                                 | Content trust               | Allowed token scope                                        | Allowed actions                                                          |
+| --------------------------------------- | --------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------ |
+| MR from a branch in the same project    | Medium (team member's code) | Read-only project token, no protected variables            | Read diff, write findings to an artifact; a separate poster job comments |
+| MR from a fork                          | Untrusted                   | None                                                       | Nothing automatic; a maintainer triggers a manual run                    |
+| Issue or comment text                   | Untrusted                   | None, or read-only to the same project                     | Summarise to a human; no tool calls with side effects                    |
+| Push to a protected branch              | High (reviewed code)        | Read-only; write only through a separate approval step     | Analyse, open an MR as a draft                                           |
+| Scheduled job on logs or alerts         | Untrusted (logs hold input) | Read-only cloud role, short-lived, one project             | Summarise and propose; a human runs the fix                              |
+| Manual job started by an on-call person | Medium                      | Read-only by default; write role only with a second person | Diagnose; changes follow [[standards/production-change-checklist]]       |
 
 The common point: the more untrusted the text, the fewer credentials the job may hold.
 
@@ -70,7 +70,7 @@ Run agent jobs on an ephemeral runner that is thrown away after each job. On GKE
 
 ### GitLab: same-project merge requests only
 
-The job runs only for merge request pipelines whose source project is the target project, so a fork never starts it.
+The job runs only for merge request pipelines whose source project is the target project. By default a fork merge request pipeline runs in the fork's own project, where the source project ID equals that project's ID, so the rule mainly blocks the dangerous case: a pipeline in this (parent) project for a fork merge request.
 
 ```yaml title=".gitlab-ci.yml"
 ai-agent-review:
@@ -88,10 +88,39 @@ ai-agent-review:
   script:
     # AGENT_READ_TOKEN is a masked, NOT protected, project access token with the
     # read_api scope and the Reporter role. No cloud credentials, no deploy keys.
-    - ./scripts/run-agent.sh --mode comment-only --mr "$CI_MERGE_REQUEST_IID"
+    # read_api cannot create notes, so the agent only writes a file.
+    - ./scripts/run-agent.sh --mode comment-only --mr "$CI_MERGE_REQUEST_IID" --out review.md
+  artifacts:
+    paths:
+      - review.md
+    expire_in: 1 day
+
+ai-agent-post:
+  stage: .post
+  image: registry.example.com/ci/poster:1.0.0 # change: a small image with curl and jq, no agent, no repository code
+  needs:
+    - job: ai-agent-review
+      artifacts: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID'
+  timeout: 2 minutes
+  allow_failure: true
+  environment:
+    name: ai-comment-poster # change: scope POSTER_TOKEN to this environment only
+    action: access # check the action name for your GitLab version
+  variables:
+    GIT_STRATEGY: none # no repository checkout in this job
+  script:
+    # POSTER_TOKEN: masked project access token with the api scope and the Reporter role
+    # (a bot that can comment but not push or merge), scoped to the ai-comment-poster
+    # environment so the agent job does not receive it.
+    - |
+      jq -Rs '{body: .}' review.md | curl --fail --silent --show-error \
+        --header "PRIVATE-TOKEN: $POSTER_TOKEN" --header "Content-Type: application/json" \
+        --data @- "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
 ```
 
-Pitfalls to check against your GitLab version: protected variables are only exposed to pipelines on protected branches and tags, which is why the agent token must not be one; if it were protected, a branch protected by mistake would hand it to untrusted input. Confirm that `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` is set in merge request pipelines on your instance and test with a real fork.
+Pitfalls to check against your GitLab version: protected variables are only exposed to pipelines on protected branches and tags, so merge request pipelines from unprotected branches never receive them and deploy secrets stay out of reach. The agent token is an unprotected, masked variable that any pipeline in the project can read, which is acceptable only because it is read-only. Keep the poster token out of the agent job: scope `POSTER_TOKEN` to the `ai-comment-poster` environment only, so the agent job does not receive it. Environment scoping is not a hard boundary, because a branch author in the same project can still change `.gitlab-ci.yml`, so the token must stay limited to commenting (Reporter role, `api` scope). Confirm that `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` is set in merge request pipelines on your instance and test with a real fork.
 
 ### GitHub Actions: read-only, `pull_request` trigger
 
@@ -120,10 +149,36 @@ jobs:
         with:
           persist-credentials: false
       - name: Run the agent in comment-only mode
-        run: ./scripts/run-agent.sh --mode comment-only
+        run: ./scripts/run-agent.sh --mode comment-only --out review.md
         env:
           AGENT_MAX_TOOL_CALLS: "30"
+      - name: Keep the findings as an artifact
+        uses: actions/upload-artifact@FULL_COMMIT_SHA # change: full 40-character SHA of a release you reviewed
+        with:
+          name: review
+          path: review.md
+
+  post:
+    # No agent and no repository code in this job: it only posts text.
+    needs: review
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download the findings
+        uses: actions/download-artifact@FULL_COMMIT_SHA # change: full 40-character SHA of a release you reviewed
+        with:
+          name: review
+      - name: Post one comment
+        run: gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file review.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
 ```
+
+The agent job holds only `contents: read`. The write permission sits in a second job that never runs the agent, because GitHub Actions permissions are set per workflow or per job, not per step.
 
 Use `pull_request`, not `pull_request_target`: the second one runs with the base repository's secrets and write token in the context of an untrusted change. Pin every third-party action by full commit SHA and let [[patterns/automated-dependency-updates]] raise the bumps.
 

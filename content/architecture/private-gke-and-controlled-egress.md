@@ -50,6 +50,8 @@ Three paths leave the nodes. Google APIs and Artifact Registry go through Privat
 
 The gcloud form is quick to read; the Terraform form is what you commit. Flags and defaults change, so confirm them with `gcloud container clusters create --help`.
 
+The /28 control-plane range applies to peering-based private clusters; newer clusters may use a Private Service Connect based control plane and a DNS-based endpoint that do not need it, so check the current GKE network isolation docs.
+
 ```bash
 set -euo pipefail
 

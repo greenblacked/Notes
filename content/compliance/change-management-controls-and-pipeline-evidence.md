@@ -73,7 +73,7 @@ Keep the matrix in the repository next to the pipeline, so a change to the proce
 
 Write one small JSON document per production deploy, from the pipeline, using data from GitLab's API rather than from the person triggering the job. Store it as a job artifact and copy it to your long-term evidence bucket.
 
-The job below runs on the default branch after the image is built. It assumes a `build-image` job that exports `IMAGE_DIGEST` (for example through a `dotenv` report) and a masked, read-only project access token in the CI variable `EVIDENCE_API_TOKEN`.
+The job below runs on the default branch after the image is built. It assumes a `build-image` job that exports `IMAGE_DIGEST` (for example through a `dotenv` report) and a masked project access token with only the `read_api` scope and the Reporter role, in the CI variable `EVIDENCE_API_TOKEN`.
 
 ```yaml title=".gitlab-ci.yml"
 record-evidence:
@@ -177,6 +177,8 @@ POLICY_DIR="policy"            # change: directory with deploy_evidence.rego
 conftest test --namespace deploy.evidence --policy "${POLICY_DIR}" "${EVIDENCE_FILE}"
 ```
 
+The production deploy job must declare `needs: [record-evidence]` and run the conftest check first; otherwise nothing orders the deploy after the record and the policy, and the deploy can run without them.
+
 A pipeline-side check is only as strong as the pipeline's integrity. Protect the CI configuration (protected branches, CODEOWNERS on `.gitlab-ci.yml`) so a change that disables the check is itself reviewed, and see [[compliance/separation-of-duties-in-deployments]] for the enforcement settings.
 
 ### Argo CD side of the chain
@@ -226,7 +228,7 @@ Ask the auditor early which format they accept; some want exports with timestamp
 - **Evidence in places that expire.** Pipeline artifacts, job logs and Argo CD history all age out. Copy what matters to the archive.
 - **Mutable tags in records.** A tag in the record does not prove what ran; a digest does.
 - **Records written by the deployer.** If the same job that deploys also writes the approver list from a variable it controls, the record proves nothing. Read approvals from the API with a separate read-only token.
-- **Squash or force-push rewriting history.** Protect default branches against force pushes so the commit in the record still exists.
+- **Force-push rewriting history.** Protect default branches against force pushes so the commit in the record still exists.
 - **Reconciliation gap.** Evidence for what the pipeline did says nothing about what people did outside it. Look at the audit logs too.
 - **Over-collection.** Logs contain user emails and sometimes payloads; keep only what the control needs (see [[compliance/pci-dss-and-gdpr-for-devops-logs-and-data]]).
 

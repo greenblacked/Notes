@@ -19,6 +19,9 @@ This note covers the full lifecycle of a software bill of materials (SBOM) for c
 > [!info] Scope and sources
 > Written against the CycloneDX and SPDX specifications (see [cyclonedx.org](https://cyclonedx.org) and [spdx.dev](https://spdx.dev)), the Syft and Grype command line tools, and cosign from the Sigstore project ([sigstore.dev](https://sigstore.dev)). Storage examples use Artifactory and Google Cloud Storage. GitLab examples use `id_tokens` for keyless signing.
 
+> [!warning] Not legal or audit advice
+> This is general engineering guidance. Your auditor, assessor or legal counsel decides what satisfies a control or a legal obligation; check control numbers and wording against the current edition of the framework.
+
 > [!note] Not verified
 > The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the current CycloneDX and SPDX spec versions, Syft output format names, cosign attest predicate type names, and Artifactory SBOM features. Check them before relying on them.
 
@@ -89,7 +92,7 @@ variables:
 
 build-image:
   stage: build
-  image: gcr.io/kaniko-project/executor:debug # pin by digest in real use
+  image: gcr.io/kaniko-project/executor:debug # pin by digest in real use; check Kaniko's maintenance status (the upstream project has been archived) or use rootless BuildKit as in [[patterns/gitlab-runners-on-gke]]
   script:
     - /kaniko/executor --context "$CI_PROJECT_DIR" --destination "$IMAGE_REPO:$CI_COMMIT_SHORT_SHA" --digest-file digest.txt
     - echo "IMAGE_DIGEST=$(cat digest.txt)" > build.env
@@ -115,6 +118,8 @@ sbom:
     expire_in: 30 days
 ```
 
+The `cosign attest` call above uses the public Sigstore instance. Public Fulcio accepts only the OIDC issuers it is configured for (`https://gitlab.com` is one); a self-managed GitLab such as `gitlab.example.com` needs a private Sigstore deployment (Fulcio and Rekor, with `--fulcio-url` and `--rekor-url`) or a KMS key. Not verified: check the current Fulcio issuer list.
+
 The artifact expiry here is only for convenience inside GitLab. The long-term copy goes to the store described below.
 
 ### Jenkins stage
@@ -134,7 +139,8 @@ pipeline {
         sh '''
           set -euo pipefail
           syft "registry:${IMAGE_REPO}@${IMAGE_DIGEST}" -o cyclonedx-json=sbom.cdx.json
-          cosign attest --yes --key "${KMS_KEY}" --type cyclonedx \
+          # --tlog-upload=false keeps the entry out of public Rekor, which cosign uses by default even with --key (flag name: check for your pinned cosign version)
+          cosign attest --yes --tlog-upload=false --key "${KMS_KEY}" --type cyclonedx \
             --predicate sbom.cdx.json "${IMAGE_REPO}@${IMAGE_DIGEST}"
         '''
         archiveArtifacts artifacts: 'sbom.cdx.json', fingerprint: true
@@ -144,11 +150,11 @@ pipeline {
 }
 ```
 
-`IMAGE_DIGEST` comes from the earlier build stage. The shell block uses single-quoted Groovy strings on purpose so that Jenkins does not interpolate values into the script text.
+Verifying such an attestation then needs `--insecure-ignore-tlog=true` (check the flag for your version). `IMAGE_DIGEST` comes from the earlier build stage. The shell block uses single-quoted Groovy strings on purpose so that Jenkins does not interpolate values into the script text.
 
 ## Attaching and storing
 
-Attach the SBOM to the image so that it travels with the digest. A cosign attestation stores the SBOM as a signed in-toto statement next to the image in the registry. Anyone with pull access can fetch and verify it:
+Attach the SBOM to the image so that it travels with the digest. A cosign attestation stores the SBOM as a signed in-toto statement next to the image in the registry. Anyone with pull access can fetch and verify it. An image can carry several attestations (provenance as well as the SBOM), so select by predicate type. The type URI below is not verified; check what your cosign version writes for `--type cyclonedx`:
 
 ```bash
 set -euo pipefail
@@ -157,8 +163,10 @@ IMAGE="europe-docker.pkg.dev/my-project/my-repo/my-app"  # change: your image re
 DIGEST="sha256:0000000000000000000000000000000000000000000000000000000000000000"  # change: digest of the release
 
 cosign download attestation "${IMAGE}@${DIGEST}" \
-  | jq -r '.payload | @base64d | fromjson | .predicate' > fetched-sbom.cdx.json
+  | jq -c 'select(.payload | @base64d | fromjson | .predicateType == "https://cyclonedx.org/bom") | .payload | @base64d | fromjson | .predicate' > fetched-sbom.cdx.json
 ```
+
+OCI referrers are an alternative to cosign attestations: attach the SBOM as an artifact that refers to the image digest, for example with `oras attach` (not verified; check the tool version and your registry's referrers support). A referrer is not signed unless you sign it separately, so keep the attestation as the tamper-evident copy.
 
 The registry copy is not enough for inventory queries, because you cannot grep a registry. Also copy every SBOM to a store that you can search, keyed by image name and digest. Artifactory suits teams that already promote artifacts there (see [[patterns/artifact-promotion-artifactory]]); a GCS bucket with object versioning and a retention policy suits teams that want a simple, cheap archive.
 
@@ -218,14 +226,14 @@ This is fast enough to run nightly over the whole store, which turns the SBOM ar
 - **Stored but never queried.** An archive nobody has tested is a liability. Run the package query as a drill once per quarter with a package you know is present.
 - **Unsigned copies.** An SBOM in a bucket can be edited. The attestation on the image is the tamper-evident copy; the bucket copy is the searchable one. Compare digests of both when it matters.
 - **Format drift.** Syft and the specs change over time. Record the tool and spec version in the pipeline log, and test the jq query after upgrades.
-- **Private data in public logs.** If you sign with the public Sigstore instance, signing metadata for private images may be recorded in a public transparency log. Check this with your security team before enabling keyless signing for private images.
+- **Private data in public logs.** If you sign with the public Sigstore instance, signing metadata for private images is recorded in the public transparency log, with a keyless certificate or a KMS key (cosign uploads by default). Check this with your security team before enabling signing for private images, and disable the upload or use a private Sigstore deployment if needed.
 - **Missing runtime context.** An SBOM says a vulnerable package is present, not that it is reachable. Treat the query result as a candidate list for triage.
 
 ## Verify
 
 1. The SBOM is non-empty: `jq '.components | length' sbom.cdx.json` returns a plausible count.
 2. The attestation is present and verifies against your CI identity: `cosign verify-attestation --type cyclonedx --certificate-identity-regexp '^https://gitlab\.example\.com/my-group/my-app//\.gitlab-ci\.yml@refs/heads/main$' --certificate-oidc-issuer https://gitlab.example.com IMAGE@DIGEST` (change the identity and issuer to match your GitLab).
-3. The stored copy exists at `<image>/<digest>/sbom.cdx.json` and is byte-identical to the attested predicate.
+3. The stored copy exists at `<image>/<digest>/sbom.cdx.json` and matches the attested predicate: `diff <(jq -S . sbom.cdx.json) <(jq -S . fetched-sbom.cdx.json)` prints nothing (compare with `jq -S`, because jq reformats the JSON, so byte identity does not hold).
 4. The package query finds a known package in a known image.
 
 ## Rollback

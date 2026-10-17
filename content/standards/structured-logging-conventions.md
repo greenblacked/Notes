@@ -47,7 +47,7 @@ This standard defines one JSON log line format for services running on GKE and s
 | trace      | string | `projects/my-project/traces/4bf9...` | Joins the line to a trace (special field below) |
 | span       | string | `00f067aa0ba902b7`                   | Joins the line to a span (special field below)  |
 
-Optional but common: `event` (a stable machine name such as `payment.declined`), `request_id`, `duration_ms`, `http.status`, `error.type`.
+Optional but common: `event` (a stable machine name such as `payment.declined`), `request_id`, `duration_ms`, `path` (the request path or route), `http.status`, `error.type`.
 
 ```json title="sample-log-line.json"
 {
@@ -110,7 +110,7 @@ SEVERITY = {
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         entry = {
-            "severity": SEVERITY.get(record.levelno, "DEFAULT"),
+            "severity": SEVERITY.get(record.levelno, "INFO"),  # unknown custom levels map to INFO
             "message": record.getMessage(),
             "time": datetime.fromtimestamp(record.created, tz=timezone.utc)
             .isoformat(timespec="milliseconds")
@@ -195,6 +195,9 @@ Run the service's tests or a short smoke run with logging on, capture stdout to 
 set -euo pipefail
 
 LOG_FILE="sample.log"  # change: file with captured JSON log lines from a test run
+
+# An empty capture would pass the jq check below, so fail it first.
+[ -s "$LOG_FILE" ] || { echo "no log lines captured" >&2; exit 1; }
 
 REQUIRED='["severity","message","time","service","version","env"]'
 LEVELS='["DEBUG","INFO","NOTICE","WARNING","ERROR","CRITICAL","ALERT","EMERGENCY"]'

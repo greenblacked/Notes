@@ -53,14 +53,14 @@ flowchart LR
   C --> D["Retention policy<br/>and access control"]
 ```
 
-Use the collector as a safety net, not as the only control. The configuration below masks long digit sequences in log bodies, deletes sensitive attributes and hashes identifiers, using the OpenTelemetry Collector (see [[architecture/observability-pipeline-opentelemetry]] for the pipeline around it).
+Use the collector as a safety net, not as the only control. The configuration below masks long digit sequences in log bodies, deletes sensitive attributes and hashes identifiers (an unsalted hash of an email can be reversed with a dictionary, so it remains personal data; delete the field or use a keyed hash where that matters), using the OpenTelemetry Collector (see [[architecture/observability-pipeline-opentelemetry]] for the pipeline around it).
 
 ```yaml title="otel-collector/redaction.yaml"
 receivers:
   otlp:
     protocols:
       grpc:
-        endpoint: 0.0.0.0:4317
+        endpoint: localhost:4317 # agent next to the app; for a gateway use the pod IP and add TLS as in the observability note, never plain 0.0.0.0
 
 processors:
   memory_limiter:
@@ -182,16 +182,10 @@ set -euo pipefail
 LOG_DIR="build/logs"            # change: folder with sample logs or captured job output
 SCANNER="scripts/pan_scan.py"   # the script above
 
-# Cheap prefilter with grep, then the Luhn check on the matching files only
-FILES=$(grep -rlE '[0-9]{13,19}' "${LOG_DIR}" || true)
-
-if [ -z "${FILES}" ]; then
-  echo "No long digit sequences found"
-  exit 0
-fi
-
-# shellcheck disable=SC2086
-python3 "${SCANNER}" ${FILES}
+# Cheap prefilter with grep (digit runs with optional space or dash separators),
+# then the Luhn check on the matching files only; -Z/-0 keeps paths with spaces intact
+{ grep -rlZE '([0-9][ -]?){12,18}[0-9]' "${LOG_DIR}" || true; } \
+  | xargs -0 -r python3 "${SCANNER}"
 ```
 
 Run it on sample logs from a test run in the pipeline, and fail the job on a hit. Review hits by hand at first, and keep a list of known false positives with a reason. A scan like this finds mistakes; it does not prove that no data is present.

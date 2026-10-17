@@ -1,5 +1,5 @@
 ---
-title: AI-assisted incident response, what to automate and what never to
+title: "AI-assisted incident response: what to automate and what never to"
 description: How to use AI assistants during incidents and postmortems with read-only access, evidence-first prompts and a clear list of actions that always need a human.
 type: guide
 tags:
@@ -57,26 +57,27 @@ Give the assistant its own identity, separate from any human or CI identity, and
 Design rules:
 
 - One service account per assistant, with no cluster-admin and no `secrets` access.
-- Namespace-scoped RoleBindings where possible; a ClusterRole only for what truly spans namespaces.
-- No `pods/exec`, `pods/portforward`, `pods/attach` or `*/proxy` verbs. These read data from inside workloads and are effectively write-capable.
+- Namespace-scoped RoleBindings where possible; bind a ClusterRole per namespace instead of granting anything cluster-wide.
+- No `pods/exec`, `pods/portforward`, `pods/attach` or `*/proxy` subresources. These read data from inside workloads and are effectively write-capable.
 - Short-lived credentials (Workload Identity, not exported keys); see [[patterns/gke-workload-identity]].
 - Log every request the assistant makes with its identity, so the postmortem can show what it saw.
 - Prefer a pre-built evidence file over live access: a script collects, a person reviews, then the assistant reads the file.
 
 ```yaml title="incident-assistant-rbac.yaml"
 # Read-only access for an AI assistant. Change: the namespace (shop), the
-# service account name and the GCP identity binding to match your setup.
+# service account name and the GCP service account annotation to match your setup.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: incident-assistant
   namespace: shop
+  annotations:
+    iam.gke.io/gcp-service-account: incident-assistant@my-project.iam.gserviceaccount.com # change: the read-only GCP service account
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: incident-assistant-read
-  namespace: shop
 rules:
   - apiGroups: [""]
     resources: ["pods", "events"]
@@ -96,9 +97,11 @@ subjects:
     namespace: shop
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: incident-assistant-read
 ```
+
+This is one reusable ClusterRole, bound per namespace with a RoleBinding, so it grants nothing cluster-wide. See [[patterns/gke-workload-identity]] for the annotation. Note that `get` and `list` on pods return pod specs, including plaintext `env` values that can hold credentials, so keep secrets out of plain env (use secret references) before granting this.
 
 The role has no `pods/log` subresource on purpose: logs can contain customer data and instructions from outsiders. Add `pods/log` only if you accept that, and prefer the redacted evidence bundle below.
 
@@ -112,7 +115,9 @@ SA="system:serviceaccount:${NAMESPACE}:incident-assistant"
 
 kubectl auth can-i list pods -n "$NAMESPACE" --as "$SA"          # expect: yes
 kubectl auth can-i get secrets -n "$NAMESPACE" --as "$SA"        # expect: no
-kubectl auth can-i create pods/exec -n "$NAMESPACE" --as "$SA"   # expect: no
+kubectl auth can-i create pods --subresource=exec -n "$NAMESPACE" --as "$SA" # expect: no
+kubectl auth can-i get pods --subresource=log -n "$NAMESPACE" --as "$SA"      # expect: no
+kubectl auth can-i list secrets -n "$NAMESPACE" --as "$SA"                    # expect: no
 kubectl auth can-i delete deployments -n "$NAMESPACE" --as "$SA" # expect: no
 ```
 
@@ -121,7 +126,9 @@ kubectl auth can-i delete deployments -n "$NAMESPACE" --as "$SA" # expect: no
 Running one reviewed script is safer than letting an assistant improvise commands. A responder runs it, looks at the file, then shares it.
 
 ```bash title="collect-evidence.sh"
-set -euo pipefail
+#!/usr/bin/env bash
+set -uo pipefail
+umask 077 # the bundle may hold sensitive logs
 
 NAMESPACE="shop"            # change: namespace of the affected service
 DEPLOYMENT="checkout"       # change: deployment name
@@ -134,25 +141,28 @@ OUT="evidence-$(date -u +%Y%m%dT%H%M%SZ).txt"
   echo "## collected at $(date -u +%FT%TZ) by $(whoami)"
 
   echo "## events (oldest first)"
-  kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp
+  kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp || echo "!! events failed"
 
   echo "## pods"
-  kubectl get pods -n "$NAMESPACE" -o wide
+  kubectl get pods -n "$NAMESPACE" -o wide || echo "!! pods failed"
 
   echo "## rollout history"
-  kubectl rollout history "deployment/${DEPLOYMENT}" -n "$NAMESPACE"
+  kubectl rollout history "deployment/${DEPLOYMENT}" -n "$NAMESPACE" || echo "!! rollout history failed"
 
   echo "## helm history"
-  helm history "$RELEASE" -n "$NAMESPACE" --max 10
+  helm history "$RELEASE" -n "$NAMESPACE" --max 10 || echo "!! helm history failed"
 
   echo "## error logs, last ${WINDOW}"
   gcloud logging read \
     "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"${NAMESPACE}\" AND severity>=ERROR" \
-    --project "$PROJECT_ID" --freshness "$WINDOW" --limit 200 --format "value(timestamp,textPayload)"
+    --project "$PROJECT_ID" --freshness "$WINDOW" --limit 200 --format "value(timestamp,severity,textPayload,jsonPayload.message)" \
+    || echo "!! logs failed"
 } > "$OUT" 2>&1
 
 echo "Wrote $OUT. Review and redact it before sharing."
 ```
+
+A human responder runs this script, not the assistant. `helm history` reads Helm's release Secrets, which is one reason it is not in the assistant's role. Each section reports its own failure, so the bundle stays complete.
 
 Review the file for tokens, emails and customer identifiers before it goes to any external provider.
 

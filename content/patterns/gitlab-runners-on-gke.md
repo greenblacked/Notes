@@ -19,7 +19,7 @@ This note covers running self-managed GitLab runners on GKE with the Kubernetes 
 > Written against the GitLab Runner Kubernetes executor and the `gitlab-runner` Helm chart as described in the GitLab Runner documentation on docs.gitlab.com and the GKE documentation on cloud.google.com. No chart version is pinned here on purpose: pin the one you tested.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the current runner registration flow (runner authentication tokens created in the UI or API), `config.toml` key names, Helm chart value names, and whether the Cloud Storage cache works with Workload Identity and no key file in your runner version. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the current runner registration flow (runner authentication tokens created in the UI or API), `config.toml` key names, Helm chart value names, and whether the Cloud Storage cache works with Workload Identity and no key file in your runner version, the pre-signed URL flow and the `signBlob` permission it needs, and the exact names of the `build_container_security_context`, `helper_container_security_context` and `service_container_security_context` keys. Check them before relying on them.
 
 ## Architecture
 
@@ -58,7 +58,7 @@ gitlabUrl: https://gitlab.example.com/ # change: your GitLab URL
 # (for example External Secrets) and never commit the token.
 runners:
   secret: gitlab-runner-test-token
-  # The [[runners]] block comes from config.toml via --set-file.
+  # The runner entry comes from config.toml via --set-file.
 
 concurrent: 20 # change: upper bound of simultaneous job Pods for this manager
 
@@ -70,7 +70,7 @@ serviceAccount:
   create: true
   name: gitlab-runner-test
   annotations:
-    iam.gke.io/gcp-service-account: gitlab-runner-test@my-project.iam.gserviceaccount.com # change: your GSA
+    iam.gke.io/gcp-service-account: gitlab-runner-cache@my-project.iam.gserviceaccount.com # change: the cache GSA created in runner-cache.tf
 
 resources:
   requests:
@@ -98,7 +98,7 @@ RELEASE="gitlab-runner-test"
 NAMESPACE="ci-test"                 # change: one namespace per runner
 CHART_VERSION="0.0.0"               # change: the gitlab-runner chart version you tested
 VALUES_FILE="values-test.yaml"
-CONFIG_FILE="config-test.toml"      # the [[runners]] block, see below
+CONFIG_FILE="config-test.toml"      # the runner entry, see below
 
 helm repo add gitlab https://charts.gitlab.io
 helm repo update
@@ -116,7 +116,7 @@ Run the same command with a second values file, config file and namespace (`ci-d
 
 ## Executor configuration
 
-The `[[runners]]` block below is the test runner. It sets requests and limits for every job Pod, targets a spot node pool and runs the build container as a non-root user without privilege escalation.
+The runner entry below is the test runner. It sets requests and limits for every job Pod, targets a spot node pool and runs the build container as a non-root user without privilege escalation.
 
 ```toml title="config-test.toml"
 [[runners]]
@@ -151,9 +151,20 @@ The `[[runners]]` block below is the test runner. It sets requests and limits fo
       run_as_user = 1000
       fs_group = 1000
 
-    [runners.kubernetes.container_security_context]
+    # One block per container type: build, helper and service containers.
+    [runners.kubernetes.build_container_security_context]
       allow_privilege_escalation = false
-      [runners.kubernetes.container_security_context.capabilities]
+      [runners.kubernetes.build_container_security_context.capabilities]
+        drop = ["ALL"]
+
+    [runners.kubernetes.helper_container_security_context]
+      allow_privilege_escalation = false
+      [runners.kubernetes.helper_container_security_context.capabilities]
+        drop = ["ALL"]
+
+    [runners.kubernetes.service_container_security_context]
+      allow_privilege_escalation = false
+      [runners.kubernetes.service_container_security_context.capabilities]
         drop = ["ALL"]
 
   [runners.cache]
@@ -166,7 +177,7 @@ The `[[runners]]` block below is the test runner. It sets requests and limits fo
 
 Notes on the settings:
 
-- Job Pods run under `service_account`, not under the manager's service account. Give that account only what jobs need, and bind the cache access to it (see the cache section).
+- Job Pods run under `service_account`, not under the manager's service account. Give that account no cloud bindings. With the Kubernetes executor the manager creates pre-signed cache URLs and the helper only uses them, so the cache access is bound to the manager's account (see the cache section).
 - Set requests and limits for the helper container too. The default helper is small, but a large artifact upload can push it over a default limit and the job dies with an OOM kill that looks like a runner bug.
 - Memory limit equal to request is a safe default; CPU limits can throttle compilers, so many teams set a CPU request without a tight limit. Use [[patterns/kubernetes-resource-requests-and-limits]] to decide.
 - Per-job overrides (for example a bigger memory for one build job) are possible through job variables only when the runner config allows overwrites. Keep overwrites disabled on the deploy runner.
@@ -183,6 +194,14 @@ The job container runs code from the repository, including code from merge reque
 
 ```yaml title="ci-namespace-quota.yaml"
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: ci-test
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
 kind: ResourceQuota
 metadata:
   name: ci-test-quota
@@ -193,21 +212,13 @@ spec:
     requests.cpu: "40"
     requests.memory: 80Gi
     limits.memory: 120Gi
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: ci-test
-  labels:
-    pod-security.kubernetes.io/enforce: baseline
-    pod-security.kubernetes.io/warn: restricted
 ```
 
-Apply the `Namespace` before the quota in practice (the Helm command above already creates the namespace; labels can be added with `kubectl label`). The manifest is shown as one file only to keep the two objects together.
+Apply this file before the Helm command; the `kubectl create namespace` line in the install script is then a no-op.
 
 ## Cache bucket
 
-The distributed cache lets job Pods on different nodes share dependency caches. Create a private bucket with a lifecycle rule (caches are disposable) and give the job service account object access through Workload Identity.
+The distributed cache lets job Pods on different nodes share dependency caches. Create a private bucket with a lifecycle rule (caches are disposable) and give the runner manager's service account object access through Workload Identity. The manager signs the cache URLs; job Pods only use them.
 
 ```hcl title="runner-cache.tf"
 variable "project_id" {
@@ -250,19 +261,26 @@ resource "google_storage_bucket_iam_member" "cache_objects" {
   member = "serviceAccount:${google_service_account.runner_cache.email}"
 }
 
-# Let the Kubernetes service account used by job Pods act as the Google service account.
+# Let the runner manager's Kubernetes service account act as the Google service account.
 resource "google_service_account_iam_member" "cache_workload_identity" {
   service_account_id = google_service_account.runner_cache.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.cluster_project_id}.svc.id.goog[ci-test/ci-test-jobs]"
+  member             = "serviceAccount:${var.cluster_project_id}.svc.id.goog[ci-test/gitlab-runner-test]"
+}
+
+# Sign pre-signed cache URLs without a key file: the account signs as itself.
+resource "google_service_account_iam_member" "cache_sign_urls" {
+  service_account_id = google_service_account.runner_cache.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.runner_cache.email}"
 }
 ```
 
-Then annotate the `ci-test-jobs` Kubernetes service account with `iam.gke.io/gcp-service-account: gitlab-runner-cache@PROJECT_ID.iam.gserviceaccount.com`. Do not mount a JSON key into the runner to make the cache work; if your runner version cannot use Workload Identity for the cache, treat that as a reason to check the documentation or to use the S3-compatible fallback with short-lived credentials, not to add a long-lived key.
+The Helm values above already annotate the manager's `gitlab-runner-test` Kubernetes service account with the cache Google service account. The `ci-test-jobs` account used by job Pods keeps no cloud binding, so build code cannot reach the bucket directly. Do not mount a JSON key into the runner to make the cache work; if your runner version cannot use Workload Identity for the cache, treat that as a reason to check the documentation or to use the S3-compatible fallback with short-lived credentials, not to add a long-lived key.
 
 ## Capacity and autoscaling
 
-- `concurrent` in the chart is the manager's global cap; `limit` inside `[[runners]]` caps one runner entry. Set them from what the node pool and your quotas can hold, not from the number of developers.
+- `concurrent` in the chart is the manager's global cap; `limit` inside the runner entry caps that entry. Set them from what the node pool and your quotas can hold, not from the number of developers.
 - Job Pods that do not fit are `Pending`. The cluster autoscaler adds nodes for them; scale-up latency (often a few minutes) is added to every cold job. Keep a small warm baseline on the on-demand pool if deploy latency matters.
 - Use a **spot node pool for tests and builds**: jobs are short and retryable, and the cost is much lower. Use an **on-demand pool for deploy jobs** so a spot preemption never kills a release in the middle of a rollout.
 - Taint both pools (`ci-pool=spot-test:NoSchedule` above) so only runner Pods land there and normal workloads do not.
@@ -277,13 +295,13 @@ default:
       - stuck_or_timeout_failure
 ```
 
-- Scale-down: set `cluster-autoscaler.kubernetes.io/safe-to-evict: "false"` on job Pods only if you cannot tolerate eviction; otherwise a long idle node can be removed under a running job. Check how your autoscaler profile treats Pods with local storage.
+- Scale-down: job Pods are bare Pods with no controller, and the cluster autoscaler by default does not evict such Pods, so a running job normally blocks removal of its node. Check the behaviour of your GKE autoscaler profile and test it with a long job instead of adding annotations on faith.
 
 ## Building images without privileged Docker
 
 `docker:dind` needs `privileged = true`, which gives the job root-equivalent access to the node. Do not enable it on shared runners. Alternatives that build images in an unprivileged Pod:
 
-- Rootless BuildKit (`buildctl-daemonless.sh`), which needs user namespaces and sometimes relaxed seccomp or AppArmor profiles depending on the node image. Check that your node image supports it before committing to it.
+- Rootless BuildKit (`buildctl-daemonless.sh`), which needs user namespaces and sometimes relaxed seccomp or AppArmor profiles depending on the node image. Check that your node image supports it before committing to it. Needing Unconfined seccomp or AppArmor conflicts with the `enforce: baseline` label on `ci-test`, so rootless builds may need a dedicated builder namespace with a relaxed Pod Security level, isolated like the deploy runner.
 - Kaniko-style builders that run in userspace. Check the current maintenance status of the project you pick before standardising on it.
 - A build service outside the cluster (for example Cloud Build) called from the job, so the runner never builds images at all.
 
@@ -315,7 +333,7 @@ build-image:
     - test
 ```
 
-`REGISTRY_USER` and `REGISTRY_TOKEN` are masked CI variables holding a scoped Artifactory (or registry) account; see [[patterns/artifact-promotion-artifactory]] for how images move on from there.
+`REGISTRY_USER` and `REGISTRY_TOKEN` are masked CI variables holding a scoped Artifactory (or registry) account. Make `REGISTRY_TOKEN` a protected variable and push only on protected refs, since this runner executes untrusted merge request jobs; merge request builds can push to a scratch repository instead (or build with `push=false`). See [[patterns/artifact-promotion-artifactory]] for how images move on from there.
 
 ## Pitfalls
 
@@ -350,7 +368,6 @@ runner-smoke:
   script:
     - id -u
     - cat /proc/1/status | grep -i '^Cap'
-    - echo "node: ${KUBERNETES_NODE_NAME:-unknown}"
 ```
 
 Expected: `id -u` prints `1000`, not `0`; effective capabilities are all zero; during the job `kubectl -n ci-test get pod -o wide` shows the Pod on a node of the spot pool, and after the job it is gone. Also check that the cache works: run a job that writes to the cache path twice and confirm the second run reports restoring from the cache, and that objects appear in the bucket.

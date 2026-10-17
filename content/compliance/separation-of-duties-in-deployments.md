@@ -27,7 +27,7 @@ This standard is for senior DevOps engineers and engineering managers who must m
 ## Rules
 
 - The author of a change does not approve it. At least one approver is a different person with the right to approve.
-- The person or system that approves a change is not the only one who can deploy it, and the deploy step is run by automation under a service identity, not by an individual's credentials.
+- The approver does not deploy by hand; the deploy runs as automation under a service identity after the approval is recorded, not under an individual's credentials.
 - Developers cannot push to the default branch or to release branches; changes arrive by merge request.
 - Production deploys happen from a protected branch or tag, through a protected environment.
 - CI configuration, deployment manifests and approval rules are changed through the same reviewed path as code, with owners from outside the changing team where practical.
@@ -81,7 +81,7 @@ Use three layers: who can change code, who can approve it, and who can deploy it
 deploy-production:
   stage: deploy
   # change: image with the argocd CLI, pinned by tag or digest
-  image: registry.example.com/ci/argocd-cli:2.13.0
+  image: registry.example.com/ci/argocd-cli:PINNED_VERSION
   environment:
     name: production
     deployment_tier: production

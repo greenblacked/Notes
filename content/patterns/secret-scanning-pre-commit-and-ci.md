@@ -18,7 +18,7 @@ This note shows how to keep secrets out of Git with gitleaks: a fast pre-commit 
 > Written against gitleaks v8 as described in its README and the pre-commit and GitLab CI documentation on docs.gitlab.com. No gitleaks version is pinned here; pin the release you reviewed.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: gitleaks subcommand changes between versions (`detect` and `protect` versus `git` and `dir`), configuration key names (`[allowlist]` versus `[[allowlists]]`), and which GitLab tiers include built-in secret detection and push protection. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: gitleaks subcommand changes between versions (`detect` and `protect` versus `git` and `dir`), configuration key names (the single `allowlist` table versus the newer `allowlists` array of tables), which gitleaks release first supports the JUnit and SARIF report formats and `--baseline-path`, how baseline matching behaves with `--redact` reports, and which GitLab tiers include built-in secret detection and push protection. Check them before relying on them.
 
 ## Layers
 
@@ -42,7 +42,7 @@ Use the `pre-commit` framework so the hook version is pinned in the repository a
 ```yaml title=".pre-commit-config.yaml"
 repos:
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.0.0 # change: pin the gitleaks release you reviewed, as a tag
+    rev: vX.Y.Z # change: a gitleaks release you reviewed that supports junit reports and --baseline-path
     hooks:
       - id: gitleaks
 ```
@@ -65,7 +65,7 @@ The job below runs on every merge request and on the default branch. It scans on
 secret-scan:
   stage: test
   image:
-    name: ghcr.io/gitleaks/gitleaks:v8.0.0 # change: pin the same release as the hook, by tag or digest
+    name: ghcr.io/gitleaks/gitleaks:vX.Y.Z # change: the same reviewed release as the hook, by tag or digest
     entrypoint: [""]
   variables:
     GIT_DEPTH: "0" # full history so the commit range resolves
@@ -73,10 +73,16 @@ secret-scan:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       variables:
         SCAN_RANGE: "${CI_MERGE_REQUEST_DIFF_BASE_SHA}..${CI_COMMIT_SHA}"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       variables:
         SCAN_RANGE: "${CI_COMMIT_BEFORE_SHA}..${CI_COMMIT_SHA}"
   script:
+    # Scheduled, web and API pipelines (and the first push to a branch) have an
+    # all-zero CI_COMMIT_BEFORE_SHA: scan the last commit only in that case.
+    - |
+      case "$SCAN_RANGE" in
+        0000000000000000000000000000000000000000..*) SCAN_RANGE="${CI_COMMIT_SHA}~1..${CI_COMMIT_SHA}" ;;
+      esac
     - >
       gitleaks detect
       --source .
@@ -99,13 +105,15 @@ secret-scan:
 secret-scan-full-history:
   stage: test
   image:
-    name: ghcr.io/gitleaks/gitleaks:v8.0.0 # change: same pinned release
+    name: ghcr.io/gitleaks/gitleaks:vX.Y.Z # change: same reviewed release
     entrypoint: [""]
   variables:
     GIT_DEPTH: "0"
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   script:
+    # The CI clone has only the pipeline's branch: fetch every branch and tag first.
+    - git fetch origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
     - >
       gitleaks detect
       --source .
@@ -121,7 +129,7 @@ secret-scan-full-history:
       - gitleaks-history.json
 ```
 
-Create a pipeline schedule (weekly is a reasonable start) that runs the second job. The first push to a new branch has an all-zero `CI_COMMIT_BEFORE_SHA`; on the default branch that only happens at the very first commit, but check how your branch rules behave.
+Create a pipeline schedule (weekly is a reasonable start) that runs the second job. The first job's default-branch rule matches push pipelines only, because scheduled, web and API pipelines have an all-zero `CI_COMMIT_BEFORE_SHA` and a range starting with it cannot be resolved; the script also falls back to the last commit when it sees that value. The fetch line makes the scheduled job see all branches and tags; without it the job covers only the default branch.
 
 The report files contain match metadata. With `--redact` the secret value is hidden, but the file and line are not, so treat the artifact as internal.
 
@@ -138,7 +146,7 @@ title = "Repository gitleaks configuration"
 [extend]
 useDefault = true # keep the built-in rules and add ours on top
 
-# Check the key names for your gitleaks version: newer releases use [[allowlists]].
+# Check the key names for your gitleaks version: newer releases use an allowlists array of tables.
 [allowlist]
 description = "Fake credentials used by unit tests. The values are random strings that authenticate nowhere."
 paths = [
@@ -173,7 +181,8 @@ WORKDIR="$(mktemp -d)"
 git clone --mirror "$REPO_URL" "$WORKDIR/repo.git"
 cd "$WORKDIR/repo.git"
 
-gitleaks detect --source . --redact --report-format json --report-path "$WORKDIR/history.json"
+# --exit-code 0: findings must not stop the script before the count is printed.
+gitleaks detect --source . --redact --exit-code 0 --report-format json --report-path "$WORKDIR/history.json"
 jq 'length' "$WORKDIR/history.json"
 ```
 
@@ -212,15 +221,17 @@ git init -q .
 git config user.email "test@example.com"
 git config user.name "Scanner Test"
 
-# A fake AWS-style key from the public documentation examples; not a real credential.
-printf 'aws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n' > config.ini
+# A made-up token in the GitLab personal access token format (glpat- plus 20 characters).
+# It authenticates nowhere. The AWS documentation example keys are not used because
+# the default rules likely allowlist values ending in EXAMPLE.
+printf 'token = glpat-FAKEFAKEFAKEFAKEFAKE\n' > config.ini
 git add config.ini
 git commit -q -m "test: add sample key"
 
 gitleaks detect --source . --redact --exit-code 1 && echo "NOT DETECTED: check your setup" || echo "detected as expected"
 ```
 
-Expected: gitleaks reports a finding with the value redacted, and the script prints `detected as expected`. Then open a merge request that adds a similar line and confirm the `secret-scan` job fails and the finding shows in the merge request's test report. If the example key is allowlisted by the default rules in your version, use another documented format and confirm the job turns red.
+Expected: gitleaks reports a finding with the value redacted, and the script prints `detected as expected`. Then open a merge request that adds a similar line and confirm the `secret-scan` job fails and the finding shows in the merge request's test report. If the made-up token is not flagged by the default rules in your version, add a custom test rule with a recognisable prefix and confirm the job turns red.
 
 ## Rollback
 

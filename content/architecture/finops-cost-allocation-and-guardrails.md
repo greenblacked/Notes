@@ -18,7 +18,7 @@ This note is for senior DevOps engineers and the engineering manager who owns th
 > Written against Cloud Billing budgets, the Cloud Billing export to BigQuery, and GKE cost allocation, using the documentation on cloud.google.com and the Terraform Google provider docs. No prices or discount terms are given: look them up for your own contract.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: details of the billing export schema, the name and behaviour of the GKE cost allocation feature, which resource types propagate labels to billing data, and the terms of committed use discounts. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: details of the billing export schema, the name and behaviour of the GKE cost allocation feature and the `cost_management_config` block, the `terraform_labels` field, which resource types propagate labels to billing data, and the terms of committed use discounts. Check them before relying on them.
 
 ## Allocation model
 
@@ -53,7 +53,7 @@ Keep the set small, so it is actually followed.
 | `env`         | `prod`, `stage`, `dev` | Platform team       |
 | `service`     | `checkout`, `ingest`   | Service owner       |
 
-Label values should use lowercase letters, digits and hyphens, because label rules restrict allowed characters and length; check the current limits. Put the labels into Terraform modules so teams get them by default.
+Label values should use lowercase letters, digits, hyphens or underscores, because label rules restrict allowed characters and length; check the current limits. Put the labels into Terraform modules so teams get them by default.
 
 ```hcl title="modules/project/main.tf"
 variable "labels" {
@@ -93,6 +93,9 @@ resource "google_project" "this" {
   folder_id       = var.folder_id
   billing_account = var.billing_account
   labels          = var.labels
+
+  # Do not create the default network and its permissive firewall rules.
+  auto_create_network = false
 }
 ```
 
@@ -120,6 +123,18 @@ Always report an `unlabelled` row. Its size is the main health metric of your al
 ## GKE cost allocation
 
 Inside a shared GKE cluster, project-level billing shows only the cluster. GKE cost allocation, when enabled, splits cluster cost by namespace and by Kubernetes labels in the billing export. Check the documentation for the exact feature name, how to enable it in Terraform, and what it does not attribute (for example idle capacity, which shows as unallocated cost).
+
+The cluster setting is a short block, shown here without being verified against the current provider:
+
+```hcl title="modules/gke/cost-allocation.tf"
+resource "google_container_cluster" "primary" {
+  # ... other settings omitted ...
+
+  cost_management_config {
+    enabled = true
+  }
+}
+```
 
 Practical advice:
 
@@ -229,27 +244,30 @@ labelled_types := {
 
 required_labels := {"cost-center", "team", "env"}
 
+# Treat a missing or null labels field as an empty object.
+as_object(x) := x if is_object(x)
+
+as_object(x) := {} if not is_object(x)
+
+# Provider default_labels appear in terraform_labels, not labels.
+all_labels(after) := object.union(
+  as_object(object.get(after, "labels", {})),
+  as_object(object.get(after, "terraform_labels", {})),
+)
+
+# Checks creates, updates and replacements (["delete", "create"]); skips pure deletes.
 deny contains msg if {
   some rc in input.resource_changes
+  rc.mode == "managed"
   rc.type in labelled_types
-  "delete" != rc.change.actions[0]
-  labels := object.get(rc.change.after, "labels", {})
-  is_object(labels)
-  missing := required_labels - {k | some k, _ in labels}
+  rc.change.after != null
+  missing := required_labels - {k | some k, _ in all_labels(rc.change.after)}
   count(missing) > 0
   msg := sprintf("%s is missing cost labels: %v", [rc.address, missing])
 }
-
-deny contains msg if {
-  some rc in input.resource_changes
-  rc.type in labelled_types
-  "delete" != rc.change.actions[0]
-  object.get(rc.change.after, "labels", null) == null
-  msg := sprintf("%s has no labels block; cost labels are required", [rc.address])
-}
 ```
 
-Some resource types report labels under a different field or inherit them from the project, so test the policy against your real plans before enforcing it. Roll out in warn mode first, then enforce.
+The policy reads both `labels` and `terraform_labels`, so labels set through the provider's `default_labels` count. Some resource types still report labels under a different field or inherit them from the project, so test the policy against your real plans before enforcing it. Roll out in warn mode first, then enforce.
 
 ## Monthly review
 

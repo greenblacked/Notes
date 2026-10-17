@@ -152,7 +152,7 @@ opa fmt --fail policy
 opa check --strict policy
 ```
 
-`opa fmt --fail` and `opa check --strict` turn formatting drift and unused variables into failures; confirm the flag names for your OPA version. On older OPA releases that default to Rego v0 you may need a v1 compatibility flag for `import rego.v1` files.
+`opa fmt --fail` and `opa check --strict` turn formatting drift and unused variables into failures; confirm the flag names for your OPA version. On older OPA releases that default to Rego v0 you may need a v1 compatibility flag for `import rego.v1` files. The example policies use compact one-line rules and nested object literals, so they are only `opa fmt` clean if you format them: run `opa fmt --write policy` on `deployment.rego` and `deployment_test.rego` before committing, or the gate fails on its own policies.
 
 ## GitLab job
 
@@ -167,7 +167,9 @@ stages:
 variables:
   HELM_IMAGE: "alpine/helm:X.Y.Z" # change: pin an explicit Helm image tag, mirror it in Artifactory
   CONFTEST_IMAGE: "openpolicyagent/conftest:vX.Y.Z" # change: pin an explicit Conftest tag, mirror it in Artifactory
-  OPA_IMAGE: "openpolicyagent/opa:X.Y.Z" # change: pin an explicit OPA tag, mirror it in Artifactory
+  # change: pin an explicit OPA tag, mirror it in Artifactory. The standard OPA image is static and has no shell,
+  # which a GitLab script needs; the -debug variant ships a busybox shell (check the tag name), or use an internal tools image with opa
+  OPA_IMAGE: "openpolicyagent/opa:X.Y.Z-debug"
   CHART_NAME: "api" # change: your release name
 
 policy:unit-tests:
@@ -303,7 +305,7 @@ exit "${status}"
 A policy copied into ten repositories drifts in ten ways. Treat policies as a versioned product:
 
 - One repository (for example `platform/policies`) with the `policy/` tree, its tests, and the CI job above. Merge requests need a review from the platform team.
-- Release with semantic version tags. A new `deny` rule is a minor version for consumers who pin, because it can break their pipelines; announce it and use `warn` for one release first.
+- Release with semantic version tags. A new `deny` rule can break the pipelines of consumers who pin, which is a breaking change: ship a new rule as `warn` in a minor release and promote it to `deny` in the next major release (or document the convention your team chooses and announce it).
 - Consumers pin a version and update it by merge request, the same way they update dependencies ([[patterns/automated-dependency-updates]]).
 - Distribute either by cloning the tag in CI, or as an OCI artifact. Conftest can publish and pull policy bundles from an OCI registry; whether your Artifactory repository accepts them needs confirming before you design around it.
 

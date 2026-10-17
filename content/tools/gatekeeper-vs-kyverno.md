@@ -22,18 +22,18 @@ Pod Security admission covers a fixed list of Pod rules. Everything else you wan
 
 ## At a glance
 
-| Concern                      | Gatekeeper                                     | Kyverno                                        | ValidatingAdmissionPolicy                          |
-| ---------------------------- | ---------------------------------------------- | ---------------------------------------------- | -------------------------------------------------- |
-| Policy language              | Rego, wrapped in ConstraintTemplate and CRDs   | YAML rules with patterns, JMESPath and CEL     | CEL expressions in YAML                            |
-| Mutation                     | Yes, through separate mutation resources       | Yes, `mutate` rules                            | Not in the validating API                          |
-| Generate resources           | No                                             | Yes, `generate` rules                          | No                                                 |
-| Image signature verification | Not built in                                   | `verifyImages` rules                           | No                                                 |
-| Audit of existing objects    | Yes, periodic audit with violations on the CRD | Yes, background scan into PolicyReports        | Audit through `validationActions`, new writes only |
-| Reporting                    | Violations in Constraint status, metrics       | PolicyReport and ClusterPolicyReport resources | Audit annotations and events                       |
-| Availability impact          | Admission webhook, needs pods running          | Admission webhook, needs pods running          | In-process in the API server, no webhook           |
-| GitOps fit                   | Template must exist before Constraint          | One resource per policy, simple ordering       | Policy before binding, both built in               |
-| Skills needed                | Rego (shared with Conftest)                    | Kubernetes YAML, a little JMESPath             | CEL                                                |
-| Extra components to operate  | Controller and audit pods                      | Several controllers                            | None                                               |
+| Concern                      | Gatekeeper                                                                       | Kyverno                                        | ValidatingAdmissionPolicy                          |
+| ---------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------- |
+| Policy language              | Rego, wrapped in ConstraintTemplate and CRDs                                     | YAML rules with patterns, JMESPath and CEL     | CEL expressions in YAML                            |
+| Mutation                     | Yes, through separate mutation resources                                         | Yes, `mutate` rules                            | Not in the validating API                          |
+| Generate resources           | No                                                                               | Yes, `generate` rules                          | No                                                 |
+| Image signature verification | Not built in; possible via external data providers such as Ratify (not verified) | `verifyImages` rules                           | No                                                 |
+| Audit of existing objects    | Yes, periodic audit with violations on the CRD                                   | Yes, background scan into PolicyReports        | Audit through `validationActions`, new writes only |
+| Reporting                    | Violations in Constraint status, metrics                                         | PolicyReport and ClusterPolicyReport resources | Audit annotations and events                       |
+| Availability impact          | Admission webhook, needs pods running                                            | Admission webhook, needs pods running          | In-process in the API server, no webhook           |
+| GitOps fit                   | Template must exist before Constraint                                            | One resource per policy, simple ordering       | Policy before binding, both built in               |
+| Skills needed                | Rego (shared with Conftest)                                                      | Kubernetes YAML, a little JMESPath             | CEL                                                |
+| Extra components to operate  | Controller and audit pods                                                        | Several controllers                            | None                                               |
 
 Two points decide most cases. First, only the webhook engines can mutate, generate or verify image signatures. Second, only ValidatingAdmissionPolicy cannot take your deployments down by being unavailable, because it runs inside the API server.
 
@@ -51,10 +51,12 @@ sequenceDiagram
 
   Argo->>API: Apply Deployment
   API->>API: Authn, authz, built-in admission
+  API->>WH: Mutating AdmissionReview over HTTPS
+  WH-->>API: Patch (mutating webhooks run before any validation)
   API->>VAP: Evaluate CEL in process
   VAP-->>API: Allow or deny
-  API->>WH: AdmissionReview over HTTPS
-  WH-->>API: Allow, deny or patch
+  API->>WH: Validating AdmissionReview over HTTPS
+  WH-->>API: Allow or deny
   API->>Store: Persist object
   Note over WH,Store: Audit loop
   WH->>API: List existing objects on a timer
@@ -244,7 +246,7 @@ Practical rules, whichever engine you pick:
 - Exclude `kube-system` and the engine's own namespace from enforcement, and use a short webhook timeout, so a broken engine cannot block its own repair.
 - Prefer scoping webhooks with namespace and resource selectors over matching everything.
 - Keep a known break-glass step (remove or relax the webhook configuration) in your incident runbook, and test it.
-- Roll out in Git through Argo CD. Template or CRD resources must be applied before the resources that use them; use sync waves and see [[runbooks/argocd-sync-failure-and-drift]] when a sync is denied by a policy it just installed.
+- Roll out in Git through Argo CD. Template or CRD resources must be applied before the resources that use them; use sync waves, and add the `SkipDryRunOnMissingResource=true` sync option to Gatekeeper Constraints, because Argo CD dry-runs every manifest before applying any wave and the Constraint CRD is created by the Gatekeeper controller, not from Git (see [[runbooks/policy-rollout-audit-to-enforce]]). See [[runbooks/argocd-sync-failure-and-drift]] when a sync is denied by a policy it just installed.
 
 ValidatingAdmissionPolicy avoids most of this because evaluation is in the API server. Its trade-off is expressiveness: CEL expressions are bounded, there is no mutation in this API, and cross-object lookups are limited.
 

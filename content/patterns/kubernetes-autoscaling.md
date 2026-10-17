@@ -86,7 +86,7 @@ Notes:
 
 - Set `minReplicas` to at least what you need for availability (two or three, spread over zones), not to what you need for cost.
 - The numbers above are starting points. Tune them from load tests and real traffic.
-- If the HPA targets CPU, do not also set a Deployment `replicas` value in Git that Argo CD will keep resetting; omit `replicas` from the manifest or ignore that field in the sync policy.
+- When an HPA manages the Deployment, do not also set a Deployment `replicas` value in Git that Argo CD will keep resetting; omit `replicas` from the manifest or ignore that field in the sync policy.
 
 ## VPA as a recommender
 
@@ -130,6 +130,7 @@ resource "google_container_cluster" "primary" {
     enabled = true
   }
 
+  # enables node auto-provisioning; per-pool autoscaling is the node pool block
   cluster_autoscaling {
     enabled             = true
     autoscaling_profile = "OPTIMIZE_UTILIZATION" # change: or "BALANCED"
@@ -241,7 +242,7 @@ Expected: the HPA shows real current and target values (not `<unknown>`), the VP
 
 - Remove or relax the HPA by setting `minReplicas` and `maxReplicas` to a fixed, known-good count, then deleting it if needed. Argo CD or Helm will restore it if it is in Git, so change Git.
 - Set the VPA to `Off` or delete it; this has no effect on running pods.
-- To undo node autoscaling changes, revert the Terraform change. Existing nodes remain; the autoscaler stops adding or removing them according to the old limits.
+- To undo node autoscaling changes, revert the Terraform change. Reverting restores the previous limits; existing nodes stay until the autoscaler removes them under those limits.
 - For a bad rollout of the requests, use [[runbooks/helm-release-rollback]].
 
 ## Related

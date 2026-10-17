@@ -1,5 +1,5 @@
 ---
-title: Testing Terraform modules, static checks, terraform test and Terratest
+title: "Testing Terraform modules: static checks, terraform test and Terratest"
 description: Three levels of Terraform module tests, from fmt and tflint to mocked terraform test runs and Terratest in a sandbox project, and when each one pays off.
 type: pattern
 tags:
@@ -60,12 +60,14 @@ set -euo pipefail
 
 MODULE_DIR="modules/gcs-bucket"  # change: path of the module under test
 
+ROOT="$(git rev-parse --show-toplevel)"  # .tflint.hcl lives at the repository root
+
 cd "$MODULE_DIR"
 terraform fmt -check -recursive
 terraform init -backend=false -input=false
 terraform validate
-tflint --init
-tflint --recursive
+tflint --init --config "$ROOT/.tflint.hcl"
+tflint --config "$ROOT/.tflint.hcl"
 ```
 
 `-backend=false` matters: the test job must never touch the state backend of a real environment.
@@ -89,12 +91,27 @@ The plugin name, source and version above are from documentation knowledge. Pin 
 
 ## terraform test basics
 
-`terraform test` finds files named `*.tftest.hcl` (and `*.tftest.json`) in the module directory and in a `tests/` subdirectory. Each file holds `run` blocks that execute in order and share state within the file.
+`terraform test` finds files named `*.tftest.hcl` (and `*.tftest.json`) in the module directory and in a `tests/` subdirectory, not in deeper folders. Each file holds `run` blocks that execute in order and share state within the file.
 
 - `command = plan` evaluates the configuration and the plan without creating anything. Values that depend only on inputs are known, values the provider computes are unknown.
 - `command = apply` (the default) creates real resources and destroys them at the end of the file.
 - `assert` blocks hold a `condition` and an `error_message`.
 - `expect_failures` lists the variables, checks or resources that must fail in that run. The run passes only if they fail.
+
+The module declares its provider requirement; the mocked tests need it to know which provider to replace.
+
+```hcl title="modules/gcs-bucket/versions.tf"
+terraform {
+  required_version = ">= 1.9" # change: the minimum your modules support
+
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 6.0" # change: the provider range you have tested
+    }
+  }
+}
+```
 
 A module with a validated variable and secure defaults:
 
@@ -105,7 +122,9 @@ modules/gcs-bucket/
   outputs.tf
   versions.tf
   tests/
-    bucket.tftest.hcl
+    bucket.tftest.hcl          # mocked, runs on every commit
+    integration/
+      bucket_apply.tftest.hcl  # real provider, run only with -test-directory
 test/
   bucket_test.go
   go.mod
@@ -245,7 +264,7 @@ set -euo pipefail
 
 cd modules/gcs-bucket  # change: path of the module under test
 terraform init -backend=false -input=false
-terraform test -verbose
+terraform test -verbose  # tests/ only: the mocked files
 ```
 
 The first run proves the assertions can fail. Flip one `condition` and confirm the run goes red before you trust the suite.
@@ -260,15 +279,17 @@ What a mock proves: your expressions, conditionals, validations and output wirin
 
 When the question is "does GCP accept this", drop the mock and use a real provider in a throwaway project.
 
-```hcl title="modules/gcs-bucket/tests/bucket_apply.tftest.hcl"
+The file lives in `tests/integration/`, which plain `terraform test` does not read, so a merge request never creates real resources by accident. The bucket name is not in the file: pass a unique one per run with `-var`.
+
+```hcl title="modules/gcs-bucket/tests/integration/bucket_apply.tftest.hcl"
 provider "google" {
   project = "my-sandbox-project" # change: a dedicated sandbox project, never a shared or prod project
 }
 
 variables {
   project_id    = "my-sandbox-project" # change: same sandbox project
-  name          = "tftest-orders-exports-0001" # change: add a unique suffix per run in CI
   force_destroy = true
+  # name comes from -var "name=tftest-<unique>" on the command line
 }
 
 run "bucket_is_created_with_secure_defaults" {
@@ -285,7 +306,7 @@ Rules for apply-mode tests:
 
 - A dedicated sandbox project with a budget alert and a low quota, owned by the platform team and used for nothing else.
 - Credentials from workload identity federation or a short-lived impersonated service account with only the roles the module needs. See [[patterns/gke-workload-identity]] for the in-cluster side.
-- Unique names per run, so parallel pipelines do not collide.
+- Unique names per run (`-var "name=tftest-${CI_PIPELINE_ID}"`), so parallel pipelines do not collide.
 - `force_destroy = true` only inside the test, never as a module default.
 - State stays local to the test run. Never point a test at the real backend.
 
@@ -338,7 +359,7 @@ The module has no backend block, so state is local and lives in the module direc
 
 ## CI job
 
-Fast tests on every merge request, with the Terraform image pinned. The sandbox tests live in their own job so a flaky API does not block ordinary changes.
+Fast tests on every merge request (mocked, no credentials), with the Terraform image pinned. The sandbox tests live in their own job so a flaky API does not block ordinary changes.
 
 ```yaml title=".gitlab-ci.yml"
 stages:
@@ -362,7 +383,7 @@ terraform-static-and-test:
     - terraform fmt -check -recursive
     - terraform init -backend=false -input=false
     - terraform validate
-    - terraform test
+    - terraform test # reads tests/ only; the apply tests in tests/integration are not run
 
 terraform-sandbox-apply:
   stage: test
@@ -377,7 +398,7 @@ terraform-sandbox-apply:
   script:
     - cd "$MODULE_DIR"
     - terraform init -backend=false -input=false
-    - terraform test -filter=tests/bucket_apply.tftest.hcl
+    - terraform test -test-directory=tests/integration -var "name=tftest-${CI_PIPELINE_ID}"
 ```
 
 The sandbox job needs credentials for the sandbox project only, injected through your CI identity setup, never as a long-lived key in a CI variable. `resource_group` serialises runs so two pipelines do not fight over the same sandbox. Keep tflint in the same job if the image has it, or add a second job with a TFLint image pinned the same way. For the layout of the pipeline as a whole see [[patterns/gitlab-ci-pipeline-structure]].

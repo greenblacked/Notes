@@ -44,7 +44,7 @@ So the bot is a second pair of eyes, not a gate.
 2. Humans approve. Approval rules are the same with or without the bot ([[standards/code-review]]).
 3. Required checks stay deterministic: tests, linters, the SonarQube quality gate ([[patterns/sonarqube-quality-gates]]) and policy checks. A bot's opinion is never a required check.
 4. The bot job is advisory in the pipeline: `allow_failure: true`, so an outage or a timeout cannot block delivery.
-5. It does not run on fork merge requests, and it holds a read-only token with no deploy or cloud credentials (see [[ai/securing-ai-agents-in-ci-and-cloud]]).
+5. It does not run on fork merge requests, and it holds a token with no write access to code and no deploy or cloud credentials: a GitLab bot token with the `api` scope at the Reporter role, which can comment but cannot push or merge (see [[ai/securing-ai-agents-in-ci-and-cloud]]).
 6. It posts one summary note per push, updated in place, not a stream of inline comments.
 7. Its output is labelled as automated so nobody mistakes it for a teammate.
 
@@ -80,7 +80,8 @@ ai-review:
     MAX_DIFF_CHARS: "60000"
   script:
     # REVIEW_BOT_TOKEN: masked, not protected, project access token, Reporter role.
-    # The endpoint for posting notes needs a scope that allows comments: check your version.
+    # Creating and updating notes needs the api scope (read_api is not enough). At the Reporter
+    # role the bot can comment but cannot push or merge. Check the scope against your version.
     - python3 scripts/ai_review.py
 ```
 
@@ -124,7 +125,11 @@ def collect_diff():
     parts = []
     for item in files:
         parts.append(f"--- {item['old_path']}\n+++ {item['new_path']}\n{item['diff']}")
-    return "\n".join(parts)[:MAX_DIFF_CHARS]
+    text = "\n".join(parts)[:MAX_DIFF_CHARS]
+    if len(files) >= 100:
+        # Only the first page is read; say so rather than dropping files silently.
+        text += "\n[truncated: only the first 100 files were reviewed]"
+    return text
 
 
 def run_review(diff):
@@ -143,8 +148,17 @@ def run_review(diff):
 
 def post_note(body):
     text = f"{MARKER}\n**Automated advisory review.** A human reviewer decides.\n\n{body}"
+    bot_id = call("GET", f"{API}/user")["id"]  # the bot token's own user
     notes = call("GET", f"{BASE}/notes?per_page=100")
-    existing = next((n for n in notes if MARKER in n.get("body", "")), None)
+    # The marker alone is not enough: anyone can paste it into a comment.
+    existing = next(
+        (
+            n
+            for n in notes
+            if MARKER in n.get("body", "") and n.get("author", {}).get("id") == bot_id
+        ),
+        None,
+    )
     if existing:
         call("PUT", f"{BASE}/notes/{existing['id']}", {"body": text})
     else:
@@ -165,9 +179,9 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-Notes on the skeleton: it reads the diff through the API instead of checking out untrusted code, it truncates input so cost is bounded, and it updates one note instead of adding a new one per push. Pagination of notes and diffs is simplified; handle more than 100 items if your merge requests are large.
+Notes on the skeleton: it reads the diff through the API instead of checking out untrusted code, it truncates input so cost is bounded, and it updates one note instead of adding a new one per push. Pagination of notes and diffs is simplified: the script says so in the note when 100 files are returned, and you can follow the `X-Next-Page` header if your merge requests are large. It edits only a note written by the bot's own user, so a pasted marker cannot hijack it.
 
-On GitHub the same shape works with a `pull_request` workflow with `permissions: contents: read` and `pull-requests: write` only on the step that posts, never with `pull_request_target`. See the example in [[ai/securing-ai-agents-in-ci-and-cloud]].
+On GitHub the same shape uses two jobs in a `pull_request` workflow, never `pull_request_target`. GitHub Actions permissions are set per workflow or per job, not per step. A review job with `contents: read` uploads the findings as an artifact; a second job with `pull-requests: write` downloads it and comments, and it runs no agent. See the example in [[ai/securing-ai-agents-in-ci-and-cloud]].
 
 ## Triage
 
@@ -215,7 +229,7 @@ Be careful when relating this to the delivery measures in [[management/dora-metr
 
 - **Making the bot required.** Once a branch rule needs its pass, outages and false positives block work. Keep it advisory.
 - **Comment floods.** One note per push, a cap on findings and a minimum severity keep the noise down.
-- **Bot instructions inside the diff.** A comment in the code can try to steer the reviewer. The bot's token is read-only and its output only a comment, so the damage stays small; do not give it more.
+- **Bot instructions inside the diff.** A comment in the code can try to steer the reviewer. The bot's token has no write access to code, no deploy and no cloud credentials, and its output is only a comment, so the damage stays small; do not give it more.
 - **Reviewers relaxing.** "The bot looked at it" is not a review. Keep the human approval rule.
 - **Drift.** Models and prompts change; sample the output every month and re-check the false-positive rate.
 

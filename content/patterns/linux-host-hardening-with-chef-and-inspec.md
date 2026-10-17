@@ -97,7 +97,6 @@ end
 
 ```text title="cookbooks/hardening/templates/sshd_config.erb"
 # Managed by Chef, do not edit by hand
-Include /etc/ssh/sshd_config.d/*.conf
 PermitRootLogin <%= @permit_root_login %>
 PasswordAuthentication <%= @password_authentication %>
 PubkeyAuthentication yes
@@ -105,7 +104,12 @@ MaxAuthTries <%= @max_auth_tries %>
 LoginGraceTime <%= @login_grace_time %>
 UsePAM yes
 X11Forwarding no
+
+# Keep Include last: see the first-match rule below
+Include /etc/ssh/sshd_config.d/*.conf
 ```
+
+sshd uses the first value it reads for each keyword. An `Include` placed before the hardened directives lets a distribution or cloud-init drop-in (for example a cloud image file that sets `PasswordAuthentication yes`) win over the Chef value. The hardened directives therefore come first and the `Include` last, so a drop-in can only add keywords that the template leaves unset. An alternative is to leave the vendor main file alone and manage a drop-in such as `/etc/ssh/sshd_config.d/00-hardening.conf`, which sorts before other drop-ins; this works only where the main file already includes the directory, so check your images. The InSpec `sshd_config` resource reads only the main file and would pass while a weaker drop-in value applies, so the profile below checks the effective configuration instead.
 
 The `Include` line and the `UsePAM` setting depend on the distribution and OpenSSH version, so check them against the host image you run. Keep any distribution-specific lines (for example the SFTP subsystem) in the template as well, or `sshd -t` will not catch what is missing.
 
@@ -135,8 +139,10 @@ service "auditd" do
   action [:enable, :start]
 end
 
-# Legacy servers that should not be present
-%w(telnetd rsh-server).each do |legacy|
+# Legacy servers that should not be present (package names differ by family)
+legacy_packages = platform_family?("debian") ? %w(telnetd rsh-server) : %w(telnet-server rsh-server)
+
+legacy_packages.each do |legacy|
   package legacy do
     action :remove
   end
@@ -150,19 +156,20 @@ The `action :apply` form of `sysctl` writes the setting to a file under `/etc/sy
 The same settings, written as tests. InSpec reads the real state of the host, so it catches changes made by hand or by another tool.
 
 ```ruby title="cookbooks/hardening/test/integration/default/controls/baseline_spec.rb"
+# `sshd -T` prints the effective configuration, including drop-ins; it needs root
 control "ssh-root-login" do
   impact 1.0
   title "SSH root login is disabled"
-  describe sshd_config do
-    its("PermitRootLogin") { should cmp "no" }
+  describe command("sshd -T") do
+    its("stdout") { should match(/^permitrootlogin no$/) }
   end
 end
 
 control "ssh-password-auth" do
   impact 1.0
   title "SSH password authentication is disabled"
-  describe sshd_config do
-    its("PasswordAuthentication") { should cmp "no" }
+  describe command("sshd -T") do
+    its("stdout") { should match(/^passwordauthentication no$/) }
   end
 end
 
@@ -194,6 +201,15 @@ control "auditd-running" do
   end
 end
 
+control "single-uid-zero" do
+  impact 1.0
+  title "Only root has UID 0"
+  # resource syntax: check against your InSpec version
+  describe passwd.uids(0) do
+    its("users") { should cmp ["root"] }
+  end
+end
+
 control "no-empty-passwords" do
   impact 1.0
   title "No account has an empty password"
@@ -203,7 +219,7 @@ control "no-empty-passwords" do
 end
 ```
 
-Label the controls with the same short names you use in the exceptions register, so a failing control maps to a decision. You can run the same profile against live hosts later, not only inside Test Kitchen.
+The `sshd_active_config` resource may offer the same check without a shell call where it is available (not verified). Label the controls with the same short names you use in the exceptions register, so a failing control maps to a decision. You can run the same profile against live hosts later, not only inside Test Kitchen.
 
 ## Running in CI with Test Kitchen
 
@@ -293,8 +309,8 @@ sysctl net.ipv4.conf.all.accept_redirects net.ipv4.conf.all.send_redirects kerne
 systemctl is-enabled auditd
 systemctl is-active auditd
 
-# Run the InSpec profile locally against this host
-inspec exec cookbooks/hardening/test/integration/default
+# Run the InSpec profile locally against this host (root is needed to read /etc/shadow and run sshd -T)
+sudo inspec exec cookbooks/hardening/test/integration/default
 ```
 
 Expected: `permitrootlogin no`, `passwordauthentication no`, the sysctl values `0`, `0` and `2`, `enabled`, `active`, and an InSpec summary with zero failed controls.

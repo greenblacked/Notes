@@ -21,7 +21,7 @@ Progressive delivery sends a new version to a small share of traffic, measures i
 > Written against Argo Rollouts as described in the official documentation at [argo-rollouts.readthedocs.io](https://argo-rollouts.readthedocs.io/en/stable/), Argo CD at [argo-cd.readthedocs.io](https://argo-cd.readthedocs.io/en/stable/) and Prometheus at [prometheus.io](https://prometheus.io/docs/). Metric names in the queries are examples and must match your own instrumentation.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: current Argo Rollouts CRD fields, the status of the traffic-router plugin for Gateway API, and the health behaviour Argo CD shows for Rollouts. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: current Argo Rollouts CRD fields, the status of the traffic-router plugin for Gateway API, and the health behaviour Argo CD shows for Rollouts, and the maintenance status of the community ingress-nginx controller. Check them before relying on them.
 
 ## When canaries pay off
 
@@ -56,6 +56,8 @@ Blue-green is the other built-in strategy. It starts the full new version next t
 
 ## Rollout manifest
 
+The base manifests below carry no `metadata.namespace`: the Argo CD Application destination sets it per environment (see [[architecture/gitops-repo-topology-and-promotion]]).
+
 The Rollout below uses two Services and an ingress controller for weighted routing. Weights are applied by the traffic router, and the steps put the analysis between the first and second increase.
 
 ```yaml title="apps/payments/base/rollout.yaml"
@@ -63,7 +65,6 @@ apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
   name: payments
-  namespace: payments
 spec:
   replicas: 6
   revisionHistoryLimit: 3
@@ -121,7 +122,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: payments-stable
-  namespace: payments
 spec:
   selector:
     app: payments
@@ -134,7 +134,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: payments-canary
-  namespace: payments
 spec:
   selector:
     app: payments
@@ -147,7 +146,6 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: payments
-  namespace: payments
 spec:
   ingressClassName: nginx
   rules:
@@ -174,7 +172,6 @@ apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
   name: payments-success-rate
-  namespace: payments
 spec:
   args:
     - name: service-name
@@ -220,6 +217,9 @@ Add a latency metric next to the error metric for services where slow is as bad 
 
 ## Traffic routing options
 
+> [!warning] ingress-nginx retirement
+> The Kubernetes project announced the retirement of the community ingress-nginx controller, with best-effort maintenance ending around March 2026. Check its current status before adopting it. For new setups prefer the Gateway API plugin or a service mesh, and treat the NGINX examples here as a teaching shape.
+
 | Router                     | How weights are applied                           | Notes                                                                                |
 | -------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | No router (replica-based)  | Ratio of canary to stable Pods                    | Coarse: 10 percent needs 10 or more Pods. Fine for small steps on large deployments. |
@@ -227,7 +227,7 @@ Add a latency metric next to the error metric for services where slow is as bad 
 | Service mesh (Istio, etc.) | VirtualService or similar weights                 | Precise, also supports header matching; adds the mesh.                               |
 | Gateway API                | HTTPRoute weights through a traffic-router plugin | Fits GKE Gateway; plugin maturity and supported controllers were not verified.       |
 
-GKE's built-in external Ingress does not do weighted routing between two Services on its own, which is why the examples use NGINX. Check the current Gateway API support in both Argo Rollouts and GKE before choosing it.
+GKE's built-in external Ingress does not do weighted routing between two Services on its own, so the examples use NGINX only because its annotations are simple to show. Check the current Gateway API support in both Argo Rollouts and GKE before choosing it.
 
 ## Running with Argo CD
 

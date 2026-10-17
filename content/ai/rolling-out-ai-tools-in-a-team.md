@@ -36,7 +36,7 @@ Answer these before anyone installs anything. Most "pilot failures" are decision
 
 - Who owns the contract and the data processing terms? Involve security and legal early.
 - What are the licence and copyright terms for generated code? Ask legal; do not guess.
-- Is single sign-on and seat removal supported, so leavers lose access?
+- Are single sign-on and seat removal supported, so leavers lose access?
 
 **Fit**
 
@@ -97,6 +97,7 @@ Use [[management/dora-metrics]] for the first two. Compare trends and groups, ne
 A sketch for review turnaround, to adapt to your data. The table and column names here are assumptions about an export of merge request data:
 
 ```sql
+-- PostgreSQL syntax; adapt for your warehouse.
 -- Data source: your own export of merge requests, loaded into a table
 -- named merge_requests (adapt table and column names to your export).
 -- Columns assumed: id, author, created_at, first_review_at, merged_at,
@@ -133,6 +134,8 @@ Free text:
 7. Where did it get in the way or produce something wrong?
 8. What should the team rule be?
 ```
+
+Item 3 is reverse-scored: a high rating there is a bad sign.
 
 ## Cost tracking
 
@@ -179,7 +182,7 @@ If the answer is go, roll out in waves rather than all at once. Add one team at 
 - **Counting lines or merge requests.** More output is not more value; measure outcomes.
 - **Skipping security review.** A pilot with real code is a data transfer; review it first.
 - **Mandating usage.** Targets for usage create theatre. Measure results and let people opt in.
-- **Ignoring juniors and seniors differently.** Juniors may over-trust, seniors may under-use. Check both in the survey.
+- **Treating juniors and seniors the same.** Juniors may over-trust, seniors may under-use. Check both in the survey.
 - **Review overload.** Faster authoring can swamp reviewers; watch review turnaround.
 - **One-off evaluation.** Tools and terms change. Re-check data terms and costs at least every renewal.
 

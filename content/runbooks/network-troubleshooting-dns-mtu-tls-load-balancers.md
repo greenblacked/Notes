@@ -1,5 +1,5 @@
 ---
-title: Network troubleshooting, DNS, MTU, TLS and load balancer health checks
+title: "Network troubleshooting: DNS, MTU, TLS and load balancer health checks"
 description: A symptom-first runbook for the four common network failure classes on GKE and GCP, with commands, expected output and a troubleshooting table.
 type: runbook
 tags:
@@ -35,14 +35,14 @@ This runbook helps a senior DevOps engineer or on-call responder narrow down a n
 - Permission to run a short-lived Pod in the affected namespace. Check that NetworkPolicies allow it, or the debug Pod will not reproduce the real path.
 - A note of the exact failing path: source, destination, port, hostname and time of failure.
 
-An ephemeral debug Pod that does not run as root. It keeps only the capability `ping` needs.
+An ephemeral debug Pod that does not run as root. Trade-off for `ping`: a non-root process gets ICMP only where the node allows unprivileged ICMP sockets (`net.ipv4.ping_group_range`); the `NET_RAW` capability does not help a non-root user when `allowPrivilegeEscalation` is false, and it is rejected under Pod Security `restricted`. Where ping fails, run the MTU check from a short-lived root container that adds only `NET_RAW`, in a namespace at Pod Security `baseline`. This ping behaviour is not verified.
 
 ```yaml title="netdebug.yaml"
 apiVersion: v1
 kind: Pod
 metadata:
   name: netdebug
-  namespace: default # change: the namespace of the affected workload
+  # No namespace here: it comes from kubectl -n "$NAMESPACE" at apply time.
 spec:
   restartPolicy: Never
   automountServiceAccountToken: false
@@ -55,9 +55,11 @@ spec:
         runAsNonRoot: true
         runAsUser: 65534
         allowPrivilegeEscalation: false
+        seccompProfile:
+          type: RuntimeDefault
         capabilities:
           drop: ["ALL"]
-          add: ["NET_RAW"] # needed for ping; remove if you do not test with ICMP
+          # NET_RAW is not added: it does not help a non-root ping (see the note above).
 ```
 
 ## Steps
@@ -161,14 +163,14 @@ IP="203.0.113.10"        # change: the load balancer or backend IP to test
 
 # Handshake with SNI; shows the chain the server presents and the verify result.
 openssl s_client -connect "$IP:443" -servername "$HOST" -verify_return_error </dev/null 2>&1 \
-  | grep -E 'subject=|issuer=|Verify return code|Verification'
+  | grep -E 'subject=|issuer=|Verification|Verify return code' || true
 
 # Dates of the leaf certificate.
 openssl s_client -connect "$IP:443" -servername "$HOST" </dev/null 2>/dev/null \
-  | openssl x509 -noout -subject -issuer -dates
+  | openssl x509 -noout -subject -issuer -dates || true
 
 # Full HTTP exchange, forcing the name to the chosen IP without changing DNS.
-curl -v --resolve "$HOST:443:$IP" "https://$HOST/" -o /dev/null
+curl -v --resolve "$HOST:443:$IP" "https://$HOST/" -o /dev/null || true
 ```
 
 What to look for:
@@ -239,6 +241,10 @@ Re-run the failing check from the same place and compare with the healthy expect
 orders.internal.example.com. 60 IN A 10.20.0.15
 
     Verify return code: 0 (ok)
+
+2 packets transmitted, 2 received, 0% packet loss
+
+< HTTP/2 200
 
 - healthState: HEALTHY
 ```
