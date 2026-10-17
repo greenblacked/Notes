@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Changed
+
+- TypeScript 7.0.2 (native compiler) for `npm run check`; `tsconfig.json` uses `moduleResolution: "bundler"` (node10 was removed), types `micromorph` through `paths`, and `quartz/processors/parse.ts` takes the mdast `Root` type from `@types/mdast`.
+- `engines.node` is `>=22.12.0` (required by mermaid 12); `lodash-es` is overridden to `^4.18.1` (see Security).
+- The `DataMap.frontmatter` type is now inherited from `@quartz-community/types` 1.0, where `tags` is optional and `description`, `socialDescription` and `lang` are declared there; the build output is unchanged.
+- mermaid 12.0.0 (diagrams in the browser, from `public/static/vendor/mermaid`), @types/node 26.6.3, @napi-rs/simple-git 1.2.0.
+
+### Fixed
+
+- `@quartz-community/utils` 1.0.1 now comes from the npm registry: the upstream git head no longer builds `dist/` on install, which broke type checks and the build. The `DataMap.frontmatter` declaration in `quartz/plugins/index.ts` is dropped because `@quartz-community/types` 1.0 declares it. `@quartz-community/types` is now a direct registry dependency (^1.0.0) so that declaration no longer depends on a nested copy. `quartz/util` imports the `@quartz-community/utils/path`, `/lang` and `/escape` subpaths, so the client bundle (`postscript.js`) does not pull in the utils barrel and its preact copy.
+
+### Security
+
+- `@quartz-community/utils` and `@quartz-community/types` are no longer git dependencies (both resolve from the npm registry), so no `prepare` script of ours runs during the root install and the lockfile has no git-resolved package.
+- `lodash-es` is overridden to `^4.18.1` because chevrotain, pulled in by mermaid 12, pins `lodash-es` 4.17.23, which has a high advisory.
+
 ## [0.4.0] - 2026-10-16
 
 ### Added

@@ -21,7 +21,7 @@ export {
   slugTag,
   transformInternalLink,
   transformLink,
-} from "@quartz-community/utils"
+} from "@quartz-community/utils/path"
 
 export type {
   FilePath,
@@ -29,13 +29,13 @@ export type {
   SimpleSlug,
   RelativeURL,
   TransformOptions,
-} from "@quartz-community/utils"
+} from "@quartz-community/utils/path"
 
 // --- v5-specific exports below ---
 
 import type { Element as HastElement } from "hast"
-import type { FullSlug } from "@quartz-community/utils"
-import { isRelativeURL, joinSegments, resolveRelative } from "@quartz-community/utils"
+import type { FullSlug } from "@quartz-community/utils/path"
+import { isRelativeURL, joinSegments, resolveRelative } from "@quartz-community/utils/path"
 import { clone } from "./clone"
 
 export const QUARTZ = "quartz"
