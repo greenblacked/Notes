@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Added
+
+- 50 new notes, all Markdown in `content/`:
+  - a new **Architecture** section (`content/architecture/`, in the top bar and on the home page) with 13 reference designs: GCP resource hierarchy and landing zone, environment separation, IAM groups and CI Workload Identity Federation, Shared VPC hub and spoke, private GKE and controlled egress, Cloud DNS for hybrid and multi-project setups, zero-trust access with IAP and VPC Service Controls, GKE platform topology and tenancy, GitOps repository topology and promotion, disaster recovery tiers, backup architecture, the OpenTelemetry pipeline, and FinOps cost allocation;
+  - a new **Compliance** section (`content/compliance/`, in the top bar and on the home page) with 11 notes: change management controls and pipeline evidence, audit evidence collection and retention, separation of duties, access reviews, CIS benchmarks with kube-bench, GCP organization policy guardrails, the policy exception and waiver process, SBOM generation and storage, SLSA build provenance, open-source licence compliance, and PCI DSS and GDPR for DevOps logs and data;
+  - a new **AI in DevOps** section (`content/ai/`, in the top bar and on the home page) with 6 notes: securing AI agents in CI and cloud, an AI-generated code policy and provenance, AI code review bots, AI-assisted incident response, rolling out AI tools in a team, and agent skills and shared workflows;
+  - 12 patterns: progressive delivery with Argo Rollouts, Kubernetes autoscaling, Linux host hardening with Chef and InSpec, a Conftest policy gate for manifests, Terraform plan policy checks, image signing and admission verification, GitLab runners on GKE, Jenkins controller and agent hardening, secret scanning, release versioning and changelog automation, Terraform testing, and Helm chart CI quality gates;
+  - 3 tool comparisons: Argo Rollouts vs Spinnaker, Gatekeeper vs Kyverno vs ValidatingAdmissionPolicy, and service mesh on GKE;
+  - 3 runbooks: network troubleshooting (DNS, MTU, TLS, load balancers), policy rollout from audit to enforce, and Chef to immutable images;
+  - 2 standards: structured logging conventions, and change freezes and maintenance windows.
+- A `reference` note type (shown as "Reference") and new tags `architecture`, `compliance`, `ai`, `spinnaker`, `chef`, `opentelemetry`, `linux`, `supply-chain`, `policy-as-code` and `audit` in the taxonomy (see `content/standards/writing-notes.md`).
+
 ### Changed
 
 - TypeScript 7.0.2 (native compiler) for `npm run check`; `tsconfig.json` uses `moduleResolution: "bundler"` (node10 was removed), types `micromorph` through `paths`, and `quartz/processors/parse.ts` takes the mdast `Root` type from `@types/mdast`.
