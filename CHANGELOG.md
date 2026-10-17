@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Fixed
+
+- `@quartz-community/utils` 1.0.1 now comes from the npm registry: the upstream git head no longer builds `dist/` on install, which broke type checks and the build. The `DataMap.frontmatter` declaration in `quartz/plugins/index.ts` is dropped because `@quartz-community/types` 1.0 declares it.
+
+### Security
+
+- `@quartz-community/utils` is no longer a git dependency, so its `prepare` script no longer runs during the root install.
+
 ## [0.4.0] - 2026-10-16
 
 ### Added

@@ -92,7 +92,7 @@
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/source-serif-4": "^5.3.1",
     "@quartz-community/types": "github:quartz-community/types",
-    "@quartz-community/utils": "github:quartz-community/utils",
+    "@quartz-community/utils": "^1.0.1",
     "@types/hast": "^3.0.4",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.0.10",
