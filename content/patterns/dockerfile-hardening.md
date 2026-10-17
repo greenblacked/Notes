@@ -8,7 +8,7 @@ tags:
   - security
   - ci-cd
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-10-17
 draft: false
 ---
 
@@ -198,7 +198,7 @@ cosign sign --key cosign.key "${DIGEST_REF}"
 cosign verify --key cosign.pub "${DIGEST_REF}"
 ```
 
-Keyless signing with the CI provider's OIDC identity avoids key management; see the cosign documentation for the current flags. Enforcement happens at admission (Binary Authorization on GKE, or a policy controller), and is worth adding only once signing is reliable in the pipeline.
+Keyless signing with the CI provider's OIDC identity avoids key management; see the cosign documentation for the current flags. Enforcement happens at admission (Binary Authorization on GKE, or a policy controller), and is worth adding only once signing is reliable in the pipeline. Details: [[patterns/image-signing-and-admission-verification]] for signing and verification, and [[compliance/sbom-generation-and-storage]] for keeping the SBOM.
 
 ## Checklist
 

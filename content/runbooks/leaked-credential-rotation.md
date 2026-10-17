@@ -8,7 +8,7 @@ tags:
   - incident-management
   - gcp
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-10-17
 draft: false
 ---
 
@@ -205,4 +205,4 @@ Revocation of a leaked credential is intended to be permanent; do not restore it
 | Pods still use the old secret                        | Not restarted, or mounted from a stale source. Restart and check the operator sync.                                 |
 | Alert is a false positive                            | Document why, mark it resolved in the scanner, and add an allowlist rule with a comment.                            |
 
-Finish with a [[blameless-postmortems|blameless postmortem]] that asks which control was missing, not who made the commit.
+Finish with a [[blameless-postmortems|blameless postmortem]] that asks which control was missing, not who made the commit. To catch the next leak earlier, see [[patterns/secret-scanning-pre-commit-and-ci]].
