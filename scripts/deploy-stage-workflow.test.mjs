@@ -22,7 +22,7 @@ test("the teardown step fails closed after an attempted upload", () => {
     "always()",
     "failure()",
     "cancelled()",
-    "steps.preview.outcome != 'skipped'",
+    'contains(fromJSON(\'["success","failure","cancelled"]\'), steps.preview.outcome)',
   ]) {
     assert.ok(step.if.includes(needle), `teardown if contains ${needle}`)
   }
