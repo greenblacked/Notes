@@ -206,6 +206,18 @@ test("a main ruleset that does not target main fails loudly", () => {
   assert.equal(writes(calls).filter((c) => c.includes("rulesets/2")).length, 0)
 })
 
+test("a main ruleset that excludes main fails loudly without writing", () => {
+  for (const ex of ["refs/heads/main", "~DEFAULT_BRANCH"]) {
+    const bad = ruleset(2, "main", {
+      conditions: { ref_name: { include: ["refs/heads/main"], exclude: [ex] } },
+    })
+    const { code, out, calls } = run({ fake: { RULESETS: [bad], RULESET_BY_ID: { 2: bad } } })
+    assert.notEqual(code, 0)
+    assert.match(out, /does not target the branch main/)
+    assert.equal(writes(calls).filter((c) => c.includes("rulesets/2")).length, 0)
+  }
+})
+
 test("a main ruleset with only deletion keeps it, gains the other rules and its bypass actors", () => {
   const bypass = [{ actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always" }]
   const main = ruleset(2, "main", { rules: [{ type: "deletion" }], bypass_actors: bypass })

@@ -205,7 +205,7 @@ The pipeline assumes these settings: without them anyone with write access can b
 
 **How to run it.** Actions, **Repository settings**, Run workflow on `main`, first with **dry run** checked (it prints `PLAN:` lines and changes nothing), then unchecked. Re-run the dry run afterwards: it must report `0 planned change(s)`; that re-run is the verification of an apply. It runs only from `main`, only for the owner (actor and triggering actor), only by manual dispatch, in the environment `repo-admin`.
 
-**Back-merges.** Merges from `main` into `dev` (for example after a release) go by pull request with a merge commit, never squash or rebase, so `main` stays a descendant of `dev` and the next `dev` to `main` pull request has no conflicts.
+**Back-merges.** Merges from `main` into `dev` (for example after a release) go by pull request with a merge commit, never squash or rebase, so `dev` keeps every commit of `main` (`dev` stays a descendant of `main`) and the next `dev` to `main` pull request has no conflicts.
 
 **Rollout order after merging the pull request that introduced the `dev` flow.**
 
