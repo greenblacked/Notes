@@ -198,8 +198,7 @@ ensure_env() {
     body="$(jq -nc --argjson e "$env_json" '
       {deployment_branch_policy: {protected_branches: false, custom_branch_policies: true}}
       + (if $e == null then {} else
-          {wait_timer: (([$e.protection_rules[]? | select(.type == "wait_timer") | .wait_timer][0]) // 0),
-           can_admins_bypass: (if $e.can_admins_bypass == null then true else $e.can_admins_bypass end)}
+          {wait_timer: (([$e.protection_rules[]? | select(.type == "wait_timer") | .wait_timer][0]) // 0)}
           + (([$e.protection_rules[]? | select(.type == "required_reviewers")][0]) as $rr
              | if $rr == null then {}
                else {prevent_self_review: ($rr.prevent_self_review // false),
