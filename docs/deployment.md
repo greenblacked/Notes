@@ -205,6 +205,15 @@ The pipeline assumes these settings: without them anyone with write access can b
 
 **How to run it.** Actions, **Repository settings**, Run workflow on `main`, first with **dry run** checked (it prints `PLAN:` lines and changes nothing), then unchecked. Re-run the dry run afterwards: it must report `0 planned change(s)`; that re-run is the verification of an apply. It runs only from `main`, only for the owner (actor and triggering actor), only by manual dispatch, in the environment `repo-admin`.
 
+**Back-merges.** Merges from `main` into `dev` (for example after a release) go by pull request with a merge commit, never squash or rebase, so `main` stays a descendant of `dev` and the next `dev` to `main` pull request has no conflicts.
+
+**Rollout order after merging the pull request that introduced the `dev` flow.**
+
+1. Bring `dev` to the head of `main` by a fast-forward push, before the `dev` ruleset exists (afterwards a push to `dev` needs a pull request).
+2. Run **Repository settings** as a dry run, then apply, then a dry run again (it must report `0 planned change(s)`).
+
+Until the settings are applied, **Deploy dev** fails the `dev` environment policy (the environment still allows only `main`).
+
 What it applies:
 
 - **Ruleset `dev`** (target branch `dev`): enforcement active, no bypass actors, pull request required (0 approvals; the owner works alone), required status check `CI OK` from the GitHub Actions app only, no force pushes, no deletion. The script owns this ruleset and brings it to exactly this state.
