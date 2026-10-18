@@ -88,3 +88,18 @@ test("only the upload job references secrets", () => {
     assert.equal(JSON.stringify(job).includes("secrets."), name === "upload", name)
   }
 })
+
+test("the teardown comes after every step that holds secrets", () => {
+  const names = upload.steps.map((s) => s.name ?? "")
+  const teardown = names.findIndex((n) => /Take stage down/.test(n))
+  assert.ok(teardown >= 0)
+  upload.steps.forEach((step, i) => {
+    if (i !== teardown && JSON.stringify(step).includes("secrets.")) {
+      assert.ok(i < teardown, `${step.name} runs before the teardown`)
+    }
+  })
+  for (const n of ["Retire the dev Preview", "Retire the dev Access app"]) {
+    const i = names.indexOf(n)
+    assert.ok(i >= 0 && i < teardown, `${n} runs before the teardown`)
+  }
+})

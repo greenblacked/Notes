@@ -43,7 +43,6 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 ### Removed
 
 - `release.yml`, and the `workflow_call` and tag-push triggers of `deploy-production.yml`.
-
 - The `pixi.js` dependency and `static/vendor/{d3,pixi}.min.js`; the community graph plugin is disabled.
 
 ### Fixed

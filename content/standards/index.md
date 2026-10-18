@@ -34,10 +34,10 @@ Standards say how the team works: how notes are written, how production changes 
 
 ## Changing this site
 
+- Use Conventional Commits (for example `feat:`, `fix:`, `docs:`, `ci:`, `build:`, `chore:`, optionally scoped as `fix(ci):`) and keep the subject line to 72 characters or fewer.
 - Every change goes through a pull request into `main`, and the `CI OK` check must pass. Merge with a merge commit.
 - Merging to `main` deploys the stage site (behind Cloudflare Access) automatically. Production is never touched by a merge.
-- Merging to `main` deploys nothing by itself. Merging to `dev` or `main` deploys nothing. The owner updates the stage site (behind Cloudflare Access) by running Deploy stage on `dev`.
-- Production releases are `vX.Y.Z` tags created by the Release workflow, and need approval in the `production` environment.
+- Production releases are `vX.Y.Z` tags created by the Cut release workflow (it dispatches Deploy production on the tag), and need approval in the `production` environment.
 - Notable changes go into `CHANGELOG.md` under _Unreleased_.
 
 Changes to a standard follow the same rule as any other decision: if it is significant, record it as an [[adr/index|ADR]].
