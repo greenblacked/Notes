@@ -26,6 +26,11 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - A new **Learn** section (`content/learn/`, last in the top bar and on the home page) with a learning path index and 43 lessons from first steps to middle level: lab setup, Linux, networking, Git, scripting, containers, Kubernetes, Google Cloud, CI/CD and Terraform, security, observability and on-call. The lesson structure and the `learning` tag are documented in `content/standards/writing-notes.md`.
 - A `reference` note type (shown as "Reference") and new tags `architecture`, `compliance`, `ai`, `spinnaker`, `chef`, `opentelemetry`, `linux`, `supply-chain`, `policy-as-code` and `audit` in the taxonomy (see `content/standards/writing-notes.md`).
 
+### Added
+
+- `scripts/check-attribution.mjs` and the CI job `attribution` (part of CI OK): a pull request or push fails when a commit message, an author or committer email, or the PR title or body carries tooling attribution (a tool co-author trailer, a generated-with footer, a session link, a vendor noreply or email address). Dependabot co-author lines stay allowed.
+- Deploy stage creates the Access application for stage by itself when none covers stage and there is no dev one to copy: a self-hosted app for the stage host (and the workers.dev Preview host when the account subdomain is known), 24h sessions, one allow policy for the owner's email (`STAGE_ACCESS_EMAIL` in `deploy-stage.yml`). The new app passes the same safety checks; an unsafe existing app still fails. The token needs Account > Access: Apps and Policies > Edit.
+
 ### Changed
 
 - The note's local graph is now `local-plugins/note-graph`, drawn with Canvas 2D; the graph no longer downloads the full content index. Tags no longer count as depth hops, as in Obsidian.
@@ -33,7 +38,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Deploy stage refuses to upload unless the Cloudflare API shows an Access application covering stage and no Custom Domain or DNS record for the host. After the upload, the workers.dev Preview URL must redirect to Access, otherwise the Preview is deleted; the stage Preview is also deleted after any failed or cancelled step once the upload was attempted (`SMOKE_REQUIRE_ACCESS` in `scripts/smoke-test.sh`, `scripts/cloudflare-stage.mjs`). `DEV_SMOKE_TEST` is gone.
 - `/version.txt` on stage reads `stage+<sha>`; `NOTES_VERSION` accepts `stage` instead of `dev`; `npm run preview:dev` is `npm run preview:stage`.
 - A Deploy stage run skips the upload and succeeds when `main` moved on during the run, because the newer run deploys.
-- Production starts only by dispatch on a `vX.Y.Z` tag (from Cut release, or Run workflow on a tag); a pushed tag deploys nothing.
+- Production starts only by dispatch on a `vX.Y.Z` tag (from Cut release, or Run workflow on a tag); on commits that include this change a pushed tag deploys nothing (a tag on an older commit runs that commit's own workflow).
 - The one-time `remove-stage` action is removed.
 - TypeScript 7.0.2 (native compiler) for `npm run check`; `tsconfig.json` uses `moduleResolution: "bundler"` (node10 was removed), types `micromorph` through `paths`, and `quartz/processors/parse.ts` takes the mdast `Root` type from `@types/mdast`.
 - `engines.node` is `>=22.12.0` (required by mermaid 12); `lodash-es` is overridden to `^4.18.1` (see Security).
