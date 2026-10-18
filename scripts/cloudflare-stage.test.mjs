@@ -370,3 +370,10 @@ test("touchesStage: stage, notes wildcard, zone wildcard and apex", () => {
   assert.equal(touchesStage({ domain: "dev.notes.szolotov.com" }), false)
   assert.equal(touchesStage({ domain: "other.example.com" }), false)
 })
+
+test("policyProblems: null, non-object and empty include entries are problems", () => {
+  for (const include of [[{}], [null], ["x"]]) {
+    const p = policyProblems([{ name: "x", decision: "allow", include }])
+    assert.deepEqual(p, ["policy x has an invalid include rule"])
+  }
+})

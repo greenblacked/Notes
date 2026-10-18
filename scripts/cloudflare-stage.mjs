@@ -16,6 +16,9 @@ const WILDCARD = "*.notes.szolotov.com"
 const SCOPE_HINT =
   "the token lacks Account · Access: Apps and Policies (Read for preflight, Edit for ensure-access/retire)"
 
+const GROUPS_SCOPE_HINT =
+  "the token lacks Account · Access: Organizations, Identity Providers, and Groups: Read (needed only when a stage Access policy uses group rules)"
+
 const normHost = (h) =>
   String(h || "")
     .toLowerCase()
@@ -91,7 +94,10 @@ function ruleProblems(label, include, groups, inGroup) {
     return problems
   }
   for (const r of include) {
-    if (!r || typeof r !== "object") continue
+    if (!r || typeof r !== "object" || Object.keys(r).length === 0) {
+      problems.push(`${label} has an invalid include rule`)
+      continue
+    }
     for (const type of Object.keys(r)) {
       if (type === "everyone") problems.push(`${label} includes everyone`)
       else if (type === "group" && !inGroup) {
@@ -169,7 +175,9 @@ function makeClient(fetchFn, env) {
     const code = json?.errors?.[0]?.code
     if (!res.ok || !json || json.success === false) {
       const hint =
-        path.includes("/access/") && (res.status === 403 || code === 10000) ? `: ${SCOPE_HINT}` : ""
+        path.includes("/access/") && (res.status === 403 || code === 10000)
+          ? `: ${path.includes("/access/groups") ? GROUPS_SCOPE_HINT : SCOPE_HINT}`
+          : ""
       throw new ApiError(`${method} ${path.split("?")[0]} failed with HTTP ${res.status}${hint}`)
     }
     return json
