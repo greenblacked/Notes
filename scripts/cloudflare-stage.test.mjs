@@ -429,3 +429,55 @@ test("policyProblems: null, non-object and empty include entries are problems", 
     assert.deepEqual(p, ["policy x has an invalid include rule"])
   }
 })
+
+test("workers.dev wildcards inside a label are treated as covering the Preview", async () => {
+  const bypass = { id: "b", name: "open", decision: "bypass", include: [{ everyone: {} }] }
+  for (const domain of [
+    "*-notes.sub.workers.dev",
+    "stage-*.sub.workers.dev",
+    "*.workers.dev",
+    "*.sub.workers.dev",
+  ]) {
+    const unsafe = { id: "w", domain, policies: [okPolicy, bypass] }
+    const r = await run(["preflight"], cleanRoutes([stageApp, unsafe]))
+    assert.equal(r.code, 1, `${domain}: ${r.text}`)
+    const safe = { id: "w", domain, policies: [okPolicy] }
+    const ok = await run(["preflight"], cleanRoutes([stageApp, safe]))
+    assert.equal(ok.code, 0, `${domain}: ${ok.text}`)
+    assert.doesNotMatch(ok.text, /NOTE: no Access application names the workers.dev/)
+  }
+  for (const domain of ["*-other.sub.workers.dev", "dev-*.sub.workers.dev"]) {
+    const unrelated = { id: "w", domain, policies: [{ ...okPolicy, decision: "bypass" }] }
+    const r = await run(["preflight"], cleanRoutes([stageApp, unrelated]))
+    assert.equal(r.code, 0, `${domain}: ${r.text}`)
+  }
+})
+
+test("a workers.dev app with a login_method include fails the preflight", async () => {
+  const wd = {
+    id: "wd",
+    domain: "stage-notes.sub.workers.dev",
+    policies: [{ ...okPolicy, include: [{ login_method: { id: "idp" } }] }],
+  }
+  assert.equal((await run(["preflight"], cleanRoutes([stageApp, wd]))).code, 1)
+})
+
+test("the Access groups endpoint is fetched once for the stage and Preview checks", async () => {
+  const groupPolicy = {
+    id: "p",
+    name: "g",
+    decision: "allow",
+    include: [{ group: { id: "g1" } }],
+  }
+  const wd = { id: "wd", domain: "*-notes.sub.workers.dev", policies: [groupPolicy] }
+  const calls = []
+  const routes = {
+    ...cleanRoutes([{ ...stageApp, policies: [groupPolicy] }, wd]),
+    "GET /accounts/acc/access/groups": [
+      { id: "g1", name: "grp", include: [{ email: { email: "a@b.c" } }] },
+    ],
+  }
+  const r = await run(["preflight"], routes, calls)
+  assert.equal(r.code, 0, r.text)
+  assert.equal(calls.filter((c) => c.key === "GET /accounts/acc/access/groups").length, 1)
+})
