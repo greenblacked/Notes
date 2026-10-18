@@ -34,6 +34,7 @@ import {
   groupByHops,
   groupBySection,
   neighbourhood,
+  pathOf,
   placeLabels,
   radius,
   sanitizeSettings,
@@ -162,11 +163,7 @@ function modelFor(data: GraphData, tags: boolean): Model {
 }
 
 const currentId = () => simplifySlug(document.body.dataset.slug ?? "index")
-const hrefOf = (node: GNode) => {
-  const base = siteRoot()
-  if (node.kind === "tag") return `${base}tags/${node.id.slice(4)}`
-  return node.id === "index" ? base : `${base}${node.id}`
-}
+const hrefOf = (node: GNode) => siteRoot() + pathOf(node)
 
 function navigate(href: string) {
   const url = new URL(href, location.href)
