@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Writes public/version.txt as "<version>+<sha>\n".
-//   NOTES_VERSION  X.Y.Z without a leading "v" (default: "main")
+//   NOTES_VERSION  X.Y.Z without a leading "v", or "main" / "stage" (default: "main")
 //   NOTES_SHA      full 40-char commit SHA (fallback: GITHUB_SHA, then `git rev-parse HEAD`)
 import { execFileSync } from "node:child_process"
 import { mkdirSync, writeFileSync } from "node:fs"
@@ -16,8 +16,12 @@ function fail(message) {
 }
 
 const version = (process.env.NOTES_VERSION || "main").trim()
-if (version !== "main" && !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
-  fail(`NOTES_VERSION must be X.Y.Z without a "v" prefix (got "${version}")`)
+if (
+  version !== "main" &&
+  version !== "stage" &&
+  !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)
+) {
+  fail(`NOTES_VERSION must be X.Y.Z without a "v" prefix, "main" or "stage" (got "${version}")`)
 }
 
 let sha = (process.env.NOTES_SHA || process.env.GITHUB_SHA || "").trim()

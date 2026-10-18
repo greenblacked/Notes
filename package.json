@@ -12,7 +12,7 @@
     "dev": "node ./quartz/bootstrap-cli.mjs plugin restore && node ./quartz/bootstrap-cli.mjs build --serve",
     "build": "node ./quartz/bootstrap-cli.mjs plugin restore && node ./quartz/bootstrap-cli.mjs build && node scripts/postprocess-build.mjs && node scripts/build-csp.mjs && node scripts/write-version.mjs",
     "preview": "wrangler dev --port 8787",
-    "preview:dev": "wrangler dev --var ENVIRONMENT:preview --port 8788",
+    "preview:stage": "wrangler dev --var ENVIRONMENT:preview --port 8788",
     "check": "node ./quartz/bootstrap-cli.mjs plugin restore && tsc --noEmit",
     "check:links": "node scripts/check-links.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
