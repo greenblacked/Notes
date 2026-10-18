@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- The full graph of all notes, from every page (toolbar button or Ctrl/Cmd+G), with Obsidian-style depth, search, tag and orphan toggles, section colours with a legend, node size by links, a list view, and settings remembered in this browser; the `/static/graph.json` slim index it reads.
 - 50 new notes, all Markdown in `content/`:
   - a new **Architecture** section (`content/architecture/`, in the top bar and on the home page) with 13 reference designs: GCP resource hierarchy and landing zone, environment separation, IAM groups and CI Workload Identity Federation, Shared VPC hub and spoke, private GKE and controlled egress, Cloud DNS for hybrid and multi-project setups, zero-trust access with IAP and VPC Service Controls, GKE platform topology and tenancy, GitOps repository topology and promotion, disaster recovery tiers, backup architecture, the OpenTelemetry pipeline, and FinOps cost allocation;
   - a new **Compliance** section (`content/compliance/`, in the top bar and on the home page) with 11 notes: change management controls and pipeline evidence, audit evidence collection and retention, separation of duties, access reviews, CIS benchmarks with kube-bench, GCP organization policy guardrails, the policy exception and waiver process, SBOM generation and storage, SLSA build provenance, open-source licence compliance, and PCI DSS and GDPR for DevOps logs and data;
@@ -26,10 +27,15 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The note's local graph is now `local-plugins/note-graph`, drawn with Canvas 2D; the graph no longer downloads the full content index. Tags no longer count as depth hops, as in Obsidian.
 - TypeScript 7.0.2 (native compiler) for `npm run check`; `tsconfig.json` uses `moduleResolution: "bundler"` (node10 was removed), types `micromorph` through `paths`, and `quartz/processors/parse.ts` takes the mdast `Root` type from `@types/mdast`.
 - `engines.node` is `>=22.12.0` (required by mermaid 12); `lodash-es` is overridden to `^4.18.1` (see Security).
 - The `DataMap.frontmatter` type is now inherited from `@quartz-community/types` 1.0, where `tags` is optional and `description`, `socialDescription` and `lang` are declared there; the build output is unchanged.
 - mermaid 12.0.0 (diagrams in the browser, from `public/static/vendor/mermaid`), @types/node 26.6.3, @napi-rs/simple-git 1.2.0.
+
+### Removed
+
+- The `pixi.js` dependency and `static/vendor/{d3,pixi}.min.js`; the community graph plugin is disabled.
 
 ### Fixed
 

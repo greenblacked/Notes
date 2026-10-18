@@ -146,12 +146,10 @@ plugins:
     layout:
       position: left
       priority: 25
-  # The local graph closes the note, below "Linked from".
+  # Replaced by local-plugins/graph (full graph, every page) and local-plugins/note-graph (local
+  # graph at the end of a note)
   - source: github:quartz-community/graph
-    enabled: true
-    layout:
-      position: afterBody
-      priority: 20
+    enabled: false
   - source: github:quartz-community/search
     enabled: true
     layout:
@@ -252,6 +250,19 @@ plugins:
     layout:
       position: afterBody
       priority: 15
+  # The full graph of all notes: a toolbar button and a dialog, on every page type.
+  - source: ./local-plugins/graph
+    enabled: true
+    layout:
+      position: left
+      priority: 25
+      group: toolbar
+  # The local graph closes the note, below "Linked from".
+  - source: ./local-plugins/note-graph
+    enabled: true
+    layout:
+      position: afterBody
+      priority: 20
   # Markdown footnotes become margin sidenotes from 1280px up (see custom.scss).
   - source: ./local-plugins/sidenotes
     enabled: true
