@@ -139,7 +139,10 @@ async function policiesOf(client, app) {
   if (Array.isArray(app.policies) && app.policies.every((p) => p && typeof p === "object")) {
     return app.policies
   }
-  const json = await client.call("GET", `/accounts/${client.account}/access/apps/${app.id}/policies`)
+  const json = await client.call(
+    "GET",
+    `/accounts/${client.account}/access/apps/${app.id}/policies`,
+  )
   return json.result ?? []
 }
 
@@ -152,7 +155,8 @@ async function accessCheck(client, out) {
     out(`  app ${describeApp(app)} covers_stage=${covers}`)
     if (!covers) continue
     const policies = await policiesOf(client, app)
-    for (const p of policies) out(`    policy ${p.id ?? "?"} ${JSON.stringify(p.name ?? "")} decision=${p.decision}`)
+    for (const p of policies)
+      out(`    policy ${p.id ?? "?"} ${JSON.stringify(p.name ?? "")} decision=${p.decision}`)
     const problems = policyProblems(policies)
     for (const pr of problems) out(`    problem: ${pr}`)
     if (problems.length === 0) ok = true
@@ -174,7 +178,9 @@ async function preflight(client, out) {
     `/accounts/${client.account}/workers/domains?hostname=${STAGE_HOST}`,
   )
   if ((domains.result ?? []).length > 0) {
-    throw new ApiError(`a Workers Custom Domain exists for ${STAGE_HOST}; it would shadow the Preview`)
+    throw new ApiError(
+      `a Workers Custom Domain exists for ${STAGE_HOST}; it would shadow the Preview`,
+    )
   }
   out(`OK: no Custom Domain for ${STAGE_HOST}`)
 
@@ -183,7 +189,9 @@ async function preflight(client, out) {
     `/zones?name=${ZONE}&account.id=${encodeURIComponent(client.account)}`,
   )
   if ((zones.result ?? []).length !== 1) {
-    throw new ApiError(`expected exactly one zone named ${ZONE}, found ${(zones.result ?? []).length}`)
+    throw new ApiError(
+      `expected exactly one zone named ${ZONE}, found ${(zones.result ?? []).length}`,
+    )
   }
   const zoneId = zones.result[0].id
   const records = await client.call("GET", `/zones/${zoneId}/dns_records?name.exact=${STAGE_HOST}`)
@@ -249,7 +257,10 @@ async function retireDevAccess(client, out) {
 
 const COMMANDS = { preflight, "ensure-access": ensureAccess, "retire-dev-access": retireDevAccess }
 
-export async function main(argv, { fetch: fetchFn = globalThis.fetch, env = process.env, out = console.log } = {}) {
+export async function main(
+  argv,
+  { fetch: fetchFn = globalThis.fetch, env = process.env, out = console.log } = {},
+) {
   const cmd = COMMANDS[argv[0]]
   if (!cmd || argv.length !== 1) {
     out("usage: cloudflare-stage.mjs <preflight|ensure-access|retire-dev-access>")
