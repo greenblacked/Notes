@@ -162,8 +162,9 @@ jobs:
       SHA: ${{ github.sha }}
       WRANGLER_SEND_METRICS: "false"
     steps:
-      # The guard job ensures github.sha is a commit of main, which receives only PR merges that
-      # passed CI OK.
+      # The guard job ensures github.sha is a commit of main. Intended: main receives only PR merges
+      # that passed CI OK (the `main` ruleset in docs/deployment.md#repository-settings; until it
+      # exists, only the owner-only actor check limits who deploys).
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -316,6 +317,38 @@ jobs:
             echo "::notice::stage.notes.szolotov.com answered HTTP $code."
           fi
 
+      # Before the teardown on purpose: a failure here (for example no safe Access app left for
+      # stage after the dev app is deleted) triggers failure() and takes the Preview down.
+      # Idempotent. Remove once a run log shows both "nothing to delete" notices.
+      - name: Retire the dev Preview
+        id: retire
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          wrangler=tools/node_modules/.bin/wrangler
+          if out="$("$wrangler" preview delete --name dev --skip-confirmation 2>&1)"; then
+            echo "$out"
+          else
+            echo "$out"
+            chk="$("$wrangler" preview secret list --name dev 2>&1 || true)"
+            if grep -qF 'The Preview "dev" was not found.' <<<"$chk"; then
+              echo "::notice::The dev Preview does not exist; nothing to delete."
+            else
+              echo "$chk"
+              echo "::error::Deleting the dev Preview failed; see the output above."
+              exit 1
+            fi
+          fi
+
+      - name: Retire the dev Access app
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/cloudflare-stage.mjs retire-dev-access
+
       # Fail closed: once the upload was attempted, any failed or cancelled step after it takes
       # the Preview down. That covers a parse failure, a custom domain URL check that fails before
       # Access is applied (which skips the Access probes) and a detected exposure. A failed delete
@@ -351,36 +384,6 @@ jobs:
             echo "::error::stage was not fully verified; the Preview was deleted (or was absent). See the first failed step above."
           fi
           exit 1
-
-      # Idempotent. Remove once a run log shows both "nothing to delete" notices.
-      - name: Retire the dev Preview
-        id: retire
-        if: steps.fresh.outputs.current == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          wrangler=tools/node_modules/.bin/wrangler
-          if out="$("$wrangler" preview delete --name dev --skip-confirmation 2>&1)"; then
-            echo "$out"
-          else
-            echo "$out"
-            chk="$("$wrangler" preview secret list --name dev 2>&1 || true)"
-            if grep -qF 'The Preview "dev" was not found.' <<<"$chk"; then
-              echo "::notice::The dev Preview does not exist; nothing to delete."
-            else
-              echo "$chk"
-              echo "::error::Deleting the dev Preview failed; see the output above."
-              exit 1
-            fi
-          fi
-
-      - name: Retire the dev Access app
-        if: steps.fresh.outputs.current == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/cloudflare-stage.mjs retire-dev-access
 
       - name: Summary
         if: steps.fresh.outputs.current == 'true'
