@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- The full graph of all notes, from every page (toolbar button or Ctrl/Cmd+G), with Obsidian-style depth, search, tag and orphan toggles, section colours with a legend, node size by links, a list view, and settings remembered in this browser; the `/static/graph.json` slim index it reads.
 - A **Repository settings** workflow (manual, from `main`, owner only, with a dry run) that applies the branch rulesets for `dev` and `main`, the environment branch policies (environment `stage` limited to `dev`; retired `dev` and `staging` environments deleted only with the `delete_old_environments` opt-in) and the fork approval policy.
 - 50 new notes, all Markdown in `content/`:
   - a new **Architecture** section (`content/architecture/`, in the top bar and on the home page) with 13 reference designs: GCP resource hierarchy and landing zone, environment separation, IAM groups and CI Workload Identity Federation, Shared VPC hub and spoke, private GKE and controlled egress, Cloud DNS for hybrid and multi-project setups, zero-trust access with IAP and VPC Service Controls, GKE platform topology and tenancy, GitOps repository topology and promotion, disaster recovery tiers, backup architecture, the OpenTelemetry pipeline, and FinOps cost allocation;
@@ -27,6 +28,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The note's local graph is now `local-plugins/note-graph`, drawn with Canvas 2D; the graph no longer downloads the full content index. Tags no longer count as depth hops, as in Obsidian.
 - The pre-production site is **stage** again, at https://stage.notes.szolotov.com (the Worker Preview `stage`, behind Cloudflare Access). **Deploy stage** (`deploy-stage.yml`) runs only by hand (`workflow_dispatch`), only from the `dev` branch, only for the owner; merges into `dev` or `main` deploy nothing. Work goes in through pull requests into `dev`, then `dev` to `main` with a merge commit; production releases are unchanged. CI runs for `dev` too, and Dependabot targets `dev`. dev.notes.szolotov.com is retired (one-time `retire_dev` input).
 - Deploy stage refuses to upload unless the Cloudflare API shows an Access application covering stage and no Custom Domain or DNS record for the host. After the upload, the workers.dev Preview URL must redirect to Access, otherwise the Preview is deleted; the stage Preview is also deleted after any failed or cancelled step once the upload was attempted (`SMOKE_REQUIRE_ACCESS` in `scripts/smoke-test.sh`, `scripts/cloudflare-stage.mjs`). `DEV_SMOKE_TEST` is gone.
 - `/version.txt` on stage reads `stage+<sha>`; `NOTES_VERSION` accepts `stage` instead of `dev`; `npm run preview:dev` is `npm run preview:stage`.
@@ -36,6 +38,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - `engines.node` is `>=22.12.0` (required by mermaid 12); `lodash-es` is overridden to `^4.18.1` (see Security).
 - The `DataMap.frontmatter` type is now inherited from `@quartz-community/types` 1.0, where `tags` is optional and `description`, `socialDescription` and `lang` are declared there; the build output is unchanged.
 - mermaid 12.0.0 (diagrams in the browser, from `public/static/vendor/mermaid`), @types/node 26.6.3, @napi-rs/simple-git 1.2.0.
+
+### Removed
+
+- The `pixi.js` dependency and `static/vendor/{d3,pixi}.min.js`; the community graph plugin is disabled.
 
 ### Fixed
 

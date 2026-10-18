@@ -10,6 +10,8 @@ import TopBar from "./local-plugins/top-bar/TopBar"
 import SectionRow from "./local-plugins/section-row/SectionRow"
 import LinkedFrom from "./local-plugins/linked-from/LinkedFrom"
 import ContentStart from "./local-plugins/content-start/ContentStart"
+import GraphLauncher from "./local-plugins/graph-launcher/GraphLauncher"
+import NoteGraph from "./local-plugins/note-graph/NoteGraph"
 import type { QuartzComponentConstructor } from "./quartz/components/types"
 
 // Host only: no protocol, no trailing slash (what Quartz expects for baseUrl).
@@ -21,7 +23,7 @@ const baseUrl = (process.env.NOTES_BASE_URL || "notes.szolotov.com")
 // The `home` condition limits a component to the home page (note-index uses it).
 registerCondition("home", (props) => props.fileData.slug === "index")
 
-// Spec sheet, note index, top bar, section row, skip-link target and "Linked from" (local-plugins/, laid out in
+// Spec sheet, note index, top bar, section row, skip-link target, "Linked from", graph launcher and note graph (local-plugins/, laid out in
 // quartz.config.yaml). Registered here because the plugin loader only registers components that a
 // plugin's manifest declares, and these have none. The sidenotes transformer in
 // local-plugins/sidenotes needs no registration.
@@ -43,6 +45,15 @@ componentRegistry.register(
   ContentStart as QuartzComponentConstructor<any>,
   "content-start",
 )
+
+// The directory is not called "graph": the plugin restore would copy it over the disabled community
+// plugin of that name in .quartz/plugins.
+componentRegistry.register(
+  "graph-launcher",
+  GraphLauncher as QuartzComponentConstructor<any>,
+  "graph-launcher",
+)
+componentRegistry.register("note-graph", NoteGraph as QuartzComponentConstructor<any>, "note-graph")
 
 const config = await loadQuartzConfig({ baseUrl })
 export default config
