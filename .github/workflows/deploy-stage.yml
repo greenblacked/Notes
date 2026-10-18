@@ -322,27 +322,40 @@ jobs:
             echo "::notice::stage.notes.szolotov.com answered HTTP $code."
           fi
 
-      # Fail closed: once the upload was attempted (even if it or the parsing failed, or the run was cancelled), any failed verification step (including a
-      # custom domain URL check that fails before Access is applied, which skips the Access probes)
-      # or a detected exposure takes the Preview down.
+      # Fail closed: once the upload was attempted, any failed or cancelled step after it takes
+      # the Preview down. That covers a parse failure, a custom domain URL check that fails before
+      # Access is applied (which skips the Access probes) and a detected exposure. A failed delete
+      # counts as "already gone" only when Wrangler itself reports that the Preview "stage" was
+      # not found; any other error (bad token, unknown account, network) fails the step.
       - name: Take stage down unless it is verified
         if: always() && steps.preview.outcome != 'skipped' && (failure() || cancelled() || steps.access_wd.outputs.exposed == 'true')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPOSED: ${{ steps.access_wd.outputs.exposed }}
         run: |
-          if out="$(tools/node_modules/.bin/wrangler preview delete --name stage --skip-confirmation 2>&1)"; then
+          wrangler=tools/node_modules/.bin/wrangler
+          if out="$("$wrangler" preview delete --name stage --skip-confirmation 2>&1)"; then
             echo "$out"
+            echo "::notice::Deleted the stage Preview."
           else
             echo "$out"
-            if grep -qi "not found" <<<"$out"; then
+            # The delete error text comes from the API, so confirm with Wrangler's own
+            # "Preview not found" message from a read of the same Preview.
+            chk="$("$wrangler" preview secret list --name stage 2>&1 || true)"
+            if grep -qF 'The Preview "stage" was not found.' <<<"$chk"; then
               echo "::notice::The stage Preview does not exist; nothing to delete."
             else
+              echo "$chk"
               echo "::error::Deleting the unverified stage Preview failed; delete it by hand."
               exit 1
             fi
           fi
-          echo "::error::stage was not verified behind Cloudflare Access; the Preview was deleted. Fix Access, then run Deploy stage again."
+          if [[ "$EXPOSED" == "true" ]]; then
+            echo "::error::stage was reachable without Cloudflare Access and its Preview was deleted (or was absent). Fix Access, then run Deploy stage again."
+          else
+            echo "::error::stage was not fully verified; the Preview was deleted (or was absent). See the first failed step above."
+          fi
           exit 1
 
       # One time (retire_dev): delete the old dev Preview. Re-running is harmless: when
