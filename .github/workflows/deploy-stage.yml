@@ -26,8 +26,8 @@ on:
 
 permissions: {}
 
-# Manual runs queue and are never cancelled (a deploy in flight finishes). The group is keyed on
-# the ref, so a dispatch from another ref (which the guard rejects) cannot supersede a pending
+# A running deploy is never cancelled; of several queued runs only the newest stays pending. The
+# group is keyed on the ref, so a dispatch from another ref (which the guard rejects) cannot supersede a pending
 # run of dev. A run that finds `dev` has moved on fails, so it is run again.
 concurrency:
   group: deploy-stage-${{ github.ref }}
@@ -284,7 +284,14 @@ jobs:
             echo "::error::Wrangler reported no workers.dev URL for the Preview; enable preview_urls and workers_dev in wrangler.jsonc."
             exit 1
           fi
-          scripts/smoke-test.sh "$WORKERS_DEV_URL" "stage+$SHA" noindex
+          # Exit 3 means the host answered 2xx without Access (exposed): only then is stage taken
+          # down. Any other failure (DNS, TLS, 5xx while the Preview propagates) just fails the run.
+          rc=0
+          scripts/smoke-test.sh "$WORKERS_DEV_URL" "stage+$SHA" noindex || rc=$?
+          if [[ "$rc" -eq 3 ]]; then
+            echo "exposed=true" >>"$GITHUB_OUTPUT"
+          fi
+          exit "$rc"
 
       - name: Probe the custom domain
         id: access_cd
@@ -307,7 +314,7 @@ jobs:
           fi
 
       - name: Take stage down when it is exposed
-        if: always() && steps.preview.outcome == 'success' && (steps.access_wd.outcome == 'failure' || steps.access_cd.outcome == 'failure')
+        if: always() && steps.preview.outcome == 'success' && (steps.access_wd.outputs.exposed == 'true' || steps.access_cd.outcome == 'failure')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
