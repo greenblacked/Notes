@@ -363,6 +363,35 @@ test("stage is never deleted", () => {
   assert.ok(!calls.some((c) => /-X DELETE repos\/owner\/repo\/environments\/stage(\s|$)/.test(c)))
 })
 
+test("rollout: with no stage environment, stage is created before dev is deleted", () => {
+  const { code, out, calls } = run({ fake: { ENVS: { dev: goodEnv("dev") } } })
+  assert.equal(code, 0, out)
+  const idx = (prefix) => calls.findIndex((c) => c.startsWith(prefix))
+  const put = idx("api -X PUT repos/owner/repo/environments/stage")
+  const post = idx("api -X POST repos/owner/repo/environments/stage/deployment-branch-policies")
+  const del = idx("api -X DELETE repos/owner/repo/environments/dev")
+  assert.ok(put >= 0 && post > put && del > post, `order PUT ${put}, POST ${post}, DELETE ${del}`)
+  assert.deepEqual(JSON.parse(calls[post + 1].slice(5)), { name: "dev", type: "branch" })
+})
+
+test("remove_env refuses stage, production and repo-admin", () => {
+  const src = readFileSync(script, "utf8")
+  const fn = src.slice(src.indexOf("remove_env() {"), src.indexOf("# (f)"))
+  for (const name of ["stage", "production", "repo-admin"]) {
+    const r = spawnSync(
+      "bash",
+      [
+        "-c",
+        `get() { echo called-get; }; mutate() { echo called-mutate; }; say() { :; }\n${fn}\nremove_env ${name}`,
+      ],
+      { encoding: "utf8" },
+    )
+    assert.notEqual(r.status, 0, name)
+    assert.match(r.stdout + r.stderr, /refusing to delete environment/)
+    assert.doesNotMatch(r.stdout, /called-/)
+  }
+})
+
 test("an API error other than 404 exits non-zero", () => {
   const { code, out } = run({ fake: { FAIL_PATH: "environments/stage" } })
   assert.notEqual(code, 0)
