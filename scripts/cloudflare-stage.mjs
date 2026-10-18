@@ -153,12 +153,27 @@ export function hasSafeAllow(policies, groups = null) {
 }
 
 // The workers.dev Preview hostname is stage-notes.<subdomain>.workers.dev. The account subdomain
-// is not read from the API, so any `stage-notes.<label>.workers.dev` host and any workers.dev
-// wildcard that could match it counts (conservative).
+// is not read from the API, so these hosts count (conservative): any `stage-notes.<label>.workers.dev`
+// host, and any workers.dev host containing `*` anywhere (`*.workers.dev`, `*.sub.workers.dev`,
+// `*-notes.sub.workers.dev`, `stage-*.sub.workers.dev`), when the pattern, with every `*` read as
+// `.*`, matches `stage-notes.<label>.workers.dev` (the pattern's own label, or a sample one).
 const PREVIEW_HOST = /^stage-notes\.[^.]+\.workers\.dev$/
+// The sample label is the pattern's own subdomain label when it has no `*` there, else "sample".
+const sampleLabel = (h) => {
+  const label = h.split(".").slice(-3, -2)[0]
+  return label && !label.includes("*") ? label : "sample"
+}
+const globMatchesPreview = (h) =>
+  new RegExp(
+    `^${h
+      .split("*")
+      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+      .join(".*")}$`,
+  ).test(`stage-notes.${sampleLabel(h)}.workers.dev`)
 const isPreviewEntry = (e) => {
   const h = normHost(e)
-  return PREVIEW_HOST.test(h) || (h.startsWith("*.") && h.endsWith(".workers.dev"))
+  if (PREVIEW_HOST.test(h)) return true
+  return h.endsWith(".workers.dev") && h.includes("*") && globMatchesPreview(h)
 }
 
 // Any entry of the application that can decide who reaches the workers.dev Preview, whatever
@@ -303,7 +318,7 @@ async function workersDevCheck(client, apps, state, out) {
   if (r.seen === 0) {
     const named = apps.filter((a) => hostsOf(a).some((h) => h.endsWith(".workers.dev")))
     for (const a of named)
-      out(`NOTE: workers.dev Access app ${describeApp(a)} does not cover stage-notes`)
+      out(`NOTE: workers.dev Access app ${describeApp(a)} names no host that can match stage-notes`)
     out(
       "NOTE: no Access application names the workers.dev Preview host stage-notes.<subdomain>.workers.dev; Worker-level Access cannot be listed through the API, so it is not validated here. The check after the upload must see a redirect to Access, or the Preview is deleted.",
     )
