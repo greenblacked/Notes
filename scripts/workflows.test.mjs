@@ -102,3 +102,14 @@ test("dependabot targets the default branch", () => {
   const d = parse(readFileSync(join(root, ".github", "dependabot.yml"), "utf8"))
   for (const u of d.updates) assert.equal(u["target-branch"], undefined)
 })
+
+test("the attribution check runs in ci and gates CI OK", () => {
+  const ci = wf["ci.yml"]
+  assert.ok(ci.jobs.attribution)
+  assert.ok(ci.jobs["ci-ok"].needs.includes("attribution"))
+  assert.deepEqual(ci.jobs.attribution.permissions, { contents: "read" })
+  const checkout = ci.jobs.attribution.steps.find((s) =>
+    (s.uses ?? "").startsWith("actions/checkout"),
+  )
+  assert.equal(checkout.with["fetch-depth"], 0)
+})

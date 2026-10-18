@@ -118,10 +118,47 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: '"$RUNNER_TEMP/zizmor-venv/bin/zizmor" --format=github .github'
 
+  attribution:
+    name: Check attribution
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      EVENT_NAME: ${{ github.event_name }}
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
+      PUSH_BEFORE: ${{ github.event.before }}
+      PUSH_AFTER: ${{ github.event.after }}
+    steps:
+      # Full history so that the range of the pull request or push can be listed.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      # Commit messages, author and committer emails, and for a pull request its title and body
+      # (read from the event payload file) must carry no tooling attribution. A zero `before`
+      # (first push) checks only the head commit.
+      - name: Require no tooling attribution
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            node scripts/check-attribution.mjs --range "$PR_BASE..$PR_HEAD" --event "$GITHUB_EVENT_PATH"
+          else
+            node scripts/check-attribution.mjs --range "$PUSH_BEFORE..$PUSH_AFTER"
+          fi
+
   ci-ok:
     name: CI OK
     if: always()
-    needs: [build-and-check, workflow-lint]
+    needs: [build-and-check, workflow-lint, attribution]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
