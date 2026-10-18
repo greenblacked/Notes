@@ -1,0 +1,16 @@
+{
+  "name": "graph",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "quartz": {
+    "name": "graph-launcher",
+    "category": "component",
+    "version": "1.0.0",
+    "quartzVersion": ">=5.0.0",
+    "dependencies": [],
+    "defaultEnabled": true,
+    "defaultOptions": {}
+  }
+}
