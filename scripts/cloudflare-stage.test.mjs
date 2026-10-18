@@ -1,6 +1,13 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { coversStage, hostsOf, main, policyProblems, touchesStage } from "./cloudflare-stage.mjs"
+import {
+  coversStage,
+  hasSafeAllow,
+  hostsOf,
+  main,
+  policyProblems,
+  touchesStage,
+} from "./cloudflare-stage.mjs"
 
 const TOKEN = "tok-secret-123"
 const ENV = { CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: "acc" }
@@ -256,13 +263,58 @@ test("preflight passes with a safe path-scoped app next to a safe root app", asy
   assert.equal(r.code, 0, r.text)
 })
 
-test("preflight lists the Access apps that name a workers.dev host", async () => {
+test("preflight accepts a safe workers.dev Preview app and notes when none names it", async () => {
   const wd = { id: "wd", name: "wd", domain: "stage-notes.sub.workers.dev", policies: [okPolicy] }
   const r = await run(["preflight"], cleanRoutes([stageApp, wd]))
   assert.equal(r.code, 0, r.text)
-  assert.match(r.text, /NOTE: workers.dev Access app wd/)
   const none = await run(["preflight"], cleanRoutes([stageApp]))
-  assert.match(none.text, /no Access application names a workers.dev host/)
+  assert.equal(none.code, 0, none.text)
+  assert.match(none.text, /NOTE: no Access application names the workers.dev Preview host/)
+  const other = { id: "o", name: "o", domain: "dev-notes.sub.workers.dev", policies: [okPolicy] }
+  const unrelated = await run(["preflight"], cleanRoutes([stageApp, other]))
+  assert.equal(unrelated.code, 0, unrelated.text)
+  assert.match(unrelated.text, /NOTE: workers.dev Access app o /)
+})
+
+test("preflight fails closed on an unsafe workers.dev Preview app", async () => {
+  const bypass = { decision: "bypass", name: "open", include: [{ everyone: {} }] }
+  for (const policies of [
+    [okPolicy, bypass],
+    [],
+    [{ ...okPolicy, include: [{ email_domain: { domain: "b.c" } }] }],
+  ]) {
+    const wd = { id: "wd", name: "wd", domain: "stage-notes.sub.workers.dev", policies }
+    const r = await run(["preflight"], cleanRoutes([stageApp, wd]))
+    assert.equal(r.code, 1, r.text)
+    assert.match(r.text, /workers.dev Preview host/)
+  }
+  const wildcard = {
+    id: "w",
+    domain: "*.sub.workers.dev",
+    policies: [okPolicy, { ...okPolicy, id: "p2", decision: "non_identity" }],
+  }
+  assert.equal((await run(["preflight"], cleanRoutes([stageApp, wildcard]))).code, 1)
+})
+
+test("preflight fails when the workers.dev Preview apps have no safe allow", async () => {
+  const deny = { id: "d", name: "deny", decision: "deny", include: [{ email: { email: "a@b.c" } }] }
+  const denyOnly = { id: "wd", domain: "stage-notes.sub.workers.dev", policies: [deny] }
+  assert.equal((await run(["preflight"], cleanRoutes([stageApp, denyOnly]))).code, 1)
+  const pathScoped = { id: "wd", domain: "stage-notes.sub.workers.dev/x", policies: [okPolicy] }
+  assert.equal((await run(["preflight"], cleanRoutes([stageApp, pathScoped]))).code, 1)
+})
+
+test("an app with only deny policies does not cover stage", async () => {
+  const deny = { id: "d", name: "deny", decision: "deny", include: [{ email: { email: "a@b.c" } }] }
+  assert.equal(hasSafeAllow([deny]), false)
+  assert.equal(hasSafeAllow([deny, okPolicy]), true)
+  assert.equal(hasSafeAllow([{ ...okPolicy, include: [{ everyone: {} }] }]), false)
+  const denyApp = { ...stageApp, policies: [deny] }
+  const r = await run(["preflight"], cleanRoutes([denyApp]))
+  assert.equal(r.code, 1, r.text)
+  assert.match(r.text, /no safe allow policy/)
+  const both = await run(["preflight"], cleanRoutes([denyApp, stageApp]))
+  assert.equal(both.code, 0, both.text)
 })
 
 test("ensure-access copies non-reusable policies inline with every field but the ids", async () => {

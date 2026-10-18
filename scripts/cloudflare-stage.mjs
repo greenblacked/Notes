@@ -144,6 +144,34 @@ export function workerLevelCover() {
   return false
 }
 
+// True when at least one policy is an allow with only safe identity include rules. An application
+// with only deny or other decisions grants nobody access, so it must not count as coverage.
+export function hasSafeAllow(policies, groups = null) {
+  return (policies ?? []).some(
+    (p) => p?.decision === "allow" && ruleProblems("policy", p.include, groups, false).length === 0,
+  )
+}
+
+// The workers.dev Preview hostname is stage-notes.<subdomain>.workers.dev. The account subdomain
+// is not read from the API, so any `stage-notes.<label>.workers.dev` host and any workers.dev
+// wildcard that could match it counts (conservative).
+const PREVIEW_HOST = /^stage-notes\.[^.]+\.workers\.dev$/
+const isPreviewEntry = (e) => {
+  const h = normHost(e)
+  return PREVIEW_HOST.test(h) || (h.startsWith("*.") && h.endsWith(".workers.dev"))
+}
+
+// Any entry of the application that can decide who reaches the workers.dev Preview, whatever
+// its path.
+export function touchesPreview(app) {
+  return entriesOf(app).some(isPreviewEntry)
+}
+
+// The whole workers.dev Preview host (empty path, "/" or "/*").
+export function coversPreview(app) {
+  return entriesOf(app).some((e) => isPreviewEntry(e) && ["", "/", "/*"].includes(pathOf(e)))
+}
+
 class ApiError extends Error {}
 
 function makeClient(fetchFn, env) {
@@ -210,59 +238,95 @@ async function policiesOf(client, app) {
   return json.result ?? []
 }
 
-// Prints and returns whether stage is safely protected. Every application that names the stage
-// host or the wildcard counts, whatever its path: one unsafe application (an exact-host bypass,
-// a path-scoped bypass) fails the check even when another one is safe. At least one safe
-// application must cover the whole host.
-async function accessCheck(client, out) {
-  const apps = await client.list(`/accounts/${client.account}/access/apps`)
+// Shared by the stage and workers.dev Preview checks. Every application selected by `touches`
+// counts, whatever its path: one unsafe application (an exact-host bypass, a path-scoped bypass)
+// fails the check even when another one is safe. At least one application selected by `covers`
+// must have a safe allow policy. `state.groups` caches the Access groups.
+async function evaluate(client, apps, { touches, covers }, state, out) {
   let covered = false
   let unsafe = false
-  let groups = null
+  let seen = 0
   for (const app of apps) {
-    const root = coversStage(app) || workerLevelCover(app)
-    const relevant = root || touchesStage(app)
-    out(
-      `  app ${describeApp(app)} covers_stage=${root}${relevant && !root ? " (path scoped)" : ""}`,
-    )
+    const root = covers(app)
+    const relevant = root || touches(app)
+    out(`  app ${describeApp(app)} covers=${root}${relevant && !root ? " (path scoped)" : ""}`)
     if (!relevant) continue
+    seen++
     const policies = await policiesOf(client, app)
     for (const p of policies)
       out(`    policy ${p.id ?? "?"} ${JSON.stringify(p.name ?? "")} decision=${p.decision}`)
-    if (groups === null && usesGroup(policies)) {
+    if (state.groups === null && usesGroup(policies)) {
       const all = await client.list(`/accounts/${client.account}/access/groups`)
-      groups = Object.fromEntries(all.map((g) => [g.id, g]))
+      state.groups = Object.fromEntries(all.map((g) => [g.id, g]))
     }
-    const problems = policyProblems(policies, groups)
+    const problems = policyProblems(policies, state.groups)
     for (const pr of problems) out(`    problem: ${pr}`)
     if (problems.length > 0) unsafe = true
-    else if (root) covered = true
+    else if (root) {
+      if (hasSafeAllow(policies, state.groups)) covered = true
+      else out("    problem: no safe allow policy; this application grants nobody access")
+    }
   }
-  return { ok: covered && !unsafe, apps }
+  return { covered, unsafe, seen }
 }
 
-// Prints the Access applications that name a workers.dev host, so a first run shows how the
-// workers.dev Preview URL is protected (the post-upload check needs it to redirect to Access).
-function reportWorkersDev(apps, out) {
-  const wd = apps.filter((a) => hostsOf(a).some((h) => h.endsWith(".workers.dev")))
-  if (wd.length === 0) {
+// Prints and returns whether stage is safely protected.
+async function accessCheck(client, out) {
+  const apps = await client.list(`/accounts/${client.account}/access/apps`)
+  const state = { groups: null }
+  const r = await evaluate(
+    client,
+    apps,
+    {
+      touches: touchesStage,
+      covers: (a) => coversStage(a) || workerLevelCover(a),
+    },
+    state,
+    out,
+  )
+  return { ok: r.covered && !r.unsafe, apps, state }
+}
+
+// The workers.dev Preview URL must be behind Access (the post-upload check also needs the
+// redirect). Access applications that name the Preview host are validated like the stage ones;
+// an unsafe one, or none with a safe allow policy, fails closed. When no application names the
+// Preview host, Access may be enforced at Worker or account level, which the API listing cannot
+// show: that case only prints a NOTE and leaves the check after the upload to decide.
+async function workersDevCheck(client, apps, state, out) {
+  const r = await evaluate(
+    client,
+    apps,
+    { touches: touchesPreview, covers: coversPreview },
+    state,
+    out,
+  )
+  if (r.seen === 0) {
+    const named = apps.filter((a) => hostsOf(a).some((h) => h.endsWith(".workers.dev")))
+    for (const a of named)
+      out(`NOTE: workers.dev Access app ${describeApp(a)} does not cover stage-notes`)
     out(
-      "NOTE: no Access application names a workers.dev host; the workers.dev Preview URL must be protected at Worker level, or the check after the upload fails.",
+      "NOTE: no Access application names the workers.dev Preview host stage-notes.<subdomain>.workers.dev; Worker-level Access cannot be listed through the API, so it is not validated here. The check after the upload must see a redirect to Access, or the Preview is deleted.",
     )
-    return
+    return true
   }
-  for (const a of wd) out(`NOTE: workers.dev Access app ${describeApp(a)}`)
+  return r.covered && !r.unsafe
 }
 
 async function preflight(client, out) {
-  const { ok, apps } = await accessCheck(client, out)
-  reportWorkersDev(apps, out)
+  const { ok, apps, state } = await accessCheck(client, out)
   if (!ok) {
     throw new ApiError(
       `no Cloudflare Access application protects ${STAGE_HOST} with a safe policy (see the list above); running Deploy stage with retire_dev checked copies the dev Access application to stage`,
     )
   }
   out(`OK: an Access application protects ${STAGE_HOST}`)
+
+  if (!(await workersDevCheck(client, apps, state, out))) {
+    throw new ApiError(
+      "no safe Cloudflare Access application protects the workers.dev Preview host stage-notes.<subdomain>.workers.dev, or an application naming it is unsafe (see the list above)",
+    )
+  }
+  out("OK: the workers.dev Preview host is not exposed by an unsafe Access application")
 
   const domains = await client.call(
     "GET",
