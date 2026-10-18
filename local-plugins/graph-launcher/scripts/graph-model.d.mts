@@ -66,7 +66,7 @@ export function applyFilters(
   model: Model,
   opts?: { orphans?: boolean; hiddenSections?: Iterable<string>; query?: string },
 ): FilteredView
-export function listClickCloses(c: {
+export function linkClickCloses(c: {
   onLink: boolean
   button?: number
   ctrlKey?: boolean

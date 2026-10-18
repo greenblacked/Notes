@@ -25,7 +25,7 @@ import {
   SETTINGS_KEY,
   TAG_SECTION,
   applyFilters,
-  listClickCloses,
+  linkClickCloses,
   buildModel,
   contentIndexToData,
   decodeGraphData,
@@ -327,11 +327,23 @@ class GraphView {
       if (id) this.setHover(id)
     })
     this.listen(list, "focusout", () => this.setHover(null))
-    this.listen(this.q(".graph-selection-open"), "click", () => this.afterNavigateClick())
+    this.listen(this.q(".graph-selection-open"), "click", (e: MouseEvent) => {
+      if (
+        linkClickCloses({
+          onLink: true,
+          button: e.button,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          shiftKey: e.shiftKey,
+          altKey: e.altKey,
+        })
+      )
+        this.afterNavigateClick()
+    })
     this.listen(this.q(".graph-list-body"), "click", (e: MouseEvent) => {
       const onLink = (e.target as HTMLElement).closest("a[data-id]") !== null
       if (
-        listClickCloses({
+        linkClickCloses({
           onLink,
           button: e.button,
           ctrlKey: e.ctrlKey,
