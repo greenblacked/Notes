@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import {
   DEFAULT_SETTINGS,
   applyFilters,
+  listClickCloses,
   buildModel,
   contentIndexToData,
   decodeGraphData,
@@ -286,4 +287,24 @@ test("decodeGraphData: v 2 index pairs become id pairs, anything else is null", 
   assert.equal(decodeGraphData({ v: 1, nodes, links: [] }), null)
   assert.equal(decodeGraphData({ v: 2, nodes }), null)
   assert.equal(decodeGraphData(null), null)
+})
+
+test("filters: searching is true for any non-empty query, even with zero matches", () => {
+  const m = buildModel(data)
+  const view = neighbourhood(m, "a", "all")
+  assert.equal(applyFilters(view, m, {}).searching, false)
+  assert.equal(applyFilters(view, m, { query: "   " }).searching, false)
+  const none = applyFilters(view, m, { query: "zzzzqq" })
+  assert.equal(none.searching, true)
+  assert.equal(none.matches.size, 0)
+})
+
+test("list clicks close only on plain primary clicks on a note link", () => {
+  assert.equal(listClickCloses({ onLink: true }), true)
+  assert.equal(listClickCloses({ onLink: true, button: 0 }), true)
+  assert.equal(listClickCloses({ onLink: false }), false)
+  assert.equal(listClickCloses({ onLink: true, ctrlKey: true }), false)
+  assert.equal(listClickCloses({ onLink: true, metaKey: true }), false)
+  assert.equal(listClickCloses({ onLink: true, shiftKey: true }), false)
+  assert.equal(listClickCloses({ onLink: true, button: 1 }), false)
 })

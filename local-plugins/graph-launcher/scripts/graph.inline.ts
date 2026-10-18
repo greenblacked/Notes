@@ -25,6 +25,7 @@ import {
   SETTINGS_KEY,
   TAG_SECTION,
   applyFilters,
+  listClickCloses,
   buildModel,
   contentIndexToData,
   decodeGraphData,
@@ -327,7 +328,10 @@ class GraphView {
     })
     this.listen(list, "focusout", () => this.setHover(null))
     this.listen(this.q(".graph-selection-open"), "click", () => this.afterNavigateClick())
-    this.listen(this.q(".graph-list-body"), "click", () => this.afterNavigateClick())
+    this.listen(this.q(".graph-list-body"), "click", (e: MouseEvent) => {
+      const onLink = (e.target as HTMLElement).closest("a[data-id]") !== null
+      if (listClickCloses({ onLink, ...e })) this.afterNavigateClick()
+    })
   }
 
   private afterNavigateClick() {
@@ -770,7 +774,8 @@ class GraphView {
   private updateMatches() {
     if (!this.view) return
     const r = applyFilters(this.view, this.model, { query: this.query })
-    this.view = { ...this.view, matches: r.matches }
+    this.view = { ...this.view, matches: r.matches, searching: r.searching }
+    this.wrap.dataset.search = r.searching ? (r.matches.size > 0 ? "matches" : "none") : ""
     const status = this.q(".graph-matches")
     if (status) status.textContent = this.query.trim() ? `${this.view.matches.size} matching` : ""
     this.requestDraw()
@@ -944,7 +949,8 @@ class GraphView {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, w, h)
     const hl = this.hl
-    const matches = this.view.matches.size > 0 ? this.view.matches : null
+    // A query with zero matches still dims everything.
+    const matches = this.view.searching ? this.view.matches : null
     const active = this.hoverId ?? this.selectedId
 
     ctx.save()

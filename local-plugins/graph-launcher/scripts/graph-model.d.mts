@@ -37,6 +37,8 @@ export interface View {
 }
 export interface FilteredView extends View {
   matches: Set<string>
+  /** True when a non-empty query is active, even with zero matches. */
+  searching: boolean
 }
 export interface Settings {
   v: 1
@@ -64,6 +66,14 @@ export function applyFilters(
   model: Model,
   opts?: { orphans?: boolean; hiddenSections?: Iterable<string>; query?: string },
 ): FilteredView
+export function listClickCloses(c: {
+  onLink: boolean
+  button?: number
+  ctrlKey?: boolean
+  metaKey?: boolean
+  shiftKey?: boolean
+  altKey?: boolean
+}): boolean
 export function clamp(v: number, lo: number, hi: number): number
 export function radius(node: GNode, degree: number, isCentre: boolean): number
 export function truncateLabel(title: string, max?: number): string

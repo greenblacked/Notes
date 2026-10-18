@@ -230,7 +230,7 @@ function bfs(model, start, maxDepth, hops) {
  * @param {View} view
  * @param {Model} model
  * @param {{ orphans?: boolean, hiddenSections?: Iterable<string>, query?: string }} opts
- * @returns {View & { matches: Set<string> }}
+ * @returns {View & { matches: Set<string>, searching: boolean }}
  */
 export function applyFilters(view, model, opts = {}) {
   const orphans = opts.orphans !== false
@@ -260,7 +260,18 @@ export function applyFilters(view, model, opts = {}) {
         matches.add(n.id)
     }
   }
-  return { ...view, nodes, links, matches }
+  return { ...view, nodes, links, matches, searching: query !== "" }
+}
+
+/**
+ * Whether a click in the list should close the dialog: only a plain primary click on a note link.
+ * Headings, padding, text selection and modified clicks (new tab or window) keep it open.
+ * @param {{ onLink: boolean, button?: number, ctrlKey?: boolean, metaKey?: boolean, shiftKey?: boolean, altKey?: boolean }} c
+ */
+export function listClickCloses(c) {
+  if (!c.onLink) return false
+  if ((c.button ?? 0) !== 0) return false
+  return !(c.ctrlKey || c.metaKey || c.shiftKey || c.altKey)
 }
 
 /** @param {number} v @param {number} lo @param {number} hi */
