@@ -34,6 +34,24 @@ export function simplifySlug(slug) {
 }
 
 /**
+ * Turns graph.json (v 2: links are pairs of indices into nodes) into the in-memory shape, links
+ * as pairs of ids. Null when the data is not v 2.
+ * @param {any} data
+ * @returns {GraphData | null}
+ */
+export function decodeGraphData(data) {
+  if (!data || data.v !== 2 || !Array.isArray(data.nodes) || !Array.isArray(data.links)) return null
+  /** @type {[string, string][]} */
+  const links = []
+  for (const l of data.links) {
+    const a = data.nodes[l?.[0]]
+    const b = data.nodes[l?.[1]]
+    if (a && b) links.push([a.id, b.id])
+  }
+  return { v: 2, nodes: data.nodes, links }
+}
+
+/**
  * Converts contentIndex.json (the fallback when graph.json is missing, e.g. on the dev server) to
  * the shape of graph.json.
  * @param {Record<string, any>} index
@@ -74,7 +92,7 @@ export function contentIndexToData(index, folders) {
   links.sort((a, b) =>
     a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0,
   )
-  return { v: 1, nodes, links }
+  return { v: 2, nodes, links }
 }
 
 /**

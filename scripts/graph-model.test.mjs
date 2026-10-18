@@ -5,6 +5,7 @@ import {
   applyFilters,
   buildModel,
   contentIndexToData,
+  decodeGraphData,
   depthToSlider,
   fitTransform,
   groupByHops,
@@ -263,4 +264,26 @@ test("list groupings: by hop count and by section", () => {
     secs.map((g) => g.section),
     ["adr", "patterns", "tools", "other"],
   )
+})
+
+test("decodeGraphData: v 2 index pairs become id pairs, anything else is null", () => {
+  const nodes = [{ id: "a" }, { id: "b" }, { id: "c" }]
+  assert.deepEqual(
+    decodeGraphData({
+      v: 2,
+      nodes,
+      links: [
+        [0, 1],
+        [2, 0],
+        [0, 9],
+      ],
+    }).links,
+    [
+      ["a", "b"],
+      ["c", "a"],
+    ],
+  )
+  assert.equal(decodeGraphData({ v: 1, nodes, links: [] }), null)
+  assert.equal(decodeGraphData({ v: 2, nodes }), null)
+  assert.equal(decodeGraphData(null), null)
 })

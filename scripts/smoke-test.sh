@@ -228,10 +228,10 @@ run_checks() {
     gct="$(header_value graph content-type)"
     if [[ "${gct,,}" != application/json* ]]; then
       fail_on graph "/static/graph.json content-type should be application/json, got '$gct'"
-    elif ! grep -q '"v":1' "$WORK/graph.b"; then
-      fail_on graph "/static/graph.json does not contain \"v\":1"
+    elif ! grep -q '"v":2' "$WORK/graph.b"; then
+      fail_on graph "/static/graph.json does not contain \"v\":2"
     else
-      pass "/static/graph.json is application/json with \"v\":1"
+      pass "/static/graph.json is application/json with \"v\":2"
     fi
   fi
 
