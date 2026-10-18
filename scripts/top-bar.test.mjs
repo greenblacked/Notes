@@ -56,3 +56,34 @@ test("second row: the centring script is constant text the CSP hash can cover", 
   assert.ok(!m[1].includes("</"), "no closing tag")
   assert.ok(m[1].includes("aria-current"))
 })
+
+test("search plugin keeps the hooks the top-bar bridge relies on", (t) => {
+  const file = ".quartz/plugins/search/src/components/scripts/search.inline.ts"
+  if (!fs.existsSync(file)) return t.skip("search plugin not restored")
+  const src = fs.readFileSync(file, "utf8")
+  assert.match(src, /e\.stopPropagation\(\);\s*showSearch\("basic"\)/)
+  assert.match(src, /results\.className = "results-container"/)
+  assert.match(src, /class="card-description"/)
+})
+
+test("search results clamp the snippet to three lines", () => {
+  assert.ok(!scss.includes("p.preview"), "stale p.preview selector")
+  assert.match(scss, /p\.card-description\s*\{[^}]*-webkit-line-clamp:\s*3/)
+})
+
+test("search click bridge and focus handler run from the head, before postscript.js", () => {
+  const tsx = read("local-plugins/top-bar/TopBar.tsx")
+  assert.match(tsx, /TopBar\.beforeDOMLoaded = earlyScript/)
+  const early = read("local-plugins/top-bar/scripts/top-bar.early.inline.ts")
+  const main = read("local-plugins/top-bar/scripts/top-bar.inline.ts")
+  assert.ok(early.includes("focusin") && early.includes("openEarly"))
+  assert.ok(
+    !main.includes("openEarly") && !main.includes("focusin"),
+    "must not be in the deferred bundle",
+  )
+})
+
+test("top bar: focus rings are not clipped, the wordmark has a 44 x 32 hit area", () => {
+  assert.ok(!/^\s*overflow-clip-margin\s*:/m.test(scss), "overflow-clip-margin is not in Safari")
+  assert.match(scss, /\.top-bar-brand\s*\{[^}]*padding-block:\s*0\.375rem/)
+})

@@ -92,11 +92,34 @@ function setupDrawer() {
   })
 }
 
+// When the search closes (Escape, a click on the dimmed page), the keyboard goes back to the button
+// that opened it; the search plugin leaves it on the page body.
+function setupSearchFocus() {
+  const container = document.querySelector<HTMLElement>(".search-container")
+  const button = document.querySelector<HTMLElement>(".search-button")
+  if (!container || !button) return
+  let was = container.classList.contains("active")
+  const observer = new MutationObserver(() => {
+    const now = container.classList.contains("active")
+    if (was && !now) {
+      const active = document.activeElement
+      if (!active || active === document.body || container.contains(active)) {
+        button.focus({ preventScroll: true })
+      }
+    }
+    was = now
+  })
+  observer.observe(container, { attributes: true, attributeFilter: ["class"] })
+  window.addCleanup(() => observer.disconnect())
+}
+
 // Escape closes the drawer; Tab stays inside it while it is open. The search has the keyboard
 // while it is open, and Ctrl/Cmd+K closes the drawer before the search opens.
 document.addEventListener("keydown", (e) => {
   const parts = drawerParts()
   if (!parts || !isOpen(parts)) return
+  // Autofill and some tools dispatch a keydown without a key.
+  if (typeof e.key !== "string") return
   if (e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey)) {
     parts.toggle.click()
     return
@@ -283,6 +306,7 @@ void document.fonts?.ready.then(() => revealCurrentSection(false))
 
 const onNav = () => {
   setupDrawer()
+  setupSearchFocus()
   setupTocSpy()
   setupLandmarks()
   void settleHash()
