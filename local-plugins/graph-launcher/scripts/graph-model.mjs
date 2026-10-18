@@ -38,6 +38,18 @@ export function simplifySlug(slug) {
   return s === "" ? "index" : s
 }
 
+/**
+ * The one node-inclusion rule of the graph, shared by scripts/graph-data.mjs and the dev fallback:
+ * tag pages ("tags/..." keys and the "tags" index page) and the 404 page are not notes.
+ * @param {string} key a contentIndex key
+ */
+export function isGraphNode(key) {
+  const k = String(key)
+  if (k.startsWith("tags/")) return false
+  const id = simplifySlug(k)
+  return id !== "tags" && id !== "404"
+}
+
 /** True for a folder index note: the slug (before any "#") ends in "/index". */
 export function isFolderSlug(slug) {
   return String(slug).split("#")[0].endsWith("/index")
@@ -70,7 +82,7 @@ export function decodeGraphData(data) {
  */
 export function contentIndexToData(index, folders) {
   const keys = Object.keys(index ?? {})
-    .filter((k) => !k.startsWith("tags/"))
+    .filter(isGraphNode)
     .sort()
   const ids = new Set(keys.map(simplifySlug))
   const nodes = keys.map((k) => {
