@@ -26,9 +26,11 @@ permissions: {}
 
 # Runs queue (never cancel a deploy in flight). GitHub keeps at most one pending run per group
 # and supersedes older pending ones, so the newest push wins; the head-of-dev checks make a
-# superseded run that already started skip instead of overwriting a newer deploy.
+# superseded run that already started skip instead of overwriting a newer deploy. The group is
+# keyed on the ref, so a dispatch from another ref (which the guard rejects) cannot supersede a
+# pending run of dev.
 concurrency:
-  group: deploy-dev
+  group: deploy-dev-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
