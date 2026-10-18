@@ -12,7 +12,6 @@ const API = "https://api.cloudflare.com/client/v4"
 const STAGE_HOST = "stage.notes.szolotov.com"
 const DEV_HOST = "dev.notes.szolotov.com"
 const ZONE = "szolotov.com"
-const WILDCARD = "*.notes.szolotov.com"
 const SCOPE_HINT =
   "the token lacks Account · Access: Apps and Policies (Read for preflight, Edit for ensure-access/retire)"
 
@@ -57,19 +56,34 @@ function entriesOf(app) {
   return entries
 }
 
-const isStageEntry = (e) => [STAGE_HOST, WILDCARD].includes(normHost(e))
-const isBroaderEntry = (e) => [`*.${ZONE}`, ZONE].includes(normHost(e))
-
-// True when some entry is the stage host, the notes wildcard, the zone wildcard or the zone apex,
-// whatever its path (conservative). Such an application can decide who reaches stage (Access
-// applies the most specific one).
-export function touchesStage(app) {
-  return entriesOf(app).some((e) => isStageEntry(e) || isBroaderEntry(e))
+// One glob rule for every host match (stage and Preview): each `*` reads as any text, every other
+// character is literal, the match is anchored and case-insensitive.
+export function globToRegex(pattern) {
+  const body = String(pattern)
+    .split("*")
+    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*")
+  return new RegExp(`^${body}$`, "i")
 }
 
-// True when a host equals stage or the notes wildcard and the path is empty, "/" or "/*".
+const WHOLE_HOST_PATHS = ["", "/", "/*"]
+const globMatches = (entry, host) => globToRegex(normHost(entry)).test(host)
+
+// A host pattern of an entry decides who reaches stage when it matches the stage host (path
+// ignored: any path counts). The zone apex is kept as an explicit conservative case.
+const isStageEntry = (e) => globMatches(e, STAGE_HOST) || normHost(e) === ZONE
+
+// True when some entry's host pattern matches the stage host, whatever its path (conservative).
+// Such an application can decide who reaches stage (Access applies the most specific one).
+export function touchesStage(app) {
+  return entriesOf(app).some(isStageEntry)
+}
+
+// True when an entry matches the stage host with no path restriction (empty, "/" or "/*").
 export function coversStage(app) {
-  return entriesOf(app).some((e) => isStageEntry(e) && ["", "/", "/*"].includes(pathOf(e)))
+  return entriesOf(app).some(
+    (e) => globMatches(e, STAGE_HOST) && WHOLE_HOST_PATHS.includes(pathOf(e)),
+  )
 }
 
 // Include rule types that name identities. Anything else (everyone, email_domain, login_method,
@@ -153,27 +167,17 @@ export function hasSafeAllow(policies, groups = null) {
 }
 
 // The workers.dev Preview hostname is stage-notes.<subdomain>.workers.dev. The account subdomain
-// is not read from the API, so these hosts count (conservative): any `stage-notes.<label>.workers.dev`
-// host, and any workers.dev host containing `*` anywhere (`*.workers.dev`, `*.sub.workers.dev`,
-// `*-notes.sub.workers.dev`, `stage-*.sub.workers.dev`), when the pattern, with every `*` read as
-// `.*`, matches `stage-notes.<label>.workers.dev` (the pattern's own label, or a sample one).
-const PREVIEW_HOST = /^stage-notes\.[^.]+\.workers\.dev$/
-// The sample label is the pattern's own subdomain label when it has no `*` there, else "sample".
-const sampleLabel = (h) => {
-  const label = h.split(".").slice(-3, -2)[0]
-  return label && !label.includes("*") ? label : "sample"
-}
-const globMatchesPreview = (h) =>
-  new RegExp(
-    `^${h
-      .split("*")
-      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-      .join(".*")}$`,
-  ).test(`stage-notes.${sampleLabel(h)}.workers.dev`)
+// is not read from the API, so an entry whose host ends in `.workers.dev` counts (conservative)
+// when its glob matches `stage-notes.<L>.workers.dev`, where <L> is the pattern's own subdomain
+// label with each `*` replaced by `a` ("sample" when there is no such label), or matches
+// `stage-notes.sample.workers.dev`.
 const isPreviewEntry = (e) => {
   const h = normHost(e)
-  if (PREVIEW_HOST.test(h)) return true
-  return h.endsWith(".workers.dev") && h.includes("*") && globMatchesPreview(h)
+  if (!h.endsWith(".workers.dev")) return false
+  const labels = h.split(".")
+  const own = labels.length >= 3 ? labels[labels.length - 3].replaceAll("*", "a") : "sample"
+  const re = globToRegex(h)
+  return re.test(`stage-notes.${own}.workers.dev`) || re.test("stage-notes.sample.workers.dev")
 }
 
 // Any entry of the application that can decide who reaches the workers.dev Preview, whatever
@@ -184,7 +188,7 @@ export function touchesPreview(app) {
 
 // The whole workers.dev Preview host (empty path, "/" or "/*").
 export function coversPreview(app) {
-  return entriesOf(app).some((e) => isPreviewEntry(e) && ["", "/", "/*"].includes(pathOf(e)))
+  return entriesOf(app).some((e) => isPreviewEntry(e) && WHOLE_HOST_PATHS.includes(pathOf(e)))
 }
 
 class ApiError extends Error {}

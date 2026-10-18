@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
   coversStage,
+  globToRegex,
   hasSafeAllow,
   hostsOf,
   main,
@@ -480,4 +481,46 @@ test("the Access groups endpoint is fetched once for the stage and Preview check
   const r = await run(["preflight"], routes, calls)
   assert.equal(r.code, 0, r.text)
   assert.equal(calls.filter((c) => c.key === "GET /accounts/acc/access/groups").length, 1)
+})
+
+test("globToRegex: literal characters, * as any text, anchored, case-insensitive", () => {
+  assert.equal(globToRegex("a.b").test("axb"), false)
+  assert.equal(globToRegex("a*.b").test("A-long.B"), true)
+  assert.equal(globToRegex("a*").test("xa"), false)
+})
+
+test("stage: any glob that can match the stage host is checked", async () => {
+  const bypass = { decision: "bypass", name: "open", include: [{ everyone: {} }] }
+  const unsafe = (domain) => ({ id: "u", domain, policies: [okPolicy, bypass] })
+  for (const domain of ["st*.notes.szolotov.com", "*.*.szolotov.com"]) {
+    const r = await run(["preflight"], cleanRoutes([stageApp, unsafe(domain)]))
+    assert.equal(r.code, 1, `${domain}: ${r.text}`)
+  }
+  const unrelated = await run(
+    ["preflight"],
+    cleanRoutes([stageApp, unsafe("x*.notes.szolotov.com")]),
+  )
+  assert.equal(unrelated.code, 0, unrelated.text)
+})
+
+test("Preview: a *-notes.ac*.workers.dev glob is checked and can cover", async () => {
+  const bypass = { decision: "bypass", name: "open", include: [{ everyone: {} }] }
+  const domain = "*-notes.ac*.workers.dev"
+  const bad = await run(
+    ["preflight"],
+    cleanRoutes([stageApp, { id: "w", domain, policies: [okPolicy, bypass] }]),
+  )
+  assert.equal(bad.code, 1, bad.text)
+  const ok = await run(
+    ["preflight"],
+    cleanRoutes([stageApp, { id: "w", domain, policies: [okPolicy] }]),
+  )
+  assert.equal(ok.code, 0, ok.text)
+  assert.doesNotMatch(ok.text, /NOTE: no Access application names the workers.dev/)
+})
+
+test("an exact safe stage app plus a safe Preview wildcard app passes", async () => {
+  const wild = { id: "w", name: "w", domain: "*.workers.dev", policies: [okPolicy] }
+  const r = await run(["preflight"], cleanRoutes([stageApp, wild]))
+  assert.equal(r.code, 0, r.text)
 })
