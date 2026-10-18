@@ -180,7 +180,8 @@ plugins:
     layout:
       position: beforeBody
       priority: 30
-  # The wordmark is part of the top bar (local-plugins/top-bar).
+  # The wordmark is part of the top bar (local-plugins/top-bar), the section links of its second row
+  # (local-plugins/section-row).
   - source: github:quartz-community/page-title
     enabled: false
   - source: github:quartz-community/darkmode
@@ -224,14 +225,21 @@ plugins:
       position: afterBody
       priority: 10
       condition: home
-  # The sticky top bar: wordmark and section links. The page frame's left sidebar is the bar, and
-  # holds this component, the Explorer (its Browse button opens the drawer), the search and the
-  # dark-mode toggle (see custom.scss).
+  # The sticky top bar: the wordmark. The page frame's left sidebar is the bar, and holds this
+  # component, the Explorer (its Browse button opens the drawer), the search and the dark-mode
+  # toggle (see custom.scss).
   - source: ./local-plugins/top-bar
     enabled: true
     layout:
       position: left
       priority: 10
+  # The second row of the bar: the section links. After the toolbar group (35), so the keyboard
+  # order matches what is drawn.
+  - source: ./local-plugins/section-row
+    enabled: true
+    layout:
+      position: left
+      priority: 40
   # The target of the skip link, before the breadcrumbs and the title.
   - source: ./local-plugins/content-start
     enabled: true

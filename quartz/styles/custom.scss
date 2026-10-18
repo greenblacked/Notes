@@ -20,7 +20,6 @@
 // still apply to its components; the sidenotes need a wider sheet than the table of contents does.
 $wide: "(min-width: 1280px)";
 $wider: "(min-width: 1500px)";
-$compact-bar: "(max-width: 60rem)";
 
 // ============================================================================
 // Fonts (self-hosted)
@@ -82,6 +81,12 @@ $unicode-ranges: (
   --pad: clamp(1.25rem, 4vw, 3.25rem);
   --sidenote-gap: 1.25rem;
   --bar-h: 3.5rem;
+  // The top bar is two rows: the toolbar (--bar-h) and the section links (--sec-h). --sticky-h is
+  // how much of the top of the viewport it covers: anchors and the table of contents rail stay
+  // below that. On a short window (a landscape phone) the bar scrolls away, and it is 0.
+  --sec-h: 2.5rem;
+  --header-h: calc(var(--bar-h) + var(--sec-h));
+  --sticky-h: var(--header-h);
   --radius: 12px;
   --radius-sm: 8px;
 
@@ -170,6 +175,12 @@ $unicode-ranges: (
   }
 }
 
+@media all and (max-height: 30rem) {
+  :root {
+    --sticky-h: 0px;
+  }
+}
+
 // ============================================================================
 // Accessibility and motion
 // ============================================================================
@@ -226,8 +237,8 @@ $unicode-ranges: (
 
 html {
   scroll-behavior: smooth;
-  // Anchors and the table of contents land below the sticky bar.
-  scroll-padding-top: calc(var(--bar-h) + 1.25rem);
+  // Anchors and the table of contents land below the sticky bar (both rows).
+  scroll-padding-top: calc(var(--sticky-h) + 1.25rem);
   background-color: var(--desk);
   -webkit-font-smoothing: antialiased;
 
@@ -374,6 +385,12 @@ body {
     }
   }
 
+  // The rail's column is empty on pages without a table of contents; an empty box still has its
+  // padding and would widen the page at large text sizes.
+  & .sidebar.right:empty {
+    display: none;
+  }
+
   // Table of contents rail: beside the sheet from the desktop breakpoint, hidden below it.
   & .sidebar.right {
     display: none;
@@ -383,11 +400,11 @@ body {
       grid-area: rail;
       align-self: start;
       position: sticky;
-      top: calc(var(--bar-h) + 1.25rem);
+      top: calc(var(--sticky-h) + 1.25rem);
       box-sizing: border-box;
       width: 100%;
       height: auto;
-      max-height: calc(100dvh - var(--bar-h) - 2.5rem);
+      max-height: calc(100dvh - var(--sticky-h) - 2.5rem);
       margin-top: 1.25rem;
       padding: 1.5rem 0 1rem 1.75rem;
       overflow-y: auto;
@@ -440,8 +457,10 @@ body {
 // ============================================================================
 // Top bar
 // ============================================================================
-// The left sidebar of the frame: wordmark and section links (local-plugins/top-bar), then the
-// Browse button (the Explorer, below), search and the theme toggle. Sticky; from the first pixels
+// The left sidebar of the frame, in two rows. Row 1: the wordmark (local-plugins/top-bar), the
+// Browse button (the Explorer, below), search and the theme toggle. Row 2: the section links
+// (local-plugins/section-row), which scroll sideways when they do not fit. Both rows are one sticky
+// element (except on short windows, see --sticky-h); from the first pixels
 // of scrolling its background fades in as a translucent, blurred band and a thin line under it
 // fills with the reading progress. Both are scroll-driven animations; where they are not
 // supported the band is simply always there and the progress line stays out.
@@ -456,23 +475,45 @@ body {
   top: 0;
   z-index: 40;
   box-sizing: border-box;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
+  // Two rows. Row 1: the wordmark (left), Browse and the toolbar (right); row 2: the section row.
+  // The outer columns are the page margin less one gap, so the content starts at --bar-x.
+  --bar-x: 1rem;
+  --bar-gap: 0.75rem;
+  display: grid;
+  grid-template-columns:
+    calc(var(--bar-x) - var(--bar-gap)) minmax(0, 1fr) auto auto
+    calc(var(--bar-x) - var(--bar-gap));
+  grid-template-rows: var(--bar-h) var(--sec-h);
+  column-gap: var(--bar-gap);
+  row-gap: 0;
   align-items: center;
-  gap: 0.5rem 0.75rem;
-  height: var(--bar-h);
-  padding: 0 var(--gutter);
+  height: var(--header-h);
+  padding: 0;
   overflow: visible;
 
-  @media all and ($tablet) {
-    padding: 0 1rem;
-  }
   @media all and ($desktop) {
-    padding: 0 max(1rem, calc((100% - 72rem) / 2));
+    --bar-x: max(1rem, calc((100% - 72rem) / 2));
   }
   @media all and ($mobile) {
-    padding: 0 0.75rem;
+    --bar-x: 0.75rem;
+    --bar-gap: 0.5rem;
+  }
+  @media all and (max-width: 22.49em) {
+    --bar-gap: 0.375rem;
+  }
+  // A short window (a landscape phone): the two rows would take a quarter of the screen, so the
+  // bar scrolls away with the page (--sticky-h is 0 there).
+  @media all and (max-height: 30rem) {
+    position: relative;
+  }
+
+  & > .top-bar {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  & > .section-row {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   &::before {
@@ -534,11 +575,8 @@ body {
 }
 
 .top-bar {
-  order: 1;
   display: flex;
   align-items: center;
-  gap: 1.75rem;
-  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -578,19 +616,43 @@ body {
   }
 }
 
-.top-bar-links {
+// The second row: the section links. It scrolls sideways when they do not fit, with no visible
+// scrollbar; the half-visible link at the edge shows that there is more, and keyboard focus (the
+// top-bar script keeps the focused link in view), touch, trackpads and shift+wheel scroll it. No
+// scroll-snap, which would fight the centring of the current section. position: relative makes it
+// the offsetParent of its links, which the centring script relies on.
+.section-row {
+  position: relative;
+  align-self: stretch;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.section-row-links {
   display: flex;
   align-items: center;
   gap: 0.15rem;
+  box-sizing: border-box;
+  // The list is as wide as its links (at least the row), so the padding is part of the scrolled
+  // content. The inline padding lines the first pill up with the wordmark; the 4px block padding
+  // is room for the 2px outline + 2px offset of the focus ring inside the clip edge of the row
+  // (overflow-clip-margin is not in Safari).
+  width: max-content;
+  min-width: 100%;
+  height: 100%;
   margin: 0;
-  padding: 0;
+  padding: 4px var(--bar-x);
   list-style: none;
 
-  @media all and ($compact-bar) {
-    display: none;
-  }
-
   & li {
+    flex: none;
     margin: 0;
     padding: 0;
     line-height: 1;
@@ -598,8 +660,12 @@ body {
 
   & a {
     position: relative;
-    display: block;
-    padding: 0.5rem 0.7rem;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    height: 2rem;
+    padding: 0 0.7rem;
+    white-space: nowrap;
     border-radius: 999px;
     font: 500 0.875rem/1 var(--ui);
     color: var(--darkgray);
@@ -628,7 +694,8 @@ body {
 // Search, the theme toggle (Quartz's own components) and the Browse button.
 .page > #quartz-body > .sidebar.left.sidebar {
   & > .flex-component {
-    order: 3;
+    grid-column: 4;
+    grid-row: 1;
     flex: none;
     align-items: center;
     gap: 0.25rem !important;
@@ -791,7 +858,8 @@ body {
 // focus handling and Escape are in local-plugins/top-bar/scripts/top-bar.inline.ts.
 
 .page > #quartz-body > .sidebar.left.sidebar .explorer {
-  order: 2;
+  grid-column: 3;
+  grid-row: 1;
   flex: none;
   align-self: center;
   height: auto;
@@ -845,8 +913,27 @@ body {
       color: var(--dark);
     }
 
+    // Until Quartz's script has loaded the button keeps its box, so nothing shifts when it appears.
     &.hide-until-loaded {
-      display: none;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    // Icon only, as the search on a phone; the name is kept for assistive technology.
+    @media all and (max-width: 22.49em) {
+      width: 2.25rem;
+      padding: 0;
+      justify-content: center;
+      position: relative;
+
+      &::after {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
     }
   }
 
