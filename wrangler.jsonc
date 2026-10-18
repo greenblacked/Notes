@@ -2,9 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   // One Worker serves everything. Static site is served from ./public (the Quartz build output)
   // through worker/index.js, which adds security headers, serves /robots.txt and sets cache policy.
-  //   - production: `wrangler deploy` (tag releases) at https://notes.szolotov.com
-  //   - stage: a Worker Preview named `stage` (`wrangler preview`, run by hand from the `dev`
-  //     branch) at https://stage.notes.szolotov.com, behind Cloudflare Access. See
+  //   - production: `wrangler deploy` from release tags (Cut release) at https://notes.szolotov.com
+  //   - stage: a Worker Preview named `stage` (`wrangler preview`, deployed on every merge to
+  //     `main`) at https://stage.notes.szolotov.com, behind Cloudflare Access. See
   //     docs/deployment.md#stage-preview.
   "name": "notes",
   "main": "worker/index.js",

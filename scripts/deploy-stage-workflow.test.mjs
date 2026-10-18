@@ -43,3 +43,63 @@ test("no run block interpolates ${{ }} expressions", () => {
     if (s.run) assert.ok(!s.run.includes("${{"), `step "${s.name}" interpolates in run`)
   }
 })
+
+const raw = readFileSync(file, "utf8")
+const upload = workflow.jobs.upload
+
+test("it runs on pushes to main and on dispatch from main, with no inputs", () => {
+  assert.deepEqual(Object.keys(workflow.on).sort(), ["push", "workflow_dispatch"])
+  assert.deepEqual(workflow.on.push.branches, ["main"])
+  const dispatch = workflow.on.workflow_dispatch
+  assert.ok(!dispatch || !dispatch.inputs, "dispatch has no inputs")
+})
+
+test("the guard accepts main only", () => {
+  const run = workflow.jobs.guard.steps.map((s) => s.run ?? "").join("\n")
+  assert.ok(run.includes("refs/heads/main"))
+  assert.ok(!run.includes("refs/heads/dev"))
+})
+
+test("the upload job uses the staging environment", () => {
+  assert.equal(upload.environment.name, "staging")
+})
+
+test("every freshness check targets main", () => {
+  const withBranch = steps.filter((s) => s.env && s.env.BRANCH !== undefined)
+  assert.ok(withBranch.length >= 2)
+  for (const s of withBranch) assert.equal(s.env.BRANCH, "main")
+})
+
+test("the one-time retire switch is gone", () => {
+  assert.ok(!raw.includes("RETIRE_DEV"))
+  assert.ok(!raw.includes("retire_dev"))
+})
+
+test("ensure-access runs before the preflight, unconditionally on a fresh commit", () => {
+  const names = upload.steps.map((s) => s.name ?? "")
+  const ensure = names.findIndex((n) => /Ensure Cloudflare Access/.test(n))
+  const preflight = names.findIndex((n) => /Require Cloudflare Access and a clean hostname/.test(n))
+  assert.ok(ensure >= 0 && preflight > ensure)
+  assert.ok(!/inputs\.|env\./.test(upload.steps[ensure].if))
+})
+
+test("only the upload job references secrets", () => {
+  for (const [name, job] of Object.entries(workflow.jobs)) {
+    assert.equal(JSON.stringify(job).includes("secrets."), name === "upload", name)
+  }
+})
+
+test("the teardown comes after every step that holds secrets", () => {
+  const names = upload.steps.map((s) => s.name ?? "")
+  const teardown = names.findIndex((n) => /Take stage down/.test(n))
+  assert.ok(teardown >= 0)
+  upload.steps.forEach((step, i) => {
+    if (i !== teardown && JSON.stringify(step).includes("secrets.")) {
+      assert.ok(i < teardown, `${step.name} runs before the teardown`)
+    }
+  })
+  for (const n of ["Retire the dev Preview", "Retire the dev Access app"]) {
+    const i = names.indexOf(n)
+    assert.ok(i >= 0 && i < teardown, `${n} runs before the teardown`)
+  }
+})
