@@ -203,7 +203,7 @@ The smoke test also sends the User-Agent `notes-smoke-test/1 (+https://github.co
 
 The pipeline assumes these settings: without them anyone with write access can bypass its checks. The **Repository settings** workflow (`repo-settings.yml`, script `.github/scripts/repo-settings.sh`) applies most of them idempotently through the GitHub API.
 
-**How to run it.** Actions, **Repository settings**, Run workflow on `main`, first with **dry run** checked (it prints `PLAN:` lines and changes nothing), then unchecked. Re-run the dry run afterwards: it must report `0 planned change(s)`. It runs only from `main`, only for the owner (actor and triggering actor), only by manual dispatch, in the environment `repo-admin`.
+**How to run it.** Actions, **Repository settings**, Run workflow on `main`, first with **dry run** checked (it prints `PLAN:` lines and changes nothing), then unchecked. Re-run the dry run afterwards: it must report `0 planned change(s)`; that re-run is the verification of an apply. It runs only from `main`, only for the owner (actor and triggering actor), only by manual dispatch, in the environment `repo-admin`.
 
 What it applies:
 

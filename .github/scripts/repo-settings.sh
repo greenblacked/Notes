@@ -129,6 +129,8 @@ ensure_dev_ruleset() {
               | if $e.key == "required_status_checks"
                 then ($e.value | map({context, integration_id}) | sort)
                      == (($hr.parameters.required_status_checks // []) | map({context, integration_id}) | sort)
+                elif ($e.value | type) == "array"
+                then ($e.value | sort) == ((($hr.parameters // {})[$e.key] // []) | sort)
                 else $e.value == (($hr.parameters // {})[$e.key])
                 end)))' <<<"$GOT" >/dev/null; then
     say "OK: ruleset dev up to date"
@@ -196,7 +198,8 @@ ensure_env() {
     body="$(jq -nc --argjson e "$env_json" '
       {deployment_branch_policy: {protected_branches: false, custom_branch_policies: true}}
       + (if $e == null then {} else
-          {wait_timer: (([$e.protection_rules[]? | select(.type == "wait_timer") | .wait_timer][0]) // 0)}
+          {wait_timer: (([$e.protection_rules[]? | select(.type == "wait_timer") | .wait_timer][0]) // 0),
+           can_admins_bypass: ($e.can_admins_bypass // true)}
           + (([$e.protection_rules[]? | select(.type == "required_reviewers")][0]) as $rr
              | if $rr == null then {}
                else {prevent_self_review: ($rr.prevent_self_review // false),
@@ -228,7 +231,7 @@ report_production() {
     say "WARN: environment production does not exist (see docs/deployment.md#repository-settings)."
     return
   fi
-  reviewers="$(jq -r '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]? | .reviewer.login] | join(",")' <<<"$GOT")"
+  reviewers="$(jq -r '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]? | (.reviewer.login // .reviewer.slug)] | join(",")' <<<"$GOT")"
   get environments/production/deployment-branch-policies --paginate || true
   policies="$(jq -sc '[.[].branch_policies[]?]' <<<"${GOT:-}")"
   say "OK: production (read only): reviewers '${reviewers}', policies $(jq -c 'map("\(.type // "branch"):\(.name)")' <<<"$policies")"
@@ -279,16 +282,21 @@ report_state() {
   done
 }
 
-ensure_dev_ruleset
-ensure_main_ruleset
-ensure_env dev dev
-ensure_env repo-admin main
-report_production
-remove_staging
-ensure_fork_approval
+apply_all() {
+  ensure_dev_ruleset
+  ensure_main_ruleset
+  ensure_env dev dev
+  ensure_env repo-admin main
+  report_production
+  remove_staging
+  ensure_fork_approval
+}
+
+apply_all
 
 if [[ "$DRY_RUN" == "true" ]]; then
   say "Dry run: $PLANNED planned change(s); re-run with dry_run unchecked to apply."
 else
   report_state
+  say "Verify: re-run with dry_run checked; it must report 0 planned change(s)."
 fi
