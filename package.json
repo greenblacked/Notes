@@ -53,7 +53,7 @@
     "mdast-util-to-string": "^4.0.0",
     "micromorph": "^0.4.5",
     "minimatch": "^10.2.6",
-    "preact": "^10.29.8",
+    "preact": "^11.0.0",
     "preact-render-to-string": "^6.8.0",
     "pretty-bytes": "^7.2.0",
     "pretty-time": "^1.1.0",
