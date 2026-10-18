@@ -155,7 +155,7 @@ test("SMOKE_REQUIRE_ACCESS=1 passes on an Access redirect", async () => {
 test("SMOKE_REQUIRE_ACCESS=1 fails on a healthy public site", async () => {
   const s = await start()
   const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1" })
-  assert.equal(code, 1, out)
+  assert.equal(code, 3, out)
   assert.match(out, /is not behind Cloudflare Access \(HTTP 200\)/)
 })
 
@@ -167,7 +167,7 @@ test("SMOKE_REQUIRE_ACCESS=1 fails on a 200 carrying an Access Location", async 
         .end("other\n"),
   })
   const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1" })
-  assert.equal(code, 1, out)
+  assert.equal(code, 3, out)
   assert.match(out, /is not behind Cloudflare Access/)
 })
 
@@ -176,4 +176,26 @@ test("SMOKE_REQUIRE_ACCESS=1 fails on another redirect", async () => {
   const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1" })
   assert.equal(code, 1, out)
   assert.match(out, /is not behind Cloudflare Access \(HTTP 30/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 retries a 503 and passes once the Access redirect shows", async () => {
+  let n = 0
+  const s = await start({
+    "/version.txt": (res) => {
+      n++
+      if (n === 1) return res.writeHead(503).end()
+      return access(res)
+    },
+  })
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1", SMOKE_MAX_ATTEMPTS: "3" })
+  assert.equal(code, 0, out)
+  assert.match(out, /attempt 1: HTTP 503/)
+  assert.match(out, /behind Cloudflare Access/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 exits 1, not 3, when a 503 persists", async () => {
+  const s = await start({ "/version.txt": (res) => res.writeHead(503).end() })
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1", SMOKE_MAX_ATTEMPTS: "2" })
+  assert.equal(code, 1, out)
+  assert.match(out, /after 2 attempts/)
 })
