@@ -38,8 +38,7 @@ jobs:
     if: github.repository == 'greenblacked/Notes'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    permissions:
-      contents: read
+    permissions: {}
     env:
       REF: ${{ github.ref }}
       EVENT: ${{ github.event_name }}
