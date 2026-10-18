@@ -1,0 +1,153 @@
+name: Cut release
+
+# Run on main with a version whose CHANGELOG section is already on main (Actions -> Cut release
+# -> Run workflow -> X.Y.Z). It validates, creates the annotated tag vX.Y.Z and the GitHub
+# Release through the API (both carry the CHANGELOG section as their notes), then dispatches
+# deploy-production.yml on the tag. A tag created with GITHUB_TOKEN starts no push workflow, but
+# a workflow_dispatch made with GITHUB_TOKEN does start a run. Production then waits for the
+# approval of the `production` environment.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version X.Y.Z (no leading v); its CHANGELOG section must be on main"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: cut-release
+  cancel-in-progress: false
+
+jobs:
+  cut:
+    name: Cut release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # the tag object, refs/tags/vX.Y.Z and the GitHub Release; never a code push
+      actions: write # dispatch deploy-production.yml (includes read for require-ci-success.sh)
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+      REF: ${{ github.ref }}
+      REPO: ${{ github.repository }}
+      ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      INPUT_VERSION: ${{ inputs.version }}
+    steps:
+      # A failing step, not a job-level `if`: a skipped job reports success.
+      - name: Refuse anything but main and the owner
+        run: |
+          set -Eeuo pipefail
+          if [[ "$REPO" != "greenblacked/Notes" ]]; then
+            echo "::error::Unexpected repository '$REPO'."
+            exit 1
+          fi
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "::error::Releases can only be cut from main (got '$REF')."
+            exit 1
+          fi
+          if [[ "$ACTOR" != "greenblacked" || "$TRIGGERING_ACTOR" != "greenblacked" ]]; then
+            echo "::error::Cut release is limited to the repository owner (actor '$ACTOR', triggered by '$TRIGGERING_ACTOR')."
+            exit 1
+          fi
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false # nothing is installed with npm here
+
+      - name: Validate version
+        id: validate
+        run: |
+          set -Eeuo pipefail
+          if [[ ! "$INPUT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Version must be X.Y.Z (SemVer: digits only, no leading zeros, no leading v)."
+            exit 1
+          fi
+          echo "tag=v$INPUT_VERSION" >>"$GITHUB_OUTPUT"
+
+      - name: Check this commit is the head of main
+        id: fresh
+        env:
+          BRANCH: main
+        run: .github/scripts/is-branch-head.sh
+
+      - name: Require the head of main
+        env:
+          CURRENT: ${{ steps.fresh.outputs.current }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "$CURRENT" != "true" ]]; then
+            echo "::error::main moved on since this run started; run Cut release again."
+            exit 1
+          fi
+
+      - name: Require a version greater than the latest tag
+        env:
+          TAG: ${{ steps.validate.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          latest="$(gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/v" --jq '.[].ref' \
+            | sed 's#^refs/tags/##' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -n 1 || true)"
+          echo "Latest existing tag: ${latest:-<none>}"
+          if [[ -z "$latest" ]]; then
+            exit 0
+          fi
+          if [[ "$TAG" == "$latest" ]] || [[ "$(printf '%s\n%s\n' "$latest" "$TAG" | sort -V | tail -n 1)" != "$TAG" ]]; then
+            echo "::error::$TAG must be strictly greater than the latest tag $latest."
+            exit 1
+          fi
+
+      - name: Require a successful CI run for this commit
+        run: .github/scripts/require-ci-success.sh
+
+      - name: Write the release notes from CHANGELOG.md
+        run: |
+          set -Eeuo pipefail
+          node scripts/changelog-section.mjs "$INPUT_VERSION" CHANGELOG.md >"$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Create the annotated tag
+        env:
+          TAG: ${{ steps.validate.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          jq -n --arg tag "$TAG" --rawfile message "$RUNNER_TEMP/notes.md" --arg object "$SHA" \
+            '{tag:$tag,message:$message,object:$object,type:"commit",tagger:{name:"github-actions[bot]",email:"41898282+github-actions[bot]@users.noreply.github.com"}}' \
+            >"$RUNNER_TEMP/tag.json"
+          tag_sha="$(gh api "repos/$GH_REPO/git/tags" --input "$RUNNER_TEMP/tag.json" --jq .sha)"
+          gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$tag_sha" --silent
+          echo "Created tag $TAG on $SHA."
+
+      - name: Create the GitHub Release
+        env:
+          TAG: ${{ steps.validate.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          if ! gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"; then
+            echo "::error::The tag $TAG exists but the GitHub Release failed; do not cut again. Run: gh release create $TAG --repo $GH_REPO --verify-tag --title $TAG --notes-file <notes>"
+            exit 1
+          fi
+
+      - name: Dispatch Deploy production on the tag
+        env:
+          TAG: ${{ steps.validate.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          if ! gh workflow run deploy-production.yml --ref "$TAG"; then
+            echo "::error::The tag $TAG and its Release exist but the dispatch failed. Run: gh workflow run deploy-production.yml --repo $GH_REPO --ref $TAG"
+            exit 1
+          fi
+          echo "::notice::Dispatched Deploy production on $TAG: $GITHUB_SERVER_URL/$GH_REPO/actions/workflows/deploy-production.yml"

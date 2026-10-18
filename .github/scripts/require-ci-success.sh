@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fails unless $SHA (a) has a successful ci.yml run for a push to main and (b) is on main
-# (the head of main or one of its ancestors). Used by release.yml before it tags and by the
+# (the head of main or one of its ancestors). Used by cut-release.yml before it tags and by the
 # guard job of deploy-production.yml, so a production deploy never ships a commit that CI did
 # not pass on main. Requires GH_TOKEN (actions: read, contents: read), GH_REPO and SHA in the env.
 set -euo pipefail
