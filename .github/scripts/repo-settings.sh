@@ -119,7 +119,9 @@ ensure_dev_ruleset() {
       . as $have
       | $have.enforcement == $w.enforcement
         and ($have.bypass_actors // []) == []
-        and ($have.conditions.ref_name.include | sort) == ($w.conditions.ref_name.include | sort)
+        and $have.target == $w.target
+        and ($have.conditions.ref_name.include // [] | sort) == ($w.conditions.ref_name.include | sort)
+        and ($have.conditions.ref_name.exclude // []) == []
         and ([$have.rules[].type] | sort) == ([$w.rules[].type] | sort)
         and ($w.rules | all(
           . as $wr
@@ -155,6 +157,10 @@ ensure_main_ruleset() {
   fi
   get "rulesets/$RULESET_ID" || { echo "::error::Ruleset $RULESET_ID vanished."; exit 1; }
   existing="$GOT"
+  if ! jq -e '.target == "branch" and ((.conditions.ref_name.include // []) | any(. == "refs/heads/main" or . == "~DEFAULT_BRANCH"))' <<<"$existing" >/dev/null; then
+    echo "::error::Ruleset main (id $RULESET_ID) does not target the branch main (target and conditions.ref_name.include must be branch and refs/heads/main or ~DEFAULT_BRANCH). Fix or delete it in the repository settings, then run this workflow again."
+    exit 1
+  fi
   rules="$(jq -c '.rules' <<<"$want")"
   new_rules="$(jq -c --argjson d "$rules" --argjson ci "$CI_CHECK" '
       .rules as $r
