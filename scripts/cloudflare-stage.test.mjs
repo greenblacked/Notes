@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { coversStage, hostsOf, main, policyProblems } from "./cloudflare-stage.mjs"
+import { coversStage, hostsOf, main, policyProblems, touchesStage } from "./cloudflare-stage.mjs"
 
 const TOKEN = "tok-secret-123"
 const ENV = { CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: "acc" }
@@ -71,8 +71,17 @@ test("coversStage: exact host, wildcard, path, destinations", () => {
 
 test("policyProblems: empty, bypass, non_identity, everyone", () => {
   assert.deepEqual(policyProblems([]), ["no policies"])
-  assert.equal(policyProblems([{ name: "x", decision: "bypass", include: [] }]).length, 1)
-  assert.equal(policyProblems([{ name: "x", decision: "non_identity", include: [] }]).length, 1)
+  assert.equal(
+    policyProblems([{ name: "x", decision: "bypass", include: [{ email: { email: "a@b.c" } }] }])
+      .length,
+    1,
+  )
+  assert.equal(
+    policyProblems([
+      { name: "x", decision: "non_identity", include: [{ email: { email: "a@b.c" } }] },
+    ]).length,
+    1,
+  )
   assert.equal(
     policyProblems([{ name: "x", decision: "allow", include: [{ everyone: {} }] }]).length,
     1,
@@ -193,7 +202,11 @@ test("policyProblems: only identity include rules are accepted", () => {
   assert.equal(policyProblems(pol([{ login_method: { id: "otp" } }])).length, 1)
   assert.equal(policyProblems(pol([{ any_valid_service_token: {} }])).length, 1)
   assert.equal(policyProblems(pol([{ ip: { ip: "1.2.3.4/32" } }])).length, 1)
-  assert.deepEqual(policyProblems(pol([{ email: { email: "a@b.c" } }, { group: { id: "g" } }])), [])
+  const groups = { g: { id: "g", name: "team", include: [{ email: { email: "a@b.c" } }] } }
+  assert.deepEqual(
+    policyProblems(pol([{ email: { email: "a@b.c" } }, { group: { id: "g" } }]), groups),
+    [],
+  )
 })
 
 test("preflight fails when a wildcard app allows a public email domain", async () => {
@@ -317,4 +330,43 @@ test("unknown commands print usage and fail", async () => {
   const r = await run(["nope"], {})
   assert.equal(r.code, 2)
   assert.match(r.text, /usage/)
+})
+
+test("policyProblems: a policy without include rules is a problem", () => {
+  for (const include of [undefined, []]) {
+    const p = policyProblems([{ name: "x", decision: "allow", include }])
+    assert.deepEqual(p, ["policy x has no include rules"])
+  }
+})
+
+test("policyProblems: group rules are resolved and checked like policy rules", () => {
+  const pol = [{ name: "x", decision: "allow", include: [{ group: { id: "g" } }] }]
+  const everyone = { g: { id: "g", name: "all", include: [{ everyone: {} }] } }
+  const emails = { g: { id: "g", name: "me", include: [{ email: { email: "a@b.c" } }] } }
+  assert.equal(policyProblems(pol, everyone).length, 1)
+  assert.deepEqual(policyProblems(pol, emails), [])
+  assert.equal(policyProblems(pol, {}).length, 1)
+  assert.equal(policyProblems(pol).length, 1)
+})
+
+test("preflight resolves Access groups through the API", async () => {
+  const mk = (include) => ({
+    ...cleanRoutes([
+      {
+        ...stageApp,
+        policies: [{ id: "p", name: "g", decision: "allow", include: [{ group: { id: "g1" } }] }],
+      },
+    ]),
+    "GET /accounts/acc/access/groups": [{ id: "g1", name: "grp", include }],
+  })
+  assert.equal((await run(["preflight"], mk([{ everyone: {} }]))).code, 1)
+  assert.equal((await run(["preflight"], mk([{ email: { email: "a@b.c" } }]))).code, 0)
+})
+
+test("touchesStage: stage, notes wildcard, zone wildcard and apex", () => {
+  assert.equal(touchesStage({ domain: "stage.notes.szolotov.com/x" }), true)
+  assert.equal(touchesStage({ domain: "*.szolotov.com" }), true)
+  assert.equal(touchesStage({ domain: "szolotov.com/admin" }), true)
+  assert.equal(touchesStage({ domain: "dev.notes.szolotov.com" }), false)
+  assert.equal(touchesStage({ domain: "other.example.com" }), false)
 })
