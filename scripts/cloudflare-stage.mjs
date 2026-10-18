@@ -56,18 +56,28 @@ function entriesOf(app) {
   return entries
 }
 
-// One glob rule for every host match (stage and Preview): each `*` reads as any text, every other
-// character is literal, the match is anchored and case-insensitive.
-export function globToRegex(pattern) {
-  const body = String(pattern)
+// Two glob rules for host matches; every other character is literal, the match is anchored and
+// case-insensitive. The permissive rule (each `*` reads as any text, dots included) decides
+// TOUCHING: an application that might decide who reaches a host must be checked. The strict rule
+// (a `*` stays inside one DNS label, `[^.]*`) decides COVERING: a wildcard is trusted to protect a
+// whole host only when it cannot be wider than Access reads it.
+const globBody = (pattern, star) =>
+  String(pattern)
     .split("*")
     .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-    .join(".*")
-  return new RegExp(`^${body}$`, "i")
+    .join(star)
+
+export function globToRegex(pattern) {
+  return new RegExp(`^${globBody(pattern, ".*")}$`, "i")
+}
+
+export function strictGlobToRegex(pattern) {
+  return new RegExp(`^${globBody(pattern, "[^.]*")}$`, "i")
 }
 
 const WHOLE_HOST_PATHS = ["", "/", "/*"]
 const globMatches = (entry, host) => globToRegex(normHost(entry)).test(host)
+const strictGlobMatches = (entry, host) => strictGlobToRegex(normHost(entry)).test(host)
 
 // A host pattern of an entry decides who reaches stage when it matches the stage host (path
 // ignored: any path counts). The zone apex is kept as an explicit conservative case.
@@ -82,7 +92,7 @@ export function touchesStage(app) {
 // True when an entry matches the stage host with no path restriction (empty, "/" or "/*").
 export function coversStage(app) {
   return entriesOf(app).some(
-    (e) => globMatches(e, STAGE_HOST) && WHOLE_HOST_PATHS.includes(pathOf(e)),
+    (e) => strictGlobMatches(e, STAGE_HOST) && WHOLE_HOST_PATHS.includes(pathOf(e)),
   )
 }
 
@@ -166,29 +176,37 @@ export function hasSafeAllow(policies, groups = null) {
   )
 }
 
-// The workers.dev Preview hostname is stage-notes.<subdomain>.workers.dev. The account subdomain
-// is not read from the API, so an entry whose host ends in `.workers.dev` counts (conservative)
-// when its glob matches `stage-notes.<L>.workers.dev`, where <L> is the pattern's own subdomain
-// label with each `*` replaced by `a` ("sample" when there is no such label), or matches
-// `stage-notes.sample.workers.dev`.
-const isPreviewEntry = (e) => {
+// The workers.dev Preview hostname is stage-notes.<subdomain>.workers.dev. `host` is that real
+// host, built from the account subdomain (null when the lookup failed). Touching is conservative:
+// an entry ending in `.workers.dev` touches when its permissive glob matches the real host, or
+// `stage-notes.<L>.workers.dev` where <L> is the pattern's own subdomain label with each `*`
+// replaced by `a` ("sample" when there is no such label), or `stage-notes.sample.workers.dev`.
+const isPreviewTouch = (e, host) => {
   const h = normHost(e)
   if (!h.endsWith(".workers.dev")) return false
   const labels = h.split(".")
   const own = labels.length >= 3 ? labels[labels.length - 3].replaceAll("*", "a") : "sample"
   const re = globToRegex(h)
-  return re.test(`stage-notes.${own}.workers.dev`) || re.test("stage-notes.sample.workers.dev")
+  return (
+    (host !== null && host !== undefined && re.test(host)) ||
+    re.test(`stage-notes.${own}.workers.dev`) ||
+    re.test("stage-notes.sample.workers.dev")
+  )
 }
 
 // Any entry of the application that can decide who reaches the workers.dev Preview, whatever
 // its path.
-export function touchesPreview(app) {
-  return entriesOf(app).some(isPreviewEntry)
+export function touchesPreview(app, host = null) {
+  return entriesOf(app).some((e) => isPreviewTouch(e, host))
 }
 
-// The whole workers.dev Preview host (empty path, "/" or "/*").
-export function coversPreview(app) {
-  return entriesOf(app).some((e) => isPreviewEntry(e) && WHOLE_HOST_PATHS.includes(pathOf(e)))
+// The whole workers.dev Preview host (empty path, "/" or "/*"): the strict glob must match the
+// real host. Without the real host (failed subdomain lookup) nothing covers.
+export function coversPreview(app, host = null) {
+  if (!host) return false
+  return entriesOf(app).some(
+    (e) => strictGlobMatches(e, host) && WHOLE_HOST_PATHS.includes(pathOf(e)),
+  )
 }
 
 class ApiError extends Error {}
@@ -312,10 +330,22 @@ async function accessCheck(client, out) {
 // Preview host, Access may be enforced at Worker or account level, which the API listing cannot
 // show: that case only prints a NOTE and leaves the check after the upload to decide.
 async function workersDevCheck(client, apps, state, out) {
+  let host = null
+  try {
+    const json = await client.call("GET", `/accounts/${client.account}/workers/subdomain`)
+    const sub = json.result?.subdomain
+    if (typeof sub === "string" && sub !== "") host = `stage-notes.${sub.toLowerCase()}.workers.dev`
+    else throw new ApiError("the response has no workers.dev subdomain")
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e
+    out(
+      `NOTE: cannot read the workers.dev subdomain (${e.message}); no application counts as covering the Preview (needs Account · Workers Scripts: Read, included in the Workers scopes)`,
+    )
+  }
   const r = await evaluate(
     client,
     apps,
-    { touches: touchesPreview, covers: coversPreview },
+    { touches: (a) => touchesPreview(a, host), covers: (a) => coversPreview(a, host) },
     state,
     out,
   )
