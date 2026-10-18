@@ -3,7 +3,9 @@
 //   preflight          fail unless an Access application covers stage.notes.szolotov.com and no
 //                      Custom Domain or DNS record shadows the Preview hostname
 //   ensure-access      create the stage Access application from the dev one when none covers stage
+//                      (Deploy stage runs it before every preflight)
 //   retire-dev-access  delete the Access application that covers only dev.notes.szolotov.com
+//                      (Deploy stage runs it after a verified deploy)
 // Reads CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. Never prints them, nor any policy
 // include/exclude value (they hold emails): only ids, names, types, hosts and decisions.
 import { pathToFileURL } from "node:url"
@@ -365,7 +367,7 @@ async function preflight(client, out) {
   const { ok, apps, state } = await accessCheck(client, out)
   if (!ok) {
     throw new ApiError(
-      `no Cloudflare Access application protects ${STAGE_HOST} with a safe policy (see the list above); running Deploy stage with retire_dev checked copies the dev Access application to stage`,
+      `no Cloudflare Access application protects ${STAGE_HOST} with a safe policy (see the list above); Deploy stage's ensure-access step copies a dev-only Access application to stage when one exists; otherwise create one for stage`,
     )
   }
   out(`OK: an Access application protects ${STAGE_HOST}`)

@@ -21,7 +21,7 @@ const gh = join(dir, "gh")
 writeFileSync(gh, `#!/usr/bin/env bash\necho "$2" >>"$FAKE_GH_LOG"\necho "$FAKE_HEAD"\n`)
 chmodSync(gh, 0o755)
 
-function run({ branch = "dev", sha = SHA, head = SHA } = {}) {
+function run({ branch = "main", sha = SHA, head = SHA } = {}) {
   const id = Math.random()
   const log = join(dir, `log-${id}`)
   const output = join(dir, `output-${id}`)
@@ -51,14 +51,14 @@ test("current=true when the commit is the head of the branch", () => {
   const { code, output, log } = run()
   assert.equal(code, 0)
   assert.equal(output.trim(), "current=true")
-  assert.match(readFileSync(log, "utf8"), /git\/ref\/heads\/dev/)
+  assert.match(readFileSync(log, "utf8"), /git\/ref\/heads\/main/)
 })
 
 test("current=false when the branch moved on", () => {
   const { code, output, out } = run({ head: OTHER })
   assert.equal(code, 0)
   assert.equal(output.trim(), "current=false")
-  assert.match(out, /no longer the head of dev/)
+  assert.match(out, /no longer the head of main/)
 })
 
 test("fails without a plain BRANCH", () => {
