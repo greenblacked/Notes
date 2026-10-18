@@ -1,6 +1,6 @@
 # Notes
 
-Architecture decision records, platform patterns, tool notes and engineering standards, published as a static site at <https://notes.szolotov.com> and a pre-production site at <https://dev.notes.szolotov.com> (a Preview of the same Worker, deployed automatically from the `dev` branch).
+Architecture decision records, platform patterns, tool notes and engineering standards, published as a static site at <https://notes.szolotov.com> and a pre-production site at <https://stage.notes.szolotov.com> (a Preview of the same Worker behind Cloudflare Access, deployed by hand from the `dev` branch).
 
 The site is built with [Quartz](https://quartz.jzhao.xyz/) and served by a Cloudflare Worker. The Markdown is Obsidian-friendly (wikilinks, frontmatter, callouts), see [docs/obsidian.md](docs/obsidian.md).
 
@@ -28,7 +28,7 @@ npm run build    # production build into public/ (also writes public/version.txt
 npm run preview  # serve public/ through the Worker locally (wrangler dev, port 8787)
 ```
 
-`npm run preview:dev` previews the dev variant (`ENVIRONMENT=preview`: noindex headers, `Disallow: /`). `wrangler dev` presents requests with the route's host (`notes.szolotov.com`), so `npm run preview` shows the indexable production behaviour; add `--local-upstream localhost:8787` to see the non-canonical (noindex) behaviour. Only production on `notes.szolotov.com` is indexable.
+`npm run preview:stage` previews the stage variant (`ENVIRONMENT=preview`: noindex headers, `Disallow: /`). `wrangler dev` presents requests with the route's host (`notes.szolotov.com`), so `npm run preview` shows the indexable production behaviour; add `--local-upstream localhost:8787` to see the non-canonical (noindex) behaviour. Only production on `notes.szolotov.com` is indexable.
 
 Checks (the same ones CI runs):
 
@@ -44,7 +44,7 @@ Also `npm run check:contrast`: WCAG AA contrast of the palette in both themes (C
 
 `npm run dev` skips `scripts/postprocess-build.mjs`, so the dev server has no self-hosted fonts and follows the system theme. Use `npm run build` and `npm run preview` to see the site as deployed.
 
-Build-time variables: `NOTES_BASE_URL` (default `notes.szolotov.com`), `NOTES_VERSION` (`X.Y.Z`, `main` or `dev`), `NOTES_SHA`.
+Build-time variables: `NOTES_BASE_URL` (default `notes.szolotov.com`), `NOTES_VERSION` (`X.Y.Z`, `main` or `stage`), `NOTES_SHA`.
 
 ## Writing notes
 
@@ -84,15 +84,15 @@ All custom CSS is in `quartz/styles/custom.scss` and the colour keys are in `qua
 flowchart LR
     A[Work branch] --> B[PR into dev]
     B -->|CI OK required| C[Merge to dev]
-    C --> D[Deploy dev: automatic]
+    C --> D[Deploy stage: manual, owner, from dev]
     D --> E[PR dev to main]
     E -->|CI OK, merge commit| F[Release workflow: tag vX.Y.Z]
     F -->|approval| G[Deploy production]
 ```
 
 1. Branch `<type>/<kebab>` from `dev` and open a pull request into `dev`. CI must pass (`CI OK`).
-2. Merging into `dev` deploys https://dev.notes.szolotov.com automatically (about 15 minutes; the newest push wins; `/version.txt` shows `dev+<sha>`). Production traffic is untouched ([Dev Preview](docs/deployment.md#dev-preview)).
-3. When dev looks good, open a pull request `dev` to `main` and merge it with a merge commit (`CI OK` required). Back-merges `main` into `dev` also go by pull request with a merge commit, never squash or rebase, so `dev` keeps every commit of `main` (`dev` stays a descendant of `main`).
+2. Merging deploys nothing. The owner runs **Deploy stage** (Actions, branch `dev`) to update https://stage.notes.szolotov.com (behind Cloudflare Access; about 15 minutes; `/version.txt` shows `stage+<sha>`) ([Stage Preview](docs/deployment.md#stage-preview)). Production traffic is untouched.
+3. When stage looks good, open a pull request `dev` to `main` and merge it with a merge commit (`CI OK` required). Back-merges `main` into `dev` also go by pull request with a merge commit, never squash or rebase, so `dev` keeps every commit of `main` (`dev` stays a descendant of `main`).
 4. To release: Actions, **Release**, **Run workflow** on `main`, enter the version as `X.Y.Z`. The workflow checks that CI passed for that commit and that the version is higher than the latest tag, creates the tag and GitHub Release, and starts the production deployment.
 5. Approve the deployment in the `production` environment. A smoke test runs against the Worker's workers.dev URL after the deploy; on failure the previous version is restored automatically.
 
@@ -101,7 +101,7 @@ Production only ever deploys from a `vX.Y.Z` tag. Deploy workflows build in a jo
 ## Rolling back
 
 - Re-deploy an older release: Actions, **Deploy production**, Run workflow with an older **tag** selected as the ref, then approve. This rebuilds and deploys that tag.
-- Fast path: `npx wrangler rollback <version-id> --message "reason"` (list ids with `npx wrangler deployments list`). Production only: dev is a Preview and has no rollback, so merge a fix into `dev` (it redeploys automatically). See [docs/deployment.md](docs/deployment.md#rollback).
+- Fast path: `npx wrangler rollback <version-id> --message "reason"` (list ids with `npx wrangler deployments list`). Production only: stage is a Preview and has no rollback, so merge a fix into `dev` and run Deploy stage again. See [docs/deployment.md](docs/deployment.md#rollback).
 
 ## Quartz
 

@@ -11,19 +11,19 @@ verified: 2026-10-16
 draft: false
 ---
 
-How this site reaches Cloudflare and how to undo a bad release. Production is the Worker `notes` at https://notes.szolotov.com; dev is a Worker Preview named `dev`[^preview] of the same Worker at https://dev.notes.szolotov.com. Dev is the pre-production site and is deployed automatically from the `dev` branch; there is no stage.
+How this site reaches Cloudflare and how to undo a bad release. Production is the Worker `notes` at https://notes.szolotov.com; stage is a Worker Preview named `stage`[^preview] of the same Worker at https://stage.notes.szolotov.com, behind Cloudflare Access. Stage is the pre-production site; the owner deploys it by hand from the `dev` branch.
 
 > [!info] Checked against
-> `wrangler.jsonc`, `.github/workflows/{deploy-dev,deploy-production,release}.yml`, `scripts/smoke-test.sh`, `scripts/write-version.mjs` and `docs/deployment.md` in the repository, and the Wrangler 4.149.0 CLI help (`npx wrangler rollback --help`). Cloudflare docs: [Rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/), [Wrangler commands for Workers](https://developers.cloudflare.com/workers/wrangler/commands/workers/) (`deployments`, `versions`, `preview`) [Previews on custom domains](https://developers.cloudflare.com/workers/previews/custom-domains/) and the [changelog entry](https://developers.cloudflare.com/changelog/post/2025-09-11-increased-version-rollback-limit/) that raised the rollback window from 10 to 100 versions. Worker Previews are in open beta, so flags may change.
+> `wrangler.jsonc`, `.github/workflows/{deploy-stage,deploy-production,release}.yml`, `scripts/smoke-test.sh`, `scripts/write-version.mjs` and `docs/deployment.md` in the repository, and the Wrangler 4.149.0 CLI help (`npx wrangler rollback --help`). Cloudflare docs: [Rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/), [Wrangler commands for Workers](https://developers.cloudflare.com/workers/wrangler/commands/workers/) (`deployments`, `versions`, `preview`) [Previews on custom domains](https://developers.cloudflare.com/workers/previews/custom-domains/) and the [changelog entry](https://developers.cloudflare.com/changelog/post/2025-09-11-increased-version-rollback-limit/) that raised the rollback window from 10 to 100 versions. Worker Previews are in open beta, so flags may change.
 
 ## When to use
 
 - Cutting a release to production.
 - Production serves the wrong or a broken version and you need to undo it.
-- Checking which version is live on production or dev.
+- Checking which version is live on production or stage.
 - A deploy run failed and you need to know whether the site is affected.
 
-Day-to-day publishing of notes needs none of this: merging to `main` deploys nothing. Work reaches dev through a pull request into `dev`, which runs **Deploy dev** automatically.
+Day-to-day publishing of notes needs none of this: merging to `main` deploys nothing. Merging to `dev` or `main` deploys nothing. The owner updates stage with **Deploy stage**.
 
 ## Preconditions
 
@@ -36,8 +36,8 @@ Day-to-day publishing of notes needs none of this: merging to `main` deploys not
 ```mermaid
 flowchart TD
     A[Work branch] --> P[Pull request into dev]
-    P --> B[Deploy dev: automatic, on push to dev]
-    B --> C[Dev smoke test]
+    P --> B[Deploy stage: manual, from dev]
+    B --> C[Stage Access check]
     C --> M[Pull request dev to main, merge commit]
     M --> D[Actions: Release, version X.Y.Z]
     D --> E[Tag vX.Y.Z and GitHub Release]
@@ -54,10 +54,10 @@ flowchart TD
 
 ### Release to production
 
-1. Check that CI on the `main` head is green and, if you want the pre-production check, that dev serves the commit you are about to release (the **Deploy dev** run for the `dev` head finished green):
+1. Check that CI on the `main` head is green and, if you want the pre-production check, that stage serves the commit you are about to release (the **Deploy stage** run for the `dev` head finished green):
 
    ```bash
-   curl -s https://dev.notes.szolotov.com/version.txt   # dev+<40-char sha>
+   curl -s https://stage.notes.szolotov.com/version.txt   # stage+<40-char sha> (sign in through Access first)
    ```
 
 2. In GitHub, open **Actions**, **Release**, **Run workflow** on `main`, and enter the version as `X.Y.Z` (no leading `v`, strictly greater than the latest tag).
@@ -75,17 +75,17 @@ What **Deploy production** does after approval, and therefore verifies:
 > [!note] Why workers.dev
 > Cloudflare Bot Fight Mode answers GitHub-hosted runners with 403 on the custom domains, so CI verifies on workers.dev and only logs a notice for notes.szolotov.com.
 
-### Dev
+### Stage
 
-**Deploy dev** runs automatically on every push to `dev` (a merged pull request) and can be started by hand only on the `dev` branch: **Actions**, **Deploy dev**, **Run workflow**, branch `dev`. It builds without secrets, then runs `wrangler preview --name dev`. Dev is a Preview of the same Worker, so it never touches production traffic. Runs queue and are never cancelled; `/version.txt` shows which commit dev serves. If a newer commit has reached `dev` during the run, the run skips with a notice and succeeds, because the newer push has its own run. Work branches are not deployed anywhere: they are merged into `dev` by pull request first. When dev looks good, open a pull request `dev` to `main` and merge it with a merge commit.
+**Deploy stage** is manual and runs only from the `dev` branch, only for the owner: **Actions**, **Deploy stage**, **Run workflow**, branch `dev`. It builds without secrets, checks through the Cloudflare API that an Access application covers stage and that no Custom Domain or DNS record shadows the host, then runs `wrangler preview --name stage`. It requires the workers.dev Preview URL to redirect to Access and deletes the Preview if stage is exposed. Stage is a Preview of the same Worker, so it never touches production traffic. Runs queue and are never cancelled; `/version.txt` shows which commit stage serves. If `dev` moved on during the run, the run fails; run it again. Work branches are not deployed anywhere: they are merged into `dev` by pull request first. When stage looks good, open a pull request `dev` to `main` and merge it with a merge commit.
 
 ## Validation
 
-Check what is live on production and dev:[^version]
+Check what is live on production and stage:[^version]
 
 ```bash
 curl -s https://notes.szolotov.com/version.txt        # <X.Y.Z>+<40-char sha>
-curl -s https://dev.notes.szolotov.com/version.txt  # dev+<40-char sha>
+curl -s https://stage.notes.szolotov.com/version.txt  # stage+<40-char sha> (sign in through Access first)
 curl -sI https://notes.szolotov.com | grep -i x-robots-tag   # no output: production is indexable
 ```
 
@@ -103,7 +103,7 @@ npx wrangler deployments list
 > [!warning] A rollback is not in git
 > It changes what Cloudflare serves, not `main` or the tags. The site then runs an older build while `main` has moved on, so follow up with a roll-forward.
 
-Production only; dev has no rollback.
+Production only; stage has no rollback.
 
 1. Find the version id to return to:
 
@@ -129,27 +129,27 @@ Only the 100 most recently published versions can be rolled back to. Rollback is
 
 To redeploy a tag, including an older good one: **Actions**, **Deploy production**, **Run workflow**, select the **tag** (for example `v0.1.0`) as the ref, and approve. This rebuilds the tag and deploys it with the same checks, and rolls back automatically if they fail. Production deploys refuse any ref that is not a `vX.Y.Z` tag, and the tagged commit must have a successful `ci.yml` push run on `main` and be on `main`, so a tag whose CI run is no longer available cannot be redeployed; use a rollback in that case. Pushing a `v*.*.*` tag by hand also starts **Deploy production**, but tags created by the Release workflow do not (they are deployed by the explicit call).
 
-Dev recovers by merging a fix into `dev`, which deploys it again (or re-run the failed **Deploy dev** run). To remove the Preview: `npx wrangler preview delete --name dev`.
+Stage recovers by merging a fix into `dev` and running Deploy stage again. To remove it: `npx wrangler preview delete --name stage`.
 
 ## Troubleshooting
 
 | Symptom                                                                                | Cause and fix                                                                                                                                                                                                               |
 | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cloudflare error 1042 right after a deploy that created a new workers.dev route        | The route is still propagating. The smoke test retries the version, content, header and indexing checks, so wait or re-run; this no longer fails a deploy or triggers a rollback.                                           |
-| `curl` works locally but CI gets 403 on notes.szolotov.com or dev.notes.szolotov.com   | Bot Fight Mode blocks GitHub runners on the custom domains. Expected: CI verifies on workers.dev. Look up the `cf-ray` in Security, Events only if workers.dev fails too.                                                   |
-| Dev smoke test notice, workers.dev URL of the Preview redirects to a Cloudflare login  | Cloudflare Access protects Worker Previews in this account. The dev smoke test passes with a notice; Wrangler reporting https://dev.notes.szolotov.com is the check. Production never accepts an Access redirect.           |
+| `curl` works locally but CI gets 403 on notes.szolotov.com or stage.notes.szolotov.com | Bot Fight Mode blocks GitHub runners on the custom domains. Expected: CI verifies on workers.dev. Look up the `cf-ray` in Security, Events only if workers.dev fails too.                                                   |
+| Deploy stage deleted the Preview: "not behind Cloudflare Access"                       | stage was reachable without sign-in. Fix Cloudflare Access for stage.notes.szolotov.com, then run Deploy stage again. Production never accepts an Access redirect.                                                          |
 | Wrangler warns "Custom domain Preview URLs are configured, but none are active"        | Before the first production deploy, `previews_enabled` on the Custom Domain has not been applied yet. It is applied by `wrangler deploy` (the first release) or in the dashboard under Domains, **Production and Preview**. |
-| Deploy dev fails at "Require the custom domain Preview URL"                            | The Preview exists only on workers.dev because `previews_enabled` has not been applied. Do the first production release or enable **Production and Preview** in the dashboard, then re-run.                                 |
-| Deploy dev fails with "runs only from dev"                                             | The run was started from another branch. Re-run it with branch `dev` selected.                                                                                                                                              |
-| Deploy dev run succeeds but dev still shows an older commit                            | The run skipped because a newer commit reached `dev` during the build (see the notice); that push has its own run.                                                                                                          |
+| Deploy stage fails at "Require the custom domain Preview URL"                          | The Preview exists only on workers.dev because `previews_enabled` has not been applied. Do the first production release or enable **Production and Preview** in the dashboard, then re-run.                                 |
+| Deploy stage fails with "runs only from dev"                                           | The run was started from another branch. Re-run it with branch `dev` selected.                                                                                                                                              |
+| Deploy stage fails: "dev moved on during this run"                                     | A newer commit reached `dev` while the run was building. Run Deploy stage again.                                                                                                                                            |
 | Deploy production fails in the tag guard ("Tag ... points at ...", not a `vX.Y.Z` ref) | The run was not started from a release tag, or the tag does not resolve to the commit being deployed. Re-run from the correct tag.                                                                                          |
 | Deploy production waits and never starts                                               | The `production` environment needs approval; approve it in the run.                                                                                                                                                         |
 | Release fails with "must be strictly greater than the latest tag"                      | Pick a higher `X.Y.Z`. Tags are never reused; if the failure came after the tag step, re-run only **Deploy production** from that tag.                                                                                      |
 | Run failed, unsure whether production is affected                                      | Run `npx wrangler deployments status` and `curl -s https://notes.szolotov.com/version.txt`. The job log says either "rolled back", or "failed before it went live".                                                         |
 
-The full setup, token permissions and removal of the old stage Preview are in `docs/deployment.md` in the repository. For how changes are decided and recorded, see [[adr/index|the architecture decisions]]. If a bad release becomes an incident, follow [[incident-response]]; the checks before any production release are in [[production-change-checklist]].
+The full setup, token permissions and the stage history are in `docs/deployment.md` in the repository. For how changes are decided and recorded, see [[adr/index|the architecture decisions]]. If a bad release becomes an incident, follow [[incident-response]]; the checks before any production release are in [[production-change-checklist]].
 
-[^preview]: Both come from `wrangler.jsonc`: production uses the top-level `vars`, and the Preview takes its own from `previews.vars` (`ENVIRONMENT` is `preview`), which is what makes the Worker send `noindex` on dev.
+[^preview]: Both come from `wrangler.jsonc`: production uses the top-level `vars`, and the Preview takes its own from `previews.vars` (`ENVIRONMENT` is `preview`), which is what makes the Worker send `noindex` on stage.
 
 [^ci]: The Release workflow asks the GitHub API for completed `ci.yml` runs of that commit from a push event on `main` and needs at least one with the conclusion `success`. A green pull request run does not count.
 

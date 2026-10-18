@@ -36,7 +36,7 @@ Standards say how the team works: how notes are written, how production changes 
 
 - Use Conventional Commits (for example `feat:`, `fix:`, `docs:`, `ci:`, `build:`, `chore:`, optionally scoped as `fix(ci):`) and keep the subject line to 72 characters or fewer.
 - Every change goes through a pull request into `dev`, and the `CI OK` check must pass. Promotion to production is a pull request `dev` to `main` with a merge commit.
-- Merging to `main` deploys nothing by itself. The dev site is updated automatically by Deploy dev on every push to `dev`.
+- Merging to `main` deploys nothing by itself. Merging to `dev` or `main` deploys nothing. The owner updates the stage site (behind Cloudflare Access) by running Deploy stage on `dev`.
 - Production releases are `vX.Y.Z` tags created by the Release workflow, and need approval in the `production` environment.
 - Notable changes go into `CHANGELOG.md` under _Unreleased_.
 
