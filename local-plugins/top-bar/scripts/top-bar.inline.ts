@@ -203,13 +203,15 @@ function setupTocSpy() {
   })
 }
 
-// The centre column is the page's main landmark, and "Skip to content" lands on the title: the
+// The centre column is the page's main landmark, the top bar its banner, and "Skip to content" lands on the title: the
 // target (#content) is rendered by the content-start component; the 404 page has none, so its
 // article stands in. Following the link also moves the keyboard (the SPA router only scrolls to an
 // in-page anchor).
 function setupLandmarks() {
   const center = document.querySelector<HTMLElement>(".center")
   center?.setAttribute("role", "main")
+  // The top bar (brand, Browse, search, theme) is the page's banner, so row 1 sits in a landmark.
+  document.querySelector<HTMLElement>(".sidebar.left")?.setAttribute("role", "banner")
   const link = document.querySelector<HTMLAnchorElement>(".skip-link")
   let target = document.getElementById("content")
   if (!target) {

@@ -605,7 +605,13 @@ body {
 }
 
 .top-bar-brand {
-  flex: none;
+  // May shrink and clip with an ellipsis at extreme text sizes (200% on a 320 px phone), so the
+  // wordmark never spills over the Browse button.
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   // A hit area of at least 44 x 32 px (the wordmark is about 50 x 22): padding that the negative
   // margin takes back, so the layout does not change.
   padding-block: 0.375rem;
@@ -1338,6 +1344,7 @@ h6 {
 
 h1.article-title {
   margin: 0;
+  overflow-wrap: anywhere;
   font-size: clamp(2.1rem, 5vw, 2.85rem);
   font-weight: 400;
   line-height: 1.1;
