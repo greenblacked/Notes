@@ -1,6 +1,6 @@
 # Notes
 
-Architecture decision records, platform patterns, tool notes and engineering standards, published as a static site at <https://notes.szolotov.com> and a pre-production site at <https://stage.notes.szolotov.com> (a Preview of the same Worker behind Cloudflare Access, deployed by hand from the `dev` branch).
+Architecture decision records, platform patterns, tool notes and engineering standards, published as a static site at <https://notes.szolotov.com> and a pre-production site at <https://stage.notes.szolotov.com> (a Preview of the same Worker behind Cloudflare Access, deployed automatically from `main`).
 
 The site is built with [Quartz](https://quartz.jzhao.xyz/) and served by a Cloudflare Worker. The Markdown is Obsidian-friendly (wikilinks, frontmatter, callouts), see [docs/obsidian.md](docs/obsidian.md).
 
@@ -83,26 +83,24 @@ All custom CSS is in `quartz/styles/custom.scss` and the colour keys are in `qua
 
 ```mermaid
 flowchart LR
-    A[Work branch] --> B[PR into dev]
-    B -->|CI OK required| C[Merge to dev]
-    C --> D[Deploy stage: manual, owner, from dev]
-    D --> E[PR dev to main]
-    E -->|CI OK, merge commit| F[Release workflow: tag vX.Y.Z]
+    A[Work branch] --> B[PR into main]
+    B -->|CI OK required, merge commit| C[Merge to main]
+    C --> D[Deploy stage: automatic]
+    D --> F[Cut release: tag vX.Y.Z]
     F -->|approval| G[Deploy production]
 ```
 
-1. Branch `<type>/<kebab>` from `dev` and open a pull request into `dev`. CI must pass (`CI OK`).
-2. Merging deploys nothing. The owner runs **Deploy stage** (Actions, branch `dev`) to update https://stage.notes.szolotov.com (behind Cloudflare Access; about 15 minutes; `/version.txt` shows `stage+<sha>`) ([Stage Preview](docs/deployment.md#stage-preview)). Production traffic is untouched.
-3. When stage looks good, open a pull request `dev` to `main` and merge it with a merge commit (`CI OK` required). Back-merges `main` into `dev` also go by pull request with a merge commit, never squash or rebase, so `dev` keeps every commit of `main` (`dev` stays a descendant of `main`).
-4. To release: Actions, **Release**, **Run workflow** on `main`, enter the version as `X.Y.Z`. The workflow checks that CI passed for that commit and that the version is higher than the latest tag, creates the tag and GitHub Release, and starts the production deployment.
-5. Approve the deployment in the `production` environment. A smoke test runs against the Worker's workers.dev URL after the deploy; on failure the previous version is restored automatically.
+1. Branch `<type>/<kebab>` from `main` and open a pull request into `main`. CI must pass (`CI OK`); merge with a merge commit.
+2. The merge deploys stage automatically: https://stage.notes.szolotov.com (behind Cloudflare Access; about 15 minutes; `/version.txt` shows `stage+<sha>`) ([Stage Preview](docs/deployment.md#stage-preview)). Run workflow on `main` re-deploys it. Production traffic is untouched.
+3. To release: update `CHANGELOG.md` (`[Unreleased]` to `[X.Y.Z] - date`) by pull request, then Actions, **Cut release**, **Run workflow** on `main`, enter the version as `X.Y.Z`. The workflow validates it, checks that CI passed for that commit and that the version is higher than the latest tag, creates the tag and GitHub Release from the CHANGELOG section, and dispatches Deploy production on the tag.
+4. Approve the deployment in the `production` environment. A smoke test runs against the Worker's workers.dev URL after the deploy; on failure the previous version is restored automatically.
 
-Production only ever deploys from a `vX.Y.Z` tag. Deploy workflows build in a job without secrets and deploy from a second job, because `npm run build` fetches and builds third-party Quartz plugins (pinned in `quartz.lock.json`, whose changes deserve review). Deploy builds are cold and take about 15 minutes; CI caches the plugins. Builds need access to github.com and npm. Details: [docs/deployment.md](docs/deployment.md#build-and-deploy-are-separate-jobs). Setup (Cloudflare token, GitHub environments) is in [docs/deployment.md](docs/deployment.md); the branch rulesets and environment policies are applied by the **Repository settings** workflow ([docs/deployment.md](docs/deployment.md#repository-settings)).
+Production only ever deploys from a `vX.Y.Z` tag. Deploy workflows build in a job without secrets and deploy from a second job, because `npm run build` fetches and builds third-party Quartz plugins (pinned in `quartz.lock.json`, whose changes deserve review). Deploy builds are cold and take about 15 minutes; CI caches the plugins. Builds need access to github.com and npm. Details: [docs/deployment.md](docs/deployment.md#build-and-deploy-are-separate-jobs). Setup (Cloudflare token, GitHub environments) is in [docs/deployment.md](docs/deployment.md); the expected repository settings are in [docs/deployment.md](docs/deployment.md#repository-settings).
 
 ## Rolling back
 
 - Re-deploy an older release: Actions, **Deploy production**, Run workflow with an older **tag** selected as the ref, then approve. This rebuilds and deploys that tag.
-- Fast path: `npx wrangler rollback <version-id> --message "reason"` (list ids with `npx wrangler deployments list`). Production only: stage is a Preview and has no rollback, so merge a fix into `dev` and run Deploy stage again. See [docs/deployment.md](docs/deployment.md#rollback).
+- Fast path: `npx wrangler rollback <version-id> --message "reason"` (list ids with `npx wrangler deployments list`). Production only: stage is a Preview and has no rollback, so merge a fix into `main` (stage redeploys). See [docs/deployment.md](docs/deployment.md#rollback).
 
 ## Quartz
 

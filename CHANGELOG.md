@@ -2,14 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Versions are the `vX.Y.Z` git tags created by the Release workflow.
+The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Versions are the `vX.Y.Z` git tags created by the Cut release workflow.
 
 ## [Unreleased]
 
 ### Added
 
 - The full graph of all notes, from every page (toolbar button or Ctrl/Cmd+G), with Obsidian-style depth, search, tag and orphan toggles, section colours with a legend, node size by links, a list view, and settings remembered in this browser; the `/static/graph.json` slim index it reads.
-- A **Repository settings** workflow (manual, from `main`, owner only, with a dry run) that applies the branch rulesets for `dev` and `main`, the environment branch policies (environment `stage` limited to `dev`; retired `dev` and `staging` environments deleted only with the `delete_old_environments` opt-in) and the fork approval policy.
+- **Cut release** (`cut-release.yml`, manual, from `main`, owner only) and `scripts/changelog-section.mjs`: the workflow validates the version, creates the annotated tag `vX.Y.Z` and the GitHub Release, then dispatches Deploy production on the tag. The tag message and the Release notes are the `CHANGELOG.md` section of that version.
 - 50 new notes, all Markdown in `content/`:
   - a new **Architecture** section (`content/architecture/`, in the top bar and on the home page) with 13 reference designs: GCP resource hierarchy and landing zone, environment separation, IAM groups and CI Workload Identity Federation, Shared VPC hub and spoke, private GKE and controlled egress, Cloud DNS for hybrid and multi-project setups, zero-trust access with IAP and VPC Service Controls, GKE platform topology and tenancy, GitOps repository topology and promotion, disaster recovery tiers, backup architecture, the OpenTelemetry pipeline, and FinOps cost allocation;
   - a new **Compliance** section (`content/compliance/`, in the top bar and on the home page) with 11 notes: change management controls and pipeline evidence, audit evidence collection and retention, separation of duties, access reviews, CIS benchmarks with kube-bench, GCP organization policy guardrails, the policy exception and waiver process, SBOM generation and storage, SLSA build provenance, open-source licence compliance, and PCI DSS and GDPR for DevOps logs and data;
@@ -29,10 +29,11 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 ### Changed
 
 - The note's local graph is now `local-plugins/note-graph`, drawn with Canvas 2D; the graph no longer downloads the full content index. Tags no longer count as depth hops, as in Obsidian.
-- The pre-production site is **stage** again, at https://stage.notes.szolotov.com (the Worker Preview `stage`, behind Cloudflare Access). **Deploy stage** (`deploy-stage.yml`) runs only by hand (`workflow_dispatch`), only from the `dev` branch, only for the owner; merges into `dev` or `main` deploy nothing. Work goes in through pull requests into `dev`, then `dev` to `main` with a merge commit; production releases are unchanged. CI runs for `dev` too, and Dependabot targets `dev`. dev.notes.szolotov.com is retired (one-time `retire_dev` input).
+- The pre-production site is **stage** again, at https://stage.notes.szolotov.com (the Worker Preview `stage`, behind Cloudflare Access). **Deploy stage** (`deploy-stage.yml`) runs on every merge to `main` and on Run workflow from `main`, only for the owner, in the environment `staging`. There is no `dev` branch: pull requests go into `main`, CI and Dependabot run for `main` only, and dev.notes.szolotov.com is retired automatically after a verified stage deploy.
 - Deploy stage refuses to upload unless the Cloudflare API shows an Access application covering stage and no Custom Domain or DNS record for the host. After the upload, the workers.dev Preview URL must redirect to Access, otherwise the Preview is deleted; the stage Preview is also deleted after any failed or cancelled step once the upload was attempted (`SMOKE_REQUIRE_ACCESS` in `scripts/smoke-test.sh`, `scripts/cloudflare-stage.mjs`). `DEV_SMOKE_TEST` is gone.
 - `/version.txt` on stage reads `stage+<sha>`; `NOTES_VERSION` accepts `stage` instead of `dev`; `npm run preview:dev` is `npm run preview:stage`.
-- A Deploy stage run fails (instead of skipping) when `dev` moved on during the run.
+- A Deploy stage run skips the upload and succeeds when `main` moved on during the run, because the newer run deploys.
+- Production starts only by dispatch on a `vX.Y.Z` tag (from Cut release, or Run workflow on a tag); a pushed tag deploys nothing.
 - The one-time `remove-stage` action is removed.
 - TypeScript 7.0.2 (native compiler) for `npm run check`; `tsconfig.json` uses `moduleResolution: "bundler"` (node10 was removed), types `micromorph` through `paths`, and `quartz/processors/parse.ts` takes the mdast `Root` type from `@types/mdast`.
 - `engines.node` is `>=22.12.0` (required by mermaid 12); `lodash-es` is overridden to `^4.18.1` (see Security).
@@ -40,6 +41,8 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - mermaid 12.0.0 (diagrams in the browser, from `public/static/vendor/mermaid`), @types/node 26.6.3, @napi-rs/simple-git 1.2.0.
 
 ### Removed
+
+- `release.yml`, and the `workflow_call` and tag-push triggers of `deploy-production.yml`.
 
 - The `pixi.js` dependency and `static/vendor/{d3,pixi}.min.js`; the community graph plugin is disabled.
 
