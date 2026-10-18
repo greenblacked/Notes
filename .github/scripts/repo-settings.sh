@@ -157,8 +157,8 @@ ensure_main_ruleset() {
   fi
   get "rulesets/$RULESET_ID" || { echo "::error::Ruleset $RULESET_ID vanished."; exit 1; }
   existing="$GOT"
-  if ! jq -e '.target == "branch" and ((.conditions.ref_name.include // []) | any(. == "refs/heads/main" or . == "~DEFAULT_BRANCH")) and ((.conditions.ref_name.exclude // []) | any(. == "refs/heads/main" or . == "~DEFAULT_BRANCH") | not)' <<<"$existing" >/dev/null; then
-    echo "::error::Ruleset main (id $RULESET_ID) does not target the branch main (target and conditions.ref_name.include must be branch and refs/heads/main or ~DEFAULT_BRANCH, and conditions.ref_name.exclude must not contain either). Fix or delete it in the repository settings, then run this workflow again."
+  if ! jq -e '.target == "branch" and ((.conditions.ref_name.include // []) | any(. == "refs/heads/main" or . == "~DEFAULT_BRANCH")) and ((.conditions.ref_name.exclude // []) | length == 0)' <<<"$existing" >/dev/null; then
+    echo "::error::Ruleset main (id $RULESET_ID) may not protect the branch main (target must be branch, conditions.ref_name.include must contain refs/heads/main or ~DEFAULT_BRANCH, and conditions.ref_name.exclude must be empty, because any exclude pattern could exclude main). Fix or delete it in the repository settings, then run this workflow again."
     exit 1
   fi
   rules="$(jq -c '.rules' <<<"$want")"
@@ -166,8 +166,8 @@ ensure_main_ruleset() {
       .rules as $r
       | ($r + [$d[] | select(.type as $t | ($r | map(.type) | index($t)) == null)])
       | map(if .type == "required_status_checks"
-               and ((.parameters.required_status_checks // []) | map(.context) | index($ci.context)) == null
-            then .parameters.required_status_checks = ((.parameters.required_status_checks // []) + [$ci])
+               and ((.parameters.required_status_checks // []) | any(.context == $ci.context and .integration_id == $ci.integration_id) | not)
+            then .parameters.required_status_checks = (((.parameters.required_status_checks // []) | map(select(.context != $ci.context))) + [$ci])
             else . end)' <<<"$existing")"
   enforcement="$(jq -r '.enforcement' <<<"$existing")"
   changed=false
