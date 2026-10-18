@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Writes `current=true|false` to $GITHUB_OUTPUT: whether $SHA is still the head
-# of $BRANCH (default main). Used by deploy-dev.yml so a stale run never overwrites a newer
-# deployment. Requires GH_TOKEN, GITHUB_REPOSITORY and SHA in the env.
+# Writes `current=true|false` to $GITHUB_OUTPUT: whether $SHA is still the head of $BRANCH.
+# Used by deploy-dev.yml (BRANCH=dev) so a stale run never overwrites a newer deployment.
+# Requires GH_TOKEN, GITHUB_REPOSITORY, BRANCH and SHA in the env.
 set -euo pipefail
 
-branch="${BRANCH:-main}"
+branch="${BRANCH:-}"
 if [[ ! "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
   echo "::error::BRANCH must be a plain branch name, got '$branch'."
+  exit 1
+fi
+if [[ ! "${SHA:-}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "::error::SHA must be a full 40-character commit id."
   exit 1
 fi
 

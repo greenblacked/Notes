@@ -1,67 +1,71 @@
 name: Deploy dev
 
-# Manual only: updates the Worker Preview `dev` of the Worker `notes`, served at
-# https://dev.notes.szolotov.com (see docs/deployment.md#dev-preview). Run it from the Actions
-# tab (Deploy dev, Run workflow, branch `main`, action `deploy`) when the owner asks for it.
-# There is no push trigger, so dev may lag behind main by design. Production is not touched:
-# Previews never change production traffic.
+# Every push to `dev` updates the Worker Preview `dev` of the Worker `notes`, served at
+# https://dev.notes.szolotov.com (see docs/deployment.md#dev-preview). Pushes to `dev` only
+# arrive by merging a pull request, because the `dev` ruleset requires a pull request and the
+# CI OK check. `workflow_dispatch` re-deploys the head of `dev`; it must be run from `dev`.
+# Production is not touched: Previews never change production traffic.
 #
-# The `guard` job fails every run that was not started from main, so the jobs that hold the
-# Cloudflare token only ever run main's code (the environment `dev` is limited to main too).
+# The `guard` job refuses any other ref, event, repository or actor, so the jobs that hold the
+# Cloudflare token only ever run code of `dev` (the environment `dev` is limited to the `dev`
+# branch too).
 #
-# Two actions:
-#   deploy        build main with no secrets, then upload it to the Preview `dev`.
-#   remove-stage  one time: delete the Preview `stage` left over from the old stage environment.
-#                 Deleting a Preview that is already gone is not an error, so re-running is harmless.
-#
-# Two jobs for `deploy`: `build` runs the (third-party plugin) build code with no secrets and
-# no environment; `upload` has the secrets, installs only wrangler (tools/, without
+# Two jobs: `build` runs the (third-party plugin) build code with no secrets and no
+# environment; `upload` has the secrets, installs only wrangler (tools/, without
 # lifecycle scripts) and receives only public/ from the build as an artifact; the Worker
 # code is never taken from it.
 #
 # Gating: instead of a workflow_run trigger (a dangerous trigger in zizmor), the
 # checks run inline here against the exact commit being deployed.
 on:
+  push:
+    branches: [dev]
   workflow_dispatch:
-    inputs:
-      action:
-        description: "What to do (run from main)"
-        type: choice
-        required: true
-        default: deploy
-        options:
-          - deploy
-          - remove-stage
 
 permissions: {}
 
-# Runs queue (never cancel a deploy in flight); GitHub supersedes older pending
-# runs, so only the newest queued one waits.
+# Runs queue (never cancel a deploy in flight). GitHub keeps at most one pending run per group
+# and supersedes older pending ones, so the newest push wins; the head-of-dev checks make a
+# superseded run that already started skip instead of overwriting a newer deploy.
 concurrency:
   group: deploy-dev
   cancel-in-progress: false
 
 jobs:
   guard:
-    name: Require main
+    name: Require dev
+    # Forks never run it (their Actions skip quietly instead of failing).
+    if: github.repository == 'greenblacked/Notes'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
     env:
       REF: ${{ github.ref }}
+      EVENT: ${{ github.event_name }}
+      ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
     steps:
-      - name: Require the main branch
+      - name: Require the dev branch and the owner
         run: |
-          if [[ "$REF" != "refs/heads/main" ]]; then
-            echo "::error::Deploy dev runs only from main; select main in Run workflow (this run was started from '$REF')."
+          if [[ "$REF" != "refs/heads/dev" ]]; then
+            echo "::error::Deploy dev runs only from dev; select dev in Run workflow (this run was started from '$REF')."
+            exit 1
+          fi
+          if [[ "$EVENT" != "push" && "$EVENT" != "workflow_dispatch" ]]; then
+            echo "::error::Unexpected event '$EVENT'."
+            exit 1
+          fi
+          # Only the owner deploys: pushes to dev are PR merges by the owner, and only the owner
+          # can dispatch or re-run. A re-run by anyone else changes triggering_actor and stops here.
+          if [[ "$ACTOR" != "greenblacked" || "$TRIGGERING_ACTOR" != "greenblacked" ]]; then
+            echo "::error::Deploy dev is limited to the repository owner (actor '$ACTOR', triggered by '$TRIGGERING_ACTOR')."
             exit 1
           fi
 
   build:
     name: Build
     needs: guard
-    if: inputs.action == 'deploy'
     runs-on: ubuntu-24.04
     # A cold `quartz plugin restore` (no cache here on purpose) takes about 15 minutes.
     timeout-minutes: 45
@@ -80,11 +84,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check this commit is still the head of main
+      - name: Check this commit is still the head of dev
         id: fresh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: .github/scripts/is-main-head.sh
+          BRANCH: dev
+        run: .github/scripts/is-branch-head.sh
 
       - name: Set up Node.js
         if: steps.fresh.outputs.current == 'true'
@@ -104,6 +109,7 @@ jobs:
       - name: Build
         if: steps.fresh.outputs.current == 'true'
         env:
+          NOTES_VERSION: dev
           NOTES_BASE_URL: dev.notes.szolotov.com
           NOTES_SHA: ${{ github.sha }}
         run: npm run build
@@ -149,7 +155,8 @@ jobs:
       SHA: ${{ github.sha }}
       WRANGLER_SEND_METRICS: "false"
     steps:
-      # The guard job ensures github.sha is a commit of main, so this is trusted code.
+      # The guard job ensures github.sha is a commit of dev, which only receives PR merges that
+      # passed CI OK.
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -186,11 +193,12 @@ jobs:
           cp -R "$site/public" public
           node scripts/build-csp.mjs
 
-      - name: Re-check this commit is still the head of main
+      - name: Re-check this commit is still the head of dev
         id: fresh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: .github/scripts/is-main-head.sh
+          BRANCH: dev
+        run: .github/scripts/is-branch-head.sh
 
       # `wrangler preview` creates or updates the Preview `dev`; its ENVIRONMENT var comes from
       # `previews.vars` in wrangler.jsonc (not production, so noindex). It does not touch
@@ -241,7 +249,7 @@ jobs:
             echo "::error::Wrangler reported no workers.dev URL for the Preview; enable preview_urls and workers_dev in wrangler.jsonc, or set DEV_SMOKE_TEST to false."
             exit 1
           fi
-          scripts/smoke-test.sh "$WORKERS_DEV_URL" "main+$SHA" noindex
+          scripts/smoke-test.sh "$WORKERS_DEV_URL" "dev+$SHA" noindex
 
       # Informational only: never fails the run.
       - name: Probe the custom domain
@@ -255,74 +263,3 @@ jobs:
           else
             echo "https://dev.notes.szolotov.com answered HTTP $code"
           fi
-
-  remove-stage:
-    name: Remove stage Preview
-    needs: guard
-    if: inputs.action == 'remove-stage'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    environment:
-      name: dev
-      url: https://dev.notes.szolotov.com
-    env:
-      WRANGLER_SEND_METRICS: "false"
-    steps:
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false # no npm cache outside CI (cache-poisoning)
-
-      # Only wrangler, from tools/ (its own lockfile), with no lifecycle scripts.
-      - name: Install wrangler
-        run: npm ci --ignore-scripts --prefix tools
-
-      # One time clean-up of the Preview `stage` of the old stage environment. Re-running is
-      # harmless: when Cloudflare answers that the Preview does not exist, that is the wanted
-      # end state and the step passes with a notice. Any other failure (bad token, network)
-      # still fails the step. Wrangler reports the API error text, so "not found" is matched on
-      # the combined output; the exact wording of the API error is not documented.
-      - name: Delete the stage Preview
-        id: delete
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if out="$(tools/node_modules/.bin/wrangler preview delete --name stage --skip-confirmation 2>&1)"; then
-            echo "$out"
-            echo "result=deleted" >>"$GITHUB_OUTPUT"
-          else
-            echo "$out"
-            if grep -qi "not found" <<<"$out"; then
-              echo "::notice::The stage Preview does not exist (already removed); nothing to do."
-              echo "result=absent" >>"$GITHUB_OUTPUT"
-            else
-              echo "::error::Deleting the stage Preview failed; see the output above."
-              exit 1
-            fi
-          fi
-
-      - name: Summary
-        env:
-          RESULT: ${{ steps.delete.outputs.result }}
-        run: |
-          {
-            echo "### Remove stage"
-            echo
-            if [[ "$RESULT" == "deleted" ]]; then
-              echo "The Preview \`stage\` of the Worker \`notes\` was deleted."
-            else
-              echo "The Preview \`stage\` did not exist; nothing to delete."
-            fi
-            echo
-            echo "This action is only needed once. Production and the \`dev\` Preview are not touched."
-          } >>"$GITHUB_STEP_SUMMARY"

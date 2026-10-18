@@ -5,7 +5,7 @@
 #
 #   base_url          e.g. https://notes.szolotov.com (no trailing slash needed)
 #   expected_version  exact content of /version.txt (without the newline),
-#                     e.g. "1.2.3+<40-char sha>" or "main+<40-char sha>"
+#                     e.g. "1.2.3+<sha>", "main+<sha>" or "dev+<sha>"
 #   indexable|noindex what this host is expected to send: "indexable" (no noindex,
 #                     robots.txt allows crawling; only notes.szolotov.com in production) or
 #                     "noindex" (X-Robots-Tag noindex, robots.txt "Disallow: /"; the dev
