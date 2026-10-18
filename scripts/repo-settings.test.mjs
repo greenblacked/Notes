@@ -228,6 +228,7 @@ test("environment dev: the dev policy is added before the main policy is deleted
 test("an environment PUT keeps the existing reviewers and wait timer", () => {
   const env = {
     name: "dev",
+    can_admins_bypass: false,
     protection_rules: [
       { type: "wait_timer", wait_timer: 5 },
       {
@@ -244,6 +245,7 @@ test("an environment PUT keeps the existing reviewers and wait timer", () => {
   assert.deepEqual(body, {
     deployment_branch_policy: { protected_branches: false, custom_branch_policies: true },
     wait_timer: 5,
+    can_admins_bypass: false,
     prevent_self_review: true,
     reviewers: [{ type: "User", id: 9 }],
   })

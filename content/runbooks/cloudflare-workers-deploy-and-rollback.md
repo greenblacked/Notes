@@ -11,7 +11,7 @@ verified: 2026-10-16
 draft: false
 ---
 
-How this site reaches Cloudflare and how to undo a bad release. Production is the Worker `notes` at https://notes.szolotov.com; dev is a Worker Preview named `dev`[^preview] of the same Worker at https://dev.notes.szolotov.com. Dev is the pre-production site and is deployed by hand from `main`; there is no stage.
+How this site reaches Cloudflare and how to undo a bad release. Production is the Worker `notes` at https://notes.szolotov.com; dev is a Worker Preview named `dev`[^preview] of the same Worker at https://dev.notes.szolotov.com. Dev is the pre-production site and is deployed automatically from the `dev` branch; there is no stage.
 
 > [!info] Checked against
 > `wrangler.jsonc`, `.github/workflows/{deploy-dev,deploy-production,release}.yml`, `scripts/smoke-test.sh`, `scripts/write-version.mjs` and `docs/deployment.md` in the repository, and the Wrangler 4.149.0 CLI help (`npx wrangler rollback --help`). Cloudflare docs: [Rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/), [Wrangler commands for Workers](https://developers.cloudflare.com/workers/wrangler/commands/workers/) (`deployments`, `versions`, `preview`) [Previews on custom domains](https://developers.cloudflare.com/workers/previews/custom-domains/) and the [changelog entry](https://developers.cloudflare.com/changelog/post/2025-09-11-increased-version-rollback-limit/) that raised the rollback window from 10 to 100 versions. Worker Previews are in open beta, so flags may change.
@@ -23,7 +23,7 @@ How this site reaches Cloudflare and how to undo a bad release. Production is th
 - Checking which version is live on production or dev.
 - A deploy run failed and you need to know whether the site is affected.
 
-Day-to-day publishing of notes needs none of this: merging to `main` deploys nothing, and **Deploy dev** is run only when the owner asks for it.
+Day-to-day publishing of notes needs none of this: merging to `main` deploys nothing. Work reaches dev through a pull request into `dev`, which runs **Deploy dev** automatically.
 
 ## Preconditions
 
@@ -35,10 +35,10 @@ Day-to-day publishing of notes needs none of this: merging to `main` deploys not
 
 ```mermaid
 flowchart TD
-    A[Feature branch] --> P[Preview by the maintainer]
-    P --> M[Merge to main]
-    M -->|on request| B[Deploy dev: manual, from main]
+    A[Work branch] --> P[Pull request into dev]
+    P --> B[Deploy dev: automatic, on push to dev]
     B --> C[Dev smoke test]
+    C --> M[Pull request dev to main, merge commit]
     M --> D[Actions: Release, version X.Y.Z]
     D --> E[Tag vX.Y.Z and GitHub Release]
     E --> F[Deploy production: build, approval]
@@ -54,10 +54,10 @@ flowchart TD
 
 ### Release to production
 
-1. Check that CI on the `main` head is green and, if you want the pre-production check, that dev serves that commit (run **Deploy dev** first if it does not):
+1. Check that CI on the `main` head is green and, if you want the pre-production check, that dev serves the commit you are about to release (the **Deploy dev** run for the `dev` head finished green):
 
    ```bash
-   curl -s https://dev.notes.szolotov.com/version.txt   # main+<40-char sha>
+   curl -s https://dev.notes.szolotov.com/version.txt   # dev+<40-char sha>
    ```
 
 2. In GitHub, open **Actions**, **Release**, **Run workflow** on `main`, and enter the version as `X.Y.Z` (no leading `v`, strictly greater than the latest tag).
@@ -77,9 +77,7 @@ What **Deploy production** does after approval, and therefore verifies:
 
 ### Dev
 
-**Deploy dev** is manual and runs only from `main`: **Actions**, **Deploy dev**, **Run workflow**, branch `main`, action `deploy`. It builds, then runs `wrangler preview --name dev`. Dev is a Preview of the same Worker, so it never touches production traffic. It may lag behind `main` by design, and `/version.txt` shows which commit it serves. If a newer commit has reached `main` during the run, the run skips with a notice and succeeds; run it again. Feature branches are not deployed anywhere: the maintainer shows them with screenshots or a video before the merge.
-
-The old Preview `stage` is removed once with **Deploy dev**, action `remove-stage`.
+**Deploy dev** runs automatically on every push to `dev` (a merged pull request) and can be started by hand only on the `dev` branch: **Actions**, **Deploy dev**, **Run workflow**, branch `dev`. It builds without secrets, then runs `wrangler preview --name dev`. Dev is a Preview of the same Worker, so it never touches production traffic. Runs queue and are never cancelled; `/version.txt` shows which commit dev serves. If a newer commit has reached `dev` during the run, the run skips with a notice and succeeds, because the newer push has its own run. Work branches are not deployed anywhere: they are merged into `dev` by pull request first. When dev looks good, open a pull request `dev` to `main` and merge it with a merge commit.
 
 ## Validation
 
@@ -87,7 +85,7 @@ Check what is live on production and dev:[^version]
 
 ```bash
 curl -s https://notes.szolotov.com/version.txt        # <X.Y.Z>+<40-char sha>
-curl -s https://dev.notes.szolotov.com/version.txt  # main+<40-char sha>
+curl -s https://dev.notes.szolotov.com/version.txt  # dev+<40-char sha>
 curl -sI https://notes.szolotov.com | grep -i x-robots-tag   # no output: production is indexable
 ```
 
@@ -131,7 +129,7 @@ Only the 100 most recently published versions can be rolled back to. Rollback is
 
 To redeploy a tag, including an older good one: **Actions**, **Deploy production**, **Run workflow**, select the **tag** (for example `v0.1.0`) as the ref, and approve. This rebuilds the tag and deploys it with the same checks, and rolls back automatically if they fail. Production deploys refuse any ref that is not a `vX.Y.Z` tag, and the tagged commit must have a successful `ci.yml` push run on `main` and be on `main`, so a tag whose CI run is no longer available cannot be redeployed; use a rollback in that case. Pushing a `v*.*.*` tag by hand also starts **Deploy production**, but tags created by the Release workflow do not (they are deployed by the explicit call).
 
-Dev recovers by merging a fix and running **Deploy dev** again. To remove the Preview: `npx wrangler preview delete --name dev`.
+Dev recovers by merging a fix into `dev`, which deploys it again (or re-run the failed **Deploy dev** run). To remove the Preview: `npx wrangler preview delete --name dev`.
 
 ## Troubleshooting
 
@@ -142,8 +140,8 @@ Dev recovers by merging a fix and running **Deploy dev** again. To remove the Pr
 | Dev smoke test notice, workers.dev URL of the Preview redirects to a Cloudflare login  | Cloudflare Access protects Worker Previews in this account. The dev smoke test passes with a notice; Wrangler reporting https://dev.notes.szolotov.com is the check. Production never accepts an Access redirect.           |
 | Wrangler warns "Custom domain Preview URLs are configured, but none are active"        | Before the first production deploy, `previews_enabled` on the Custom Domain has not been applied yet. It is applied by `wrangler deploy` (the first release) or in the dashboard under Domains, **Production and Preview**. |
 | Deploy dev fails at "Require the custom domain Preview URL"                            | The Preview exists only on workers.dev because `previews_enabled` has not been applied. Do the first production release or enable **Production and Preview** in the dashboard, then re-run.                                 |
-| Deploy dev fails with "runs only from main"                                            | The run was started from another branch. Re-run it with branch `main` selected.                                                                                                                                             |
-| Deploy dev run succeeds but dev still shows an older commit                            | The run skipped because a newer commit reached `main` during the build (see the notice). Run it again.                                                                                                                      |
+| Deploy dev fails with "runs only from dev"                                             | The run was started from another branch. Re-run it with branch `dev` selected.                                                                                                                                              |
+| Deploy dev run succeeds but dev still shows an older commit                            | The run skipped because a newer commit reached `dev` during the build (see the notice); that push has its own run.                                                                                                          |
 | Deploy production fails in the tag guard ("Tag ... points at ...", not a `vX.Y.Z` ref) | The run was not started from a release tag, or the tag does not resolve to the commit being deployed. Re-run from the correct tag.                                                                                          |
 | Deploy production waits and never starts                                               | The `production` environment needs approval; approve it in the run.                                                                                                                                                         |
 | Release fails with "must be strictly greater than the latest tag"                      | Pick a higher `X.Y.Z`. Tags are never reused; if the failure came after the tag step, re-run only **Deploy production** from that tag.                                                                                      |

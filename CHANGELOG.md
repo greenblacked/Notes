@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- The runbook on Cloudflare deploys and rollbacks and the standards page describe the `dev` branch flow (automatic Deploy dev, `dev+<sha>`, pull request `dev` to `main`).
 - The dev site deploys automatically on every push to the `dev` branch. Work goes in through pull requests into `dev`, which then go to `main` with a merge commit; production releases are unchanged. CI runs for `dev` too, and Dependabot targets `dev`.
 - The one-time `remove-stage` action is removed (the stage Preview is gone).
 - `/version.txt` on dev reads `dev+<sha>`.
