@@ -202,18 +202,18 @@ test("a main ruleset that does not target main fails loudly", () => {
   })
   const { code, out, calls } = run({ fake: { RULESETS: [bad], RULESET_BY_ID: { 2: bad } } })
   assert.notEqual(code, 0)
-  assert.match(out, /does not target the branch main/)
+  assert.match(out, /may not protect the branch main/)
   assert.equal(writes(calls).filter((c) => c.includes("rulesets/2")).length, 0)
 })
 
-test("a main ruleset that excludes main fails loudly without writing", () => {
-  for (const ex of ["refs/heads/main", "~DEFAULT_BRANCH"]) {
+test("a main ruleset with any exclude pattern fails loudly without writing", () => {
+  for (const ex of ["refs/heads/main", "~DEFAULT_BRANCH", "refs/heads/m*"]) {
     const bad = ruleset(2, "main", {
       conditions: { ref_name: { include: ["refs/heads/main"], exclude: [ex] } },
     })
     const { code, out, calls } = run({ fake: { RULESETS: [bad], RULESET_BY_ID: { 2: bad } } })
     assert.notEqual(code, 0)
-    assert.match(out, /does not target the branch main/)
+    assert.match(out, /may not protect the branch main/)
     assert.equal(writes(calls).filter((c) => c.includes("rulesets/2")).length, 0)
   }
 })
@@ -244,6 +244,18 @@ test("the CI OK check is appended to an existing check list, never replacing it"
   const body = bodyAfter(calls, "api -X PUT repos/owner/repo/rulesets/2")
   const checks = body.rules.find((r) => r.type === "required_status_checks").parameters
   assert.deepEqual(checks.required_status_checks, [other, CI])
+})
+
+test("a CI OK check without the pinned integration id is replaced, not duplicated", () => {
+  for (const stale of [{ context: "CI OK" }, { context: "CI OK", integration_id: 1 }]) {
+    const other = { context: "other" }
+    const main = ruleset(2, "main", { rules: rules(["merge"], [stale, other]) })
+    const { code, calls } = run({ fake: { RULESETS: [main], RULESET_BY_ID: { 2: main } } })
+    assert.equal(code, 0)
+    const body = bodyAfter(calls, "api -X PUT repos/owner/repo/rulesets/2")
+    const checks = body.rules.find((r) => r.type === "required_status_checks").parameters
+    assert.deepEqual(checks.required_status_checks, [other, CI])
+  }
 })
 
 test("environment dev: the dev policy is added before the main policy is deleted", () => {
