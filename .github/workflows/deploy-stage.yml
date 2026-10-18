@@ -328,7 +328,7 @@ jobs:
       # counts as "already gone" only when Wrangler itself reports that the Preview "stage" was
       # not found; any other error (bad token, unknown account, network) fails the step.
       - name: Take stage down unless it is verified
-        if: always() && steps.preview.outcome != 'skipped' && (failure() || cancelled() || steps.access_wd.outputs.exposed == 'true')
+        if: always() && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled() || steps.access_wd.outputs.exposed == 'true')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
