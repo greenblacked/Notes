@@ -1,13 +1,12 @@
-name: Deploy dev
+name: Deploy stage
 
-# Every push to `dev` updates the Worker Preview `dev` of the Worker `notes`, served at
-# https://dev.notes.szolotov.com (see docs/deployment.md#dev-preview). Pushes to `dev` only
-# arrive by merging a pull request, because the `dev` ruleset requires a pull request and the
-# CI OK check. `workflow_dispatch` re-deploys the head of `dev`; it must be run from `dev`.
+# Manual only (`workflow_dispatch`), only from `dev`, only by the repository owner. It updates
+# the Worker Preview `stage` of the Worker `notes`, served at https://stage.notes.szolotov.com
+# behind Cloudflare Access (see docs/deployment.md#stage-preview). Merges deploy nothing.
 # Production is not touched: Previews never change production traffic.
 #
 # The `guard` job refuses any other ref, event, repository or actor, so the jobs that hold the
-# Cloudflare token only ever run code of `dev` (the environment `dev` is limited to the `dev`
+# Cloudflare token only ever run code of `dev` (the environment `stage` is limited to the `dev`
 # branch too).
 #
 # Two jobs: `build` runs the (third-party plugin) build code with no secrets and no
@@ -18,30 +17,32 @@ name: Deploy dev
 # Gating: instead of a workflow_run trigger (a dangerous trigger in zizmor), the
 # checks run inline here against the exact commit being deployed.
 on:
-  push:
-    branches: [dev]
   workflow_dispatch:
+    inputs:
+      retire_dev:
+        description: "One time: delete the old dev Preview and its Access app after stage is verified"
+        type: boolean
+        default: false
 
 permissions: {}
 
-# Runs queue (never cancel a deploy in flight). GitHub keeps at most one pending run per group
-# and supersedes older pending ones, so the newest push wins; the head-of-dev checks make a
-# superseded run that already started skip instead of overwriting a newer deploy. The group is
-# keyed on the ref, so a dispatch from another ref (which the guard rejects) cannot supersede a
-# pending run of dev.
+# Manual runs queue and are never cancelled (a deploy in flight finishes). The group is keyed on
+# the ref, so a dispatch from another ref (which the guard rejects) cannot supersede a pending
+# run of dev. A run that finds `dev` has moved on fails, so it is run again.
 concurrency:
-  group: deploy-dev-${{ github.ref }}
+  group: deploy-stage-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   guard:
-    name: Require dev
+    name: Require dev and the owner
     # Forks never run it (their Actions skip quietly instead of failing).
     if: github.repository == 'greenblacked/Notes'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     env:
+      REPO: ${{ github.repository }}
       REF: ${{ github.ref }}
       EVENT: ${{ github.event_name }}
       ACTOR: ${{ github.actor }}
@@ -49,18 +50,22 @@ jobs:
     steps:
       - name: Require the dev branch and the owner
         run: |
-          if [[ "$REF" != "refs/heads/dev" ]]; then
-            echo "::error::Deploy dev runs only from dev; select dev in Run workflow (this run was started from '$REF')."
+          if [[ "$REPO" != "greenblacked/Notes" ]]; then
+            echo "::error::Unexpected repository '$REPO'."
             exit 1
           fi
-          if [[ "$EVENT" != "push" && "$EVENT" != "workflow_dispatch" ]]; then
+          if [[ "$REF" != "refs/heads/dev" ]]; then
+            echo "::error::Deploy stage runs only from dev; select dev in Run workflow (this run was started from '$REF')."
+            exit 1
+          fi
+          if [[ "$EVENT" != "workflow_dispatch" ]]; then
             echo "::error::Unexpected event '$EVENT'."
             exit 1
           fi
-          # Only the owner deploys: pushes to dev are PR merges by the owner, and only the owner
-          # can dispatch or re-run. A re-run by anyone else changes triggering_actor and stops here.
+          # Only the owner deploys: only the owner can dispatch or re-run. A re-run by anyone
+          # else changes triggering_actor and stops here.
           if [[ "$ACTOR" != "greenblacked" || "$TRIGGERING_ACTOR" != "greenblacked" ]]; then
-            echo "::error::Deploy dev is limited to the repository owner (actor '$ACTOR', triggered by '$TRIGGERING_ACTOR')."
+            echo "::error::Deploy stage is limited to the repository owner (actor '$ACTOR', triggered by '$TRIGGERING_ACTOR')."
             exit 1
           fi
 
@@ -92,6 +97,12 @@ jobs:
           BRANCH: dev
         run: .github/scripts/is-branch-head.sh
 
+      - name: Fail when dev moved on
+        if: steps.fresh.outputs.current != 'true'
+        run: |
+          echo "::error::dev moved on during this run; run Deploy stage again."
+          exit 1
+
       - name: Set up Node.js
         if: steps.fresh.outputs.current == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -110,8 +121,8 @@ jobs:
       - name: Build
         if: steps.fresh.outputs.current == 'true'
         env:
-          NOTES_VERSION: dev
-          NOTES_BASE_URL: dev.notes.szolotov.com
+          NOTES_VERSION: stage
+          NOTES_BASE_URL: stage.notes.szolotov.com
           NOTES_SHA: ${{ github.sha }}
         run: npm run build
 
@@ -142,7 +153,7 @@ jobs:
           if-no-files-found: error
 
   upload:
-    name: Update dev Preview
+    name: Update stage Preview
     needs: build
     if: needs.build.outputs.current == 'true'
     runs-on: ubuntu-24.04
@@ -150,11 +161,12 @@ jobs:
     permissions:
       contents: read
     environment:
-      name: dev
-      url: https://dev.notes.szolotov.com
+      name: stage
+      url: https://stage.notes.szolotov.com
     env:
       SHA: ${{ github.sha }}
       WRANGLER_SEND_METRICS: "false"
+      RETIRE_DEV: ${{ inputs.retire_dev }}
     steps:
       # The guard job ensures github.sha is a commit of dev, which only receives PR merges that
       # passed CI OK.
@@ -201,10 +213,34 @@ jobs:
           BRANCH: dev
         run: .github/scripts/is-branch-head.sh
 
-      # `wrangler preview` creates or updates the Preview `dev`; its ENVIRONMENT var comes from
+      - name: Fail when dev moved on
+        if: steps.fresh.outputs.current != 'true'
+        run: |
+          echo "::error::dev moved on during this run; run Deploy stage again."
+          exit 1
+
+      # The token never lives at job level: each step that needs it sets it. Only wrangler and the
+      # Node built-ins run next to it.
+      - name: Ensure Cloudflare Access for stage
+        if: steps.fresh.outputs.current == 'true' && env.RETIRE_DEV == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/cloudflare-stage.mjs ensure-access
+
+      # Fail closed: nothing is uploaded unless an Access application covers stage and no Custom
+      # Domain or DNS record shadows the Preview hostname.
+      - name: Require Cloudflare Access and a clean hostname
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/cloudflare-stage.mjs preflight
+
+      # `wrangler preview` creates or updates the Preview `stage`; its ENVIRONMENT var comes from
       # `previews.vars` in wrangler.jsonc (not production, so noindex). It does not touch
       # production or the routes.
-      - name: Update the dev Preview
+      - name: Update the stage Preview
         id: preview
         if: steps.fresh.outputs.current == 'true'
         env:
@@ -212,7 +248,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
         run: |
-          tools/node_modules/.bin/wrangler preview --name dev --message "dev ${SHA::7}" --tag "$SHA"
+          tools/node_modules/.bin/wrangler preview --name stage --message "stage ${SHA::7}" --tag "$SHA"
           out="$(node scripts/read-wrangler-output.mjs --preview "$WRANGLER_OUTPUT_FILE_PATH")"
           echo "$out"
           echo "$out" >>"$GITHUB_OUTPUT"
@@ -220,47 +256,99 @@ jobs:
       - name: Require the custom domain Preview URL
         if: steps.fresh.outputs.current == 'true'
         env:
-          DEV_URL: ${{ steps.preview.outputs.custom_url }}
+          STAGE_URL: ${{ steps.preview.outputs.custom_url }}
         run: |
-          if [[ "$DEV_URL" != "https://dev.notes.szolotov.com" ]]; then
-            echo "::error::The dev Preview is not served at https://dev.notes.szolotov.com (Wrangler reported '$DEV_URL'). notes.szolotov.com must be enabled for Production and Preview. See docs/deployment.md#dev-preview."
+          if [[ "$STAGE_URL" != "https://stage.notes.szolotov.com" ]]; then
+            echo "::error::The stage Preview is not served at https://stage.notes.szolotov.com (Wrangler reported '$STAGE_URL'). notes.szolotov.com must be enabled for Production and Preview. See docs/deployment.md#stage-preview."
             exit 1
           fi
-          echo "::notice::Dev preview: https://dev.notes.szolotov.com"
+          echo "::notice::Stage preview: https://stage.notes.szolotov.com"
           {
-            echo "### Dev preview"
+            echo "### Stage preview"
             echo
-            echo "https://dev.notes.szolotov.com (commit \`${SHA::7}\`)"
+            echo "https://stage.notes.szolotov.com (commit \`${SHA::7}\`)"
           } >>"$GITHUB_STEP_SUMMARY"
 
       # Bot Fight Mode answers GitHub-hosted runners with 403 on the custom domains, so the
-      # deploy is verified on the Preview's workers.dev URL. When the account protects Previews
-      # with Cloudflare Access, that URL redirects to the Access login: SMOKE_ALLOW_ACCESS turns
-      # that into a notice, and Wrangler reporting the custom domain URL above is the
-      # verification. Set the repository or environment variable DEV_SMOKE_TEST to "false" to
-      # skip it entirely.
-      - name: Smoke test (workers.dev)
-        if: steps.fresh.outputs.current == 'true' && vars.DEV_SMOKE_TEST != 'false'
+      # exposure check runs on the Preview's workers.dev URL, which must redirect to the Access
+      # login. There is no skip switch: a switch would turn the exposure check off.
+      - name: Require Access on the workers.dev Preview URL
+        id: access_wd
+        if: steps.fresh.outputs.current == 'true'
         env:
           SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
           WORKERS_DEV_URL: ${{ steps.preview.outputs.workers_dev_url }}
-          SMOKE_ALLOW_ACCESS: "1"
+          SMOKE_REQUIRE_ACCESS: "1"
         run: |
           if [[ -z "$WORKERS_DEV_URL" ]]; then
-            echo "::error::Wrangler reported no workers.dev URL for the Preview; enable preview_urls and workers_dev in wrangler.jsonc, or set DEV_SMOKE_TEST to false."
+            echo "::error::Wrangler reported no workers.dev URL for the Preview; enable preview_urls and workers_dev in wrangler.jsonc."
             exit 1
           fi
-          scripts/smoke-test.sh "$WORKERS_DEV_URL" "dev+$SHA" noindex
+          scripts/smoke-test.sh "$WORKERS_DEV_URL" "stage+$SHA" noindex
 
-      # Informational only: never fails the run.
       - name: Probe the custom domain
+        id: access_cd
         if: steps.fresh.outputs.current == 'true'
         run: |
-          code="$(curl --proto '=https' --tlsv1.2 -s -o /dev/null -w '%{http_code}' --max-time 30 \
+          res="$(curl --proto '=https' --tlsv1.2 -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 30 \
             --user-agent 'notes-smoke-test/1 (+https://github.com/greenblacked/Notes)' \
-            https://dev.notes.szolotov.com/ || true)"
-          if [[ "$code" == "403" ]]; then
-            echo "::notice::https://dev.notes.szolotov.com answered 403 to this runner (Cloudflare Bot Fight Mode); expected, verification used workers.dev."
+            https://stage.notes.szolotov.com/version.txt || true)"
+          code="${res%% *}"
+          loc="${res#* }"
+          if [[ "$code" =~ ^2[0-9][0-9]$ ]]; then
+            echo "::error::stage.notes.szolotov.com is publicly reachable (not behind Cloudflare Access)."
+            exit 1
+          elif [[ "$code" =~ ^3[0-9][0-9]$ && "$loc" =~ ^https://[^/]+\.cloudflareaccess\.com/ ]]; then
+            echo "::notice::stage.notes.szolotov.com redirects to the Cloudflare Access login."
+          elif [[ "$code" == "403" ]]; then
+            echo "::notice::stage.notes.szolotov.com answered 403 (Bot Fight Mode); Access verified by the API preflight."
           else
-            echo "https://dev.notes.szolotov.com answered HTTP $code"
+            echo "::notice::stage.notes.szolotov.com answered HTTP $code."
+          fi
+
+      - name: Take stage down when it is exposed
+        if: always() && steps.preview.outcome == 'success' && (steps.access_wd.outcome == 'failure' || steps.access_cd.outcome == 'failure')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          tools/node_modules/.bin/wrangler preview delete --name stage --skip-confirmation
+          echo "::error::stage was not behind Cloudflare Access; the Preview was deleted. Fix Access, then run Deploy stage again."
+          exit 1
+
+      # One time (retire_dev): delete the old dev Preview. Re-running is harmless: when
+      # Cloudflare answers that the Preview does not exist, that is the wanted end state.
+      - name: Retire the dev Preview
+        id: retire
+        if: steps.fresh.outputs.current == 'true' && env.RETIRE_DEV == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if out="$(tools/node_modules/.bin/wrangler preview delete --name dev --skip-confirmation 2>&1)"; then
+            echo "$out"
+          else
+            echo "$out"
+            if grep -qi "not found" <<<"$out"; then
+              echo "::notice::The dev Preview does not exist (already removed); nothing to do."
+            else
+              echo "::error::Deleting the dev Preview failed; see the output above."
+              exit 1
+            fi
+          fi
+
+      - name: Retire the dev Access app
+        if: steps.fresh.outputs.current == 'true' && env.RETIRE_DEV == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/cloudflare-stage.mjs retire-dev-access
+
+      - name: Summary
+        if: steps.fresh.outputs.current == 'true'
+        run: |
+          if [[ "$RETIRE_DEV" == "true" ]]; then
+            echo "dev retired" >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "dev untouched" >>"$GITHUB_STEP_SUMMARY"
           fi
