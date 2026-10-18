@@ -163,6 +163,10 @@ ensure_main_ruleset() {
     echo "::error::Ruleset main (id $RULESET_ID) may not protect the branch main (target must be branch, conditions.ref_name.include must contain refs/heads/main or ~DEFAULT_BRANCH, and conditions.ref_name.exclude must be empty, because any exclude pattern could exclude main). Fix or delete it in the repository settings, then run this workflow again."
     exit 1
   fi
+  if ! jq -e '(.conditions.ref_name.include // []) | length == 1' <<<"$existing" >/dev/null; then
+    echo "::error::Ruleset main (id $RULESET_ID) must target only the branch main: conditions.ref_name.include must be exactly one entry, refs/heads/main or ~DEFAULT_BRANCH. Other patterns would get a pull request and CI OK requirement, but ci.yml runs only for main and dev, so those branches could never merge. Remove the other patterns and protect those branches with a dedicated ruleset, then run this workflow again."
+    exit 1
+  fi
   rules="$(jq -c '.rules' <<<"$want")"
   new_rules="$(jq -c --argjson d "$rules" --argjson ci "$CI_CHECK" '
       .rules as $r
