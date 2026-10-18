@@ -100,7 +100,7 @@ const goodEnv = (name) => ({
   deployment_branch_policy: { protected_branches: false, custom_branch_policies: true },
 })
 
-function run({ dry = "false", fake = {} } = {}) {
+function run({ dry = "false", fake = {}, deleteOld = "false" } = {}) {
   const log = join(dir, `log-${Math.random()}`)
   const env = {
     ...process.env,
@@ -108,6 +108,7 @@ function run({ dry = "false", fake = {} } = {}) {
     GH_REPO: "owner/repo",
     GH_TOKEN: "test-token",
     DRY_RUN: dry,
+    DELETE_OLD_ENVIRONMENTS: deleteOld,
     FAKE_GH_LOG: log,
   }
   delete env.GITHUB_STEP_SUMMARY
@@ -330,6 +331,7 @@ test("production is never the target of a mutating call", () => {
   for (const dry of ["true", "false"]) {
     const { code, calls } = run({
       dry,
+      deleteOld: "true",
       fake: {
         ENVS: {
           production: goodEnv("production"),
@@ -347,13 +349,21 @@ test("production is never the target of a mutating call", () => {
   }
 })
 
-test("the leftover staging environment is deleted", () => {
-  const { calls } = run({ fake: { ENVS: { staging: goodEnv("staging") } } })
+test("old environments are not deleted by default", () => {
+  const { code, calls } = run({
+    fake: { ENVS: { staging: goodEnv("staging"), dev: goodEnv("dev") } },
+  })
+  assert.equal(code, 0)
+  assert.ok(!calls.some((c) => /-X DELETE repos\/owner\/repo\/environments\/(dev|staging)/.test(c)))
+})
+
+test("the leftover staging environment is deleted on opt-in", () => {
+  const { calls } = run({ deleteOld: "true", fake: { ENVS: { staging: goodEnv("staging") } } })
   assert.ok(calls.some((c) => c.startsWith("api -X DELETE repos/owner/repo/environments/staging")))
 })
 
-test("the retired dev environment is deleted", () => {
-  const { calls } = run({ fake: { ENVS: { dev: goodEnv("dev") } } })
+test("the retired dev environment is deleted on opt-in", () => {
+  const { calls } = run({ deleteOld: "true", fake: { ENVS: { dev: goodEnv("dev") } } })
   assert.ok(calls.some((c) => c.startsWith("api -X DELETE repos/owner/repo/environments/dev")))
 })
 
@@ -364,7 +374,10 @@ test("stage is never deleted", () => {
 })
 
 test("rollout: with no stage environment, stage is created before dev is deleted", () => {
-  const { code, out, calls } = run({ fake: { ENVS: { dev: goodEnv("dev") } } })
+  const { code, out, calls } = run({
+    deleteOld: "true",
+    fake: { ENVS: { dev: goodEnv("dev") } },
+  })
   assert.equal(code, 0, out)
   const idx = (prefix) => calls.findIndex((c) => c.startsWith(prefix))
   const put = idx("api -X PUT repos/owner/repo/environments/stage")
