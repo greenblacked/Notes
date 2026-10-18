@@ -2,8 +2,7 @@
 // Post-build step that makes the Quartz output satisfy a strict Content-Security-Policy:
 // removes every runtime dependency on third-party origins and every `eval` use.
 //
-// Quartz v5 community plugins load a few libraries from public CDNs at runtime:
-//   graph plugin     d3@7 and pixi.js@8 from cdn.jsdelivr.net (unpinned major versions)
+// Quartz v5 community plugins load a library from a public CDN at runtime:
 //   obsidian-flavored-markdown plugin  mermaid 11.4.0 from cdnjs.cloudflare.com
 // and the page head contains a preconnect hint to cdnjs.cloudflare.com.
 //
@@ -11,6 +10,10 @@
 // and rebuilds them in the browser with `new Function`, which needs script-src 'unsafe-eval'. The
 // serialised functions are identical to the defaults hard-coded in the explorer script, so the
 // attribute is dropped and the script falls back to those defaults.
+//
+// The graph (local-plugins/graph-launcher, local-plugins/note-graph) is drawn with Canvas 2D and its d3 subset
+// is bundled into postscript.js, so it loads nothing from a CDN. Its data is public/static/graph.json,
+// a slim index written here from contentIndex.json (see scripts/graph-data.mjs).
 //
 // Two more adjustments for the site's own design:
 //   fonts      Source Serif 4, Inter (the UI) and IBM Plex Mono are self-hosted. quartz/styles/custom.scss
@@ -22,7 +25,7 @@
 //              whenever it changes; both are rewritten so that light is the default and only a
 //              saved toggle choice (localStorage "theme") changes it.
 //
-// This script copies exact, npm-pinned builds of those libraries (see package.json devDependencies)
+// This script copies the exact, npm-pinned build of that library (see package.json devDependencies)
 // to public/static/vendor/ and rewrites the URLs in the built output, so the site only talks to its
 // own origin and the CSP can be 'self'-only. It fails loudly if an expected URL is not found, so a
 // Quartz or plugin upgrade that changes the loading code cannot silently reintroduce a CDN.
@@ -37,6 +40,7 @@ import {
 } from "node:fs"
 import { dirname, join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
+import { buildGraphData } from "./graph-data.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const pub = join(root, "public")
@@ -60,16 +64,6 @@ function* walk(dir) {
 
 // 1. Copy the pinned libraries.
 mkdirSync(vendor, { recursive: true })
-for (const src of [nm("d3", "dist", "d3.min.js"), nm("pixi.js", "dist", "pixi.min.js")]) {
-  if (!existsSync(src)) fail(`missing ${relative(root, src)}; run npm ci`)
-}
-cpSync(nm("d3", "dist", "d3.min.js"), join(vendor, "d3.min.js"))
-// pixi.js v8 compiles shaders with `new Function`, which a CSP without 'unsafe-eval' forbids. PixiJS
-// ships an eval-free replacement as a UMD add-on; appended to the same file it patches the global
-// PIXI before the graph plugin uses it.
-const pixi = readFileSync(nm("pixi.js", "dist", "pixi.min.js"), "utf8")
-const pixiNoEval = readFileSync(nm("pixi.js", "dist", "packages", "unsafe-eval.min.js"), "utf8")
-writeFileSync(join(vendor, "pixi.min.js"), `${pixi}\n;${pixiNoEval}\n`)
 const mermaidDir = join(vendor, "mermaid")
 mkdirSync(mermaidDir, { recursive: true })
 cpSync(nm("mermaid", "dist", "mermaid.esm.min.mjs"), join(mermaidDir, "mermaid.esm.min.mjs"))
@@ -81,16 +75,17 @@ cpSync(
   },
 )
 
+// 1b. Slim graph index for the graph view.
+const contentIndexPath = join(pub, "static", "contentIndex.json")
+if (!existsSync(contentIndexPath))
+  fail("public/static/contentIndex.json is missing; run `quartz build` first")
+const graph = buildGraphData(JSON.parse(readFileSync(contentIndexPath, "utf8")))
+if (graph.nodes.length < 100)
+  fail(`graph.json would have only ${graph.nodes.length} nodes; expected at least 100`)
+writeFileSync(join(pub, "static", "graph.json"), JSON.stringify(graph))
+
 // 2. Rewrite CDN URLs in the built output.
 const rewrites = [
-  {
-    re: /https:\/\/cdn\.jsdelivr\.net\/npm\/d3@[0-9.]+\/dist\/d3\.min\.js/g,
-    to: "/static/vendor/d3.min.js",
-  },
-  {
-    re: /https:\/\/cdn\.jsdelivr\.net\/npm\/pixi\.js@[0-9.]+\/dist\/pixi\.js/g,
-    to: "/static/vendor/pixi.min.js",
-  },
   {
     re: /https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/mermaid\/[0-9.]+\/mermaid\.esm\.min\.mjs/g,
     to: "/static/vendor/mermaid/mermaid.esm.min.mjs",
@@ -183,5 +178,5 @@ for (const file of walk(pub)) {
 if (leftovers.length > 0) fail(`third-party origins remain:\n  ${leftovers.join("\n  ")}`)
 
 console.log(
-  `postprocess-build: rewrote d3=${counts[0]} pixi=${counts[1]} mermaid=${counts[2]} urls, removed ${preconnects} preconnect hint(s) and ${dataFnsRemoved} data-data-fns attribute(s), copied ${fontFiles.length} font files (${fontBytes} bytes), light theme by default`,
+  `postprocess-build: graph.json nodes=${graph.nodes.length} links=${graph.links.length}, rewrote mermaid=${counts[0]} url(s), removed ${preconnects} preconnect hint(s) and ${dataFnsRemoved} data-data-fns attribute(s), copied ${fontFiles.length} font files (${fontBytes} bytes), light theme by default`,
 )

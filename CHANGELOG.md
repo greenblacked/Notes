@@ -2,13 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Versions are the `vX.Y.Z` git tags created by the Release workflow.
+The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Versions are the `vX.Y.Z` git tags created by the Cut release workflow.
 
 ## [Unreleased]
 
 ### Added
 
-- A **Repository settings** workflow (manual, from `main`, owner only, with a dry run) that applies the branch rulesets for `dev` and `main`, the environment branch policies (environment `stage` limited to `dev`; retired `dev` and `staging` environments deleted only with the `delete_old_environments` opt-in) and the fork approval policy.
+- The full graph of all notes, from every page (toolbar button or Ctrl/Cmd+G), with Obsidian-style depth, search, tag and orphan toggles, section colours with a legend, node size by links, a list view, and settings remembered in this browser; the `/static/graph.json` slim index it reads.
+- **Cut release** (`cut-release.yml`, manual, from `main`, owner only) and `scripts/changelog-section.mjs`: the workflow validates the version, creates the annotated tag `vX.Y.Z` and the GitHub Release, then dispatches Deploy production on the tag. The tag message and the Release notes are the `CHANGELOG.md` section of that version.
 - 50 new notes, all Markdown in `content/`:
   - a new **Architecture** section (`content/architecture/`, in the top bar and on the home page) with 13 reference designs: GCP resource hierarchy and landing zone, environment separation, IAM groups and CI Workload Identity Federation, Shared VPC hub and spoke, private GKE and controlled egress, Cloud DNS for hybrid and multi-project setups, zero-trust access with IAP and VPC Service Controls, GKE platform topology and tenancy, GitOps repository topology and promotion, disaster recovery tiers, backup architecture, the OpenTelemetry pipeline, and FinOps cost allocation;
   - a new **Compliance** section (`content/compliance/`, in the top bar and on the home page) with 11 notes: change management controls and pipeline evidence, audit evidence collection and retention, separation of duties, access reviews, CIS benchmarks with kube-bench, GCP organization policy guardrails, the policy exception and waiver process, SBOM generation and storage, SLSA build provenance, open-source licence compliance, and PCI DSS and GDPR for DevOps logs and data;
@@ -24,21 +25,35 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
   - 6 management notes: team charter, cross-team dependencies, inner-source contribution model, engineering budget planning, quarterly engineering review, and team reorganisation.
 - A new **Learn** section (`content/learn/`, last in the top bar and on the home page) with a learning path index and 43 lessons from first steps to middle level: lab setup, Linux, networking, Git, scripting, containers, Kubernetes, Google Cloud, CI/CD and Terraform, security, observability and on-call. The lesson structure and the `learning` tag are documented in `content/standards/writing-notes.md`.
 - A `reference` note type (shown as "Reference") and new tags `architecture`, `compliance`, `ai`, `spinnaker`, `chef`, `opentelemetry`, `linux`, `supply-chain`, `policy-as-code` and `audit` in the taxonomy (see `content/standards/writing-notes.md`).
+- `scripts/check-attribution.mjs` and the CI job `attribution` (part of CI OK): a pull request or push fails when a commit message, an author or committer email, or the PR title or body carries tooling attribution (a tool co-author trailer, a generated-with footer, a session link, a vendor noreply or email address). Dependabot co-author lines stay allowed.
+- Deploy stage creates the Access application for stage by itself when none covers stage and there is no dev one to copy: a self-hosted app for the stage host (and the workers.dev Preview host when the account subdomain is known), 24h sessions, one allow policy for the owner's email (`STAGE_ACCESS_EMAIL` in `deploy-stage.yml`). The new app passes the same safety checks; an unsafe existing app still fails. The token needs Account > Access: Apps and Policies > Edit.
 
 ### Changed
 
-- The pre-production site is **stage** again, at https://stage.notes.szolotov.com (the Worker Preview `stage`, behind Cloudflare Access). **Deploy stage** (`deploy-stage.yml`) runs only by hand (`workflow_dispatch`), only from the `dev` branch, only for the owner; merges into `dev` or `main` deploy nothing. Work goes in through pull requests into `dev`, then `dev` to `main` with a merge commit; production releases are unchanged. CI runs for `dev` too, and Dependabot targets `dev`. dev.notes.szolotov.com is retired (one-time `retire_dev` input).
+- The note's local graph is now `local-plugins/note-graph`, drawn with Canvas 2D; the graph no longer downloads the full content index. Tags no longer count as depth hops, as in Obsidian.
+- The pre-production site is **stage** again, at https://stage.notes.szolotov.com (the Worker Preview `stage`, behind Cloudflare Access). **Deploy stage** (`deploy-stage.yml`) runs on every merge to `main` and on Run workflow from `main`, only for the owner, in the environment `staging`. There is no `dev` branch: pull requests go into `main`, CI and Dependabot run for `main` only, and dev.notes.szolotov.com is retired automatically after a verified stage deploy.
 - Deploy stage refuses to upload unless the Cloudflare API shows an Access application covering stage and no Custom Domain or DNS record for the host. After the upload, the workers.dev Preview URL must redirect to Access, otherwise the Preview is deleted; the stage Preview is also deleted after any failed or cancelled step once the upload was attempted (`SMOKE_REQUIRE_ACCESS` in `scripts/smoke-test.sh`, `scripts/cloudflare-stage.mjs`). `DEV_SMOKE_TEST` is gone.
 - `/version.txt` on stage reads `stage+<sha>`; `NOTES_VERSION` accepts `stage` instead of `dev`; `npm run preview:dev` is `npm run preview:stage`.
-- A Deploy stage run fails (instead of skipping) when `dev` moved on during the run.
+- A Deploy stage run skips the upload and succeeds when `main` moved on during the run, because the newer run deploys.
+- Production starts only by dispatch on a `vX.Y.Z` tag (from Cut release, or Run workflow on a tag); on commits that include this change a pushed tag deploys nothing (a tag on an older commit runs that commit's own workflow).
 - The one-time `remove-stage` action is removed.
 - TypeScript 7.0.2 (native compiler) for `npm run check`; `tsconfig.json` uses `moduleResolution: "bundler"` (node10 was removed), types `micromorph` through `paths`, and `quartz/processors/parse.ts` takes the mdast `Root` type from `@types/mdast`.
 - `engines.node` is `>=22.12.0` (required by mermaid 12); `lodash-es` is overridden to `^4.18.1` (see Security).
 - The `DataMap.frontmatter` type is now inherited from `@quartz-community/types` 1.0, where `tags` is optional and `description`, `socialDescription` and `lang` are declared there; the build output is unchanged.
 - mermaid 12.0.0 (diagrams in the browser, from `public/static/vendor/mermaid`), @types/node 26.6.3, @napi-rs/simple-git 1.2.0.
 
+### Removed
+
+- `release.yml`, and the `workflow_call` and tag-push triggers of `deploy-production.yml`.
+- The `pixi.js` dependency and `static/vendor/{d3,pixi}.min.js`; the community graph plugin is disabled.
+
 ### Fixed
 
+- Section links in their own scrolling second row under the main bar, so they never overlap Browse or the search at any width, zoom or text setting. The current section is scrolled into view before the first paint, focus rings are not clipped, anchors and the table of contents sit below the taller header, and the Browse button keeps its space while loading.
+- The search button opens on the first click (a script in the head); text typed meanwhile is searched once the index is ready.
+- Search results show at most three lines (the old clamp targeted `p.preview`, which no result has).
+- The "Notes" hit area is at least 44 x 32 px.
+- At large text sizes the empty right column no longer widens the page between 1200 and 1280 px.
 - `@quartz-community/utils` 1.0.1 now comes from the npm registry: the upstream git head no longer builds `dist/` on install, which broke type checks and the build. The `DataMap.frontmatter` declaration in `quartz/plugins/index.ts` is dropped because `@quartz-community/types` 1.0 declares it. `@quartz-community/types` is now a direct registry dependency (^1.0.0) so that declaration no longer depends on a nested copy. `quartz/util` imports the `@quartz-community/utils/path`, `/lang` and `/escape` subpaths, so the client bundle (`postscript.js`) does not pull in the utils barrel and its preact copy.
 
 ### Security

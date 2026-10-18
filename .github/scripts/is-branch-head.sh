@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Writes `current=true|false` to $GITHUB_OUTPUT: whether $SHA is still the head of $BRANCH.
-# Used by deploy-stage.yml (BRANCH=dev) so a stale run never overwrites a newer deployment.
+# Used by deploy-stage.yml and cut-release.yml (BRANCH=main) so a stale run never overwrites a newer deployment.
 # Requires GH_TOKEN, GITHUB_REPOSITORY, BRANCH and SHA in the env.
 set -euo pipefail
 

@@ -1,70 +1,39 @@
 import { classNames } from "../../quartz/util/lang"
-import { pathToRoot, resolveRelative, type FullSlug } from "../../quartz/util/path"
 import type { QuartzComponent, QuartzComponentProps } from "../../quartz/components/types"
-import { SECTIONS } from "./sections"
+import { siteLinks } from "./links"
 // @ts-expect-error - inline script, loaded as text by the build (see quartz/cli/handlers.js)
 import script from "./scripts/top-bar.inline.ts"
+// @ts-expect-error - inline script, loaded as text by the build (see quartz/cli/handlers.js)
+import earlyScript from "./scripts/top-bar.early.inline.ts"
 
 /**
- * The wordmark and the section links of the sticky top bar. The bar itself is the left sidebar of
+ * The wordmark of the sticky top bar, with the skip link. The bar itself is the left sidebar of
  * the page frame: this component sits in it next to Quartz's search, dark-mode toggle and Explorer
- * (whose "Browse" button opens the drawer), and quartz/styles/custom.scss lays them out as one
- * row. A link is shown for every section that has an index page; the link of the section the page
- * belongs to carries aria-current, which the styles highlight.
+ * (whose "Browse" button opens the drawer), and quartz/styles/custom.scss lays them out as the
+ * first row. The section links are the second row, in local-plugins/section-row.
  *
  * The script (scripts/top-bar.inline.ts) manages the focus of the Browse drawer, marks the
  * current heading in the table of contents, marks the centre column as the main landmark and moves
- * the keyboard to the skip link's target (#content, rendered by local-plugins/content-start).
+ * the keyboard to the skip link's target (#content, rendered by local-plugins/content-start). A
+ * second, tiny script (scripts/top-bar.early.inline.ts) runs in the head, before the page is
+ * painted: it makes the search button and the focus of the section links work at once.
  */
 export default (() => {
-  const TopBar: QuartzComponent = ({
-    fileData,
-    allFiles,
-    cfg,
-    displayClass,
-  }: QuartzComponentProps) => {
-    const slug = fileData.slug!
-    // The 404 page is served at whatever URL was missing (/missing/deep), so relative links would
-    // resolve against that path. It links from the site root instead, as Quartz's own 404 body does.
-    const root = slug === "404" ? new URL(`https://${cfg.baseUrl ?? "example.com"}`).pathname : null
-    const href = (target: FullSlug) =>
-      root === null
-        ? resolveRelative(slug, target)
-        : `${root.replace(/\/?$/, "/")}${target.replace(/index$/, "")}`
-    const links = SECTIONS.filter((s) => allFiles.some((f) => f.slug === `${s.folder}/index`)).map(
-      (s) => ({
-        ...s,
-        href: href(`${s.folder}/index` as FullSlug),
-        current:
-          slug === `${s.folder}/index`
-            ? ("page" as const)
-            : slug.startsWith(`${s.folder}/`)
-              ? ("true" as const)
-              : undefined,
-      }),
-    )
-
+  const TopBar: QuartzComponent = ({ fileData, cfg, displayClass }: QuartzComponentProps) => {
+    const links = siteLinks(fileData.slug!, cfg.baseUrl)
     return (
-      <nav class={classNames(displayClass, "top-bar")} aria-label="Sections">
+      <div class={classNames(displayClass, "top-bar")}>
         <a class="skip-link" href="#content">
           Skip to content
         </a>
-        <a class="top-bar-brand" href={root ?? pathToRoot(slug)}>
+        <a class="top-bar-brand" href={links.home}>
           {cfg.pageTitle}
         </a>
-        <ul class="top-bar-links">
-          {links.map((link) => (
-            <li>
-              <a href={link.href} aria-current={link.current}>
-                {link.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      </div>
     )
   }
 
+  TopBar.beforeDOMLoaded = earlyScript
   TopBar.afterDOMLoaded = script
   return TopBar
 }) satisfies () => QuartzComponent

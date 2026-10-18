@@ -246,6 +246,23 @@ run_checks() {
     fail_on home "X-Content-Type-Options should be nosniff, got '$v'"
   fi
 
+  # Slim graph index used by the graph view.
+  code="$(fetch "/static/graph.json?cb=$RANDOM$RANDOM" graph)"
+  if is_redirect "$code"; then
+    fail_redirect graph /static/graph.json "$code"
+  elif [[ "$code" != "200" ]]; then
+    fail_on graph "GET /static/graph.json returned HTTP $code"
+  else
+    gct="$(header_value graph content-type)"
+    if [[ "${gct,,}" != application/json* ]]; then
+      fail_on graph "/static/graph.json content-type should be application/json, got '$gct'"
+    elif ! grep -q '"v":2' "$WORK/graph.b"; then
+      fail_on graph "/static/graph.json does not contain \"v\":2"
+    else
+      pass "/static/graph.json is application/json with \"v\":2"
+    fi
+  fi
+
   # 3. Indexing policy.
   robots_header="$(header_value home x-robots-tag)"
   code="$(fetch "/robots.txt?cb=$RANDOM$RANDOM" robots)"
