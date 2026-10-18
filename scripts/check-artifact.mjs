@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Checks the build output before it is deployed. Used by ci.yml (after the build) and by the
- * upload and deploy jobs of deploy-dev.yml and deploy-production.yml, which receive the
+ * upload and deploy jobs of deploy-stage.yml and deploy-production.yml, which receive the
  * output as an artifact from a job that ran third-party plugin code.
  *
  *   node scripts/check-artifact.mjs --root <dir>    an extracted artifact: <dir> holds exactly

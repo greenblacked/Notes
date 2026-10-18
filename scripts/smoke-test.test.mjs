@@ -57,6 +57,7 @@ async function run(url, env = {}) {
       SMOKE_CHECK_DELAY: "0",
       SMOKE_MAX_DELAY: "0",
       SMOKE_ALLOW_ACCESS: "",
+      SMOKE_REQUIRE_ACCESS: "",
       ...env,
     },
   })
@@ -170,4 +171,59 @@ test("graph.json with the wrong content-type or body fails", async () => {
   r = await run(wrongBody.url)
   assert.notEqual(r.code, 0, r.out)
   assert.match(r.out, /does not contain/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 passes on an Access redirect", async () => {
+  const s = await start({ "/version.txt": access })
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1" })
+  assert.equal(code, 0, out)
+  assert.match(out, /::notice::.*behind Cloudflare Access/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 fails on a healthy public site", async () => {
+  const s = await start()
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1" })
+  assert.equal(code, 3, out)
+  assert.match(out, /is not behind Cloudflare Access \(HTTP 200\)/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 fails on a 200 carrying an Access Location", async () => {
+  const s = await start({
+    "/version.txt": (res) =>
+      res
+        .writeHead(200, { location: "https://team.cloudflareaccess.com/cdn-cgi/access/login/x" })
+        .end("other\n"),
+  })
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1" })
+  assert.equal(code, 3, out)
+  assert.match(out, /is not behind Cloudflare Access/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 fails on another redirect", async () => {
+  const s = await start({ "/version.txt": redirect("https://example.com/") })
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1" })
+  assert.equal(code, 1, out)
+  assert.match(out, /is not behind Cloudflare Access \(HTTP 30/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 retries a 503 and passes once the Access redirect shows", async () => {
+  let n = 0
+  const s = await start({
+    "/version.txt": (res) => {
+      n++
+      if (n === 1) return res.writeHead(503).end()
+      return access(res)
+    },
+  })
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1", SMOKE_MAX_ATTEMPTS: "3" })
+  assert.equal(code, 0, out)
+  assert.match(out, /attempt 1: HTTP 503/)
+  assert.match(out, /behind Cloudflare Access/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 exits 1, not 3, when a 503 persists", async () => {
+  const s = await start({ "/version.txt": (res) => res.writeHead(503).end() })
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1", SMOKE_MAX_ATTEMPTS: "2" })
+  assert.equal(code, 1, out)
+  assert.match(out, /after 2 attempts/)
 })

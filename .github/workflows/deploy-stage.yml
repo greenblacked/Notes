@@ -1,0 +1,396 @@
+name: Deploy stage
+
+# Manual only (`workflow_dispatch`), only from `dev`, only by the repository owner. It updates
+# the Worker Preview `stage` of the Worker `notes`, served at https://stage.notes.szolotov.com
+# behind Cloudflare Access (see docs/deployment.md#stage-preview). Merges deploy nothing.
+# Production is not touched: Previews never change production traffic.
+#
+# The `guard` job refuses any other ref, event, repository or actor, so the jobs that hold the
+# Cloudflare token only ever run code of `dev` (the environment `stage` is limited to the `dev`
+# branch too).
+#
+# Two jobs: `build` runs the (third-party plugin) build code with no secrets and no
+# environment; `upload` has the secrets, installs only wrangler (tools/, without
+# lifecycle scripts) and receives only public/ from the build as an artifact; the Worker
+# code is never taken from it.
+#
+# Gating: instead of a workflow_run trigger (a dangerous trigger in zizmor), the
+# checks run inline here against the exact commit being deployed.
+on:
+  workflow_dispatch:
+    inputs:
+      retire_dev:
+        description: "One time: delete the old dev Preview and its Access app after stage is verified"
+        type: boolean
+        default: false
+
+permissions: {}
+
+# A running deploy is never cancelled; of several queued runs only the newest stays pending. The
+# group is keyed on the ref, so a dispatch from another ref (which the guard rejects) cannot supersede a pending
+# run of dev. A run that finds `dev` has moved on fails, so it is run again.
+concurrency:
+  group: deploy-stage-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Require dev and the owner
+    # Forks never run it (their Actions skip quietly instead of failing).
+    if: github.repository == 'greenblacked/Notes'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    env:
+      REPO: ${{ github.repository }}
+      REF: ${{ github.ref }}
+      EVENT: ${{ github.event_name }}
+      ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+    steps:
+      - name: Require the dev branch and the owner
+        run: |
+          if [[ "$REPO" != "greenblacked/Notes" ]]; then
+            echo "::error::Unexpected repository '$REPO'."
+            exit 1
+          fi
+          if [[ "$REF" != "refs/heads/dev" ]]; then
+            echo "::error::Deploy stage runs only from dev; select dev in Run workflow (this run was started from '$REF')."
+            exit 1
+          fi
+          if [[ "$EVENT" != "workflow_dispatch" ]]; then
+            echo "::error::Unexpected event '$EVENT'."
+            exit 1
+          fi
+          # Only the owner deploys: only the owner can dispatch or re-run. A re-run by anyone
+          # else changes triggering_actor and stops here.
+          if [[ "$ACTOR" != "greenblacked" || "$TRIGGERING_ACTOR" != "greenblacked" ]]; then
+            echo "::error::Deploy stage is limited to the repository owner (actor '$ACTOR', triggered by '$TRIGGERING_ACTOR')."
+            exit 1
+          fi
+
+  build:
+    name: Build
+    needs: guard
+    runs-on: ubuntu-24.04
+    # A cold `quartz plugin restore` (no cache here on purpose) takes about 15 minutes.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      current: ${{ steps.fresh.outputs.current }}
+    env:
+      SHA: ${{ github.sha }}
+      # Neither our dependencies nor the plugins' (npm-installed by `quartz plugin restore`) may
+      # run install scripts next to this job's checkout; the build needs none of them.
+      NPM_CONFIG_IGNORE_SCRIPTS: "true"
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check this commit is still the head of dev
+        id: fresh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: dev
+        run: .github/scripts/is-branch-head.sh
+
+      - name: Fail when dev moved on
+        if: steps.fresh.outputs.current != 'true'
+        run: |
+          echo "::error::dev moved on during this run; run Deploy stage again."
+          exit 1
+
+      - name: Set up Node.js
+        if: steps.fresh.outputs.current == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false # no npm cache outside CI (cache-poisoning)
+
+      - name: Install dependencies
+        if: steps.fresh.outputs.current == 'true'
+        run: npm ci
+
+      - name: Type check
+        if: steps.fresh.outputs.current == 'true'
+        run: npm run check
+
+      - name: Build
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          NOTES_VERSION: stage
+          NOTES_BASE_URL: stage.notes.szolotov.com
+          NOTES_SHA: ${{ github.sha }}
+        run: npm run build
+
+      - name: Check links
+        if: steps.fresh.outputs.current == 'true'
+        run: npm run check:links
+
+      - name: Check the build output
+        if: steps.fresh.outputs.current == 'true'
+        run: node scripts/check-artifact.mjs --public public
+
+      # The artifact holds exactly public/ (worker/csp.generated.js is regenerated by the deploy
+      # job from it, never taken from this job). Collected in a directory of its own so that the
+      # upload keeps the `public/` prefix.
+      - name: Collect the build output
+        if: steps.fresh.outputs.current == 'true'
+        run: |
+          mkdir "$RUNNER_TEMP/artifact"
+          cp -R public "$RUNNER_TEMP/artifact/public"
+
+      - name: Upload build output
+        if: steps.fresh.outputs.current == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site
+          path: ${{ runner.temp }}/artifact
+          retention-days: 1
+          if-no-files-found: error
+
+  upload:
+    name: Update stage Preview
+    needs: build
+    if: needs.build.outputs.current == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    environment:
+      name: stage
+      url: https://stage.notes.szolotov.com
+    env:
+      SHA: ${{ github.sha }}
+      WRANGLER_SEND_METRICS: "false"
+      RETIRE_DEV: ${{ inputs.retire_dev }}
+    steps:
+      # The guard job ensures github.sha is a commit of dev, which only receives PR merges that
+      # passed CI OK.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false # no npm cache outside CI (cache-poisoning)
+
+      # Only wrangler, from tools/ (its own lockfile), with no lifecycle scripts. The root
+      # dependencies are not installed here (defence in depth: a git dependency's `prepare`
+      # script would run even with --ignore-scripts). Nothing but wrangler and the Node
+      # built-ins runs next to the token (the scripts below import nothing else).
+      - name: Install wrangler
+        run: npm ci --ignore-scripts --prefix tools
+
+      - name: Download build output
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site
+          path: ${{ runner.temp }}/site
+
+      # Only public/ is accepted from the artifact (built by a job that ran third-party code),
+      # and it must pass the extension allowlist (scripts/check-artifact.mjs). The Worker's CSP
+      # hashes are regenerated here from that public/, so no Worker code comes from the build.
+      - name: Install build output
+        run: |
+          site="$RUNNER_TEMP/site"
+          node scripts/check-artifact.mjs --root "$site"
+          rm -rf public worker/csp.generated.js
+          cp -R "$site/public" public
+          node scripts/build-csp.mjs
+
+      - name: Re-check this commit is still the head of dev
+        id: fresh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: dev
+        run: .github/scripts/is-branch-head.sh
+
+      - name: Fail when dev moved on
+        if: steps.fresh.outputs.current != 'true'
+        run: |
+          echo "::error::dev moved on during this run; run Deploy stage again."
+          exit 1
+
+      # The token never lives at job level: each step that needs it sets it. Only wrangler and the
+      # Node built-ins run next to it.
+      - name: Ensure Cloudflare Access for stage
+        if: steps.fresh.outputs.current == 'true' && env.RETIRE_DEV == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/cloudflare-stage.mjs ensure-access
+
+      # Fail closed: nothing is uploaded unless an Access application covers stage and no Custom
+      # Domain or DNS record shadows the Preview hostname.
+      - name: Require Cloudflare Access and a clean hostname
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/cloudflare-stage.mjs preflight
+
+      # `wrangler preview` creates or updates the Preview `stage`; its ENVIRONMENT var comes from
+      # `previews.vars` in wrangler.jsonc (not production, so noindex). It does not touch
+      # production or the routes.
+      - name: Update the stage Preview
+        id: preview
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
+        run: tools/node_modules/.bin/wrangler preview --name stage --message "stage ${SHA::7}" --tag "$SHA"
+
+      # Parsing is its own step so that the teardown depends only on the upload having been
+      # attempted, not on whether Wrangler's output could be read.
+      - name: Read the Preview URLs
+        id: parse
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
+        run: |
+          out="$(node scripts/read-wrangler-output.mjs --preview "$WRANGLER_OUTPUT_FILE_PATH")"
+          echo "$out"
+          echo "$out" >>"$GITHUB_OUTPUT"
+
+      - name: Require the custom domain Preview URL
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          STAGE_URL: ${{ steps.parse.outputs.custom_url }}
+        run: |
+          if [[ "$STAGE_URL" != "https://stage.notes.szolotov.com" ]]; then
+            echo "::error::The stage Preview is not served at https://stage.notes.szolotov.com (Wrangler reported '$STAGE_URL'). notes.szolotov.com must be enabled for Production and Preview. See docs/deployment.md#stage-preview."
+            exit 1
+          fi
+          echo "::notice::Stage preview: https://stage.notes.szolotov.com"
+          {
+            echo "### Stage preview"
+            echo
+            echo "https://stage.notes.szolotov.com (commit \`${SHA::7}\`)"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      # Bot Fight Mode answers GitHub-hosted runners with 403 on the custom domains, so the
+      # exposure check runs on the Preview's workers.dev URL, which must redirect to the Access
+      # login. There is no skip switch: a switch would turn the exposure check off.
+      - name: Require Access on the workers.dev Preview URL
+        id: access_wd
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
+          WORKERS_DEV_URL: ${{ steps.parse.outputs.workers_dev_url }}
+          SMOKE_REQUIRE_ACCESS: "1"
+        run: |
+          if [[ -z "$WORKERS_DEV_URL" ]]; then
+            echo "::error::Wrangler reported no workers.dev URL for the Preview; enable preview_urls and workers_dev in wrangler.jsonc."
+            exit 1
+          fi
+          # Exit 3 marks an exposure. Any failure after the upload (including DNS, TLS or a 5xx
+          # while the Preview propagates) also takes the unverified Preview down in the teardown
+          # step, so the Preview stays only when every check passed.
+          rc=0
+          scripts/smoke-test.sh "$WORKERS_DEV_URL" "stage+$SHA" noindex || rc=$?
+          if [[ "$rc" -eq 3 ]]; then
+            echo "exposed=true" >>"$GITHUB_OUTPUT"
+          fi
+          exit "$rc"
+
+      - name: Probe the custom domain
+        id: access_cd
+        if: steps.fresh.outputs.current == 'true'
+        run: |
+          res="$(curl --proto '=https' --tlsv1.2 -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 30 \
+            --user-agent 'notes-smoke-test/1 (+https://github.com/greenblacked/Notes)' \
+            https://stage.notes.szolotov.com/version.txt || true)"
+          code="${res%% *}"
+          loc="${res#* }"
+          if [[ "$code" =~ ^2[0-9][0-9]$ ]]; then
+            echo "::error::stage.notes.szolotov.com is publicly reachable (not behind Cloudflare Access)."
+            exit 1
+          elif [[ "$code" =~ ^3[0-9][0-9]$ && "$loc" =~ ^https://[^/]+\.cloudflareaccess\.com/ ]]; then
+            echo "::notice::stage.notes.szolotov.com redirects to the Cloudflare Access login."
+          elif [[ "$code" == "403" ]]; then
+            echo "::notice::stage.notes.szolotov.com answered 403 (Bot Fight Mode); Access verified by the API preflight."
+          else
+            echo "::notice::stage.notes.szolotov.com answered HTTP $code."
+          fi
+
+      # Fail closed: once the upload was attempted, any failed or cancelled step after it takes
+      # the Preview down. That covers a parse failure, a custom domain URL check that fails before
+      # Access is applied (which skips the Access probes) and a detected exposure. A failed delete
+      # counts as "already gone" only when Wrangler itself reports that the Preview "stage" was
+      # not found; any other error (bad token, unknown account, network) fails the step.
+      - name: Take stage down unless it is verified
+        if: always() && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled() || steps.access_wd.outputs.exposed == 'true')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EXPOSED: ${{ steps.access_wd.outputs.exposed }}
+        run: |
+          wrangler=tools/node_modules/.bin/wrangler
+          if out="$("$wrangler" preview delete --name stage --skip-confirmation 2>&1)"; then
+            echo "$out"
+            echo "::notice::Deleted the stage Preview."
+          else
+            echo "$out"
+            # The delete error text comes from the API, so confirm with Wrangler's own
+            # "Preview not found" message from a read of the same Preview.
+            chk="$("$wrangler" preview secret list --name stage 2>&1 || true)"
+            if grep -qF 'The Preview "stage" was not found.' <<<"$chk"; then
+              echo "::notice::The stage Preview does not exist; nothing to delete."
+            else
+              echo "$chk"
+              echo "::error::Deleting the unverified stage Preview failed; delete it by hand."
+              exit 1
+            fi
+          fi
+          if [[ "$EXPOSED" == "true" ]]; then
+            echo "::error::stage was reachable without Cloudflare Access and its Preview was deleted (or was absent). Fix Access, then run Deploy stage again."
+          else
+            echo "::error::stage was not fully verified; the Preview was deleted (or was absent). See the first failed step above."
+          fi
+          exit 1
+
+      # One time (retire_dev): delete the old dev Preview. Re-running is harmless: when
+      # Cloudflare answers that the Preview does not exist, that is the wanted end state.
+      - name: Retire the dev Preview
+        id: retire
+        if: steps.fresh.outputs.current == 'true' && env.RETIRE_DEV == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if out="$(tools/node_modules/.bin/wrangler preview delete --name dev --skip-confirmation 2>&1)"; then
+            echo "$out"
+          else
+            echo "$out"
+            if grep -qi "not found" <<<"$out"; then
+              echo "::notice::The dev Preview does not exist (already removed); nothing to do."
+            else
+              echo "::error::Deleting the dev Preview failed; see the output above."
+              exit 1
+            fi
+          fi
+
+      - name: Retire the dev Access app
+        if: steps.fresh.outputs.current == 'true' && env.RETIRE_DEV == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/cloudflare-stage.mjs retire-dev-access
+
+      - name: Summary
+        if: steps.fresh.outputs.current == 'true'
+        run: |
+          if [[ "$RETIRE_DEV" == "true" ]]; then
+            echo "dev retired" >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "dev untouched" >>"$GITHUB_STEP_SUMMARY"
+          fi
