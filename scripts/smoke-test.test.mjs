@@ -53,6 +53,7 @@ async function run(url, env = {}) {
       SMOKE_CHECK_DELAY: "0",
       SMOKE_MAX_DELAY: "0",
       SMOKE_ALLOW_ACCESS: "",
+      SMOKE_REQUIRE_ACCESS: "",
       ...env,
     },
   })
@@ -142,4 +143,37 @@ test("another redirect still fails with SMOKE_ALLOW_ACCESS=1", async () => {
   const { code, out } = await run(s.url, { SMOKE_ALLOW_ACCESS: "1" })
   assert.equal(code, 1, out)
   assert.match(out, /redirects are not followed/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 passes on an Access redirect", async () => {
+  const s = await start({ "/version.txt": access })
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1" })
+  assert.equal(code, 0, out)
+  assert.match(out, /::notice::.*behind Cloudflare Access/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 fails on a healthy public site", async () => {
+  const s = await start()
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1" })
+  assert.equal(code, 1, out)
+  assert.match(out, /is not behind Cloudflare Access \(HTTP 200\)/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 fails on a 200 carrying an Access Location", async () => {
+  const s = await start({
+    "/version.txt": (res) =>
+      res
+        .writeHead(200, { location: "https://team.cloudflareaccess.com/cdn-cgi/access/login/x" })
+        .end("other\n"),
+  })
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1" })
+  assert.equal(code, 1, out)
+  assert.match(out, /is not behind Cloudflare Access/)
+})
+
+test("SMOKE_REQUIRE_ACCESS=1 fails on another redirect", async () => {
+  const s = await start({ "/version.txt": redirect("https://example.com/") })
+  const { code, out } = await run(s.url, { SMOKE_REQUIRE_ACCESS: "1" })
+  assert.equal(code, 1, out)
+  assert.match(out, /is not behind Cloudflare Access \(HTTP 30/)
 })
