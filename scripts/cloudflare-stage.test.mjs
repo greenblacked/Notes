@@ -171,7 +171,7 @@ test("ensure-access fails when there is nothing to copy", async () => {
 test("retire-dev-access deletes only an exact dev-only app", async () => {
   const dev = { id: "d1", domain: "dev.notes.szolotov.com" }
   const wide = { id: "w1", self_hosted_domains: ["dev.notes.szolotov.com", "other.example"] }
-  const wild = { id: "w2", domain: "*.notes.szolotov.com" }
+  const wild = { id: "w2", domain: "*.notes.szolotov.com", policies: [okPolicy] }
   const r = await run(["retire-dev-access"], { "GET /accounts/acc/access/apps": [dev, wide, wild] })
   assert.equal(r.code, 0)
   const dels = r.calls.filter((c) => c.key.startsWith("DELETE"))
@@ -185,6 +185,132 @@ test("retire-dev-access passes when nothing is found", async () => {
   const r = await run(["retire-dev-access"], { "GET /accounts/acc/access/apps": [stageApp] })
   assert.equal(r.code, 0)
   assert.ok(!r.calls.some((c) => c.key.startsWith("DELETE")))
+})
+
+test("policyProblems: only identity include rules are accepted", () => {
+  const pol = (include) => [{ name: "x", decision: "allow", include }]
+  assert.equal(policyProblems(pol([{ email_domain: { domain: "gmail.com" } }])).length, 1)
+  assert.equal(policyProblems(pol([{ login_method: { id: "otp" } }])).length, 1)
+  assert.equal(policyProblems(pol([{ any_valid_service_token: {} }])).length, 1)
+  assert.equal(policyProblems(pol([{ ip: { ip: "1.2.3.4/32" } }])).length, 1)
+  assert.deepEqual(policyProblems(pol([{ email: { email: "a@b.c" } }, { group: { id: "g" } }])), [])
+})
+
+test("preflight fails when a wildcard app allows a public email domain", async () => {
+  const wild = {
+    id: "w",
+    domain: "*.notes.szolotov.com",
+    policies: [
+      {
+        id: "p",
+        name: "dom",
+        decision: "allow",
+        include: [{ email_domain: { domain: "gmail.com" } }],
+      },
+    ],
+  }
+  const r = await run(["preflight"], cleanRoutes([wild]))
+  assert.equal(r.code, 1)
+  assert.match(r.text, /non-identity rule type email_domain/)
+})
+
+test("preflight fails when an exact-host bypass app sits next to a safe wildcard app", async () => {
+  const exact = {
+    id: "x",
+    domain: "stage.notes.szolotov.com",
+    policies: [{ id: "b", name: "open", decision: "bypass", include: [{ everyone: {} }] }],
+  }
+  const wild = { id: "w", domain: "*.notes.szolotov.com", policies: [okPolicy] }
+  const r = await run(["preflight"], cleanRoutes([wild, exact]))
+  assert.equal(r.code, 1, r.text)
+  assert.doesNotMatch(r.text, /OK: an Access application protects/)
+})
+
+test("preflight fails when a path-scoped bypass app sits on the stage host", async () => {
+  const scoped = {
+    id: "s",
+    domain: "stage.notes.szolotov.com/public/*",
+    policies: [{ id: "b", name: "open", decision: "bypass", include: [{ everyone: {} }] }],
+  }
+  const r = await run(["preflight"], cleanRoutes([stageApp, scoped]))
+  assert.equal(r.code, 1, r.text)
+  assert.match(r.text, /decision bypass/)
+})
+
+test("preflight passes with a safe path-scoped app next to a safe root app", async () => {
+  const scoped = { id: "s", domain: "stage.notes.szolotov.com/admin/*", policies: [okPolicy] }
+  const r = await run(["preflight"], cleanRoutes([stageApp, scoped]))
+  assert.equal(r.code, 0, r.text)
+})
+
+test("preflight lists the Access apps that name a workers.dev host", async () => {
+  const wd = { id: "wd", name: "wd", domain: "stage-notes.sub.workers.dev", policies: [okPolicy] }
+  const r = await run(["preflight"], cleanRoutes([stageApp, wd]))
+  assert.equal(r.code, 0, r.text)
+  assert.match(r.text, /NOTE: workers.dev Access app wd/)
+  const none = await run(["preflight"], cleanRoutes([stageApp]))
+  assert.match(none.text, /no Access application names a workers.dev host/)
+})
+
+test("ensure-access copies non-reusable policies inline with every field but the ids", async () => {
+  const dev = {
+    id: "d1",
+    type: "self_hosted",
+    domain: "dev.notes.szolotov.com",
+    policies: [
+      {
+        id: "i1",
+        uid: "u1",
+        created_at: "x",
+        updated_at: "y",
+        name: "me",
+        decision: "allow",
+        include: [{ email: { email: "a@b.c" } }],
+        approval_required: false,
+        purpose_justification_required: true,
+        session_duration: "6h",
+        precedence: 2,
+      },
+    ],
+  }
+  const calls = []
+  let created = false
+  const base = fakeFetch({ "GET /accounts/acc/access/apps": [dev] }, calls)
+  const fetchFn = async (url, init = {}) => {
+    const u = new URL(url)
+    if ((init.method ?? "GET") === "POST" && u.pathname.endsWith("/access/apps")) {
+      created = true
+      calls.push({ key: "POST apps", body: JSON.parse(init.body) })
+      return new Response(JSON.stringify({ success: true, result: { id: "new" } }), { status: 200 })
+    }
+    if (created && u.pathname.endsWith("/access/apps")) {
+      return new Response(JSON.stringify({ success: true, result: [dev, stageApp] }), {
+        status: 200,
+      })
+    }
+    return base(url, init)
+  }
+  const code = await main(["ensure-access"], { fetch: fetchFn, env: ENV, out: () => {} })
+  assert.equal(code, 0)
+  const post = calls.find((c) => c.key === "POST apps")
+  assert.deepEqual(post.body.policies, [
+    {
+      name: "me",
+      decision: "allow",
+      include: [{ email: { email: "a@b.c" } }],
+      approval_required: false,
+      purpose_justification_required: true,
+      session_duration: "6h",
+      precedence: 2,
+    },
+  ])
+})
+
+test("retire-dev-access fails when stage is left without a safe app", async () => {
+  const dev = { id: "d1", domain: "dev.notes.szolotov.com" }
+  const r = await run(["retire-dev-access"], { "GET /accounts/acc/access/apps": [dev] })
+  assert.equal(r.code, 1)
+  assert.match(r.text, /after retiring the dev app/)
 })
 
 test("unknown commands print usage and fail", async () => {

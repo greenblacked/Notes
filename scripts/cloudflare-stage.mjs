@@ -42,33 +42,63 @@ const pathOf = (value) => {
   return rest === "" ? "" : `/${rest}`
 }
 
-// True when a host equals stage or the notes wildcard and the path is empty, "/" or "/*".
-export function coversStage(app) {
+// Every host-with-path entry of an Access application (domain, self_hosted_domains, public
+// destinations).
+function entriesOf(app) {
   const entries = []
   if (app?.domain) entries.push(app.domain)
   for (const d of app?.self_hosted_domains ?? []) entries.push(d)
   for (const d of app?.destinations ?? []) {
     if ((d.type ?? "public") === "public" && d.uri) entries.push(d.uri)
   }
-  return entries.some((e) => {
-    const host = normHost(e)
-    const path = pathOf(e)
-    return (host === STAGE_HOST || host === WILDCARD) && ["", "/", "/*"].includes(path)
-  })
+  return entries
 }
 
+const isStageEntry = (e) => [STAGE_HOST, WILDCARD].includes(normHost(e))
+
+// True when some entry is the stage host or the notes wildcard, whatever its path. Such an
+// application can decide who reaches stage (Access applies the most specific one).
+export function touchesStage(app) {
+  return entriesOf(app).some(isStageEntry)
+}
+
+// True when a host equals stage or the notes wildcard and the path is empty, "/" or "/*".
+export function coversStage(app) {
+  return entriesOf(app).some((e) => isStageEntry(e) && ["", "/", "/*"].includes(pathOf(e)))
+}
+
+// Include rule types that name identities. Anything else (everyone, email_domain, login_method,
+// any_valid_service_token, geo, ip, ...) can be satisfied by people who were never named, so it
+// is a problem.
+const IDENTITY_RULES = new Set([
+  "email",
+  "email_list",
+  "group",
+  "github-organization",
+  "gsuite",
+  "azureAD",
+  "okta",
+])
+
 // Problems that make a set of policies unsafe: none at all, bypass or non_identity decisions, or
-// an include rule for everyone.
+// an include rule that does not name identities.
 export function policyProblems(policies) {
   const list = policies ?? []
   if (list.length === 0) return ["no policies"]
   const problems = []
   for (const p of list) {
+    const label = p.name ?? p.id ?? "?"
     if (p.decision === "bypass" || p.decision === "non_identity") {
-      problems.push(`policy ${p.name ?? p.id ?? "?"} has decision ${p.decision}`)
+      problems.push(`policy ${label} has decision ${p.decision}`)
     }
-    if ((p.include ?? []).some((r) => r && typeof r === "object" && "everyone" in r)) {
-      problems.push(`policy ${p.name ?? p.id ?? "?"} includes everyone`)
+    for (const r of p.include ?? []) {
+      if (!r || typeof r !== "object") continue
+      for (const type of Object.keys(r)) {
+        if (type === "everyone") problems.push(`policy ${label} includes everyone`)
+        else if (!IDENTITY_RULES.has(type)) {
+          problems.push(`policy ${label} includes the non-identity rule type ${type}`)
+        }
+      }
     }
   }
   return problems
@@ -146,26 +176,48 @@ async function policiesOf(client, app) {
   return json.result ?? []
 }
 
-// Prints and returns whether some application protects stage.
+// Prints and returns whether stage is safely protected. Every application that names the stage
+// host or the wildcard counts, whatever its path: one unsafe application (an exact-host bypass,
+// a path-scoped bypass) fails the check even when another one is safe. At least one safe
+// application must cover the whole host.
 async function accessCheck(client, out) {
   const apps = await client.list(`/accounts/${client.account}/access/apps`)
-  let ok = false
+  let covered = false
+  let unsafe = false
   for (const app of apps) {
-    const covers = coversStage(app) || workerLevelCover(app)
-    out(`  app ${describeApp(app)} covers_stage=${covers}`)
-    if (!covers) continue
+    const root = coversStage(app) || workerLevelCover(app)
+    const relevant = root || touchesStage(app)
+    out(
+      `  app ${describeApp(app)} covers_stage=${root}${relevant && !root ? " (path scoped)" : ""}`,
+    )
+    if (!relevant) continue
     const policies = await policiesOf(client, app)
     for (const p of policies)
       out(`    policy ${p.id ?? "?"} ${JSON.stringify(p.name ?? "")} decision=${p.decision}`)
     const problems = policyProblems(policies)
     for (const pr of problems) out(`    problem: ${pr}`)
-    if (problems.length === 0) ok = true
+    if (problems.length > 0) unsafe = true
+    else if (root) covered = true
   }
-  return { ok, apps }
+  return { ok: covered && !unsafe, apps }
+}
+
+// Prints the Access applications that name a workers.dev host, so a first run shows how the
+// workers.dev Preview URL is protected (the post-upload check needs it to redirect to Access).
+function reportWorkersDev(apps, out) {
+  const wd = apps.filter((a) => hostsOf(a).some((h) => h.endsWith(".workers.dev")))
+  if (wd.length === 0) {
+    out(
+      "NOTE: no Access application names a workers.dev host; the workers.dev Preview URL must be protected at Worker level, or the check after the upload fails.",
+    )
+    return
+  }
+  for (const a of wd) out(`NOTE: workers.dev Access app ${describeApp(a)}`)
 }
 
 async function preflight(client, out) {
-  const { ok } = await accessCheck(client, out)
+  const { ok, apps } = await accessCheck(client, out)
+  reportWorkersDev(apps, out)
   if (!ok) {
     throw new ApiError(
       `no Cloudflare Access application protects ${STAGE_HOST} with a safe policy (see the list above)`,
@@ -215,7 +267,12 @@ async function ensureAccess(client, out) {
   const dev = before.apps.find((a) => a.type === "self_hosted" && isDevOnly(a))
   if (!dev) throw new ApiError("no Access app covers stage or dev; nothing to copy")
   const policies = await policiesOf(client, dev)
-  const reusable = policies.length > 0 && policies.every((p) => p.reusable === true || p.uid)
+  const reusable = policies.length > 0 && policies.every((p) => p.reusable === true)
+  const copy = (p, i) => {
+    // Every field except the identifiers and timestamps, so approval and session settings stay.
+    const { id, uid, created_at, updated_at, reusable: _r, app_count, ...rest } = p
+    return { ...rest, precedence: p.precedence ?? i + 1 }
+  }
   const body = {
     type: "self_hosted",
     name: "Notes stage",
@@ -224,14 +281,7 @@ async function ensureAccess(client, out) {
     session_duration: dev.session_duration ?? "24h",
     policies: reusable
       ? policies.map((p, i) => ({ id: p.id, precedence: p.precedence ?? i + 1 }))
-      : policies.map((p, i) => ({
-          name: p.name,
-          decision: p.decision,
-          include: p.include,
-          exclude: p.exclude,
-          require: p.require,
-          precedence: p.precedence ?? i + 1,
-        })),
+      : policies.map(copy),
   }
   const created = await client.call("POST", `/accounts/${client.account}/access/apps`, body)
   out(`Created Access application ${created.result?.id ?? "?"} for ${STAGE_HOST}`)
@@ -253,6 +303,13 @@ async function retireDevAccess(client, out) {
     deleted++
   }
   if (deleted === 0) out(`::notice::No Access app that covers only ${DEV_HOST}; nothing to delete.`)
+  // The dev app may have owned the policies stage uses: stage must still be protected.
+  const after = await accessCheck(client, out)
+  if (!after.ok) {
+    throw new ApiError(
+      `after retiring the dev app, no safe Access application protects ${STAGE_HOST}`,
+    )
+  }
 }
 
 const COMMANDS = { preflight, "ensure-access": ensureAccess, "retire-dev-access": retireDevAccess }
