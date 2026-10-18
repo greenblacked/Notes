@@ -146,7 +146,7 @@ plugins:
     layout:
       position: left
       priority: 25
-  # Replaced by local-plugins/graph (full graph, every page) and local-plugins/note-graph (local
+  # Replaced by local-plugins/graph-launcher (full graph, every page) and local-plugins/note-graph (local
   # graph at the end of a note)
   - source: github:quartz-community/graph
     enabled: false
@@ -251,7 +251,7 @@ plugins:
       position: afterBody
       priority: 15
   # The full graph of all notes: a toolbar button and a dialog, on every page type.
-  - source: ./local-plugins/graph
+  - source: ./local-plugins/graph-launcher
     enabled: true
     layout:
       position: left

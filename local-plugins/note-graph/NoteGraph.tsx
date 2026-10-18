@@ -4,7 +4,7 @@ import type { QuartzComponent, QuartzComponentProps } from "../../quartz/compone
 /**
  * The local graph at the end of a note: the note and the notes within a chosen number of links of
  * it (depth 1 to 5, or all), drawn on a canvas. Only markup lives here; the script is the one of
- * local-plugins/graph (graph-launcher), which finds `.note-graph`, fills it and keeps it in step
+ * local-plugins/graph-launcher, which finds `.note-graph`, fills it and keeps it in step
  * with the page. Where the layout clears `afterBody` (section, tag and 404 pages) there is no
  * panel; the toolbar button still opens the full graph.
  */
