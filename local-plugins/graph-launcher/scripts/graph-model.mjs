@@ -2,9 +2,9 @@
 // (scripts/graph-model.test.mjs). graph.inline.ts draws what this module computes.
 
 /**
- * @typedef {{ id: string, title: string, section: string, tags: string[] }} NoteData
+ * @typedef {{ id: string, title: string, section: string, tags: string[], d?: 1 }} NoteData
  * @typedef {{ v: number, nodes: NoteData[], links: [string, string][] }} GraphData
- * @typedef {{ id: string, title: string, section: string, kind: "note" | "tag", tags: string[], uses: number }} GraphNode
+ * @typedef {{ id: string, title: string, section: string, kind: "note" | "tag", tags: string[], uses: number, folder: boolean }} GraphNode
  * @typedef {{ source: string, target: string, kind: "link" | "tag" }} GraphLink
  * @typedef {{ nodes: GraphNode[], links: GraphLink[], degree: Map<string, number>, adj: Map<string, Set<string>>, byId: Map<string, GraphNode>, noteCount: number, linkCount: number }} Model
  * @typedef {{ nodes: GraphNode[], links: GraphLink[], centre: string | null, hops: Map<string, number>, fellBack: boolean }} View
@@ -67,12 +67,15 @@ export function contentIndexToData(index, folders) {
     const entry = index[k] ?? {}
     const id = simplifySlug(k)
     const first = id.split("/")[0]
-    return {
+    /** @type {NoteData} */
+    const node = {
       id,
       title: String(entry.title ?? id),
       section: folders.includes(first) ? first : OTHER_SECTION,
       tags: Array.isArray(entry.tags) ? entry.tags.map(String) : [],
     }
+    if (k.split("#")[0].endsWith("/index")) node.d = 1
+    return node
   })
   nodes.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   const seen = new Set()
@@ -96,6 +99,18 @@ export function contentIndexToData(index, folders) {
 }
 
 /**
+ * The site-relative path of a node, without the site root: "" for the home page, "adr/" for a
+ * folder index note (the site serves folders with a trailing slash, a bare one answers 307),
+ * "tags/x" for a tag, the id for any other note.
+ * @param {{ id: string, kind: "note" | "tag", folder?: boolean }} node
+ */
+export function pathOf(node) {
+  if (node.kind === "tag") return `tags/${node.id.slice(TAG_PREFIX.length)}`
+  if (node.id === "index") return ""
+  return node.folder ? `${node.id}/` : node.id
+}
+
+/**
  * @param {GraphData} data
  * @param {{ tags?: boolean }} [opts]
  * @returns {Model}
@@ -115,6 +130,7 @@ export function buildModel(data, opts = {}) {
       kind: /** @type {const} */ ("note"),
       tags: Array.isArray(n.tags) ? n.tags : [],
       uses: 0,
+      folder: n.d === 1,
     }
     byId.set(node.id, node)
     nodes.push(node)
@@ -142,7 +158,15 @@ export function buildModel(data, opts = {}) {
         const id = TAG_PREFIX + t
         let tag = tagNodes.get(id)
         if (!tag) {
-          tag = { id, title: `#${t}`, section: TAG_SECTION, kind: "tag", tags: [], uses: 0 }
+          tag = {
+            id,
+            title: `#${t}`,
+            section: TAG_SECTION,
+            kind: "tag",
+            tags: [],
+            uses: 0,
+            folder: false,
+          }
           tagNodes.set(id, tag)
         }
         tag.uses += 1

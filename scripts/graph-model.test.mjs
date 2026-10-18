@@ -12,6 +12,7 @@ import {
   groupByHops,
   groupBySection,
   neighbourhood,
+  pathOf,
   placeLabels,
   radius,
   sanitizeSettings,
@@ -178,6 +179,49 @@ test("contentIndexToData: slugs, sections, tag pages and links", () => {
     ["index", "patterns/foo"],
     ["patterns/foo", "patterns"],
   ])
+})
+
+test("contentIndexToData: folder index notes are flagged, the root index and files are not", () => {
+  const d = contentIndexToData(
+    { index: { title: "Home" }, "adr/index": { title: "ADRs" }, "adr/0001": { title: "One" } },
+    ["adr"],
+  )
+  assert.deepEqual(
+    d.nodes.map((n) => [n.id, n.d]),
+    [
+      ["adr", 1],
+      ["adr/0001", undefined],
+      ["index", undefined],
+    ],
+  )
+})
+
+test("buildModel carries the folder flag and pathOf gives the served path", () => {
+  const data = decodeGraphData({
+    v: 2,
+    nodes: [
+      { id: "adr", title: "ADRs", section: "adr", tags: ["t"], d: 1 },
+      { id: "adr/0001", title: "One", section: "adr", tags: [] },
+      { id: "index", title: "Home", section: "other", tags: [] },
+    ],
+    links: [],
+  })
+  const m = buildModel(data, { tags: true })
+  assert.equal(m.byId.get("adr").folder, true)
+  assert.equal(m.byId.get("adr/0001").folder, false)
+  assert.equal(pathOf(m.byId.get("adr")), "adr/")
+  assert.equal(pathOf(m.byId.get("adr/0001")), "adr/0001")
+  assert.equal(pathOf(m.byId.get("index")), "")
+  assert.equal(pathOf(m.byId.get("tag:t")), "tags/t")
+  // graph.json written before the flag existed still decodes: no node is a folder
+  const old = buildModel(
+    decodeGraphData({
+      v: 2,
+      nodes: [{ id: "adr", title: "A", section: "adr", tags: [] }],
+      links: [],
+    }),
+  )
+  assert.equal(pathOf(old.byId.get("adr")), "adr")
 })
 
 test("settings: defaults, valid values and bad input", () => {

@@ -3,7 +3,7 @@
 export type Depth = number | "all"
 export interface GraphData {
   v: number
-  nodes: { id: string; title: string; section: string; tags: string[] }[]
+  nodes: { id: string; title: string; section: string; tags: string[]; d?: 1 }[]
   links: [string, string][]
 }
 export interface GNode {
@@ -13,6 +13,7 @@ export interface GNode {
   kind: "note" | "tag"
   tags: string[]
   uses: number
+  folder: boolean
 }
 export interface GLink {
   source: string
@@ -57,6 +58,7 @@ export const TAG_SECTION: string
 export const DEFAULT_SETTINGS: Readonly<Settings>
 
 export function simplifySlug(slug: string): string
+export function pathOf(node: { id: string; kind: "note" | "tag"; folder?: boolean }): string
 export function decodeGraphData(data: unknown): GraphData | null
 export function contentIndexToData(index: Record<string, any>, folders: string[]): GraphData
 export function buildModel(data: GraphData, opts?: { tags?: boolean }): Model

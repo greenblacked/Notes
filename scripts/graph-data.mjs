@@ -1,8 +1,9 @@
 // Builds the slim graph index (public/static/graph.json) from Quartz's contentIndex.json.
 // Pure function, no I/O, so it is unit-tested and shared by scripts/postprocess-build.mjs.
 //
-// Output: { v: 2, nodes: [{ id, title, section, tags }], links: [[from, to]] }
+// Output: { v: 2, nodes: [{ id, title, section, tags, d? }], links: [[from, to]] }
 //   id       the slug without a trailing "/index" ("index" stays "index")
+//   d        1 only on folder index notes (the slug ended in "/index"): they live at "<id>/"
 //   section  the first slug segment when it is one of SECTIONS, otherwise "other"
 //   links    directed pairs of indices into nodes (which are sorted by id), no self-links,
 //            de-duplicated, sorted; decodeGraphData() in graph-model.mjs turns them back into ids
@@ -28,6 +29,11 @@ export function simplifySlug(slug) {
   return s.endsWith("/index") ? s.slice(0, -"/index".length) : s
 }
 
+/** True for a folder index note: the slug (before any "#") ends in "/index". */
+export function isFolderSlug(slug) {
+  return String(slug).split("#")[0].endsWith("/index")
+}
+
 /**
  * @param {Record<string, {title?: string, links?: string[], tags?: string[]}>} contentIndex
  * @param {string[]} [sections]
@@ -40,12 +46,14 @@ export function buildGraphData(contentIndex, sections = SECTIONS) {
     const entry = contentIndex[key] ?? {}
     const id = simplifySlug(key)
     const first = id.split("/")[0]
-    nodes.push({
+    const node = {
       id,
       title: typeof entry.title === "string" && entry.title ? entry.title : id,
       section: known.has(first) ? first : "other",
       tags: [...new Set(Array.isArray(entry.tags) ? entry.tags.map(String) : [])].sort(),
-    })
+    }
+    if (isFolderSlug(key)) node.d = 1
+    nodes.push(node)
   }
   nodes.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   const ids = new Set(nodes.map((n) => n.id))

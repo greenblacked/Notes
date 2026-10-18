@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import { gzipSync } from "node:zlib"
 import { test } from "node:test"
-import { SECTIONS, buildGraphData, simplifySlug } from "./graph-data.mjs"
+import { SECTIONS, buildGraphData, isFolderSlug, simplifySlug } from "./graph-data.mjs"
 
 const entry = (title, links = [], tags = [], extra = {}) => ({
   slug: "x",
@@ -45,6 +45,17 @@ test("nodes: tags/* keys are not nodes, ids simplified, sorted", () => {
   )
 })
 
+test("folder index notes get d: 1, other notes none", () => {
+  const g = buildGraphData(index)
+  const byId = Object.fromEntries(g.nodes.map((n) => [n.id, n]))
+  assert.equal(byId["adr"].d, 1)
+  assert.equal("d" in byId["adr/0001-bar"], false)
+  assert.equal("d" in byId["index"], false)
+  assert.equal(isFolderSlug("a/index#x"), true)
+  assert.equal(isFolderSlug("a/indexer"), false)
+  assert.equal(isFolderSlug("index"), false)
+})
+
 test("section is the first segment when known, else other", () => {
   const by = Object.fromEntries(buildGraphData(index).nodes.map((n) => [n.id, n.section]))
   assert.equal(by["adr"], "adr")
@@ -82,7 +93,10 @@ test("no page text is carried over", () => {
   assert.ok(!text.includes("BODY TEXT"))
   assert.ok(!text.includes('"content"'))
   for (const n of buildGraphData(index).nodes)
-    assert.deepEqual(Object.keys(n), ["id", "title", "section", "tags"])
+    assert.deepEqual(
+      Object.keys(n).filter((k) => k !== "d"),
+      ["id", "title", "section", "tags"],
+    )
 })
 
 test("output is deterministic regardless of key order", () => {
