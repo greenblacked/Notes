@@ -421,21 +421,48 @@ const isDevOnly = (app) => {
   return hosts.length === 1 && hosts[0] === DEV_HOST
 }
 
-// Hosts of the new application: stage, plus the workers.dev Preview host when the subdomain
-// lookup works (the check after the upload needs Access there as well).
-async function newAppDestinations(client, out) {
-  const destinations = [{ type: "public", uri: STAGE_HOST }]
+// The workers.dev Preview host (the check after the upload needs Access there as well), or null
+// when the subdomain lookup fails.
+async function previewHostOf(client, out, note) {
   try {
     const json = await client.call("GET", `/accounts/${client.account}/workers/subdomain`)
     const sub = json.result?.subdomain
-    if (typeof sub === "string" && sub !== "") {
-      destinations.push({ type: "public", uri: `stage-notes.${sub.toLowerCase()}.workers.dev` })
-    }
+    if (typeof sub === "string" && sub !== "") return `stage-notes.${sub.toLowerCase()}.workers.dev`
   } catch (e) {
     if (!(e instanceof ApiError)) throw e
-    out(`NOTE: cannot read the workers.dev subdomain (${e.message}); the app covers stage only`)
+    out(`NOTE: cannot read the workers.dev subdomain (${e.message}); ${note}`)
   }
-  return destinations
+  return null
+}
+
+// Best effort: add the Preview host to an application this script created (name "Notes stage",
+// stage as its only host). Cloudflare may refuse a workers.dev destination, which is not a zone of
+// the account; any failure is a NOTE, because the check after the upload decides.
+async function addPreviewHost(client, app, host, out) {
+  try {
+    const policies = await policiesOf(client, app)
+    if (policies.length === 0 || !policies.every((p) => p?.id)) {
+      out("NOTE: cannot add the workers.dev Preview host: the application's policies have no ids")
+      return
+    }
+    await client.call("PUT", `/accounts/${client.account}/access/apps/${app.id}`, {
+      type: "self_hosted",
+      name: app.name,
+      domain: STAGE_HOST,
+      destinations: [
+        { type: "public", uri: STAGE_HOST },
+        { type: "public", uri: host },
+      ],
+      session_duration: app.session_duration ?? "24h",
+      policies: policies.map((p, i) => ({ id: p.id, precedence: p.precedence ?? i + 1 })),
+    })
+    out(`Added ${host} to Access application ${app.id}`)
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e
+    out(
+      `NOTE: could not add ${host} to the Access application (${e.message}); the check after the upload decides whether the Preview is protected`,
+    )
+  }
 }
 
 // No Access application covers stage and there is no dev one to copy: create a self-hosted
@@ -448,16 +475,22 @@ async function createOwnerApp(client, before, out) {
       `an unsafe Access application already decides who reaches ${STAGE_HOST} (see the list above); fix or delete it`,
     )
   }
+  if (before.apps.some(coversStage)) {
+    throw new ApiError(
+      `an Access application already covers ${STAGE_HOST} but has no safe allow policy (see the list above); fix or delete it`,
+    )
+  }
   const email = String(client.env.STAGE_ACCESS_EMAIL ?? "").trim()
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new ApiError("no Access app covers stage or dev, and STAGE_ACCESS_EMAIL is not set")
+    throw new ApiError(
+      "no Access app covers stage or dev, and STAGE_ACCESS_EMAIL is not set or not a valid email address",
+    )
   }
-  const destinations = await newAppDestinations(client, out)
   const body = {
     type: "self_hosted",
     name: "Notes stage",
     domain: STAGE_HOST,
-    destinations,
+    destinations: [{ type: "public", uri: STAGE_HOST }],
     session_duration: "24h",
     policies: [
       {
@@ -472,16 +505,41 @@ async function createOwnerApp(client, before, out) {
   out(`Created Access application ${created.result?.id ?? "?"} for the owner on ${STAGE_HOST}`)
   const after = await accessCheck(client, out)
   if (!after.ok) throw new ApiError("the new Access application still does not protect stage")
+  const host = await previewHostOf(client, out, "the app covers stage only; a re-run adds the host")
+  const app = after.apps.find((a) => a.id === created.result?.id)
+  if (host && app) await addPreviewHost(client, app, host, out)
+}
+
+// An application this script created covers stage but not the Preview host (the subdomain lookup
+// failed or the host was refused then): try to add the host now.
+async function completePreviewHost(client, before, out) {
+  const app = before.apps.find(
+    (a) =>
+      a.type === "self_hosted" &&
+      a.name === "Notes stage" &&
+      hostsOf(a).length === 1 &&
+      hostsOf(a)[0] === STAGE_HOST,
+  )
+  if (!app) return
+  const host = await previewHostOf(client, out, "the Preview host is not added")
+  if (!host || before.apps.some((a) => touchesPreview(a, host))) return
+  await addPreviewHost(client, app, host, out)
 }
 
 async function ensureAccess(client, out) {
   const before = await accessCheck(client, out)
   if (before.ok) {
     out(`::notice::An Access application already protects ${STAGE_HOST}; nothing to do.`)
+    await completePreviewHost(client, before, out)
     return
   }
   const dev = before.apps.find((a) => a.type === "self_hosted" && isDevOnly(a))
   if (!dev) return createOwnerApp(client, before, out)
+  if (before.apps.some(coversStage)) {
+    throw new ApiError(
+      `an Access application already covers ${STAGE_HOST} but has no safe allow policy (see the list above); fix or delete it`,
+    )
+  }
   const policies = await policiesOf(client, dev)
   const reusable = policies.length > 0 && policies.every((p) => p.reusable === true)
   const copy = (p, i) => {
