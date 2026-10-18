@@ -27,10 +27,20 @@ export const DEFAULT_SETTINGS = Object.freeze({
   hidden: Object.freeze([]),
 })
 
-/** The slug rule of the content index: a trailing "/index" goes, "index" stays. */
+/**
+ * The slug rule of the content index, shared with scripts/graph-data.mjs: a fragment ("#section")
+ * goes, then a trailing "/index"; "index" stays.
+ */
 export function simplifySlug(slug) {
-  const s = String(slug).replace(/\/index$/, "")
+  const s = String(slug)
+    .split("#")[0]
+    .replace(/\/index$/, "")
   return s === "" ? "index" : s
+}
+
+/** True for a folder index note: the slug (before any "#") ends in "/index". */
+export function isFolderSlug(slug) {
+  return String(slug).split("#")[0].endsWith("/index")
 }
 
 /**
@@ -72,9 +82,9 @@ export function contentIndexToData(index, folders) {
       id,
       title: String(entry.title ?? id),
       section: folders.includes(first) ? first : OTHER_SECTION,
-      tags: Array.isArray(entry.tags) ? entry.tags.map(String) : [],
+      tags: [...new Set(Array.isArray(entry.tags) ? entry.tags.map(String) : [])].sort(),
     }
-    if (k.split("#")[0].endsWith("/index")) node.d = 1
+    if (isFolderSlug(k)) node.d = 1
     return node
   })
   nodes.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))

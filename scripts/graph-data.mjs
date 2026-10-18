@@ -9,6 +9,8 @@
 //            de-duplicated, sorted; decodeGraphData() in graph-model.mjs turns them back into ids
 // There is no page text: the file stays a small fraction of contentIndex.json.
 
+import { isFolderSlug, simplifySlug } from "../local-plugins/graph-launcher/scripts/graph-model.mjs"
+
 // Keep in step with local-plugins/top-bar/sections.ts (graph-data.test.mjs compares the two).
 export const SECTIONS = [
   "adr",
@@ -23,16 +25,7 @@ export const SECTIONS = [
   "learn",
 ]
 
-/** The plugin's simplifySlug rule: drop a trailing "/index"; "index" stays "index". */
-export function simplifySlug(slug) {
-  const s = String(slug).split("#")[0]
-  return s.endsWith("/index") ? s.slice(0, -"/index".length) : s
-}
-
-/** True for a folder index note: the slug (before any "#") ends in "/index". */
-export function isFolderSlug(slug) {
-  return String(slug).split("#")[0].endsWith("/index")
-}
+export { simplifySlug, isFolderSlug }
 
 /**
  * @param {Record<string, {title?: string, links?: string[], tags?: string[]}>} contentIndex
