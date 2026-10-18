@@ -5,6 +5,8 @@
 # Administration: read and write on this repository only) in the env; DRY_RUN is "true"
 # (default: only print the planned changes) or "false". Needs gh and jq.
 #
+# The environment `stage` is limited to the branch `dev`.
+#
 # Never prints the token and never enables `set -x`. Branch protection of `main` and the
 # `production` environment are only read, never written; the `main` ruleset is only ever made
 # stricter. The required check `CI OK` is pinned to GitHub Actions (integration 15368): a `CI OK`
@@ -260,12 +262,18 @@ report_production() {
   fi
 }
 
-# (e) The unused staging environment is deleted.
-remove_staging() {
-  if get environments/staging; then
-    mutate DELETE environments/staging
+# (e) Retired environments (dev, replaced by stage on 2026-10-18; staging, removed 2026-10-15)
+# are deleted. The live environments are never deleted here.
+remove_env() {
+  local name="$1"
+  if [[ "$name" == "stage" || "$name" == "production" || "$name" == "repo-admin" ]]; then
+    echo "::error::refusing to delete environment $name"
+    exit 1
+  fi
+  if get "environments/$name"; then
+    mutate DELETE "environments/$name"
   else
-    say "OK: no staging environment"
+    say "OK: no $name environment"
   fi
 }
 
@@ -287,7 +295,7 @@ report_state() {
   get "rulesets?includes_parents=false" --paginate || true
   list="$(jq -sc 'add // []' <<<"${GOT:-[]}")"
   say "STATE: rulesets $(jq -c 'map("\(.name):\(.enforcement)")' <<<"$list")"
-  for name in dev repo-admin production; do
+  for name in stage repo-admin production; do
     if get "environments/$name"; then
       say "STATE: environment $name $(jq -c '.deployment_branch_policy' <<<"$GOT")"
     else
@@ -299,10 +307,11 @@ report_state() {
 apply_all() {
   ensure_dev_ruleset
   ensure_main_ruleset
-  ensure_env dev dev
+  ensure_env stage dev
   ensure_env repo-admin main
   report_production
-  remove_staging
+  remove_env dev
+  remove_env staging
   ensure_fork_approval
 }
 
