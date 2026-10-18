@@ -107,7 +107,13 @@ test("the attribution check runs in ci and gates CI OK", () => {
   const ci = wf["ci.yml"]
   assert.ok(ci.jobs.attribution)
   assert.ok(ci.jobs["ci-ok"].needs.includes("attribution"))
-  assert.deepEqual(ci.jobs.attribution.permissions, { contents: "read" })
+  assert.deepEqual(ci.jobs.attribution.permissions, {
+    contents: "read",
+    "pull-requests": "read",
+  })
+  const step = ci.jobs.attribution.steps.find((s) => s.name === "Require no tooling attribution")
+  assert.match(step.run, /gh api "repos\/\$GH_REPO\/pulls\/\$PR_NUMBER"/)
+  assert.doesNotMatch(step.run, /GITHUB_EVENT_PATH/)
   const checkout = ci.jobs.attribution.steps.find((s) =>
     (s.uses ?? "").startsWith("actions/checkout"),
   )

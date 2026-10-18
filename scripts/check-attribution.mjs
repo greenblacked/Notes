@@ -63,19 +63,22 @@ export function commitProblems(commits) {
 export function eventProblems(event) {
   const pr = event?.pull_request
   if (!pr) return []
+  // Dependabot bodies quote upstream release notes verbatim; its commits are still checked.
+  if (pr.user?.login === "dependabot[bot]") return []
   return [...textProblems("PR title", pr.title), ...textProblems("PR body", pr.body)]
 }
 
 // Resolves the commit range. A zero or empty base (first push, new branch) checks only the head.
 export function rangeArgs(range) {
   const [base, head] = String(range).split("..")
-  if (!head || !/^[0-9a-zA-Z._/-]+$/.test(head)) throw new Error(`bad range '${range}'`)
-  if (!base || ZERO.test(base)) return ["-1", head]
-  if (!/^[0-9a-zA-Z._/-]+$/.test(base)) throw new Error(`bad range '${range}'`)
-  return [`${base}..${head}`]
+  const ok = (v) => /^[0-9a-zA-Z._/][0-9a-zA-Z._/-]*$/.test(v)
+  if (!head || !ok(head)) throw new Error(`bad range '${range}'`)
+  if (!base || ZERO.test(base)) return ["-1", "--end-of-options", head]
+  if (!ok(base)) throw new Error(`bad range '${range}'`)
+  return ["--end-of-options", `${base}..${head}`]
 }
 
-function readCommits(range) {
+function readCommits(range, args) {
   const fmt = "%H%x1f%ae%x1f%ce%x1f%B%x00"
   const run = (args) =>
     execFileSync("git", ["log", `--format=${fmt}`, ...args], {
@@ -83,13 +86,13 @@ function readCommits(range) {
       maxBuffer: 64 * 1024 * 1024,
     })
   try {
-    return parseLog(run(rangeArgs(range)))
-  } catch (e) {
+    return parseLog(run(args))
+  } catch {
     // A base that is not in the clone (force-push, shallow history): check the head alone.
+    // The range is already validated, so the head is a safe revision.
     const head = String(range).split("..")[1]
-    if (!head) throw e
     console.log(`::warning::could not list ${range}; checking the head commit only`)
-    return parseLog(run(["-1", head]))
+    return parseLog(run(["-1", "--end-of-options", head]))
   }
 }
 
@@ -105,7 +108,14 @@ export function main(argv, { out = console.log } = {}) {
     out("usage: check-attribution.mjs --range <base>..<head> [--event <payload.json>]")
     return 2
   }
-  const problems = commitProblems(readCommits(range))
+  let args
+  try {
+    args = rangeArgs(range)
+  } catch (e) {
+    out(`::error::${e.message}`)
+    return 2
+  }
+  const problems = commitProblems(readCommits(range, args))
   if (event) problems.push(...eventProblems(JSON.parse(readFileSync(event, "utf8"))))
   for (const p of problems) out(`::error::${p}`)
   if (problems.length === 0) out("No tooling attribution found.")
