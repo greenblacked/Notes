@@ -46,11 +46,8 @@ componentRegistry.register(
   "content-start",
 )
 
-componentRegistry.register(
-  "graph-launcher",
-  GraphLauncher as QuartzComponentConstructor<any>,
-  "graph-launcher",
-)
+// Registered under the directory name ("graph"): the layout resolver looks components up by it.
+componentRegistry.register("graph", GraphLauncher as QuartzComponentConstructor<any>, "graph")
 componentRegistry.register("note-graph", NoteGraph as QuartzComponentConstructor<any>, "note-graph")
 
 const config = await loadQuartzConfig({ baseUrl })
