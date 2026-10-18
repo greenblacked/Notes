@@ -28,6 +28,10 @@ function site(overrides = {}) {
       res.writeHead(200, { "cache-control": "no-store" }).end(`${VERSION}\n`)
     } else if (path === "/robots.txt") {
       res.writeHead(200, headers).end("User-agent: *\nDisallow: /\n")
+    } else if (path === "/static/graph.json") {
+      res
+        .writeHead(200, { "content-type": "application/json" })
+        .end('{"v":1,"nodes":[],"links":[]}')
     } else if (path === "/") {
       res.writeHead(200, headers).end("<html></html>")
     } else {
@@ -142,4 +146,28 @@ test("another redirect still fails with SMOKE_ALLOW_ACCESS=1", async () => {
   const { code, out } = await run(s.url, { SMOKE_ALLOW_ACCESS: "1" })
   assert.equal(code, 1, out)
   assert.match(out, /redirects are not followed/)
+})
+
+test("a missing /static/graph.json fails", async () => {
+  const s = await start({ "/static/graph.json": (res) => res.writeHead(404).end() })
+  const { code, out } = await run(s.url)
+  assert.notEqual(code, 0, out)
+  assert.match(out, /graph\.json returned HTTP 404/)
+})
+
+test("graph.json with the wrong content-type or body fails", async () => {
+  const wrongType = await start({
+    "/static/graph.json": (res) =>
+      res.writeHead(200, { "content-type": "text/html" }).end('{"v":1}'),
+  })
+  let r = await run(wrongType.url)
+  assert.notEqual(r.code, 0, r.out)
+  assert.match(r.out, /content-type should be application\/json/)
+  const wrongBody = await start({
+    "/static/graph.json": (res) =>
+      res.writeHead(200, { "content-type": "application/json" }).end('{"v":2}'),
+  })
+  r = await run(wrongBody.url)
+  assert.notEqual(r.code, 0, r.out)
+  assert.match(r.out, /does not contain/)
 })
