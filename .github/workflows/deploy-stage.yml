@@ -214,13 +214,15 @@ jobs:
 
       # The token never lives at job level: each step that needs it sets it. Only wrangler and the
       # Node built-ins run next to it.
-      # Reads only when a stage Access app exists, and creates one from a dev-only app only when
-      # none covers stage. It runs before the preflight on every deploy.
+      # Reads only when a stage Access app exists. When none covers stage it copies a dev-only
+      # app, or else creates one that allows the owner's email (a public address). It runs before
+      # the preflight on every deploy.
       - name: Ensure Cloudflare Access for stage
         if: steps.fresh.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGE_ACCESS_EMAIL: zolotov.98@gmail.com
         run: node scripts/cloudflare-stage.mjs ensure-access
 
       # Fail closed: nothing is uploaded unless an Access application covers stage and no Custom
