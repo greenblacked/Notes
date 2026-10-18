@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import {
   DEFAULT_SETTINGS,
   applyFilters,
-  listClickCloses,
+  linkClickCloses,
   buildModel,
   contentIndexToData,
   decodeGraphData,
@@ -299,12 +299,12 @@ test("filters: searching is true for any non-empty query, even with zero matches
   assert.equal(none.matches.size, 0)
 })
 
-test("list clicks close only on plain primary clicks on a note link", () => {
-  assert.equal(listClickCloses({ onLink: true }), true)
-  assert.equal(listClickCloses({ onLink: true, button: 0 }), true)
-  assert.equal(listClickCloses({ onLink: false }), false)
-  assert.equal(listClickCloses({ onLink: true, ctrlKey: true }), false)
-  assert.equal(listClickCloses({ onLink: true, metaKey: true }), false)
-  assert.equal(listClickCloses({ onLink: true, shiftKey: true }), false)
-  assert.equal(listClickCloses({ onLink: true, button: 1 }), false)
+test("link clicks close only on plain primary clicks on a note link", () => {
+  assert.equal(linkClickCloses({ onLink: true }), true)
+  assert.equal(linkClickCloses({ onLink: true, button: 0 }), true)
+  assert.equal(linkClickCloses({ onLink: false }), false)
+  assert.equal(linkClickCloses({ onLink: true, ctrlKey: true }), false)
+  assert.equal(linkClickCloses({ onLink: true, metaKey: true }), false)
+  assert.equal(linkClickCloses({ onLink: true, shiftKey: true }), false)
+  assert.equal(linkClickCloses({ onLink: true, button: 1 }), false)
 })

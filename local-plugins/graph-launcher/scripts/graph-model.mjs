@@ -264,11 +264,11 @@ export function applyFilters(view, model, opts = {}) {
 }
 
 /**
- * Whether a click in the list should close the dialog: only a plain primary click on a note link.
+ * Whether a click should close the dialog: only a plain primary click on a note link (list or selection bar).
  * Headings, padding, text selection and modified clicks (new tab or window) keep it open.
  * @param {{ onLink: boolean, button?: number, ctrlKey?: boolean, metaKey?: boolean, shiftKey?: boolean, altKey?: boolean }} c
  */
-export function listClickCloses(c) {
+export function linkClickCloses(c) {
   if (!c.onLink) return false
   if ((c.button ?? 0) !== 0) return false
   return !(c.ctrlKey || c.metaKey || c.shiftKey || c.altKey)
