@@ -11,7 +11,7 @@
 // serialised functions are identical to the defaults hard-coded in the explorer script, so the
 // attribute is dropped and the script falls back to those defaults.
 //
-// The graph (local-plugins/graph, local-plugins/note-graph) is drawn with Canvas 2D and its d3 subset
+// The graph (local-plugins/graph-launcher, local-plugins/note-graph) is drawn with Canvas 2D and its d3 subset
 // is bundled into postscript.js, so it loads nothing from a CDN. Its data is public/static/graph.json,
 // a slim index written here from contentIndex.json (see scripts/graph-data.mjs).
 //

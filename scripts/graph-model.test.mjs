@@ -15,7 +15,7 @@ import {
   sanitizeSettings,
   sliderToDepth,
   truncateLabel,
-} from "../local-plugins/graph/scripts/graph-model.mjs"
+} from "../local-plugins/graph-launcher/scripts/graph-model.mjs"
 
 // a - b - c - d is a chain; e links nowhere (an orphan). a and d share the tag "x".
 const note = (id, section, tags = []) => ({ id, title: id.toUpperCase(), section, tags })

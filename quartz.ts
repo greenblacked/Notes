@@ -10,7 +10,7 @@ import TopBar from "./local-plugins/top-bar/TopBar"
 import SectionRow from "./local-plugins/section-row/SectionRow"
 import LinkedFrom from "./local-plugins/linked-from/LinkedFrom"
 import ContentStart from "./local-plugins/content-start/ContentStart"
-import GraphLauncher from "./local-plugins/graph/GraphLauncher"
+import GraphLauncher from "./local-plugins/graph-launcher/GraphLauncher"
 import NoteGraph from "./local-plugins/note-graph/NoteGraph"
 import type { QuartzComponentConstructor } from "./quartz/components/types"
 
@@ -46,8 +46,13 @@ componentRegistry.register(
   "content-start",
 )
 
-// Registered under the directory name ("graph"): the layout resolver looks components up by it.
-componentRegistry.register("graph", GraphLauncher as QuartzComponentConstructor<any>, "graph")
+// The directory is not called "graph": the plugin restore would copy it over the disabled community
+// plugin of that name in .quartz/plugins.
+componentRegistry.register(
+  "graph-launcher",
+  GraphLauncher as QuartzComponentConstructor<any>,
+  "graph-launcher",
+)
 componentRegistry.register("note-graph", NoteGraph as QuartzComponentConstructor<any>, "note-graph")
 
 const config = await loadQuartzConfig({ baseUrl })
