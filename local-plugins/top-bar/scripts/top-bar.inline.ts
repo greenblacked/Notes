@@ -1,4 +1,6 @@
-// Behaviour of the top bar that CSS cannot do: the Browse drawer (Quartz's Explorer, shown at
+// Behaviour of the top bar that CSS cannot do: the section row keeps the current section in view
+// (the inline script of the row does it before the first paint; this does it again after a page
+// change and once the fonts have loaded), the Browse drawer (Quartz's Explorer, shown at
 // every width) gets a name, focus management and Escape, the table of contents marks the heading
 // being read, the centre column gets its landmark and the skip link its focus. Runs once per page
 // load; the parts that touch the page re-run on every SPA navigation ("nav") and clean up after
@@ -133,7 +135,11 @@ function setupTocSpy() {
   let frame = 0
   const update = () => {
     frame = 0
-    const bar = document.querySelector<HTMLElement>(".left.sidebar")?.offsetHeight ?? 0
+    // Where the bar ends on screen (0 when it has scrolled away, on short landscape screens).
+    const bar = Math.max(
+      0,
+      document.querySelector(".left.sidebar")?.getBoundingClientRect().bottom ?? 0,
+    )
     const line = bar + 40
     const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2
     let current = atEnd ? entries[entries.length - 1] : undefined
@@ -258,11 +264,29 @@ function playEnter() {
   enterTimer = window.setTimeout(() => center.removeAttribute("data-enter"), 800)
 }
 
+// The section row scrolls sideways when the links do not fit; keep the current section's link in
+// view, centred, after a page change and when the fonts have changed the widths. Nothing happens
+// when the row does not overflow or the link is already fully visible.
+function revealCurrentSection(smooth: boolean) {
+  const row = document.querySelector<HTMLElement>(".section-row")
+  const link = row?.querySelector<HTMLElement>("a[aria-current]")
+  if (!row || !link || row.scrollWidth <= row.clientWidth) return
+  const r = row.getBoundingClientRect()
+  const l = link.getBoundingClientRect()
+  if (l.left >= r.left + 4 && l.right <= r.right - 4) return
+  row.scrollTo({
+    left: link.offsetLeft + link.offsetWidth / 2 - row.clientWidth / 2,
+    behavior: smooth && !reducedMotion() ? "smooth" : "instant",
+  })
+}
+void document.fonts?.ready.then(() => revealCurrentSection(false))
+
 const onNav = () => {
   setupDrawer()
   setupTocSpy()
   setupLandmarks()
   void settleHash()
+  revealCurrentSection(navigating)
   if (navigating) {
     navigating = false
     playEnter()
