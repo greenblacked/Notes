@@ -28,6 +28,8 @@ const index = {
   "tags/index": entry("Tags again"),
   "tags/gke": entry("Tag: gke"),
   "misc/one": entry("One"),
+  "misc/empty": entry(""),
+  "misc/num": entry(42),
 }
 
 test("simplifySlug drops a trailing /index and keeps index", () => {
@@ -42,7 +44,7 @@ test("nodes: tags/* keys are not nodes, ids simplified, sorted", () => {
   assert.equal(g.v, 2)
   assert.deepEqual(
     g.nodes.map((n) => n.id),
-    ["adr", "adr/0001-bar", "index", "misc/one", "patterns/foo", "tags"],
+    ["adr", "adr/0001-bar", "index", "misc/empty", "misc/num", "misc/one", "patterns/foo", "tags"],
   )
 })
 
@@ -131,5 +133,8 @@ test("contentIndexToData (dev fallback) agrees with buildGraphData", () => {
     f.links,
     g.links.map(([a, b]) => [ids[a], ids[b]]),
   )
+  const title = Object.fromEntries(f.nodes.map((n) => [n.id, n.title]))
+  assert.equal(title["misc/empty"], "misc/empty")
+  assert.equal(title["misc/num"], "misc/num")
   assert.ok(f.links.some(([a, b]) => a === "adr/0001-bar" && b === "patterns/foo"))
 })
