@@ -1158,6 +1158,13 @@ function setupDialog(): () => void {
     if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)
       hide()
   })
+  // Close on Escape ourselves: a page script (the diagram popup of the note renderer) calls
+  // preventDefault on every Escape keydown, which would cancel the native close of the dialog.
+  on(dialog, "keydown", (e) => {
+    if (e.key !== "Escape" || !dialog.open) return
+    e.preventDefault()
+    hide()
+  })
   on(dialog, "close", () => {
     token++
     view?.deactivate()
