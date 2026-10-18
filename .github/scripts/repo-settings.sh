@@ -157,8 +157,8 @@ ensure_main_ruleset() {
   fi
   get "rulesets/$RULESET_ID" || { echo "::error::Ruleset $RULESET_ID vanished."; exit 1; }
   existing="$GOT"
-  if ! jq -e '.target == "branch" and ((.conditions.ref_name.include // []) | any(. == "refs/heads/main" or . == "~DEFAULT_BRANCH"))' <<<"$existing" >/dev/null; then
-    echo "::error::Ruleset main (id $RULESET_ID) does not target the branch main (target and conditions.ref_name.include must be branch and refs/heads/main or ~DEFAULT_BRANCH). Fix or delete it in the repository settings, then run this workflow again."
+  if ! jq -e '.target == "branch" and ((.conditions.ref_name.include // []) | any(. == "refs/heads/main" or . == "~DEFAULT_BRANCH")) and ((.conditions.ref_name.exclude // []) | any(. == "refs/heads/main" or . == "~DEFAULT_BRANCH") | not)' <<<"$existing" >/dev/null; then
+    echo "::error::Ruleset main (id $RULESET_ID) does not target the branch main (target and conditions.ref_name.include must be branch and refs/heads/main or ~DEFAULT_BRANCH, and conditions.ref_name.exclude must not contain either). Fix or delete it in the repository settings, then run this workflow again."
     exit 1
   fi
   rules="$(jq -c '.rules' <<<"$want")"

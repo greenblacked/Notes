@@ -92,7 +92,7 @@ flowchart LR
 
 1. Branch `<type>/<kebab>` from `dev` and open a pull request into `dev`. CI must pass (`CI OK`).
 2. Merging into `dev` deploys https://dev.notes.szolotov.com automatically (about 15 minutes; the newest push wins; `/version.txt` shows `dev+<sha>`). Production traffic is untouched ([Dev Preview](docs/deployment.md#dev-preview)).
-3. When dev looks good, open a pull request `dev` to `main` and merge it with a merge commit (`CI OK` required). Back-merges `main` into `dev` also go by pull request with a merge commit, never squash or rebase, so `main` stays a descendant of `dev`.
+3. When dev looks good, open a pull request `dev` to `main` and merge it with a merge commit (`CI OK` required). Back-merges `main` into `dev` also go by pull request with a merge commit, never squash or rebase, so `dev` keeps every commit of `main` (`dev` stays a descendant of `main`).
 4. To release: Actions, **Release**, **Run workflow** on `main`, enter the version as `X.Y.Z`. The workflow checks that CI passed for that commit and that the version is higher than the latest tag, creates the tag and GitHub Release, and starts the production deployment.
 5. Approve the deployment in the `production` environment. A smoke test runs against the Worker's workers.dev URL after the deploy; on failure the previous version is restored automatically.
 
