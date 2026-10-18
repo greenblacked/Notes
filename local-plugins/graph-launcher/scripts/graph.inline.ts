@@ -110,6 +110,9 @@ function saveSettings() {
 // The relative path to the site root, from the slug of the current page.
 function siteRoot(): string {
   const slug = document.body.dataset.slug ?? "index"
+  // The 404 page is served at whatever URL was missing (/a/b/c), so a relative path would
+  // resolve against that URL. The site is served at the host root: link from there.
+  if (slug === "404") return "/"
   const depth = slug.split("/").length - 1
   return depth > 0 ? "../".repeat(depth) : "./"
 }
@@ -1104,15 +1107,17 @@ function setupDialog(): () => void {
   const dialog = document.getElementById("graph-dialog") as HTMLDialogElement | null
   const launcher = document.querySelector<HTMLButtonElement>(".graph-launcher")
   if (!dialog) return () => {}
-  if (typeof dialog.showModal !== "function") {
-    // No <dialog> support: the launcher would do nothing, so it is not offered.
-    if (launcher) launcher.hidden = true
-    return () => {}
-  }
+  // Parsed first: the note panel needs the section colours and labels even where the dialog
+  // is not supported.
   try {
     sections = JSON.parse(dialog.dataset.sections ?? "[]")
   } catch {
     sections = []
+  }
+  if (typeof dialog.showModal !== "function") {
+    // No <dialog> support: the launcher would do nothing, so it is not offered.
+    if (launcher) launcher.hidden = true
+    return () => {}
   }
   const abort = new AbortController()
   const on = (el: any, type: string, fn: (e: any) => void) =>

@@ -193,6 +193,7 @@ for (const theme of ["light", "dark"]) {
         min: UI,
         ok: false,
       })
+    if (!(`graph-${key}` in t)) continue
     check(theme, `Graph colour ${key} on surface tint`, c(`graph-${key}`), surface, UI)
     check(theme, `Graph colour ${key} on sheet`, c(`graph-${key}`), sheet, UI)
   }

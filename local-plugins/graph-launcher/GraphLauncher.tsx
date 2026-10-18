@@ -21,6 +21,7 @@ export default (() => {
           type="button"
           class={`${displayClass ?? ""} graph-launcher`.trim()}
           aria-haspopup="dialog"
+          aria-expanded="false"
           aria-keyshortcuts="Control+G Meta+G"
           aria-label="Open graph of all notes"
           title="Graph of all notes (Ctrl+G)"

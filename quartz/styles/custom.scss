@@ -2690,6 +2690,7 @@ article h2:has(> a.tag-link) {
 
     & .graph-controls {
       flex: none;
+      max-height: 50vh;
       max-height: 50dvh;
     }
 
