@@ -19,6 +19,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import YAML from "yaml"
+import { SECTIONS } from "./graph-data.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const outIndex = process.argv.indexOf("--out")
@@ -26,18 +27,7 @@ const outFile = outIndex > 0 ? process.argv[outIndex + 1] : undefined
 
 const TEXT = 4.5
 const UI = 3
-const SECTION_KEYS = [
-  "adr",
-  "architecture",
-  "patterns",
-  "tools",
-  "runbooks",
-  "compliance",
-  "ai",
-  "management",
-  "standards",
-  "learn",
-]
+const SECTION_KEYS = SECTIONS
 // Strongest opacity of the grain (the alpha row of the feColorMatrix in custom.scss).
 const GRAIN_MAX = { light: 0.05, dark: 0.03 }
 
@@ -193,6 +183,16 @@ for (const theme of ["light", "dark"]) {
   }
   // Graph node colours (swatches and legend text) on the panel and on the dialog sheet.
   for (const key of [...SECTION_KEYS, "other", "tag"]) {
+    if (!(`graph-${key}` in t))
+      rows.push({
+        theme,
+        label: `Graph colour ${key}: no --graph-${key} token in custom.scss`,
+        fg: "-",
+        bg: "-",
+        ratio: 0,
+        min: UI,
+        ok: false,
+      })
     check(theme, `Graph colour ${key} on surface tint`, c(`graph-${key}`), surface, UI)
     check(theme, `Graph colour ${key} on sheet`, c(`graph-${key}`), sheet, UI)
   }
