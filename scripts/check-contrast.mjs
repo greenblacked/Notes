@@ -6,7 +6,7 @@
 //   quartz.config.yaml          the Quartz colour keys (light = the sheet of paper, lightgray,
 //                               gray, darkgray, dark, secondary, tertiary, highlight) per theme
 //   quartz/styles/custom.scss   the --desk, --surface, --accepted, --warning, --grain-color and
-//                               --chip-* tokens, in the `:root` block (light) and the
+//                               --chip-* and --graph-* tokens, in the `:root` block (light) and the
 //                               `:root[saved-theme="dark"]` block (dark)
 // Text sits on the sheet (with the paper grain, checked at its maximum strength), on the desk (the
 // top bar and the table of contents; the bar is translucent, so it is the desk or the sheet,
@@ -26,6 +26,18 @@ const outFile = outIndex > 0 ? process.argv[outIndex + 1] : undefined
 
 const TEXT = 4.5
 const UI = 3
+const SECTION_KEYS = [
+  "adr",
+  "architecture",
+  "patterns",
+  "tools",
+  "runbooks",
+  "compliance",
+  "ai",
+  "management",
+  "standards",
+  "learn",
+]
 // Strongest opacity of the grain (the alpha row of the feColorMatrix in custom.scss).
 const GRAIN_MAX = { light: 0.05, dark: 0.03 }
 
@@ -179,6 +191,12 @@ for (const theme of ["light", "dark"]) {
       c(`chip-${kind}-bg`),
     )
   }
+  // Graph node colours (swatches and legend text) on the panel and on the dialog sheet.
+  for (const key of [...SECTION_KEYS, "other", "tag"]) {
+    check(theme, `Graph colour ${key} on surface tint`, c(`graph-${key}`), surface, UI)
+    check(theme, `Graph colour ${key} on sheet`, c(`graph-${key}`), sheet, UI)
+  }
+
   // Tags are neutral chips; their hover state, the accent, and the section a note belongs to in
   // the top bar and in the drawer (accent on the link highlight) sit on tints as well.
   check(
