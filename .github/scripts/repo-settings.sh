@@ -7,7 +7,9 @@
 #
 # Never prints the token and never enables `set -x`. Branch protection of `main` and the
 # `production` environment are only read, never written; the `main` ruleset is only ever made
-# stricter.
+# stricter. The required check `CI OK` is pinned to GitHub Actions (integration 15368): a `CI OK`
+# entry with any other integration is removed, because another app could satisfy it with a
+# commit status, and the pinned entry is added when missing.
 set -euo pipefail
 
 : "${GH_REPO:?GH_REPO (owner/name) is required}"
@@ -166,8 +168,11 @@ ensure_main_ruleset() {
       .rules as $r
       | ($r + [$d[] | select(.type as $t | ($r | map(.type) | index($t)) == null)])
       | map(if .type == "required_status_checks"
-               and ((.parameters.required_status_checks // []) | any(.context == $ci.context and .integration_id == $ci.integration_id) | not)
-            then .parameters.required_status_checks = (((.parameters.required_status_checks // []) | map(select(.context != $ci.context))) + [$ci])
+               and (((.parameters.required_status_checks // []) | any(.context == $ci.context and .integration_id != $ci.integration_id))
+                    or ((.parameters.required_status_checks // []) | any(.context == $ci.context and .integration_id == $ci.integration_id) | not))
+            then .parameters.required_status_checks = (
+                ((.parameters.required_status_checks // []) | map(select(.context != $ci.context or .integration_id == $ci.integration_id))) as $kept
+                | if ($kept | any(.context == $ci.context)) then $kept else $kept + [$ci] end)
             else . end)' <<<"$existing")"
   enforcement="$(jq -r '.enforcement' <<<"$existing")"
   changed=false
