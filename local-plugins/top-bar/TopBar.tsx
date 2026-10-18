@@ -3,6 +3,8 @@ import type { QuartzComponent, QuartzComponentProps } from "../../quartz/compone
 import { siteLinks } from "./links"
 // @ts-expect-error - inline script, loaded as text by the build (see quartz/cli/handlers.js)
 import script from "./scripts/top-bar.inline.ts"
+// @ts-expect-error - inline script, loaded as text by the build (see quartz/cli/handlers.js)
+import earlyScript from "./scripts/top-bar.early.inline.ts"
 
 /**
  * The wordmark of the sticky top bar, with the skip link. The bar itself is the left sidebar of
@@ -12,7 +14,9 @@ import script from "./scripts/top-bar.inline.ts"
  *
  * The script (scripts/top-bar.inline.ts) manages the focus of the Browse drawer, marks the
  * current heading in the table of contents, marks the centre column as the main landmark and moves
- * the keyboard to the skip link's target (#content, rendered by local-plugins/content-start).
+ * the keyboard to the skip link's target (#content, rendered by local-plugins/content-start). A
+ * second, tiny script (scripts/top-bar.early.inline.ts) runs in the head, before the page is
+ * painted: it makes the search button and the focus of the section links work at once.
  */
 export default (() => {
   const TopBar: QuartzComponent = ({ fileData, cfg, displayClass }: QuartzComponentProps) => {
@@ -29,6 +33,7 @@ export default (() => {
     )
   }
 
+  TopBar.beforeDOMLoaded = earlyScript
   TopBar.afterDOMLoaded = script
   return TopBar
 }) satisfies () => QuartzComponent

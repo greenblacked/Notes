@@ -606,6 +606,11 @@ body {
 
 .top-bar-brand {
   flex: none;
+  // A hit area of at least 44 x 32 px (the wordmark is about 50 x 22): padding that the negative
+  // margin takes back, so the layout does not change.
+  padding-block: 0.375rem;
+  margin-block: -0.375rem;
+  border-radius: 0.375rem;
   font: 600 1.35rem/1 var(--serif);
   letter-spacing: -0.01em;
   color: var(--dark);
@@ -2778,13 +2783,14 @@ pre:has(> code.mermaid) {
         }
       }
 
-      // On a phone the result shows a few lines of the match, not the whole note.
-      & .result-card > p.preview {
+      // The result shows a few lines of the match, not the whole note.
+      & .result-card > p.card-description {
         display: -webkit-box;
         -webkit-box-orient: vertical;
-        -webkit-line-clamp: 4;
-        line-clamp: 4;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
         overflow: hidden;
+        overflow-wrap: anywhere;
       }
 
       & .highlight {
