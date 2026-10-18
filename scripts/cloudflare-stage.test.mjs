@@ -194,7 +194,7 @@ test("ensure-access fails when nothing exists and no owner email is set", async 
 })
 
 // A fake API that remembers the application created by POST and lists it afterwards.
-function statefulApi(apps, extra = {}) {
+function statefulApi(apps, extra = {}, { rejectWorkersDev = false } = {}) {
   const calls = []
   const list = [...apps]
   const base = fakeFetch({ ...cleanRoutes([]), ...extra }, calls)
@@ -205,7 +205,11 @@ function statefulApi(apps, extra = {}) {
       if (method === "POST") {
         const body = JSON.parse(init.body)
         calls.push({ key: "POST apps", body })
-        list.push({ id: "new", ...body })
+        list.push({
+          id: "new",
+          ...body,
+          policies: body.policies.map((p, i) => ({ id: `pol${i}`, ...p })),
+        })
         return new Response(JSON.stringify({ success: true, result: { id: "new" } }), {
           status: 200,
         })
@@ -214,6 +218,18 @@ function statefulApi(apps, extra = {}) {
         JSON.stringify({ success: true, result: list, result_info: { total_pages: 1 } }),
         { status: 200 },
       )
+    }
+    if (u.pathname.endsWith("/access/apps/new") && method === "PUT") {
+      const body = JSON.parse(init.body)
+      calls.push({ key: "PUT app", body })
+      if (rejectWorkersDev) {
+        return new Response(JSON.stringify({ success: false, errors: [{ code: 12130 }] }), {
+          status: 400,
+        })
+      }
+      const i = list.findIndex((a) => a.id === "new")
+      list[i] = { ...list[i], destinations: body.destinations }
+      return new Response(JSON.stringify({ success: true, result: { id: "new" } }), { status: 200 })
     }
     return base(url, init)
   }
@@ -233,12 +249,17 @@ test("ensure-access creates an owner-only app when none exists, and it passes va
   assert.equal(code, 0, lines.join("\n"))
   const posts = api.calls.filter((c) => c.key === "POST apps")
   assert.equal(posts.length, 1)
+  assert.deepEqual(
+    posts[0].body.destinations.map((d) => d.uri),
+    ["stage.notes.szolotov.com"],
+  )
   const body = posts[0].body
+  const put = api.calls.find((c) => c.key === "PUT app").body
   assert.equal(body.type, "self_hosted")
   assert.equal(body.domain, "stage.notes.szolotov.com")
   assert.equal(body.session_duration, "24h")
   assert.deepEqual(
-    body.destinations.map((d) => d.uri),
+    put.destinations.map((d) => d.uri),
     ["stage.notes.szolotov.com", "stage-notes.sub.workers.dev"],
   )
   assert.equal(body.policies.length, 1)
@@ -247,6 +268,77 @@ test("ensure-access creates an owner-only app when none exists, and it passes va
   assert.deepEqual(policyProblems(body.policies), [])
   assert.ok(coversStage(api.list[0]))
   assert.ok(!lines.join("\n").includes(TOKEN))
+})
+
+test("ensure-access keeps the app and prints a NOTE when workers.dev is rejected", async () => {
+  const api = statefulApi(
+    [],
+    { "GET /accounts/acc/workers/subdomain": { subdomain: "sub" } },
+    { rejectWorkersDev: true },
+  )
+  const lines = []
+  const code = await main(["ensure-access"], {
+    fetch: api.fetchFn,
+    env: OWNER_ENV,
+    out: (l) => lines.push(l),
+  })
+  assert.equal(code, 0, lines.join("\n"))
+  assert.match(lines.join("\n"), /NOTE: could not add stage-notes\.sub\.workers\.dev/)
+  assert.equal(api.calls.filter((c) => c.key === "POST apps").length, 1)
+})
+
+test("a re-run adds the workers.dev host to the app it created", async () => {
+  const stage = {
+    id: "new",
+    name: "Notes stage",
+    type: "self_hosted",
+    domain: "stage.notes.szolotov.com",
+    destinations: [{ type: "public", uri: "stage.notes.szolotov.com" }],
+    policies: [{ ...okPolicy, id: "pol0" }],
+  }
+  const api = statefulApi([stage], { "GET /accounts/acc/workers/subdomain": { subdomain: "sub" } })
+  const code = await main(["ensure-access"], {
+    fetch: api.fetchFn,
+    env: OWNER_ENV,
+    out: () => {},
+  })
+  assert.equal(code, 0)
+  assert.ok(!api.calls.some((c) => c.key === "POST apps"))
+  const put = api.calls.find((c) => c.key === "PUT app")
+  assert.deepEqual(
+    put.body.destinations.map((d) => d.uri),
+    ["stage.notes.szolotov.com", "stage-notes.sub.workers.dev"],
+  )
+})
+
+test("ensure-access does not create a second app beside a deny-only one", async () => {
+  const deny = {
+    id: "d1",
+    type: "self_hosted",
+    domain: "stage.notes.szolotov.com",
+    policies: [{ id: "x", decision: "deny", include: [{ email: { email: "a@b.c" } }] }],
+  }
+  const api = statefulApi([deny])
+  const lines = []
+  const code = await main(["ensure-access"], {
+    fetch: api.fetchFn,
+    env: OWNER_ENV,
+    out: (l) => lines.push(l),
+  })
+  assert.equal(code, 1)
+  assert.ok(!api.calls.some((c) => c.key === "POST apps"))
+  assert.match(lines.join("\n"), /no safe allow policy/)
+})
+
+test("ensure-access says a malformed STAGE_ACCESS_EMAIL is invalid", async () => {
+  const lines = []
+  const code = await main(["ensure-access"], {
+    fetch: statefulApi([]).fetchFn,
+    env: { ...ENV, STAGE_ACCESS_EMAIL: "nope" },
+    out: (l) => lines.push(l),
+  })
+  assert.equal(code, 1)
+  assert.match(lines.join("\n"), /not set or not a valid email address/)
 })
 
 test("ensure-access creates no duplicate when run again", async () => {
