@@ -3,8 +3,9 @@
   // One Worker serves everything. Static site is served from ./public (the Quartz build output)
   // through worker/index.js, which adds security headers, serves /robots.txt and sets cache policy.
   //   - production: `wrangler deploy` (tag releases) at https://notes.szolotov.com
-  //   - dev: a Worker Preview named `dev` (`wrangler preview`, deployed on every push to the
-  //     `dev` branch) at https://dev.notes.szolotov.com. See docs/deployment.md#dev-preview.
+  //   - stage: a Worker Preview named `stage` (`wrangler preview`, run by hand from the `dev`
+  //     branch) at https://stage.notes.szolotov.com, behind Cloudflare Access. See
+  //     docs/deployment.md#stage-preview.
   "name": "notes",
   "main": "worker/index.js",
   "compatibility_date": "2026-10-01",
@@ -14,8 +15,8 @@
   "workers_dev": true,
   "preview_urls": true,
   "routes": [
-    // previews_enabled serves production AND Previews: the Preview `dev` is then reachable at
-    // dev.notes.szolotov.com through a Cloudflare-managed wildcard. Applied by `wrangler deploy`
+    // previews_enabled serves production AND Previews: the Preview `stage` is then reachable at
+    // stage.notes.szolotov.com through a Cloudflare-managed wildcard. Applied by `wrangler deploy`
     // (or the dashboard), not by `wrangler preview`.
     { "pattern": "notes.szolotov.com", "custom_domain": true, "previews_enabled": true },
   ],
