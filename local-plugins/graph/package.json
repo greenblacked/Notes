@@ -5,7 +5,7 @@
   "type": "module",
   "main": "index.js",
   "quartz": {
-    "name": "graph-launcher",
+    "name": "graph",
     "category": "component",
     "version": "1.0.0",
     "quartzVersion": ">=5.0.0",
