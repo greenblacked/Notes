@@ -163,6 +163,9 @@ test("contentIndexToData: slugs, sections, tag pages and links", () => {
     "patterns/index": { title: "Patterns", links: [], tags: [] },
     "patterns/foo": { title: "Foo", links: ["patterns", "patterns/foo", "nope"], tags: ["x"] },
     "tags/x": { title: "x", links: [], tags: [] },
+    tags: { title: "Tags", links: ["patterns/foo"], tags: [] },
+    "tags/index": { title: "Tags", links: [], tags: [] },
+    404: { title: "404", links: ["patterns/foo"], tags: [] },
     "misc/bar": { title: "Bar", links: [], tags: [] },
   }
   const d = contentIndexToData(index, ["patterns"])

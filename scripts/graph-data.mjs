@@ -9,7 +9,11 @@
 //            de-duplicated, sorted; decodeGraphData() in graph-model.mjs turns them back into ids
 // There is no page text: the file stays a small fraction of contentIndex.json.
 
-import { isFolderSlug, simplifySlug } from "../local-plugins/graph-launcher/scripts/graph-model.mjs"
+import {
+  isFolderSlug,
+  isGraphNode,
+  simplifySlug,
+} from "../local-plugins/graph-launcher/scripts/graph-model.mjs"
 
 // Keep in step with local-plugins/top-bar/sections.ts (graph-data.test.mjs compares the two).
 export const SECTIONS = [
@@ -25,7 +29,7 @@ export const SECTIONS = [
   "learn",
 ]
 
-export { simplifySlug, isFolderSlug }
+export { simplifySlug, isFolderSlug, isGraphNode }
 
 /**
  * @param {Record<string, {title?: string, links?: string[], tags?: string[]}>} contentIndex
@@ -35,7 +39,7 @@ export function buildGraphData(contentIndex, sections = SECTIONS) {
   const known = new Set(sections)
   const nodes = []
   for (const key of Object.keys(contentIndex)) {
-    if (key.startsWith("tags/")) continue
+    if (!isGraphNode(key)) continue
     const entry = contentIndex[key] ?? {}
     const id = simplifySlug(key)
     const first = id.split("/")[0]
@@ -54,7 +58,7 @@ export function buildGraphData(contentIndex, sections = SECTIONS) {
   const index = new Map(nodes.map((n, i) => [n.id, i]))
   const pairs = new Set()
   for (const key of Object.keys(contentIndex)) {
-    if (key.startsWith("tags/")) continue
+    if (!isGraphNode(key)) continue
     const from = simplifySlug(key)
     for (const target of contentIndex[key]?.links ?? []) {
       const to = simplifySlug(target)

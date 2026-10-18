@@ -25,6 +25,7 @@ const index = {
   ),
   "patterns/foo": entry("Foo", ["adr/0001-bar"], ["gke"]),
   tags: entry("Tags"),
+  404: entry("Not found"),
   "tags/index": entry("Tags again"),
   "tags/gke": entry("Tag: gke"),
   "misc/one": entry("One"),
@@ -39,12 +40,12 @@ test("simplifySlug drops a trailing /index and keeps index", () => {
   assert.equal(simplifySlug("a/indexer"), "a/indexer")
 })
 
-test("nodes: tags/* keys are not nodes, ids simplified, sorted", () => {
+test("nodes: tags, tags/* and 404 are not nodes, ids simplified, sorted", () => {
   const g = buildGraphData(index)
   assert.equal(g.v, 2)
   assert.deepEqual(
     g.nodes.map((n) => n.id),
-    ["adr", "adr/0001-bar", "index", "misc/empty", "misc/num", "misc/one", "patterns/foo", "tags"],
+    ["adr", "adr/0001-bar", "index", "misc/empty", "misc/num", "misc/one", "patterns/foo"],
   )
 })
 
@@ -66,7 +67,6 @@ test("section is the first segment when known, else other", () => {
   assert.equal(by["adr/0001-bar"], "adr")
   assert.equal(by["patterns/foo"], "patterns")
   assert.equal(by["index"], "other")
-  assert.equal(by["tags"], "other")
   assert.equal(by["misc/one"], "other")
 })
 

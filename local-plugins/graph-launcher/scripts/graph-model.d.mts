@@ -58,6 +58,7 @@ export const TAG_SECTION: string
 export const DEFAULT_SETTINGS: Readonly<Settings>
 
 export function simplifySlug(slug: string): string
+export function isGraphNode(key: string): boolean
 export function isFolderSlug(slug: string): boolean
 export function pathOf(node: { id: string; kind: "note" | "tag"; folder?: boolean }): string
 export function decodeGraphData(data: unknown): GraphData | null
