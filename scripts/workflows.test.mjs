@@ -92,6 +92,20 @@ test("cut-release is owner-only from main and dispatches the tag", () => {
   assert.equal(w.concurrency["cancel-in-progress"], false)
 })
 
+test("cut-release re-checks the head of main right before creating the tag", () => {
+  const steps = wf["cut-release.yml"].jobs.cut.steps
+  const tag = steps.findIndex((s) => s.name === "Create the annotated tag")
+  assert.ok(tag > 1)
+  const require = steps[tag - 1]
+  const recheck = steps[tag - 2]
+  assert.equal(recheck.id, "fresh-final")
+  assert.equal(recheck.run, ".github/scripts/is-branch-head.sh")
+  assert.equal(recheck.env.BRANCH, "main")
+  assert.equal(require.env.CURRENT, "${{ steps.fresh-final.outputs.current }}")
+  assert.ok(require.run.includes("exit 1") && require.run.includes("main moved"))
+  assert.ok(!require.run.includes("${{"))
+})
+
 test("ci runs for main only", () => {
   const on = wf["ci.yml"].on
   assert.deepEqual(on.pull_request.branches, ["main"])
