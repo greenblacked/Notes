@@ -20,8 +20,9 @@
  *  - img-src data:. The callout icons are `url("data:image/svg+xml...")` values in Quartz's CSS.
  *
  * NOT needed (do not add): 'unsafe-inline' or 'unsafe-eval' for scripts, blob:, worker-src beyond
- * 'self', or any third-party origin. The graph's PixiJS and the explorer would need 'unsafe-eval'
- * out of the box; scripts/postprocess-build.mjs removes both causes at build time.
+ * 'self', or any third-party origin. The graph is Canvas 2D with a d3 subset bundled into
+ * postscript.js, so it needs nothing extra. The explorer would need 'unsafe-eval' out of the box;
+ * scripts/postprocess-build.mjs removes that cause at build time.
  *
  * @module csp
  */
