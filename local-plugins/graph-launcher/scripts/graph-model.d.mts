@@ -55,6 +55,7 @@ export const TAG_SECTION: string
 export const DEFAULT_SETTINGS: Readonly<Settings>
 
 export function simplifySlug(slug: string): string
+export function decodeGraphData(data: unknown): GraphData | null
 export function contentIndexToData(index: Record<string, any>, folders: string[]): GraphData
 export function buildModel(data: GraphData, opts?: { tags?: boolean }): Model
 export function neighbourhood(model: Model, centreId: string | null, depth: Depth): View

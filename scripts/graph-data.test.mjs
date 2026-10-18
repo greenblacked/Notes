@@ -38,7 +38,7 @@ test("simplifySlug drops a trailing /index and keeps index", () => {
 
 test("nodes: tags/* keys are not nodes, ids simplified, sorted", () => {
   const g = buildGraphData(index)
-  assert.equal(g.v, 1)
+  assert.equal(g.v, 2)
   assert.deepEqual(
     g.nodes.map((n) => n.id),
     ["adr", "adr/0001-bar", "index", "misc/one", "patterns/foo", "tags"],
@@ -62,13 +62,19 @@ test("tags are de-duplicated and sorted", () => {
 
 test("links resolve to existing ids, no self-links, de-duplicated, sorted", () => {
   const g = buildGraphData(index)
-  assert.deepEqual(g.links, [
-    ["adr", "adr/0001-bar"],
-    ["adr/0001-bar", "patterns/foo"],
-    ["index", "adr"],
-    ["index", "patterns/foo"],
-    ["patterns/foo", "adr/0001-bar"],
-  ])
+  assert.equal(g.v, 2)
+  const ids = g.nodes.map((n) => n.id)
+  assert.deepEqual(
+    g.links.map(([a, b]) => [ids[a], ids[b]]),
+    [
+      ["adr", "adr/0001-bar"],
+      ["adr/0001-bar", "patterns/foo"],
+      ["index", "adr"],
+      ["index", "patterns/foo"],
+      ["patterns/foo", "adr/0001-bar"],
+    ],
+  )
+  assert.ok(g.links.every((l) => l.every(Number.isInteger)))
 })
 
 test("no page text is carried over", () => {
@@ -96,8 +102,6 @@ test("a built contentIndex.json, when present, gives a small graph", (t) => {
   const g = buildGraphData(JSON.parse(fs.readFileSync(file, "utf8")))
   assert.ok(g.nodes.length >= 100)
   const text = JSON.stringify(g)
-  // The plan's 80 KB raw budget cannot hold ~1.7k id pairs (about 155 KB raw); on the wire it is
-  // about 17 KB gzip, against 3.4 MB for contentIndex.json.
-  assert.ok(text.length <= 200 * 1024, `graph.json is ${text.length} bytes`)
+  assert.ok(text.length <= 80 * 1024, `graph.json is ${text.length} bytes`)
   assert.ok(gzipSync(text).length <= 24 * 1024)
 })

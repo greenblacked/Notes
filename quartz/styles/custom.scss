@@ -2323,7 +2323,6 @@ article h2:has(> a.tag-link) {
   position: relative;
   min-height: 0;
   overflow: hidden;
-  touch-action: none;
 
   & canvas {
     display: block;
@@ -2331,8 +2330,12 @@ article h2:has(> a.tag-link) {
     height: 100%;
     background: transparent;
     cursor: grab;
-    touch-action: none;
   }
+}
+
+.graph-dialog .graph-canvas-wrap,
+.graph-dialog .graph-canvas-wrap canvas {
+  touch-action: none;
 }
 
 .graph-zoom {
@@ -2541,6 +2544,7 @@ article h2:has(> a.tag-link) {
   overflow: hidden;
   width: min(1280px, calc(100vw - 3rem));
   max-width: none;
+  height: calc(100vh - 3rem);
   height: calc(100dvh - 3rem);
   max-height: none;
 
@@ -2660,6 +2664,7 @@ article h2:has(> a.tag-link) {
 
   @media (max-width: 899px) {
     width: 100vw;
+    height: 100vh;
     height: 100dvh;
     border: 0;
     border-radius: 0;

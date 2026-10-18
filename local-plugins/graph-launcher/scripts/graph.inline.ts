@@ -27,6 +27,7 @@ import {
   applyFilters,
   buildModel,
   contentIndexToData,
+  decodeGraphData,
   depthToSlider,
   fitTransform,
   groupByHops,
@@ -135,9 +136,8 @@ async function fetchData(): Promise<GraphData> {
   try {
     const res = await fetch(`${base}static/graph.json`)
     if (res.ok) {
-      const data = await res.json()
-      if (data && data.v === 1 && Array.isArray(data.nodes) && Array.isArray(data.links))
-        return data
+      const data = decodeGraphData(await res.json())
+      if (data) return data
     }
   } catch {
     // Fall through to the content index (the dev server does not build graph.json).
@@ -440,6 +440,8 @@ class GraphView {
 
     select(canvas).call(dragBehavior as any)
     select(canvas).call(this.zoomBehavior).on("dblclick.zoom", null)
+    // d3-drag and d3-zoom both set touch-action: none; the note panel must let a swipe scroll.
+    canvas.style.touchAction = this.mode === "dialog" ? "none" : "pan-y"
 
     this.listen(canvas, "pointerdown", (e: PointerEvent) => {
       this.downAt = performance.now()
@@ -696,7 +698,7 @@ class GraphView {
         "collide",
         forceCollide((d: any) => d.r + 2),
       )
-      .alphaDecay(0.03)
+      .alphaDecay(0.045)
       .stop()
     this.sim = sim
     sim.on("tick", () => this.requestDraw())
@@ -722,6 +724,9 @@ class GraphView {
     if (startFresh || (dialog && !reheat)) {
       // The first paint is already close to the final layout.
       sim.tick(80)
+    } else if (reheat) {
+      // A reheat starts from the settled layout: run part of it before the first frame.
+      sim.tick(40)
     }
     this.wrap.dataset.state = "running"
     if (!this.fitted || !this.userMoved) this.fit()
@@ -1099,6 +1104,11 @@ function setupDialog(): () => void {
   const dialog = document.getElementById("graph-dialog") as HTMLDialogElement | null
   const launcher = document.querySelector<HTMLButtonElement>(".graph-launcher")
   if (!dialog) return () => {}
+  if (typeof dialog.showModal !== "function") {
+    // No <dialog> support: the launcher would do nothing, so it is not offered.
+    if (launcher) launcher.hidden = true
+    return () => {}
+  }
   try {
     sections = JSON.parse(dialog.dataset.sections ?? "[]")
   } catch {
@@ -1163,6 +1173,13 @@ function setupDialog(): () => void {
   on(dialog, "keydown", (e) => {
     if (e.key !== "Escape" || !dialog.open) return
     e.preventDefault()
+    // A search field with text clears first, like a native type=search field.
+    const field = e.target as HTMLInputElement | null
+    if (field instanceof HTMLInputElement && field.type === "search" && field.value) {
+      field.value = ""
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+      return
+    }
     hide()
   })
   on(dialog, "close", () => {

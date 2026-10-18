@@ -31,7 +31,7 @@ function site(overrides = {}) {
     } else if (path === "/static/graph.json") {
       res
         .writeHead(200, { "content-type": "application/json" })
-        .end('{"v":1,"nodes":[],"links":[]}')
+        .end('{"v":2,"nodes":[],"links":[]}')
     } else if (path === "/") {
       res.writeHead(200, headers).end("<html></html>")
     } else {
@@ -165,7 +165,7 @@ test("graph.json with the wrong content-type or body fails", async () => {
   assert.match(r.out, /content-type should be application\/json/)
   const wrongBody = await start({
     "/static/graph.json": (res) =>
-      res.writeHead(200, { "content-type": "application/json" }).end('{"v":2}'),
+      res.writeHead(200, { "content-type": "application/json" }).end('{"v":1}'),
   })
   r = await run(wrongBody.url)
   assert.notEqual(r.code, 0, r.out)
