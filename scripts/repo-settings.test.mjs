@@ -258,6 +258,21 @@ test("a CI OK check without the pinned integration id is replaced, not duplicate
   }
 })
 
+test("stale CI OK entries are dropped while the pinned one and other checks keep their order", () => {
+  const other = { context: "other" }
+  const stale = { context: "CI OK", integration_id: 1 }
+  const main = ruleset(2, "main", { rules: rules(["merge"], [stale, CI, other]) })
+  const { code, calls } = run({ fake: { RULESETS: [main], RULESET_BY_ID: { 2: main } } })
+  assert.equal(code, 0)
+  assert.equal(
+    calls.filter((c) => c.startsWith("api -X PUT repos/owner/repo/rulesets/2")).length,
+    1,
+  )
+  const body = bodyAfter(calls, "api -X PUT repos/owner/repo/rulesets/2")
+  const checks = body.rules.find((r) => r.type === "required_status_checks").parameters
+  assert.deepEqual(checks.required_status_checks, [CI, other])
+})
+
 test("environment dev: the dev policy is added before the main policy is deleted", () => {
   const { code, out, calls } = run({
     fake: {
