@@ -330,7 +330,17 @@ class GraphView {
     this.listen(this.q(".graph-selection-open"), "click", () => this.afterNavigateClick())
     this.listen(this.q(".graph-list-body"), "click", (e: MouseEvent) => {
       const onLink = (e.target as HTMLElement).closest("a[data-id]") !== null
-      if (listClickCloses({ onLink, ...e })) this.afterNavigateClick()
+      if (
+        listClickCloses({
+          onLink,
+          button: e.button,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          shiftKey: e.shiftKey,
+          altKey: e.altKey,
+        })
+      )
+        this.afterNavigateClick()
     })
   }
 
@@ -775,7 +785,6 @@ class GraphView {
     if (!this.view) return
     const r = applyFilters(this.view, this.model, { query: this.query })
     this.view = { ...this.view, matches: r.matches, searching: r.searching }
-    this.wrap.dataset.search = r.searching ? (r.matches.size > 0 ? "matches" : "none") : ""
     const status = this.q(".graph-matches")
     if (status) status.textContent = this.query.trim() ? `${this.view.matches.size} matching` : ""
     this.requestDraw()
@@ -946,6 +955,11 @@ class GraphView {
   private draw() {
     const { ctx, t, pal, w, h, dpr } = this
     if (!w || !h || !this.view) return
+    this.wrap.dataset.search = this.view.searching
+      ? this.view.matches.size > 0
+        ? "matches"
+        : "none"
+      : ""
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, w, h)
     const hl = this.hl
