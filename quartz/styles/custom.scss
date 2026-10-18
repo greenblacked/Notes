@@ -2514,6 +2514,14 @@ article h2:has(> a.tag-link) {
 
   & .graph-legend {
     margin-top: 0.5rem;
+    font: 500 0.75rem/1.3 var(--ui);
+    color: var(--gray);
+  }
+
+  & .graph-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
   }
 
   & .graph-list {
