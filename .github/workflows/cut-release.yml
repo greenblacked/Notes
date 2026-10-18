@@ -119,6 +119,22 @@ jobs:
           node scripts/changelog-section.mjs "$INPUT_VERSION" CHANGELOG.md >"$RUNNER_TEMP/notes.md"
           cat "$RUNNER_TEMP/notes.md"
 
+      - name: Re-check this commit is still the head of main
+        id: fresh-final
+        env:
+          BRANCH: main
+        run: .github/scripts/is-branch-head.sh
+
+      - name: Require the head of main before tagging
+        env:
+          CURRENT: ${{ steps.fresh-final.outputs.current }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "$CURRENT" != "true" ]]; then
+            echo "::error::main moved on while this release was being prepared; no tag was created. Run Cut release again."
+            exit 1
+          fi
+
       - name: Create the annotated tag
         env:
           TAG: ${{ steps.validate.outputs.tag }}
