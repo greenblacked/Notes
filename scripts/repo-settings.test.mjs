@@ -410,3 +410,21 @@ test("an API error other than 404 exits non-zero", () => {
   assert.notEqual(code, 0)
   assert.match(out, /GET environments\/stage failed/)
 })
+
+test("an invalid DELETE_OLD_ENVIRONMENTS exits non-zero without any call", () => {
+  const { code, out, calls } = run({ deleteOld: "yes" })
+  assert.notEqual(code, 0)
+  assert.match(out, /DELETE_OLD_ENVIRONMENTS must be/)
+  assert.equal(calls.length, 0)
+})
+
+test("dry run with the opt-in plans the delete without calling DELETE", () => {
+  const { code, out, calls } = run({
+    dry: "true",
+    deleteOld: "true",
+    fake: { ENVS: { staging: goodEnv("staging") } },
+  })
+  assert.equal(code, 0)
+  assert.match(out, /PLAN.*staging/i)
+  assert.equal(writes(calls).length, 0)
+})

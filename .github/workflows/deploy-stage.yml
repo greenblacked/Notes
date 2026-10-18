@@ -247,8 +247,16 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
+        run: tools/node_modules/.bin/wrangler preview --name stage --message "stage ${SHA::7}" --tag "$SHA"
+
+      # Parsing is its own step so that the teardown depends only on the upload having been
+      # attempted, not on whether Wrangler's output could be read.
+      - name: Read the Preview URLs
+        id: parse
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
         run: |
-          tools/node_modules/.bin/wrangler preview --name stage --message "stage ${SHA::7}" --tag "$SHA"
           out="$(node scripts/read-wrangler-output.mjs --preview "$WRANGLER_OUTPUT_FILE_PATH")"
           echo "$out"
           echo "$out" >>"$GITHUB_OUTPUT"
@@ -256,7 +264,7 @@ jobs:
       - name: Require the custom domain Preview URL
         if: steps.fresh.outputs.current == 'true'
         env:
-          STAGE_URL: ${{ steps.preview.outputs.custom_url }}
+          STAGE_URL: ${{ steps.parse.outputs.custom_url }}
         run: |
           if [[ "$STAGE_URL" != "https://stage.notes.szolotov.com" ]]; then
             echo "::error::The stage Preview is not served at https://stage.notes.szolotov.com (Wrangler reported '$STAGE_URL'). notes.szolotov.com must be enabled for Production and Preview. See docs/deployment.md#stage-preview."
@@ -277,15 +285,16 @@ jobs:
         if: steps.fresh.outputs.current == 'true'
         env:
           SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
-          WORKERS_DEV_URL: ${{ steps.preview.outputs.workers_dev_url }}
+          WORKERS_DEV_URL: ${{ steps.parse.outputs.workers_dev_url }}
           SMOKE_REQUIRE_ACCESS: "1"
         run: |
           if [[ -z "$WORKERS_DEV_URL" ]]; then
             echo "::error::Wrangler reported no workers.dev URL for the Preview; enable preview_urls and workers_dev in wrangler.jsonc."
             exit 1
           fi
-          # Exit 3 means the host answered 2xx without Access (exposed): only then is stage taken
-          # down. Any other failure (DNS, TLS, 5xx while the Preview propagates) just fails the run.
+          # Exit 3 marks an exposure. Any failure after the upload (including DNS, TLS or a 5xx
+          # while the Preview propagates) also takes the unverified Preview down in the teardown
+          # step, so the Preview stays only when every check passed.
           rc=0
           scripts/smoke-test.sh "$WORKERS_DEV_URL" "stage+$SHA" noindex || rc=$?
           if [[ "$rc" -eq 3 ]]; then
@@ -313,16 +322,26 @@ jobs:
             echo "::notice::stage.notes.szolotov.com answered HTTP $code."
           fi
 
-      # Fail closed: once the Preview is uploaded, any failed verification step (including a
+      # Fail closed: once the upload was attempted (even if it or the parsing failed, or the run was cancelled), any failed verification step (including a
       # custom domain URL check that fails before Access is applied, which skips the Access probes)
       # or a detected exposure takes the Preview down.
       - name: Take stage down unless it is verified
-        if: always() && steps.preview.outcome == 'success' && (failure() || steps.access_wd.outputs.exposed == 'true')
+        if: always() && steps.preview.outcome != 'skipped' && (failure() || cancelled() || steps.access_wd.outputs.exposed == 'true')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          tools/node_modules/.bin/wrangler preview delete --name stage --skip-confirmation
+          if out="$(tools/node_modules/.bin/wrangler preview delete --name stage --skip-confirmation 2>&1)"; then
+            echo "$out"
+          else
+            echo "$out"
+            if grep -qi "not found" <<<"$out"; then
+              echo "::notice::The stage Preview does not exist; nothing to delete."
+            else
+              echo "::error::Deleting the unverified stage Preview failed; delete it by hand."
+              exit 1
+            fi
+          fi
           echo "::error::stage was not verified behind Cloudflare Access; the Preview was deleted. Fix Access, then run Deploy stage again."
           exit 1
 

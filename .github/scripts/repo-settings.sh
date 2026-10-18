@@ -3,7 +3,9 @@
 # (docs/deployment.md#repository-settings), idempotently, through the GitHub REST API.
 # Used by repo-settings.yml. Requires GH_REPO (owner/name) and GH_TOKEN (fine-grained token with
 # Administration: read and write on this repository only) in the env; DRY_RUN is "true"
-# (default: only print the planned changes) or "false". Needs gh and jq.
+# (default: only print the planned changes) or "false". DELETE_OLD_ENVIRONMENTS is "false"
+# (default) or "true" (also delete the retired dev and staging environments); any other value is
+# an error. Needs gh and jq.
 #
 # The environment `stage` is limited to the branch `dev`.
 #
@@ -19,6 +21,11 @@ set -euo pipefail
 DRY_RUN="${DRY_RUN:-true}"
 if [[ "$DRY_RUN" != "true" && "$DRY_RUN" != "false" ]]; then
   echo "::error::DRY_RUN must be 'true' or 'false', got '$DRY_RUN'."
+  exit 1
+fi
+DELETE_OLD_ENVIRONMENTS="${DELETE_OLD_ENVIRONMENTS:-false}"
+if [[ "$DELETE_OLD_ENVIRONMENTS" != "true" && "$DELETE_OLD_ENVIRONMENTS" != "false" ]]; then
+  echo "::error::DELETE_OLD_ENVIRONMENTS must be 'true' or 'false', got '$DELETE_OLD_ENVIRONMENTS'."
   exit 1
 fi
 
