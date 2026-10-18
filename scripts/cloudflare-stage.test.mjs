@@ -1,12 +1,15 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
+  coversPreview,
   coversStage,
   globToRegex,
   hasSafeAllow,
   hostsOf,
   main,
   policyProblems,
+  strictGlobToRegex,
+  touchesPreview,
   touchesStage,
 } from "./cloudflare-stage.mjs"
 
@@ -59,11 +62,14 @@ const stageApp = {
 const cleanRoutes = (apps) => ({
   "GET /accounts/acc/access/apps": apps,
   "GET /zones": [{ id: "z1" }],
+  "GET /accounts/acc/workers/subdomain": { subdomain: "sub" },
 })
 
 test("coversStage: exact host, wildcard, path, destinations", () => {
   assert.equal(coversStage({ domain: "stage.notes.szolotov.com" }), true)
   assert.equal(coversStage({ self_hosted_domains: ["*.notes.szolotov.com"] }), true)
+  assert.equal(coversStage({ domain: "*.szolotov.com" }), false)
+  assert.equal(coversStage({ domain: "*.*.szolotov.com" }), true)
   assert.equal(coversStage({ domain: "stage.notes.szolotov.com/x" }), false)
   assert.equal(coversStage({ domain: "stage.notes.szolotov.com/*" }), true)
   assert.equal(
@@ -436,7 +442,6 @@ test("workers.dev wildcards inside a label are treated as covering the Preview",
   for (const domain of [
     "*-notes.sub.workers.dev",
     "stage-*.sub.workers.dev",
-    "*.workers.dev",
     "*.sub.workers.dev",
   ]) {
     const unsafe = { id: "w", domain, policies: [okPolicy, bypass] }
@@ -506,21 +511,72 @@ test("stage: any glob that can match the stage host is checked", async () => {
 test("Preview: a *-notes.ac*.workers.dev glob is checked and can cover", async () => {
   const bypass = { decision: "bypass", name: "open", include: [{ everyone: {} }] }
   const domain = "*-notes.ac*.workers.dev"
-  const bad = await run(
-    ["preflight"],
-    cleanRoutes([stageApp, { id: "w", domain, policies: [okPolicy, bypass] }]),
-  )
+  const acme = { "GET /accounts/acc/workers/subdomain": { subdomain: "acme" } }
+  const bad = await run(["preflight"], {
+    ...cleanRoutes([stageApp, { id: "w", domain, policies: [okPolicy, bypass] }]),
+    ...acme,
+  })
   assert.equal(bad.code, 1, bad.text)
-  const ok = await run(
-    ["preflight"],
-    cleanRoutes([stageApp, { id: "w", domain, policies: [okPolicy] }]),
-  )
+  const ok = await run(["preflight"], {
+    ...cleanRoutes([stageApp, { id: "w", domain, policies: [okPolicy] }]),
+    ...acme,
+  })
   assert.equal(ok.code, 0, ok.text)
   assert.doesNotMatch(ok.text, /NOTE: no Access application names the workers.dev/)
 })
 
-test("an exact safe stage app plus a safe Preview wildcard app passes", async () => {
+test("strictGlobToRegex: * stays inside one label", () => {
+  assert.equal(strictGlobToRegex("*.szolotov.com").test("stage.notes.szolotov.com"), false)
+  assert.equal(strictGlobToRegex("*.*.szolotov.com").test("stage.notes.szolotov.com"), true)
+  assert.equal(strictGlobToRegex("S*.notes.szolotov.com").test("stage.notes.szolotov.com"), true)
+})
+
+test("a safe *.szolotov.com app touches but does not cover stage", async () => {
+  const wild = { id: "w", name: "w", domain: "*.szolotov.com", policies: [okPolicy] }
+  assert.equal(touchesStage(wild), true)
+  assert.equal(coversStage(wild), false)
+  const alone = await run(["preflight"], cleanRoutes([wild]))
+  assert.equal(alone.code, 1, alone.text)
+  const withStage = await run(["preflight"], cleanRoutes([stageApp, wild]))
+  assert.equal(withStage.code, 0, withStage.text)
+  const multi = { id: "m", domain: "*.*.szolotov.com", policies: [okPolicy] }
+  assert.equal((await run(["preflight"], cleanRoutes([multi]))).code, 0)
+})
+
+test("a safe *.workers.dev app touches but does not cover the Preview", async () => {
   const wild = { id: "w", name: "w", domain: "*.workers.dev", policies: [okPolicy] }
-  const r = await run(["preflight"], cleanRoutes([stageApp, wild]))
-  assert.equal(r.code, 0, r.text)
+  const acme = { "GET /accounts/acc/workers/subdomain": { subdomain: "acme" } }
+  assert.equal(touchesPreview(wild, "stage-notes.acme.workers.dev"), true)
+  assert.equal(coversPreview(wild, "stage-notes.acme.workers.dev"), false)
+  const r = await run(["preflight"], { ...cleanRoutes([stageApp, wild]), ...acme })
+  assert.equal(r.code, 1, r.text)
+  const bypass = { ...wild, policies: [okPolicy, { ...okPolicy, id: "b", decision: "bypass" }] }
+  assert.equal((await run(["preflight"], cleanRoutes([stageApp, bypass]))).code, 1)
+})
+
+test("Preview coverage uses the real account subdomain", async () => {
+  const acme = { "GET /accounts/acc/workers/subdomain": { subdomain: "acme" } }
+  const safe = (domain) => ({ id: "w", domain, policies: [okPolicy] })
+  const ok = await run(["preflight"], {
+    ...cleanRoutes([stageApp, safe("*-notes.acme.workers.dev")]),
+    ...acme,
+  })
+  assert.equal(ok.code, 0, ok.text)
+  const wrong = await run(["preflight"], {
+    ...cleanRoutes([stageApp, safe("stage-notes.x*.workers.dev")]),
+    ...acme,
+  })
+  assert.equal(wrong.code, 1, wrong.text)
+})
+
+test("a failed subdomain lookup counts no app as covering the Preview", async () => {
+  const failing = { "GET /accounts/acc/workers/subdomain": { status: 403 } }
+  const wd = { id: "wd", domain: "stage-notes.sub.workers.dev", policies: [okPolicy] }
+  const r = await run(["preflight"], { ...cleanRoutes([stageApp, wd]), ...failing })
+  assert.equal(r.code, 1, r.text)
+  assert.match(r.text, /NOTE: cannot read the workers.dev subdomain/)
+  assert.match(r.text, /Workers Scripts: Read/)
+  const none = await run(["preflight"], { ...cleanRoutes([stageApp]), ...failing })
+  assert.equal(none.code, 0, none.text)
+  assert.match(none.text, /NOTE: no Access application names the workers.dev Preview host/)
 })
