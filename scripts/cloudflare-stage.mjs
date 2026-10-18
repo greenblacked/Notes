@@ -55,11 +55,13 @@ function entriesOf(app) {
 }
 
 const isStageEntry = (e) => [STAGE_HOST, WILDCARD].includes(normHost(e))
+const isBroaderEntry = (e) => [`*.${ZONE}`, ZONE].includes(normHost(e))
 
-// True when some entry is the stage host or the notes wildcard, whatever its path. Such an
-// application can decide who reaches stage (Access applies the most specific one).
+// True when some entry is the stage host, the notes wildcard, the zone wildcard or the zone apex,
+// whatever its path (conservative). Such an application can decide who reaches stage (Access
+// applies the most specific one).
 export function touchesStage(app) {
-  return entriesOf(app).some(isStageEntry)
+  return entriesOf(app).some((e) => isStageEntry(e) || isBroaderEntry(e))
 }
 
 // True when a host equals stage or the notes wildcard and the path is empty, "/" or "/*".
@@ -73,33 +75,57 @@ export function coversStage(app) {
 const IDENTITY_RULES = new Set([
   "email",
   "email_list",
-  "group",
+  "group", // resolved against the account's Access groups in ruleProblems
   "github-organization",
   "gsuite",
   "azureAD",
   "okta",
 ])
 
-// Problems that make a set of policies unsafe: none at all, bypass or non_identity decisions, or
-// an include rule that does not name identities.
-export function policyProblems(policies) {
+// Problems in a list of include rules (a policy's or a group's). `groups` maps a group id to the
+// group object; null means groups were not loaded.
+function ruleProblems(label, include, groups, inGroup) {
+  const problems = []
+  if (!Array.isArray(include) || include.length === 0) {
+    problems.push(`${label} has no include rules`)
+    return problems
+  }
+  for (const r of include) {
+    if (!r || typeof r !== "object") continue
+    for (const type of Object.keys(r)) {
+      if (type === "everyone") problems.push(`${label} includes everyone`)
+      else if (type === "group" && !inGroup) {
+        const id = r.group?.id
+        const g = groups?.[id]
+        if (!g) problems.push(`${label} references the unknown group ${id ?? "?"}`)
+        else
+          problems.push(
+            ...ruleProblems(`group ${g.name ?? id} (in ${label})`, g.include, groups, true),
+          )
+      } else if (!IDENTITY_RULES.has(type) || type === "group") {
+        problems.push(`${label} includes the non-identity rule type ${type}`)
+      }
+    }
+  }
+  return problems
+}
+
+const usesGroup = (policies) =>
+  policies.some((p) => (p.include ?? []).some((r) => r && typeof r === "object" && "group" in r))
+
+// Problems that make a set of policies unsafe: none at all, bypass or non_identity decisions, no
+// include rules, or an include rule that does not name identities. A group rule is resolved
+// through `groups` (id -> group) and its own include rules get the same check.
+export function policyProblems(policies, groups = null) {
   const list = policies ?? []
   if (list.length === 0) return ["no policies"]
   const problems = []
   for (const p of list) {
-    const label = p.name ?? p.id ?? "?"
+    const label = `policy ${p.name ?? p.id ?? "?"}`
     if (p.decision === "bypass" || p.decision === "non_identity") {
-      problems.push(`policy ${label} has decision ${p.decision}`)
+      problems.push(`${label} has decision ${p.decision}`)
     }
-    for (const r of p.include ?? []) {
-      if (!r || typeof r !== "object") continue
-      for (const type of Object.keys(r)) {
-        if (type === "everyone") problems.push(`policy ${label} includes everyone`)
-        else if (!IDENTITY_RULES.has(type)) {
-          problems.push(`policy ${label} includes the non-identity rule type ${type}`)
-        }
-      }
-    }
+    problems.push(...ruleProblems(label, p.include, groups, false))
   }
   return problems
 }
@@ -184,6 +210,7 @@ async function accessCheck(client, out) {
   const apps = await client.list(`/accounts/${client.account}/access/apps`)
   let covered = false
   let unsafe = false
+  let groups = null
   for (const app of apps) {
     const root = coversStage(app) || workerLevelCover(app)
     const relevant = root || touchesStage(app)
@@ -194,7 +221,11 @@ async function accessCheck(client, out) {
     const policies = await policiesOf(client, app)
     for (const p of policies)
       out(`    policy ${p.id ?? "?"} ${JSON.stringify(p.name ?? "")} decision=${p.decision}`)
-    const problems = policyProblems(policies)
+    if (groups === null && usesGroup(policies)) {
+      const all = await client.list(`/accounts/${client.account}/access/groups`)
+      groups = Object.fromEntries(all.map((g) => [g.id, g]))
+    }
+    const problems = policyProblems(policies, groups)
     for (const pr of problems) out(`    problem: ${pr}`)
     if (problems.length > 0) unsafe = true
     else if (root) covered = true
@@ -220,7 +251,7 @@ async function preflight(client, out) {
   reportWorkersDev(apps, out)
   if (!ok) {
     throw new ApiError(
-      `no Cloudflare Access application protects ${STAGE_HOST} with a safe policy (see the list above)`,
+      `no Cloudflare Access application protects ${STAGE_HOST} with a safe policy (see the list above); running Deploy stage with retire_dev checked copies the dev Access application to stage`,
     )
   }
   out(`OK: an Access application protects ${STAGE_HOST}`)
