@@ -1,4 +1,6 @@
-// Behaviour of the top bar that CSS cannot do: the Browse drawer (Quartz's Explorer, shown at
+// Behaviour of the top bar that CSS cannot do: the section row keeps the current section in view
+// (the inline script of the row does it before the first paint; this does it again after a page
+// change and once the fonts have loaded), the Browse drawer (Quartz's Explorer, shown at
 // every width) gets a name, focus management and Escape, the table of contents marks the heading
 // being read, the centre column gets its landmark and the skip link its focus. Runs once per page
 // load; the parts that touch the page re-run on every SPA navigation ("nav") and clean up after
@@ -90,11 +92,34 @@ function setupDrawer() {
   })
 }
 
+// When the search closes (Escape, a click on the dimmed page), the keyboard goes back to the button
+// that opened it; the search plugin leaves it on the page body.
+function setupSearchFocus() {
+  const container = document.querySelector<HTMLElement>(".search-container")
+  const button = document.querySelector<HTMLElement>(".search-button")
+  if (!container || !button) return
+  let was = container.classList.contains("active")
+  const observer = new MutationObserver(() => {
+    const now = container.classList.contains("active")
+    if (was && !now) {
+      const active = document.activeElement
+      if (!active || active === document.body || container.contains(active)) {
+        button.focus({ preventScroll: true })
+      }
+    }
+    was = now
+  })
+  observer.observe(container, { attributes: true, attributeFilter: ["class"] })
+  window.addCleanup(() => observer.disconnect())
+}
+
 // Escape closes the drawer; Tab stays inside it while it is open. The search has the keyboard
 // while it is open, and Ctrl/Cmd+K closes the drawer before the search opens.
 document.addEventListener("keydown", (e) => {
   const parts = drawerParts()
   if (!parts || !isOpen(parts)) return
+  // Autofill and some tools dispatch a keydown without a key.
+  if (typeof e.key !== "string") return
   if (e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey)) {
     parts.toggle.click()
     return
@@ -133,7 +158,11 @@ function setupTocSpy() {
   let frame = 0
   const update = () => {
     frame = 0
-    const bar = document.querySelector<HTMLElement>(".left.sidebar")?.offsetHeight ?? 0
+    // Where the bar ends on screen (0 when it has scrolled away, on short landscape screens).
+    const bar = Math.max(
+      0,
+      document.querySelector(".left.sidebar")?.getBoundingClientRect().bottom ?? 0,
+    )
     const line = bar + 40
     const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2
     let current = atEnd ? entries[entries.length - 1] : undefined
@@ -174,13 +203,15 @@ function setupTocSpy() {
   })
 }
 
-// The centre column is the page's main landmark, and "Skip to content" lands on the title: the
+// The centre column is the page's main landmark, the top bar its banner, and "Skip to content" lands on the title: the
 // target (#content) is rendered by the content-start component; the 404 page has none, so its
 // article stands in. Following the link also moves the keyboard (the SPA router only scrolls to an
 // in-page anchor).
 function setupLandmarks() {
   const center = document.querySelector<HTMLElement>(".center")
   center?.setAttribute("role", "main")
+  // The top bar (brand, Browse, search, theme) is the page's banner, so row 1 sits in a landmark.
+  document.querySelector<HTMLElement>(".sidebar.left")?.setAttribute("role", "banner")
   const link = document.querySelector<HTMLAnchorElement>(".skip-link")
   let target = document.getElementById("content")
   if (!target) {
@@ -258,11 +289,30 @@ function playEnter() {
   enterTimer = window.setTimeout(() => center.removeAttribute("data-enter"), 800)
 }
 
+// The section row scrolls sideways when the links do not fit; keep the current section's link in
+// view, centred, after a page change and when the fonts have changed the widths. Nothing happens
+// when the row does not overflow or the link is already fully visible.
+function revealCurrentSection(smooth: boolean) {
+  const row = document.querySelector<HTMLElement>(".section-row")
+  const link = row?.querySelector<HTMLElement>("a[aria-current]")
+  if (!row || !link || row.scrollWidth <= row.clientWidth) return
+  const r = row.getBoundingClientRect()
+  const l = link.getBoundingClientRect()
+  if (l.left >= r.left + 4 && l.right <= r.right - 4) return
+  row.scrollTo({
+    left: link.offsetLeft + link.offsetWidth / 2 - row.clientWidth / 2,
+    behavior: smooth && !reducedMotion() ? "smooth" : "instant",
+  })
+}
+void document.fonts?.ready.then(() => revealCurrentSection(false))
+
 const onNav = () => {
   setupDrawer()
+  setupSearchFocus()
   setupTocSpy()
   setupLandmarks()
   void settleHash()
+  revealCurrentSection(navigating)
   if (navigating) {
     navigating = false
     playEnter()

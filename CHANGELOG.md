@@ -39,6 +39,11 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Section links in their own scrolling second row under the main bar, so they never overlap Browse or the search at any width, zoom or text setting. The current section is scrolled into view before the first paint, focus rings are not clipped, anchors and the table of contents sit below the taller header, and the Browse button keeps its space while loading.
+- The search button opens on the first click (a script in the head); text typed meanwhile is searched once the index is ready.
+- Search results show at most three lines (the old clamp targeted `p.preview`, which no result has).
+- The "Notes" hit area is at least 44 x 32 px.
+- At large text sizes the empty right column no longer widens the page between 1200 and 1280 px.
 - `@quartz-community/utils` 1.0.1 now comes from the npm registry: the upstream git head no longer builds `dist/` on install, which broke type checks and the build. The `DataMap.frontmatter` declaration in `quartz/plugins/index.ts` is dropped because `@quartz-community/types` 1.0 declares it. `@quartz-community/types` is now a direct registry dependency (^1.0.0) so that declaration no longer depends on a nested copy. `quartz/util` imports the `@quartz-community/utils/path`, `/lang` and `/escape` subpaths, so the client bundle (`postscript.js`) does not pull in the utils barrel and its preact copy.
 
 ### Security
