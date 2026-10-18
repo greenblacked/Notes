@@ -313,14 +313,17 @@ jobs:
             echo "::notice::stage.notes.szolotov.com answered HTTP $code."
           fi
 
-      - name: Take stage down when it is exposed
-        if: always() && steps.preview.outcome == 'success' && (steps.access_wd.outputs.exposed == 'true' || steps.access_cd.outcome == 'failure')
+      # Fail closed: once the Preview is uploaded, any failed verification step (including a
+      # custom domain URL check that fails before Access is applied, which skips the Access probes)
+      # or a detected exposure takes the Preview down.
+      - name: Take stage down unless it is verified
+        if: always() && steps.preview.outcome == 'success' && (failure() || steps.access_wd.outputs.exposed == 'true')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           tools/node_modules/.bin/wrangler preview delete --name stage --skip-confirmation
-          echo "::error::stage was not behind Cloudflare Access; the Preview was deleted. Fix Access, then run Deploy stage again."
+          echo "::error::stage was not verified behind Cloudflare Access; the Preview was deleted. Fix Access, then run Deploy stage again."
           exit 1
 
       # One time (retire_dev): delete the old dev Preview. Re-running is harmless: when
