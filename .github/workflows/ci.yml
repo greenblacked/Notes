@@ -124,8 +124,12 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      pull-requests: read # read the PR's current title and body
     env:
       EVENT_NAME: ${{ github.event_name }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       PR_BASE: ${{ github.event.pull_request.base.sha }}
       PR_HEAD: ${{ github.event.pull_request.head.sha }}
       PUSH_BEFORE: ${{ github.event.before }}
@@ -145,12 +149,15 @@ jobs:
           package-manager-cache: false
 
       # Commit messages, author and committer emails, and for a pull request its title and body
-      # (read from the event payload file) must carry no tooling attribution. A zero `before`
+      # (fetched when the step runs, not taken from the event payload, which keeps the body as it
+      # was when the run started: a footer appended at creation and cleaned afterwards is gone
+      # on a re-run) must carry no tooling attribution. A zero `before`
       # (first push) checks only the head commit.
       - name: Require no tooling attribution
         run: |
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            node scripts/check-attribution.mjs --range "$PR_BASE..$PR_HEAD" --event "$GITHUB_EVENT_PATH"
+            gh api "repos/$GH_REPO/pulls/$PR_NUMBER" | jq '{pull_request: .}' >"$RUNNER_TEMP/pr.json"
+            node scripts/check-attribution.mjs --range "$PR_BASE..$PR_HEAD" --event "$RUNNER_TEMP/pr.json"
           else
             node scripts/check-attribution.mjs --range "$PUSH_BEFORE..$PUSH_AFTER"
           fi

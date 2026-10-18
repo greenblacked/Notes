@@ -68,10 +68,32 @@ test("PR title and body are checked from the event payload", () => {
   assert.equal(eventProblems({}).length, 0)
 })
 
+test("a dependabot PR body that quotes a footer is not flagged", () => {
+  const pr = {
+    user: { login: "dependabot[bot]" },
+    title: "bump x",
+    body: `Generated with [${V} Code]`,
+  }
+  assert.equal(eventProblems({ pull_request: pr }).length, 0)
+  assert.equal(eventProblems({ pull_request: { ...pr, user: { login: "ann" } } }).length, 1)
+})
+
 test("a zero or empty base checks only the head", () => {
-  assert.deepEqual(rangeArgs("0000000000000000000000000000000000000000..abc"), ["-1", "abc"])
-  assert.deepEqual(rangeArgs("a..b"), ["a..b"])
+  assert.deepEqual(rangeArgs("0000000000000000000000000000000000000000..abc"), [
+    "-1",
+    "--end-of-options",
+    "abc",
+  ])
+  assert.deepEqual(rangeArgs("a..b"), ["--end-of-options", "a..b"])
   assert.throws(() => rangeArgs("a..b;rm"))
+  assert.throws(() => rangeArgs("a..-p"))
+  assert.throws(() => rangeArgs("-p..b"))
+})
+
+test("a bad range exits 2 without running git", () => {
+  const lines = []
+  assert.equal(main(["--range", "a..-p"], { out: (l) => lines.push(l) }), 2)
+  assert.match(lines.join("\n"), /bad range/)
 })
 
 function repo() {
