@@ -5,10 +5,10 @@
 #
 #   base_url          e.g. https://notes.szolotov.com (no trailing slash needed)
 #   expected_version  exact content of /version.txt (without the newline),
-#                     e.g. "1.2.3+<40-char sha>" or "main+<40-char sha>"
+#                     e.g. "1.2.3+<sha>", "main+<sha>" or "stage+<sha>"
 #   indexable|noindex what this host is expected to send: "indexable" (no noindex,
 #                     robots.txt allows crawling; only notes.szolotov.com in production) or
-#                     "noindex" (X-Robots-Tag noindex, robots.txt "Disallow: /"; the dev
+#                     "noindex" (X-Robots-Tag noindex, robots.txt "Disallow: /"; the stage
 #                     Preview and every workers.dev URL)
 #
 # The version check is retried with a growing delay (custom domains and edge
@@ -38,8 +38,13 @@ MAX_DELAY="${SMOKE_MAX_DELAY:-20}"
 CHECK_ROUNDS="${SMOKE_CHECK_ROUNDS:-6}"
 CHECK_DELAY="${SMOKE_CHECK_DELAY:-10}"
 # SMOKE_ALLOW_ACCESS=1: a host behind Cloudflare Access (redirect to its login) passes with a
-# notice instead of failing. Only for the dev Preview, which the account protects with Access.
+# notice instead of failing. For the stage Preview, which must sit behind Access.
 ALLOW_ACCESS="${SMOKE_ALLOW_ACCESS:-}"
+# SMOKE_REQUIRE_ACCESS=1: the host must redirect to a Cloudflare Access login; any other answer
+# fails (stage: proves it is not public). Implies the Access notice and exit 0 when it does.
+# A 2xx answer fails at once with exit 3 (exposed); 000, 4xx, 5xx and non-Access 3xx are retried
+# like a version mismatch and then fail with exit 1.
+REQUIRE_ACCESS="${SMOKE_REQUIRE_ACCESS:-}"
 # Identifiable User-Agent, so a Cloudflare WAF rule can recognise these requests
 # (see docs/deployment.md, Troubleshooting).
 USER_AGENT="${SMOKE_USER_AGENT:-notes-smoke-test/1 (+https://github.com/greenblacked/Notes)}"
@@ -144,8 +149,31 @@ while true; do
   cb="$RANDOM$RANDOM"
   code="$(fetch "/version.txt?cb=$cb" version)"
   body="$(tr -d '\r\n' <"$WORK/version.b")"
+  if [[ "$REQUIRE_ACCESS" == "1" ]] && ! behind_access version "$code"; then
+    if [[ "$code" =~ ^2[0-9][0-9]$ ]]; then
+      # Real exposure: content is served without Access. Exit 3 tells the caller to take the host down.
+      fail_on version "$BASE_URL is not behind Cloudflare Access (HTTP $code)"
+      echo
+      echo "Smoke test FAILED ($FAILURES check(s) failed)"
+      exit 3
+    fi
+    # 000 (DNS, TLS, timeout), 4xx, 5xx or a non-Access 3xx can be a fresh host still propagating:
+    # retry with the usual backoff, then fail with exit 1 (not exposure).
+    echo "  attempt $attempt: HTTP $code, not yet a Cloudflare Access redirect"
+    if ((attempt >= MAX_ATTEMPTS)); then
+      fail_on version "$BASE_URL is not behind Cloudflare Access (HTTP $code) after $MAX_ATTEMPTS attempts"
+      echo
+      echo "Smoke test FAILED ($FAILURES check(s) failed)"
+      exit 1
+    fi
+    delay=$((attempt * 5))
+    if ((delay > MAX_DELAY)); then delay="$MAX_DELAY"; fi
+    sleep "$delay"
+    attempt=$((attempt + 1))
+    continue
+  fi
   if behind_access version "$code"; then
-    if [[ "$ALLOW_ACCESS" == "1" ]]; then
+    if [[ "$ALLOW_ACCESS" == "1" || "$REQUIRE_ACCESS" == "1" ]]; then
       echo "::notice::$BASE_URL is behind Cloudflare Access (redirected to its login page), so its content cannot be checked from CI. Skipping the content checks."
       exit 0
     fi
