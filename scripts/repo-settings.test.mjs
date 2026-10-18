@@ -283,19 +283,19 @@ test("stale CI OK entries are dropped while the pinned one and other checks keep
   assert.deepEqual(checks.required_status_checks, [CI, other])
 })
 
-test("environment dev: the dev policy is added before the main policy is deleted", () => {
+test("environment stage: the dev policy is added before the main policy is deleted", () => {
   const { code, out, calls } = run({
     fake: {
-      ENVS: { dev: goodEnv("dev") },
-      POLICIES: { dev: [{ id: 77, name: "main", type: "branch" }] },
+      ENVS: { stage: goodEnv("stage") },
+      POLICIES: { stage: [{ id: 77, name: "main", type: "branch" }] },
     },
   })
   assert.equal(code, 0, out)
   const post = calls.findIndex((c) =>
-    c.startsWith("api -X POST repos/owner/repo/environments/dev/deployment-branch-policies"),
+    c.startsWith("api -X POST repos/owner/repo/environments/stage/deployment-branch-policies"),
   )
   const del = calls.findIndex((c) =>
-    c.startsWith("api -X DELETE repos/owner/repo/environments/dev/deployment-branch-policies/77"),
+    c.startsWith("api -X DELETE repos/owner/repo/environments/stage/deployment-branch-policies/77"),
   )
   assert.ok(post >= 0 && del >= 0, "both calls happen")
   assert.ok(post < del, "POST before DELETE")
@@ -304,7 +304,7 @@ test("environment dev: the dev policy is added before the main policy is deleted
 
 test("an environment PUT keeps the existing reviewers and wait timer", () => {
   const env = {
-    name: "dev",
+    name: "stage",
     protection_rules: [
       { type: "wait_timer", wait_timer: 5 },
       {
@@ -315,9 +315,9 @@ test("an environment PUT keeps the existing reviewers and wait timer", () => {
     ],
     deployment_branch_policy: { protected_branches: true, custom_branch_policies: false },
   }
-  const { code, calls } = run({ fake: { ENVS: { dev: env } } })
+  const { code, calls } = run({ fake: { ENVS: { stage: env } } })
   assert.equal(code, 0)
-  const body = bodyAfter(calls, "api -X PUT repos/owner/repo/environments/dev")
+  const body = bodyAfter(calls, "api -X PUT repos/owner/repo/environments/stage")
   assert.deepEqual(body, {
     deployment_branch_policy: { protected_branches: false, custom_branch_policies: true },
     wait_timer: 5,
@@ -331,7 +331,11 @@ test("production is never the target of a mutating call", () => {
     const { code, calls } = run({
       dry,
       fake: {
-        ENVS: { production: goodEnv("production"), staging: goodEnv("staging") },
+        ENVS: {
+          production: goodEnv("production"),
+          staging: goodEnv("staging"),
+          dev: goodEnv("dev"),
+        },
         POLICIES: { production: [{ id: 1, name: "main", type: "branch" }] },
       },
     })
@@ -348,8 +352,19 @@ test("the leftover staging environment is deleted", () => {
   assert.ok(calls.some((c) => c.startsWith("api -X DELETE repos/owner/repo/environments/staging")))
 })
 
+test("the retired dev environment is deleted", () => {
+  const { calls } = run({ fake: { ENVS: { dev: goodEnv("dev") } } })
+  assert.ok(calls.some((c) => c.startsWith("api -X DELETE repos/owner/repo/environments/dev")))
+})
+
+test("stage is never deleted", () => {
+  const { code, calls } = run({ dry: "false", fake: { ENVS: { stage: goodEnv("stage") } } })
+  assert.equal(code, 0)
+  assert.ok(!calls.some((c) => /-X DELETE repos\/owner\/repo\/environments\/stage(\s|$)/.test(c)))
+})
+
 test("an API error other than 404 exits non-zero", () => {
-  const { code, out } = run({ fake: { FAIL_PATH: "environments/dev" } })
+  const { code, out } = run({ fake: { FAIL_PATH: "environments/stage" } })
   assert.notEqual(code, 0)
-  assert.match(out, /GET environments\/dev failed/)
+  assert.match(out, /GET environments\/stage failed/)
 })
