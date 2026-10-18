@@ -80,7 +80,7 @@ export function contentIndexToData(index, folders) {
     /** @type {NoteData} */
     const node = {
       id,
-      title: String(entry.title ?? id),
+      title: typeof entry.title === "string" && entry.title ? entry.title : id,
       section: folders.includes(first) ? first : OTHER_SECTION,
       tags: [...new Set(Array.isArray(entry.tags) ? entry.tags.map(String) : [])].sort(),
     }
