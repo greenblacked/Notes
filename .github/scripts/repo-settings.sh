@@ -263,7 +263,9 @@ report_production() {
 }
 
 # (e) Retired environments (dev, replaced by stage on 2026-10-18; staging, removed 2026-10-15)
-# are deleted. The live environments are never deleted here.
+# are deleted only on explicit opt-in (DELETE_OLD_ENVIRONMENTS=true), because deletion is
+# irreversible and they may hold the only copy of CLOUDFLARE_API_TOKEN. The live environments
+# are never deleted here.
 remove_env() {
   local name="$1"
   if [[ "$name" == "stage" || "$name" == "production" || "$name" == "repo-admin" ]]; then
@@ -310,8 +312,12 @@ apply_all() {
   ensure_env stage dev
   ensure_env repo-admin main
   report_production
-  remove_env dev
-  remove_env staging
+  if [[ "${DELETE_OLD_ENVIRONMENTS:-false}" == "true" ]]; then
+    remove_env dev
+    remove_env staging
+  else
+    say "OK: old environments dev and staging left as they are (delete_old_environments not set)"
+  fi
   ensure_fork_approval
 }
 

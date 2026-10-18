@@ -13,6 +13,11 @@ on:
         type: boolean
         required: true
         default: true
+      delete_old_environments:
+        description: "Also delete the retired GitHub environments dev and staging (irreversible; only after Deploy stage succeeded)"
+        type: boolean
+        required: true
+        default: false
 
 permissions: {}
 
@@ -63,6 +68,7 @@ jobs:
           GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
           GH_REPO: ${{ github.repository }}
           DRY_RUN: ${{ inputs.dry_run }}
+          DELETE_OLD_ENVIRONMENTS: ${{ inputs.delete_old_environments }}
         run: |
           if [[ -z "$GH_TOKEN" ]]; then
             echo "::error::Secret REPO_ADMIN_TOKEN is not set in the environment repo-admin (see docs/deployment.md#repository-settings)."
