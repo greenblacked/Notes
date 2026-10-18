@@ -186,9 +186,112 @@ test("ensure-access creates the app with the dev app's reusable policy ids", asy
   assert.deepEqual(post.body.policies, [{ id: "pol9", precedence: 1 }])
 })
 
-test("ensure-access fails when there is nothing to copy", async () => {
+test("ensure-access fails when nothing exists and no owner email is set", async () => {
   const r = await run(["ensure-access"], cleanRoutes([]))
   assert.equal(r.code, 1)
+  assert.match(r.text, /STAGE_ACCESS_EMAIL/)
+  assert.ok(!r.calls.some((c) => c.key.startsWith("POST")))
+})
+
+// A fake API that remembers the application created by POST and lists it afterwards.
+function statefulApi(apps, extra = {}) {
+  const calls = []
+  const list = [...apps]
+  const base = fakeFetch({ ...cleanRoutes([]), ...extra }, calls)
+  const fetchFn = async (url, init = {}) => {
+    const u = new URL(url)
+    const method = init.method ?? "GET"
+    if (u.pathname.endsWith("/access/apps")) {
+      if (method === "POST") {
+        const body = JSON.parse(init.body)
+        calls.push({ key: "POST apps", body })
+        list.push({ id: "new", ...body })
+        return new Response(JSON.stringify({ success: true, result: { id: "new" } }), {
+          status: 200,
+        })
+      }
+      return new Response(
+        JSON.stringify({ success: true, result: list, result_info: { total_pages: 1 } }),
+        { status: 200 },
+      )
+    }
+    return base(url, init)
+  }
+  return { fetchFn, calls, list }
+}
+
+const OWNER_ENV = { ...ENV, STAGE_ACCESS_EMAIL: "owner@example.com" }
+
+test("ensure-access creates an owner-only app when none exists, and it passes validation", async () => {
+  const api = statefulApi([], { "GET /accounts/acc/workers/subdomain": { subdomain: "Sub" } })
+  const lines = []
+  const code = await main(["ensure-access"], {
+    fetch: api.fetchFn,
+    env: OWNER_ENV,
+    out: (l) => lines.push(l),
+  })
+  assert.equal(code, 0, lines.join("\n"))
+  const posts = api.calls.filter((c) => c.key === "POST apps")
+  assert.equal(posts.length, 1)
+  const body = posts[0].body
+  assert.equal(body.type, "self_hosted")
+  assert.equal(body.domain, "stage.notes.szolotov.com")
+  assert.equal(body.session_duration, "24h")
+  assert.deepEqual(
+    body.destinations.map((d) => d.uri),
+    ["stage.notes.szolotov.com", "stage-notes.sub.workers.dev"],
+  )
+  assert.equal(body.policies.length, 1)
+  assert.equal(body.policies[0].decision, "allow")
+  assert.deepEqual(body.policies[0].include, [{ email: { email: "owner@example.com" } }])
+  assert.deepEqual(policyProblems(body.policies), [])
+  assert.ok(coversStage(api.list[0]))
+  assert.ok(!lines.join("\n").includes(TOKEN))
+})
+
+test("ensure-access creates no duplicate when run again", async () => {
+  const api = statefulApi([])
+  for (let i = 0; i < 2; i++) {
+    const code = await main(["ensure-access"], {
+      fetch: api.fetchFn,
+      env: OWNER_ENV,
+      out: () => {},
+    })
+    assert.equal(code, 0)
+  }
+  assert.equal(api.calls.filter((c) => c.key === "POST apps").length, 1)
+})
+
+test("ensure-access does not create a second app beside an unsafe one", async () => {
+  const bypass = {
+    id: "b1",
+    type: "self_hosted",
+    domain: "stage.notes.szolotov.com",
+    policies: [{ id: "x", decision: "bypass", include: [{ everyone: {} }] }],
+  }
+  const api = statefulApi([bypass])
+  const lines = []
+  const code = await main(["ensure-access"], {
+    fetch: api.fetchFn,
+    env: OWNER_ENV,
+    out: (l) => lines.push(l),
+  })
+  assert.equal(code, 1)
+  assert.ok(!api.calls.some((c) => c.key === "POST apps"))
+})
+
+test("ensure-access names the missing scope when the create is refused", async () => {
+  const lines = []
+  const code = await main(["ensure-access"], {
+    fetch: fakeFetch({
+      ...cleanRoutes([]),
+      "POST /accounts/acc/access/apps": { status: 403 },
+    }),
+    env: OWNER_ENV,
+    out: (l) => lines.push(l),
+  })
+  assert.equal(code, 1)
+  assert.match(lines.join("\n"), /Account > Access: Apps and Policies > Edit/)
 })
 
 test("retire-dev-access deletes only an exact dev-only app", async () => {

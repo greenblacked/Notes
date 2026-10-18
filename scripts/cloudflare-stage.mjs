@@ -2,7 +2,8 @@
 // Cloudflare checks for the stage Preview (Node built-ins and global fetch only).
 //   preflight          fail unless an Access application covers stage.notes.szolotov.com and no
 //                      Custom Domain or DNS record shadows the Preview hostname
-//   ensure-access      create the stage Access application from the dev one when none covers stage
+//   ensure-access      create the stage Access application when none covers stage: a copy of the
+//                      dev one when it exists, else a new one that allows STAGE_ACCESS_EMAIL
 //                      (Deploy stage runs it before every preflight)
 //   retire-dev-access  delete the Access application that covers only dev.notes.szolotov.com
 //                      (Deploy stage runs it after a verified deploy)
@@ -16,6 +17,8 @@ const DEV_HOST = "dev.notes.szolotov.com"
 const ZONE = "szolotov.com"
 const SCOPE_HINT =
   "the token lacks Account · Access: Apps and Policies (Read for preflight, Edit for ensure-access/retire)"
+
+const EDIT_SCOPE_HINT = "the token lacks Account > Access: Apps and Policies > Edit"
 
 const GROUPS_SCOPE_HINT =
   "the token lacks Account · Access: Organizations, Identity Providers, and Groups: Read (needed only when a stage Access policy uses group rules)"
@@ -243,7 +246,13 @@ function makeClient(fetchFn, env) {
     if (!res.ok || !json || json.success === false) {
       const hint =
         path.includes("/access/") && (res.status === 403 || code === 10000)
-          ? `: ${path.includes("/access/groups") ? GROUPS_SCOPE_HINT : SCOPE_HINT}`
+          ? `: ${
+              path.includes("/access/groups")
+                ? GROUPS_SCOPE_HINT
+                : method === "GET"
+                  ? SCOPE_HINT
+                  : EDIT_SCOPE_HINT
+            }`
           : ""
       throw new ApiError(`${method} ${path.split("?")[0]} failed with HTTP ${res.status}${hint}`)
     }
@@ -260,7 +269,7 @@ function makeClient(fetchFn, env) {
     }
     return out
   }
-  return { account, call, list }
+  return { account, call, list, env }
 }
 
 const describeApp = (app) =>
@@ -323,7 +332,7 @@ async function accessCheck(client, out) {
     state,
     out,
   )
-  return { ok: r.covered && !r.unsafe, apps, state }
+  return { ok: r.covered && !r.unsafe, unsafe: r.unsafe, apps, state }
 }
 
 // The workers.dev Preview URL must be behind Access (the post-upload check also needs the
@@ -412,6 +421,59 @@ const isDevOnly = (app) => {
   return hosts.length === 1 && hosts[0] === DEV_HOST
 }
 
+// Hosts of the new application: stage, plus the workers.dev Preview host when the subdomain
+// lookup works (the check after the upload needs Access there as well).
+async function newAppDestinations(client, out) {
+  const destinations = [{ type: "public", uri: STAGE_HOST }]
+  try {
+    const json = await client.call("GET", `/accounts/${client.account}/workers/subdomain`)
+    const sub = json.result?.subdomain
+    if (typeof sub === "string" && sub !== "") {
+      destinations.push({ type: "public", uri: `stage-notes.${sub.toLowerCase()}.workers.dev` })
+    }
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e
+    out(`NOTE: cannot read the workers.dev subdomain (${e.message}); the app covers stage only`)
+  }
+  return destinations
+}
+
+// No Access application covers stage and there is no dev one to copy: create a self-hosted
+// application with one allow policy for the owner (STAGE_ACCESS_EMAIL). Never when an unsafe
+// application already decides who reaches stage (a second app would not make that safe), and
+// the created application must pass the same validation as any other.
+async function createOwnerApp(client, before, out) {
+  if (before.unsafe) {
+    throw new ApiError(
+      `an unsafe Access application already decides who reaches ${STAGE_HOST} (see the list above); fix or delete it`,
+    )
+  }
+  const email = String(client.env.STAGE_ACCESS_EMAIL ?? "").trim()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new ApiError("no Access app covers stage or dev, and STAGE_ACCESS_EMAIL is not set")
+  }
+  const destinations = await newAppDestinations(client, out)
+  const body = {
+    type: "self_hosted",
+    name: "Notes stage",
+    domain: STAGE_HOST,
+    destinations,
+    session_duration: "24h",
+    policies: [
+      {
+        name: "Owner",
+        decision: "allow",
+        include: [{ email: { email } }],
+        precedence: 1,
+      },
+    ],
+  }
+  const created = await client.call("POST", `/accounts/${client.account}/access/apps`, body)
+  out(`Created Access application ${created.result?.id ?? "?"} for the owner on ${STAGE_HOST}`)
+  const after = await accessCheck(client, out)
+  if (!after.ok) throw new ApiError("the new Access application still does not protect stage")
+}
+
 async function ensureAccess(client, out) {
   const before = await accessCheck(client, out)
   if (before.ok) {
@@ -419,7 +481,7 @@ async function ensureAccess(client, out) {
     return
   }
   const dev = before.apps.find((a) => a.type === "self_hosted" && isDevOnly(a))
-  if (!dev) throw new ApiError("no Access app covers stage or dev; nothing to copy")
+  if (!dev) return createOwnerApp(client, before, out)
   const policies = await policiesOf(client, dev)
   const reusable = policies.length > 0 && policies.every((p) => p.reusable === true)
   const copy = (p, i) => {
