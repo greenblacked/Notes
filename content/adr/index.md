@@ -20,7 +20,7 @@ An Architecture Decision Record (ADR) captures one significant decision: the con
 
 ## Lifecycle
 
-An ADR has exactly one status at a time, written in lowercase in the `status` frontmatter field and shown as a chip above the title:
+An ADR has exactly one status at a time, written in lowercase in the `status` frontmatter field:
 
 | Status       | Meaning                                                                |
 | ------------ | ---------------------------------------------------------------------- |
@@ -35,6 +35,6 @@ An ADR has exactly one status at a time, written in lowercase in the `status` fr
 
 ## Records
 
-| ADR                               | Title               | Status   |
-| --------------------------------- | ------------------- | -------- |
-| [[0001-gitops-with-argocd\|0001]] | GitOps with Argo CD | Accepted |
+| ADR                               | Title               |
+| --------------------------------- | ------------------- |
+| [[0001-gitops-with-argocd\|0001]] | GitOps with Argo CD |
