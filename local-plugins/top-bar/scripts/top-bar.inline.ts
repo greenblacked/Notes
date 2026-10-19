@@ -360,8 +360,10 @@ requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add("moti
 // colours, so the flip does not start a transition on every element; it goes again once the new
 // theme has painted. A click on the toggle is caught first (capture phase, before Quartz's own
 // listener on the button), so the class is on before the flip. Where the View Transitions API
-// exists and motion is allowed, the click is replayed inside startViewTransition: the whole page
-// then cross-fades as one snapshot (--dur-theme). Otherwise the colours flip in one frame.
+// exists, motion is allowed and the device is fast (a fine pointer, a page of modest size), the
+// click is replayed inside startViewTransition: the whole page then cross-fades as one snapshot
+// (--dur-theme). Otherwise the colours flip in one frame: capturing the old snapshot costs
+// 100-200ms of main-thread time on a slow phone, which is slower than the flip itself.
 const SWITCHING = "theme-switching"
 type ViewTransitionLike = { ready: Promise<void>; finished: Promise<void> }
 type StartViewTransition = (update: () => void) => ViewTransitionLike
@@ -372,7 +374,8 @@ function beginSwitch() {
   root.classList.add(SWITCHING)
   return ++switchId
 }
-// Taking the class off restyles the tree once (no visible change); do it when the page is idle.
+// Taking the class off restyles the whole tree once (no visible change, but it costs about as
+// much as the flip itself on a big page); do it when the page is idle, never in the flip's frame.
 function endSwitch(id: number) {
   const done = () => {
     if (id === switchId) root.classList.remove(SWITCHING)
@@ -383,6 +386,12 @@ function endSwitch(id: number) {
   if (typeof idle === "function") idle.call(window, done, { timeout: 500 })
   else window.setTimeout(done, 60)
 }
+const MAX_FADE_ELEMENTS = 1500
+// The cross-fade only where it does not delay the flip: a mouse or trackpad (not a phone or
+// tablet) and a page with a modest number of elements.
+const canFade = () =>
+  window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
+  document.querySelectorAll("*").length <= MAX_FADE_ELEMENTS
 const afterPaint = (fn: () => void) => requestAnimationFrame(() => requestAnimationFrame(fn))
 
 document.addEventListener(
@@ -394,7 +403,7 @@ document.addEventListener(
     if (!btn) return
     const start = (document as Document & { startViewTransition?: StartViewTransition })
       .startViewTransition
-    if (reducedMotion() || typeof start !== "function") {
+    if (reducedMotion() || typeof start !== "function" || !canFade()) {
       const id = beginSwitch() // Quartz's listener on the button flips the theme right after this
       afterPaint(() => endSwitch(id))
       return
@@ -436,8 +445,9 @@ document.addEventListener("themechange", () => {
 // new page; at "nav" the sheet gets data-enter, which the CSS turns into a fade and a small rise
 // (opacity and transform only, no layout shift). The initial page load, which also fires "nav",
 // does not animate. A link to a #heading fades without the rise, so the scroll target stays exact.
-// (The View Transitions API is used only for the theme cross-fade; page changes do not use it: the
-// router swaps the DOM inside its own async function, so there is no callback to hand to startViewTransition without patching Quartz's router.)
+// (The View Transitions API is used only for the theme cross-fade; page changes do not use it:
+// the router swaps the DOM inside its own async function, so there is no callback to hand to
+// startViewTransition without patching Quartz's router.)
 let navigating = false
 let enterTimer = 0
 document.addEventListener("prenav", () => {
