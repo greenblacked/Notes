@@ -16,8 +16,9 @@ name: Deploy stage
 # code is never taken from it.
 #
 # Result: the `result` job's output `stage_result` (the `upload` job's, with a skipped upload
-# mapped to `skipped`; the upload job also writes a summary line `stage_result=<level>` and a
-# notice) is one of:
+# mapped to `skipped`; the `result` job writes the authoritative `Stage result` notice and
+# `stage_result=<level>` summary line for every outcome, and the upload job also writes them
+# with detail when it runs) is one of:
 #   verified         the workers.dev smoke test read this build, and the Cloudflare API confirms
 #                    this upload is the active stage deployment.
 #   uploaded-active  the API confirms it, but Cloudflare Access kept the smoke test from the
