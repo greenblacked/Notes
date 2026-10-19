@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - The GitHub environment of Deploy stage is now `stage` (was `staging`); the repository secrets are shared, and a `main`-only branch policy on `stage` is recommended.
 - The stage site is public and not indexed: no Cloudflare Access. The Worker sends `X-Robots-Tag: noindex, nofollow` and a disallow-all `robots.txt` on every host but production on `notes.szolotov.com`. Deploy stage smoke-tests the workers.dev Preview URL for the real site (HTTP 200, the expected version, noindex) and fails on any redirect except the Cloudflare Access login of that workers.dev URL (see Fixed).
 - Deploy stage deletes the old Preview `dev` when it still exists (idempotent).
+- Callouts are redrawn as typeset asides: a thin rule in the type's tone (double for danger, failure and bug), an italic serif kind label run into the text, and no tinted box, icon or capitals. Note, info and example differ by their label. Danger has its own tone (`--danger`, AA in light and dark, checked by `check:contrast`).
 
 ### Removed
 
@@ -23,6 +24,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Folded callouts can be opened with the keyboard (Tab, Enter or Space), announce whether they are expanded, keep hidden answers out of the tab order and away from screen readers, and fold the first paragraph too, including in old browsers that send only `keyCode`.
 - Deploy stage deploys stage on every merge to `main` again; it no longer stops at a Cloudflare Access step the token cannot run.
 - Deploy stage no longer fails and deletes the stage Preview when the Cloudflare account protects workers.dev Preview URLs with Cloudflare Access. With the opt-in `SMOKE_ACCEPT_ACCESS=1` (Deploy stage only), `scripts/smoke-test.sh` treats a redirect to the Access login for that host as a notice, because the content cannot be checked from CI. Any other redirect or failure still fails, Deploy production never accepts Access, and the run summary says when stage was not verified from CI.
 

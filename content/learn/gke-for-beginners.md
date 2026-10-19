@@ -200,6 +200,7 @@ All output below is illustrative: names, versions, addresses and ages will diffe
    If you see something else: `STATUS` of `PROVISIONING` means wait. An error that the secondary range is not found means the name does not match exercise 1 (`pods` and `services`). `Insufficient regional quota` means your project's quota is too small; try another region or ask for a quota increase. Check for flags that changed with `gcloud container clusters create-auto --help`.
 
    > [!tip] Limit who can reach the API server
+   >
    > By default a GKE control plane has a public endpoint that is protected by authentication, but reachable from the internet. For anything beyond a lab, restrict it with `--enable-master-authorized-networks --master-authorized-networks=YOUR_CIDR`, or use private nodes with a private endpoint. If you do this in the lab, use a correct range, or you lock yourself out of your own cluster. See [[architecture/private-gke-and-controlled-egress]].
 
 3. **Get credentials and look at the nodes.** `kubectl` needs a plugin to authenticate to GKE; `gcloud` tells you if it is missing.

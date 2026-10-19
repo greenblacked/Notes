@@ -5,7 +5,7 @@
 // Colours come from the two places that define them:
 //   quartz.config.yaml          the Quartz colour keys (light = the sheet of paper, lightgray,
 //                               gray, darkgray, dark, secondary, tertiary, highlight) per theme
-//   quartz/styles/custom.scss   the --desk, --surface, --accepted, --warning, --grain-color and
+//   quartz/styles/custom.scss   the --desk, --surface, --accepted, --warning, --danger, --grain-color and
 //                               --chip-* and --graph-* tokens, in the `:root` block (light) and the
 //                               `:root[saved-theme="dark"]` block (dark)
 // Text sits on the sheet (with the paper grain, checked at its maximum strength), on the desk (the
@@ -231,7 +231,18 @@ for (const theme of ["light", "dark"]) {
   check(theme, "Type chip (ink) on sheet with grain", parseColor(q.dark), grainy)
   check(theme, "Type chip (ink) on surface tint (phone cards)", parseColor(q.dark), surface)
 
+  // Callouts are typeset on the sheet: no box, so no tint behind them.
+  for (const [name, back] of sheetOnly) {
+    check(theme, `Callout title (ink) on ${name}`, parseColor(q.dark), back)
+    check(theme, `Callout label, neutral (muted) on ${name}`, parseColor(q.gray), back)
+    check(theme, `Callout label, positive (accepted) on ${name}`, c("accepted"), back)
+    check(theme, `Callout label, caution (warning) on ${name}`, c("warning"), back)
+    check(theme, `Callout label, severe (danger) on ${name}`, c("danger"), back)
+    check(theme, `Callout fold marker (muted) on ${name}`, parseColor(q.gray), back, UI)
+  }
+  // A callout can also sit inside a surface card.
   check(theme, "Callout title (ink) on surface tint", parseColor(q.dark), surface)
+  check(theme, "Callout label, severe (danger) on surface tint", c("danger"), surface)
   check(theme, "Code text on surface tint", parseColor(q.darkgray), surface)
   check(theme, "Inline code (ink) on surface tint", parseColor(q.dark), surface)
   check(theme, "Filename caption (muted) on surface tint", parseColor(q.gray), surface)

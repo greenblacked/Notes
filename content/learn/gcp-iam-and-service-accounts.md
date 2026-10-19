@@ -305,6 +305,7 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
 2. **Create a service account and a locked-down bucket with a file in it.**
 
    > [!warning] Costs money
+   >
    > The bucket is billed while it exists. Delete it with: `gcloud storage rm --recursive --all-versions "gs://${BUCKET}" && gcloud iam service-accounts delete "$SA_EMAIL" --project="$PROJECT_ID" --quiet`.
 
    ```bash
@@ -483,6 +484,7 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
    If you see something else: `Error: Invalid provider version` or an init error means the version constraint does not match a published release; look up the current major version on the Registry and change it. `could not find default credentials` means you did not run `gcloud auth application-default login`. A `403` on plan means the account lacks permission to read the project.
 
    > [!warning] Check before relying on this
+   >
    > The provider major version on this page (`~> 6.0`, the same as in the Terraform lessons) was not checked against the Terraform Registry. Pin the current major version shown there and read the provider's upgrade guide when you change majors. `terraform` was not run for this exercise.
 
 10. **Clean up.** Remove the grant, the bucket, the service account and the local files.
