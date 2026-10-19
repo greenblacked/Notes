@@ -5,7 +5,7 @@ tags:
   - standards
   - meta
 created: 2026-10-10
-modified: 2026-10-17
+modified: 2026-10-19
 draft: false
 ---
 
@@ -36,7 +36,7 @@ Standards say how the team works: how notes are written, how production changes 
 
 - Use Conventional Commits (for example `feat:`, `fix:`, `docs:`, `ci:`, `build:`, `chore:`, optionally scoped as `fix(ci):`) and keep the subject line to 72 characters or fewer.
 - Every change goes through a pull request into `main`, and the `CI OK` check must pass. Merge with a merge commit.
-- Merging to `main` deploys the stage site (behind Cloudflare Access) automatically. Production is never touched by a merge.
+- Merging to `main` deploys the stage site (public, noindex) automatically. Production is never touched by a merge.
 - Production releases are `vX.Y.Z` tags created by the Cut release workflow (it dispatches Deploy production on the tag), and need approval in the `production` environment.
 - Notable changes go into `CHANGELOG.md` under _Unreleased_.
 
