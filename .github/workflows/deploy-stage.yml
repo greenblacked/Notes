@@ -281,26 +281,42 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
 
       # Bot Fight Mode answers GitHub-hosted runners with 403 on the custom domains, so the full
-      # smoke test runs on the Preview's workers.dev URL: it must serve this build with HTTP 200,
-      # the security headers, X-Robots-Tag noindex and a disallow-all robots.txt. Any redirect
-      # (a Cloudflare Access login included) fails.
+      # smoke test runs on the Preview's workers.dev URL. The Cloudflare account protects
+      # workers.dev Preview URLs with Cloudflare Access (an account setting this repository does
+      # not manage): SMOKE_ACCEPT_ACCESS=1 accepts a redirect to the Access login for this exact
+      # host as a notice, with the content checks skipped. Any other redirect or failure fails; a
+      # reachable Preview must pass every check (HTTP 200, this build, headers, noindex).
       - name: Smoke-test the workers.dev Preview URL
         id: smoke
         if: steps.fresh.outputs.current == 'true'
         env:
           SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
           WORKERS_DEV_URL: ${{ steps.parse.outputs.workers_dev_url }}
+          SMOKE_ACCEPT_ACCESS: "1"
+          SMOKE_RESULT_FILE: ${{ runner.temp }}/stage-smoke-result
         run: |
           if [[ -z "$WORKERS_DEV_URL" ]]; then
             echo "::error::Wrangler reported no workers.dev URL for the Preview; enable preview_urls and workers_dev in wrangler.jsonc."
             exit 1
           fi
           scripts/smoke-test.sh "$WORKERS_DEV_URL" "stage+$SHA" noindex
+          result="$(cat "$SMOKE_RESULT_FILE")"
+          case "$result" in
+            verified | access) echo "result=$result" >>"$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::The smoke test reported no result ('$result')."
+              exit 1
+              ;;
+          esac
 
       # The custom domain usually answers runners with 403 (Bot Fight Mode); the workers.dev smoke
-      # test above is the real check. A 200 here must still carry noindex.
+      # test above is the real check. A 200 here must still carry noindex. When the workers.dev URL
+      # is behind Access, nothing checks the build from CI (this probe only reads the headers of /):
+      # the run still passes, whatever this probe gets, and says so in a notice and the run summary.
       - name: Probe the custom domain
         if: steps.fresh.outputs.current == 'true'
+        env:
+          SMOKE_RESULT: ${{ steps.smoke.outputs.result }}
         run: |
           probe="$RUNNER_TEMP/stage-probe.h"
           : >"$probe"
@@ -315,16 +331,28 @@ jobs:
               exit 1
             fi
           elif [[ "$code" == "403" ]]; then
-            echo "::notice::https://stage.notes.szolotov.com answered 403 to this runner (Bot Fight Mode); verification used workers.dev."
+            if [[ "$SMOKE_RESULT" == "verified" ]]; then
+              echo "::notice::https://stage.notes.szolotov.com answered 403 to this runner (Bot Fight Mode); verification used workers.dev."
+            else
+              echo "::notice::https://stage.notes.szolotov.com answered 403 to this runner (Bot Fight Mode)."
+            fi
           elif [[ "$code" =~ ^3[0-9][0-9]$ ]] && grep -qiE '^location:[[:space:]]*https://[^/[:space:]]+\.cloudflareaccess\.com/' "$probe"; then
             echo "::warning::https://stage.notes.szolotov.com redirects to a Cloudflare Access login; stage is meant to be public."
           else
             echo "::notice::https://stage.notes.szolotov.com answered HTTP $code."
           fi
+          if [[ "$SMOKE_RESULT" != "verified" ]]; then
+            echo "::notice::Stage content was not verified from CI: the workers.dev Preview URL is behind Cloudflare Access and the custom domain probe only checked the response headers (HTTP $code), not the build. The Preview was uploaded and kept; open https://stage.notes.szolotov.com/version.txt and expect stage+$SHA."
+            {
+              echo
+              echo "Not verified from CI: workers.dev is behind Cloudflare Access and the custom domain probe (HTTP $code) did not check the build. Check https://stage.notes.szolotov.com/version.txt in a browser."
+            } >>"$GITHUB_STEP_SUMMARY"
+          fi
 
       # Fail closed: once the upload was attempted, any failed or cancelled step after it takes the
-      # Preview down, so stage keeps only a verified build. A failed delete counts as "already gone"
-      # only when Wrangler itself reports that the Preview "stage" was not found.
+      # Preview down, so stage keeps only a build that passed every check it could run (see the
+      # Access note on the smoke step). A failed delete counts as "already gone" only when Wrangler
+      # itself reports that the Preview "stage" was not found.
       - name: Take stage down unless it is verified
         if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled())
         env:

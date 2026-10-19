@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
@@ -137,14 +137,32 @@ test("every step after the freshness re-check is gated on a fresh commit", () =>
   }
 })
 
-test("the workers.dev smoke test is strict", () => {
+test("the workers.dev smoke test accepts only the Access login, by explicit opt-in", () => {
   const step = upload.steps.find((s) => s.id === "smoke")
   assert.ok(step)
   assert.ok(step.run.includes('scripts/smoke-test.sh "$WORKERS_DEV_URL" "stage+$SHA" noindex'))
-  const extra = Object.keys(step.env).filter(
-    (k) => k.startsWith("SMOKE_") && k !== "SMOKE_TEST_TOKEN",
-  )
-  assert.deepEqual(extra, [])
+  const extra = Object.keys(step.env)
+    .filter((k) => k.startsWith("SMOKE_") && k !== "SMOKE_TEST_TOKEN")
+    .sort()
+  assert.deepEqual(extra, ["SMOKE_ACCEPT_ACCESS", "SMOKE_RESULT_FILE"])
+  assert.equal(String(step.env.SMOKE_ACCEPT_ACCESS), "1")
+  for (const x of ["verified | access", '"result=$result" >>"$GITHUB_OUTPUT"', "exit 1"]) {
+    assert.ok(step.run.includes(x), x)
+  }
+  assert.equal(step["continue-on-error"], undefined)
+})
+
+test("only Deploy stage opts into Access", () => {
+  const dir = dirname(file)
+  const names = readdirSync(dir).filter((n) => n.endsWith(".yml"))
+  assert.ok(names.includes("deploy-stage.yml"))
+  for (const n of names) {
+    const text = readFileSync(join(dir, n), "utf8")
+    if (n !== "deploy-stage.yml") assert.ok(!text.includes("SMOKE_ACCEPT_ACCESS"), n)
+  }
+  const prod = readFileSync(join(dir, "deploy-production.yml"), "utf8")
+  assert.ok(!prod.includes("SMOKE_ACCEPT_ACCESS"))
+  assert.ok(!prod.includes("SMOKE_RESULT_FILE"))
 })
 
 test("the dev Preview delete is idempotent and fails closed", () => {
@@ -156,9 +174,23 @@ test("the dev Preview delete is idempotent and fails closed", () => {
   assert.equal(step["continue-on-error"], undefined)
 })
 
-test("the custom domain probe fails only on an indexable 200", () => {
+test("the custom domain probe fails only on an indexable 200 and reports an unverified run", () => {
   const step = upload.steps.find((s) => s.name === "Probe the custom domain")
   assert.ok(step)
-  for (const x of ['"403"', "noindex", "exit 1"]) assert.ok(step.run.includes(x), x)
+  assert.equal(step.env.SMOKE_RESULT, "${{ steps.smoke.outputs.result }}")
+  for (const x of [
+    '"403"',
+    "noindex",
+    "exit 1",
+    "cloudflareaccess",
+    "::warning::",
+    "GITHUB_STEP_SUMMARY",
+    '"verified"',
+  ])
+    assert.ok(step.run.includes(x), x)
+  assert.equal((step.run.match(/exit 1/g) ?? []).length, 1)
+  // The not-verified notice depends only on the smoke result, not on the probe status.
+  assert.ok(step.run.includes('if [[ "$SMOKE_RESULT" != "verified" ]]; then'))
+  assert.ok(!step.run.includes('"$code" != "200" ]]'))
   assert.equal(step["continue-on-error"], undefined)
 })
