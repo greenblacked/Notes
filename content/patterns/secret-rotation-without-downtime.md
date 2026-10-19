@@ -47,7 +47,7 @@ The order is the whole pattern. Three rules follow from it:
 2. **Consumers move before the old one is revoked.** Disable, wait, then revoke, never the other way round.
 3. **Revoking is the last, separate step**, and it is reversible for as long as possible (disable a Secret Manager version before destroying it).
 
-If the target system can only hold one valid credential at a time (some third-party APIs), you cannot get zero downtime from rotation alone. Plan a maintenance window or put a retry layer in the client.
+If the target system can only hold one valid credential per account, changing that account's password invalidates the old one at once, so rotating it in place cannot be zero downtime. PostgreSQL is the common case: a role has exactly one password. Use two accounts and swap between them (see [[#Database users|Database users]]). For third-party APIs that allow only one key, plan a maintenance window or put a retry layer in the client.
 
 ## Secret Manager versions
 
@@ -60,8 +60,10 @@ export SECRET="payments-db-password"
 # 1. Generate the new value into a variable (never echo it).
 NEW_PW="$(openssl rand -base64 32 | tr -d '\n')"
 
-# 2. Set it in the target system first (database ALTER USER, or the API of the target),
-#    so the target accepts the credential before any consumer can see it.
+# 2. Make the target accept it first, WITHOUT invalidating the old credential:
+#    a second account (database two-user swap, see Database users), or a second
+#    key or secret on a target that supports two valid ones (check its docs).
+#    Do not change the password of the account that consumers use right now.
 
 # 3. Then add it as a new Secret Manager version. Read it from stdin, not from the command line.
 printf '%s' "${NEW_PW}" | \
@@ -77,7 +79,7 @@ gcloud secrets versions disable 3 --secret="${SECRET}" --project="${PROJECT_ID}"
 gcloud secrets versions enable 3 --secret="${SECRET}" --project="${PROJECT_ID}"
 ```
 
-Replace version `3` with the version number that holds the old value. Piping from stdin keeps the value out of shell history and the process list. The order matters: the target system accepts the new password (step 2) before the new version exists (step 3), so a consumer that reads `latest` never gets a credential that does not work yet. See [Database users](#database-users).
+Replace version `3` with the version number that holds the old value. Piping from stdin keeps the value out of shell history and the process list. The order matters: the target system accepts the new credential (step 2) before the new version exists (step 3), and the old credential stays valid until consumers have moved, so a consumer that reads `latest` never gets a credential that does not work yet. For a database, step 2 is the inactive user of the two-user swap. See [Database users](#database-users).
 
 ### The `latest` alias pitfall
 
@@ -160,7 +162,47 @@ Check `gcloud secrets update --help` for the current flags. Alternatively, Cloud
 
 Two options for databases:
 
-**Two-user swap.** Keep two database roles, `app_a` and `app_b`, with identical privileges. Only one is "active" for the application at a time. Rotation: reset the password of the **inactive** user, add that to Secret Manager as the new version, roll consumers to it, then mark it active. The old user's password is not touched until the next cycle, so it stays valid throughout the overlap and for rollback. Mind connection limits and poolers: [[postgres-connection-pooling-gke]] explains why pools hold old credentials until connections are recycled, so the pooler needs a reload or restart too.
+**Two-user swap (use this for PostgreSQL).** Do not run `ALTER ROLE ... PASSWORD` on the account the application is using right now. A PostgreSQL role has one password, so the old one stops working for new connections at once, while External Secrets has not refreshed and the workloads still hold the old value. Every reconnect in that window fails. Instead keep two login roles, `app_a` and `app_b`, that share privileges through a group role. One is active; rotation prepares the inactive one.
+
+```sql title="one-time setup (run as an admin role)"
+-- Privileges live on the group role, so both login roles always match.
+CREATE ROLE app_users NOLOGIN;
+GRANT CONNECT ON DATABASE payments TO app_users;
+GRANT USAGE ON SCHEMA public TO app_users;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_users;
+-- Tables created later by the migration role (here: migrator) get the same grants.
+ALTER DEFAULT PRIVILEGES FOR ROLE migrator IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_users;
+
+CREATE ROLE app_a LOGIN;
+CREATE ROLE app_b LOGIN;
+GRANT app_users TO app_a, app_b;
+```
+
+Run schema changes as a separate owner role (`migrator` above), not as `app_a` or `app_b`, so objects are not owned by whichever login created them. Grant the roles `INHERIT` (the default) so they receive the group's privileges.
+
+The rotation sequence, with `app_a` active and `app_b` inactive:
+
+1. Set a new password on the **inactive** role, `app_b`. Nothing uses it, so nothing breaks.
+2. Add a new Secret Manager version holding **both the username `app_b` and the new password**. The username changes every cycle, so the Secret carries both (two keys, or one JSON value) and the application reads both.
+3. Wait for External Secrets to refresh (at least `refreshInterval`), then roll the workloads and recycle the pooler. `app_a` still works, so Pods that have not moved yet keep running.
+4. Verify that no connection uses `app_a` (see [Verify](#verify)) and that the old Secret Manager version is unread.
+5. Disable the old Secret Manager version, wait, and only then lock the old role: `ALTER ROLE app_a NOLOGIN;`. At the next cycle `app_a` becomes the inactive one and gets the new password.
+
+```bash title="step 1: new password on the inactive role (psql)"
+NEW_PW="$(openssl rand -base64 32 | tr -d '\n')"
+# psql substitutes :'pw' with a correctly quoted literal; this works from stdin, not with -c.
+psql "host=10.0.0.5 dbname=payments user=admin sslmode=verify-full" -v pw="${NEW_PW}" <<'SQL'
+ALTER ROLE app_b WITH LOGIN PASSWORD :'pw';
+SQL
+# Then add NEW_PW (with the username app_b) to Secret Manager as in the commands above.
+```
+
+Replace the host, database name and admin user with your own. Keep the admin credentials out of the rotation job's reach where you can: give the job a role that may alter only `app_a` and `app_b` (`CREATEROLE` plus membership with admin option on those roles, check the PostgreSQL docs for the version you run). Note that a password change does not close existing sessions, so a role you leave valid for rollback keeps working until you set `NOLOGIN` and terminate its connections.
+
+Rollback follows the same shape: while `app_a` is still valid, re-pin the ExternalSecret to the previous version and the workloads go back to `app_a`. Mind connection limits and poolers: [[postgres-connection-pooling-gke]] explains why pools hold old credentials until connections are recycled, so the pooler needs a reload or restart too.
+
+**In-place change, only where two credentials are valid at once.** If the database or service lets one account hold two valid secrets at the same time, you can add the second one in place and skip the account swap. Do not assume it: PostgreSQL does not do this for a role password, and for other systems check the vendor docs for dual-password or multiple-key support before relying on it.
 
 **IAM authentication, no password.** For Cloud SQL, applications can authenticate with a short-lived token tied to an identity instead of a password. The rotation problem disappears because there is no long-lived secret to rotate. Check the Cloud SQL IAM authentication requirements (database flags, connector or proxy support, token lifetime) for your engine version before committing to this. See [[0027-cloud-sql-for-production-postgres]] for the platform decision on production Postgres.
 
@@ -191,7 +233,7 @@ gcloud logging read '
 
 Consumers that read `latest` may appear under `versions/latest` rather than the number; also check those reads and the target system's login signal before disabling.
 
-An empty result for a period longer than the longest refresh interval plus restart time means the old version is unused by anything that goes through Secret Manager. The target database also has its own signal: check the login events or connection list for the old user (`pg_stat_activity` on Postgres) before revoking. Forward logs to your SIEM, see [[gcp-audit-logs-siem]].
+An empty result for a period longer than the longest refresh interval plus restart time means the old version is unused by anything that goes through Secret Manager. The target database also has its own signal: check the login events or connection list for the old user before revoking. On PostgreSQL, `SELECT usename, count(*) FROM pg_stat_activity WHERE usename = 'app_a' GROUP BY usename;` must return no rows (behind a pooler, check the pooler's own client and server connection lists too). Forward logs to your SIEM, see [[gcp-audit-logs-siem]].
 
 After the disable, watch error rates and the readiness of every consumer for at least one full refresh cycle.
 
@@ -204,7 +246,7 @@ After the disable, watch error rates and the readiness of every consumer for at 
 
 ## Checklist
 
-- Target system accepts both credentials during the overlap.
+- Target system accepts both credentials during the overlap. For a database that means two accounts (two-user swap), never an in-place password change on the active account.
 - Pinned versions for critical secrets, rotation by commit; `latest` only with a safe order of operations.
 - A defined reload path for every consumer: file reload, checksum rollout or Reloader.
 - Audit evidence that the old version is unused before it is disabled.
