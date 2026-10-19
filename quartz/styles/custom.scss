@@ -622,6 +622,9 @@ body {
     }
     &::before {
       bottom: var(--sec-h);
+      // Solid while tucked: the translucent band let the accent rule of an h2 under its lower
+      // edge show through as a faint bar.
+      background: var(--desk);
       pointer-events: auto;
     }
     &::after {
