@@ -355,3 +355,12 @@ test("link clicks close only on plain primary clicks on a note link", () => {
   assert.equal(linkClickCloses({ onLink: true, shiftKey: true }), false)
   assert.equal(linkClickCloses({ onLink: true, button: 1 }), false)
 })
+
+test("graph: theme change does not read styles synchronously", async () => {
+  const { readFileSync } = await import("node:fs")
+  const g = readFileSync("local-plugins/graph-launcher/scripts/graph.inline.ts", "utf8")
+  const body = g.match(/\n\s*recolour\(\)\s*\{([\s\S]*?)\n\s*\}/)
+  assert.ok(body, "recolour() not found")
+  assert.ok(!/readPalette|getComputedStyle/.test(body[1]))
+  assert.match(g, /if \(this\.palDirty\) \{\s*this\.pal = readPalette\(this\.mode\)/)
+})

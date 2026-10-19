@@ -241,7 +241,8 @@ class GraphView {
   private downAt = 0
   private lastType = "mouse"
   private dragging: SimNode | null = null
-  private pal: Palette
+  private pal!: Palette
+  private palDirty = true // read in the next frame, never inside a click
   private ro: ResizeObserver | null = null
   private legendSig = ""
   private measureCache = new Map<string, number>()
@@ -253,7 +254,6 @@ class GraphView {
     this.data = opts.data
     this.positions = opts.positions
     this.wrap = this.q(".graph-canvas-wrap")!
-    this.pal = readPalette(this.mode)
     this.canvas = document.createElement("canvas")
     this.canvas.setAttribute("role", "img")
     this.canvas.style.touchAction = this.mode === "dialog" ? "none" : "pan-y"
@@ -938,7 +938,7 @@ class GraphView {
 
   // -- Drawing --------------------------------------------------------------------------------
   recolour() {
-    this.pal = readPalette(this.mode)
+    this.palDirty = true // the frame reads the new colours; no style flush inside the click
     this.requestDraw()
   }
 
@@ -962,6 +962,10 @@ class GraphView {
   }
 
   private draw() {
+    if (this.palDirty) {
+      this.pal = readPalette(this.mode)
+      this.palDirty = false
+    }
     const { ctx, t, pal, w, h, dpr } = this
     if (!w || !h || !this.view) return
     this.wrap.dataset.search = this.view.searching
