@@ -295,6 +295,8 @@ test("Summary writes the result line and tells the truth about each level", () =
   assert.ok(step)
   assert.ok(step.if.includes("always()"))
   assert.ok(step.if.includes("steps.fresh.outputs.current == 'true'"))
+  assert.equal(step.env.TEARDOWN_OUTCOME, "${{ steps.teardown.outcome }}")
+  assert.ok(upload.steps.some((s) => s.id === "teardown" && /Take stage down/.test(s.name ?? "")))
   const base = { DEPLOYMENT_ID: "d1", PROBE_CODE: "403", PREVIEW_OUTCOME: "success" }
 
   const verified = bash(step, { ...base, LEVEL: "verified" })
@@ -317,6 +319,16 @@ test("Summary writes the result line and tells the truth about each level", () =
   assert.match(failed.output, /^stage_result=failure$/m)
   assert.ok(failed.summary.includes("taken down"))
 
+  // The teardown ran after the level was decided (for example a cancelled run): report failure.
+  for (const teardown of ["failure", "success", "cancelled"]) {
+    const torn = bash(step, { ...base, LEVEL: "verified", TEARDOWN_OUTCOME: teardown })
+    assert.match(torn.output, /^stage_result=failure$/m, teardown)
+    assert.ok(torn.summary.includes("taken down"), teardown)
+    assert.ok(!/\bverified\b/.test(torn.summary), teardown)
+  }
+  const kept = bash(step, { ...base, LEVEL: "verified", TEARDOWN_OUTCOME: "skipped" })
+  assert.match(kept.output, /^stage_result=verified$/m)
+
   const early = bash(step, { ...base, LEVEL: "", PREVIEW_OUTCOME: "" })
   assert.match(early.output, /^stage_result=failure$/m)
   assert.ok(early.summary.includes("nothing was uploaded"))
@@ -325,7 +337,7 @@ test("Summary writes the result line and tells the truth about each level", () =
 test("the upload job exposes stage_result, and a skipped run says skipped", () => {
   assert.equal(
     upload.outputs.stage_result,
-    "${{ steps.result.outputs.stage_result || steps.skip.outputs.stage_result }}",
+    "${{ steps.result.outputs.stage_result || steps.skip.outputs.stage_result || 'failure' }}",
   )
   const skip = upload.steps.find((s) => s.id === "skip")
   assert.ok(skip)
