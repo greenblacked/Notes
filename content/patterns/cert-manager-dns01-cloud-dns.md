@@ -23,11 +23,7 @@ Scope: this note is the design and setup. Day-2 failures such as a certificate t
 
 ## Which certificate system
 
-| Option                       | Strengths                                                        | Limits                                                                        |
-| ---------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Google-managed certificates  | No cluster component, Google renews                              | Tied to Google load balancers; wildcard and private use depend on the product |
-| Certificate Manager (Google) | Central, supports DNS authorisation and wildcards                | Applies to Google load balancers, not to in-cluster TLS termination           |
-| cert-manager                 | Works for any workload, mesh and ingress; any ACME or private CA | You operate it: upgrades, monitoring, IAM                                     |
+Google-managed certificates and Certificate Manager (Google) need no cluster component but apply to Google load balancers; cert-manager works for any workload, mesh or ingress and any ACME or private CA, at the cost of operating it. The full comparison is in [[cert-manager-vs-google-managed-certificates]].
 
 Use a Google product when the TLS terminates at a Google load balancer and the features fit. Use cert-manager when certificates are needed inside the cluster (mTLS, a mesh, internal services) or the CA is not Google's. Check the current feature comparison in the Google docs; the products change.
 
@@ -56,6 +52,7 @@ spec:
           dnsZones:
             - example.com
         dns01:
+          cnameStrategy: Follow
           cloudDNS:
             project: example-dns
 ```
@@ -76,6 +73,7 @@ spec:
           dnsZones:
             - example.com
         dns01:
+          cnameStrategy: Follow
           cloudDNS:
             project: example-dns
 ```
@@ -89,7 +87,7 @@ The solver needs write access to a zone to create `_acme-challenge` TXT records.
 1. Create a dedicated challenge zone, for example `acme.example.net`, in a small project.
 2. In the real zone add a CNAME: `_acme-challenge.example.com` pointing to `_acme-challenge.example.com.acme.example.net`.
 3. Grant cert-manager DNS write access **only** on the challenge zone.
-4. Configure the solver to use the challenge zone's project. Check the docs for the `cname-strategy` option (`Follow`) on the issuer, which is what makes cert-manager follow the CNAME.
+4. Configure the solver to use the challenge zone's project. Set `cnameStrategy: Follow` on the `dns01` solver so cert-manager follows the CNAME (both issuers below do).
 
 Now the worst cert-manager can do to DNS is write TXT records in a zone that contains nothing else. The CNAME is created once, by Terraform, see [[terraform-module-and-state-layout]].
 
@@ -136,7 +134,7 @@ spec:
 ```
 
 - `renewBefore` leaves a long window for retries. A CA decides the actual lifetime, so check what the issuer returns before relying on `duration`.
-- `rotationPolicy: Always` generates a new private key on every renewal. The default keeps the old key. Check the docs for the default in your version.
+- `rotationPolicy: Always` generates a new private key on every renewal. The default was `Never` in older releases and changed to `Always` in recent ones; set it explicitly and check the docs for your version.
 - The Secret lives in the namespace of the `Certificate`. Reuse across namespaces needs a copy mechanism; prefer one Certificate per namespace that needs it, or terminate TLS once at a shared gateway.
 
 ## Ingress and Gateway API
@@ -226,8 +224,8 @@ Check `cmctl --help` for the commands in your installed version. A staging certi
 
 ## Sources
 
-- https://cert-manager.io/docs/configuration/acme/dns01/google/
-- https://cert-manager.io/docs/usage/certificate/
-- https://cert-manager.io/docs/usage/gateway/
-- https://letsencrypt.org/docs/rate-limits/
-- https://letsencrypt.org/docs/staging-environment/
+- [cert-manager.io/docs/configuration/acme/dns01/google](https://cert-manager.io/docs/configuration/acme/dns01/google/)
+- [cert-manager.io/docs/usage/certificate](https://cert-manager.io/docs/usage/certificate/)
+- [cert-manager.io/docs/usage/gateway](https://cert-manager.io/docs/usage/gateway/)
+- [letsencrypt.org/docs/rate-limits](https://letsencrypt.org/docs/rate-limits/)
+- [letsencrypt.org/docs/staging-environment](https://letsencrypt.org/docs/staging-environment/)

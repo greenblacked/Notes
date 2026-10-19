@@ -340,6 +340,8 @@ resource "google_storage_bucket" "team" {
   location = each.value.location
   project  = var.project_id
 
+  uniform_bucket_level_access = true
+
   lifecycle {
     precondition {
       condition     = contains(["EU", "US", "ASIA"], each.value.location)
@@ -497,7 +499,7 @@ Use a scratch directory and the sandbox project. Steps with `plan` create nothin
    terraform plan
    ```
 
-   Expected: four `has moved` lines and `Plan: 0 to add, 0 to change, 0 to destroy.`
+   Expected: four `has moved` lines and `Plan: 0 to add, 0 to change, 0 to destroy.` For this to hold, the map must match what the `count` version created: set `beta = { location = "EU", storage_class = "STANDARD" }` for this exercise (if your map gives `beta` another class, expect `0 to add, 1 to change, 0 to destroy` instead).
    If you see something else: if you see adds and destroys, the bucket names changed; align the name expression with the old one. If you see "Cannot move to address", the `to` key does not exist in the map.
 
 5. **Apply the move, then remove a key.**

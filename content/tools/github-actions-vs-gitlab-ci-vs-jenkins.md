@@ -85,25 +85,27 @@ GitLab CI:
 ```yaml title=".gitlab-ci.yml"
 deploy:
   stage: deploy
-  image: google/cloud-sdk:slim # pin a tested tag or digest
+  image: google/cloud-sdk:X.Y.Z@sha256:0000000000000000000000000000000000000000000000000000000000000000 # full (non-slim) image with kubectl and gke-gcloud-auth-plugin; pin a tested tag and digest
   id_tokens:
     GCP_ID_TOKEN:
       aud: https://iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/example-pool/providers/gitlab
   script:
-    - echo "$GCP_ID_TOKEN" > "$CI_PROJECT_DIR/.id_token"
+    - CRED_DIR="$(mktemp -d)"
+    - printf '%s' "$GCP_ID_TOKEN" > "$CRED_DIR/id_token"
     - gcloud iam workload-identity-pools create-cred-config
       projects/123456789012/locations/global/workloadIdentityPools/example-pool/providers/gitlab
       --service-account=deployer@example-project.iam.gserviceaccount.com
-      --credential-source-file="$CI_PROJECT_DIR/.id_token"
-      --output-file=cred.json
-    - gcloud auth login --cred-file=cred.json
+      --credential-source-file="$CRED_DIR/id_token"
+      --output-file="$CRED_DIR/cred.json"
+    - gcloud auth login --cred-file="$CRED_DIR/cred.json"
+    - gcloud container clusters get-credentials prod --location=europe-west1 --project=example-project
     - kubectl rollout status deployment/app -n app --timeout=120s
   environment: production
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 ```
 
-Check the GitLab documentation for the current `id_tokens` and Google Cloud integration pages, since paths have moved. **Jenkins** has no built-in equivalent: credentials live on the controller. Use a credentials provider or plugin that supports OIDC or short-lived tokens, run agents on GKE with Workload Identity so the pod itself is the identity, and keep the Credentials plugin for anything that has no better path. See [[jenkins-controller-and-agent-hardening]].
+The token and credential files are written to a temporary directory, never to the project tree; never add that path to `artifacts:` or `cache:`. Check the GitLab documentation for the current `id_tokens` and Google Cloud integration pages, since paths have moved. **Jenkins** has no built-in equivalent: credentials live on the controller. Use a credentials provider or plugin that supports OIDC or short-lived tokens, run agents on GKE with Workload Identity so the pod itself is the identity, and keep the Credentials plugin for anything that has no better path. See [[jenkins-controller-and-agent-hardening]].
 
 ## Runners: hosted vs self-hosted (fork PRs must never reach self-hosted runners)
 

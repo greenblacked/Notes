@@ -42,6 +42,9 @@ ART_URL=https://artifactory.example.com
 
 ## Steps
 
+> [!note] Credentials on the command line
+> Passing a token with `-H` puts it in the process arguments, where other users on a shared host can read it. On a shared host use a `~/.netrc` file with mode 600 and `curl -n`, or a header file passed with `-H @file`.
+
 ```mermaid
 flowchart TD
     A[Builds failing on Artifactory] --> B{Ping answers?}

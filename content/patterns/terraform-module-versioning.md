@@ -193,7 +193,7 @@ It does not work when:
 
 - the new version applied a destructive change (the database is gone: use backups, [[terraform-state-recovery]] and [[backup-architecture-gke-cloud-sql-gcs]]);
 - state was migrated by a newer Terraform version;
-- the apply renamed objects via `moved` and the old module lacks the block. Re-pinning shows a plan that moves things back, which is usually fine but must be read.
+- the apply renamed objects via `moved` and the old module lacks the block. Re-pinning plans a destroy and create of those objects unless you add a reverse `moved` block in the root module (from `module.<name>.<new address>` to `module.<name>.<old address>`); read the plan for `must be replaced`.
 
 So: take a state backup (versioned remote state bucket) before each production apply, apply to dev and stage first, and treat prod rollback as a forward fix when state has changed.
 
@@ -210,7 +210,7 @@ So: take a state backup (versioned remote state bucket) before each production a
 
 ## Sources
 
-- https://developer.hashicorp.com/terraform/language/modules/sources
-- https://developer.hashicorp.com/terraform/language/modules/develop/refactoring
-- https://developer.hashicorp.com/terraform/language/files/dependency-lock
-- https://semver.org
+- [developer.hashicorp.com/terraform/language/modules/sources](https://developer.hashicorp.com/terraform/language/modules/sources)
+- [developer.hashicorp.com/terraform/language/modules/develop/refactoring](https://developer.hashicorp.com/terraform/language/modules/develop/refactoring)
+- [developer.hashicorp.com/terraform/language/files/dependency-lock](https://developer.hashicorp.com/terraform/language/files/dependency-lock)
+- [semver.org](https://semver.org)

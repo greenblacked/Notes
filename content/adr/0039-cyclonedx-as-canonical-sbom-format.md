@@ -38,7 +38,7 @@ Our scanners, dependency tracking and signing tools all read CycloneDX, and the 
 
 ```bash title="generate-and-attest-sbom.sh"
 set -euo pipefail
-IMAGE="registry.example.com/payments/api"
+IMAGE="artifactory.example.com/payments-docker-prod-local/payments/api"
 DIGEST="sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 syft "${IMAGE}@${DIGEST}" -o cyclonedx-json > sbom.cdx.json
@@ -81,7 +81,7 @@ Harder:
 
 ```bash title="validate-sbom.sh"
 set -euo pipefail
-IMAGE="registry.example.com/payments/api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+IMAGE="artifactory.example.com/payments-docker-prod-local/payments/api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 # An attestation exists for the digest
 cosign tree "${IMAGE}"

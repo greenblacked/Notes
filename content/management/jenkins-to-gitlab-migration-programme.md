@@ -17,7 +17,7 @@ draft: false
 Migrating one pipeline from Jenkins to GitLab CI is a technical task. Migrating hundreds across many teams, while builds keep shipping, is a programme: it has an inventory, a sequence, staffing, communication, exceptions, a stop-the-line rule and an end date. Most failed migrations were technically fine and managerially open-ended; the old system lingered for years because nobody owned the shutdown.
 
 > [!info] Scope
-> [[gitlab-ci-vs-jenkins]] compares the tools and the technical path. This note covers how to run the migration across teams. The decision to retire a platform in general, and the post-shutdown checks, are in [[decommissioning-platform-services]].
+> [[gitlab-ci-vs-jenkins]] compares the tools and the technical path. This note covers how to run the migration across teams. The decision to retire a platform in general, and the post-shutdown checks, are in [[decommissioning-platform-services]]. The tool decision is recorded in [[0012-gitlab-ci-for-new-pipelines]].
 
 ## Why a programme and not a project
 
@@ -43,6 +43,7 @@ OUT_DIR="${OUT_DIR:-./jenkins-inventory}"
 
 mkdir -p "$OUT_DIR"
 
+# Note: -u puts the token in the process list; on a shared host use curl -n with a mode 600 ~/.netrc.
 # Jobs: names, URLs and last result. Folder nesting may need a deeper tree.
 curl -fsS -u "${JENKINS_USER}:${JENKINS_API_TOKEN}" \
   "${JENKINS_URL}/api/json?tree=jobs[name,url,color,lastBuild[number,timestamp,result]]" \
@@ -188,3 +189,4 @@ Rollback is local and simple while the gate has not passed: the Jenkins job stay
 - [[stakeholder-communication]]
 - [[cross-team-dependencies]]
 - [[decommissioning-platform-services]]
+- [[0012-gitlab-ci-for-new-pipelines]]

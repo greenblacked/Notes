@@ -189,6 +189,6 @@ Do not delete PDBs across a namespace to unblock an upgrade. That removes protec
 
 ## Sources
 
-- https://kubernetes.io/docs/concepts/workloads/pods/disruptions/
-- https://kubernetes.io/docs/tasks/run-application/configure-pdb/
-- https://cloud.google.com/kubernetes-engine/docs/concepts/cluster-upgrades
+- [kubernetes.io/docs/concepts/workloads/pods/disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/)
+- [kubernetes.io/docs/tasks/run-application/configure-pdb](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
+- [cloud.google.com/kubernetes-engine/docs/concepts/cluster-upgrades](https://cloud.google.com/kubernetes-engine/docs/concepts/cluster-upgrades)

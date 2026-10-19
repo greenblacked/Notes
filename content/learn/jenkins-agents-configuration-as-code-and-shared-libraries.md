@@ -136,8 +136,8 @@ USER jenkins
 COPY --chown=jenkins:jenkins plugins.txt /usr/share/jenkins/ref/plugins.txt
 RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
-ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc
-COPY --chown=jenkins:jenkins casc/ /var/jenkins_home/casc/
+ENV CASC_JENKINS_CONFIG=/var/jenkins_conf
+COPY --chown=jenkins:jenkins casc/ /var/jenkins_conf/
 ```
 
 `runSetupWizard=false` skips the first-run wizard because JCasC configures the instance. `CASC_JENKINS_CONFIG` tells the Configuration as Code plugin where to read YAML: a file, a directory (all `.yaml` files in it) or a URL. Keep plugin updates on purpose: update `plugins.txt` in a merge request, rebuild, and test the new image before it replaces the old one.
@@ -336,7 +336,7 @@ You need the Jenkins container from Delivery 02, Docker, and a Git repository yo
 6. **Prove secrets are not in the YAML.**
 
    ```bash
-   grep -rn 'PASSWORD\|LAB_TOKEN' casc/ ; git grep -n "$(cat ~/.lab-token)" || echo "token not in repository"
+   grep -rn 'PASSWORD\|LAB_TOKEN' casc/ ; git grep -n -F -f ~/.lab-token || echo "token not in repository"
    ```
 
    Expected: only the `${...}` references and "token not in repository".

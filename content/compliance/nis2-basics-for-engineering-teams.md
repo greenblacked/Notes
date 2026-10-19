@@ -21,7 +21,7 @@ This note explains NIS2 for engineers who run platforms for organisations that m
 > This is general engineering guidance. Your auditor, assessor or legal counsel decides what satisfies a control or a legal obligation; check control numbers and wording against the current edition of the framework.
 
 > [!info] Not checked against a running system
-> Article numbers and structure follow Directive (EU) 2022/2555 as I understand it, but quote the exact text from EUR-Lex before relying on it. Deadlines in hours are intentionally not stated here.
+> Article numbers and structure follow Directive (EU) 2022/2555 as I understand it, but quote the exact text from EUR-Lex before relying on it. The reporting deadlines are given as a pointer only; national law can add detail.
 
 ## What NIS2 is
 
@@ -29,7 +29,7 @@ NIS2 is Directive (EU) 2022/2555, a measure on a high common level of cybersecur
 
 It applies to entities established in the EU in listed sectors above size thresholds, and it reaches suppliers indirectly, because in-scope entities must manage supply-chain risk and push requirements into contracts.
 
-If your team or company is outside the EU, including in Ukraine, the directive does not bind you directly. It matters if you have an EU-established entity, or if EU customers in scope ask you to meet their measures by contract. Treat it then as a customer requirement and ask them which controls and which evidence they expect.
+If your team or company is outside the EU, the directive does not bind you directly. It matters if you have an EU-established entity, or if EU customers in scope ask you to meet their measures by contract. Treat it then as a customer requirement and ask them which controls and which evidence they expect.
 
 ## Who is in scope
 
@@ -61,7 +61,7 @@ The point of the mapping is proportionality: you document why each measure is si
 
 ## Implementing acts
 
-For some categories of digital infrastructure and digital providers, the Commission adopted an implementing regulation that sets technical and methodological requirements. I believe it is Commission Implementing Regulation (EU) 2024/2690, but verify the number, the entity types it covers and its dates on EUR-Lex. If your service is, for example, a cloud computing or managed service provider, this is where detailed technical expectations may appear, so read it rather than relying on a summary.
+For some categories of digital infrastructure and digital providers, the Commission adopted an implementing regulation that sets technical and methodological requirements. It is Commission Implementing Regulation (EU) 2024/2690; verify the entity types it covers and its dates on EUR-Lex. If your service is, for example, a cloud computing or managed service provider, this is where detailed technical expectations may appear, so read it rather than relying on a summary.
 
 ## Article 23 reporting
 
@@ -71,7 +71,7 @@ Article 23 requires notification of significant incidents to the national CSIRT 
 2. **Incident notification** with an initial assessment: severity, impact and indicators of compromise where available.
 3. **Final report** after the incident, with a detailed description, root cause, mitigation and cross-border impact. There are also intermediate or progress reports on request.
 
-The time limits for each stage are given in hours or in a month. Take them only from the EUR-Lex text and from the national law, which can add detail. They are not repeated here so that a stale number cannot end up in your runbook.
+Article 23(4) sets the time limits: the early warning within 24 hours of becoming aware, the incident notification within 72 hours of becoming aware, and the final report within one month of the incident notification. This is a pointer, not a substitute for the text: confirm it on EUR-Lex, and check national law, which can add detail.
 
 ### What the on-call engineer must capture
 
@@ -110,7 +110,7 @@ A personal-data breach can trigger both regimes at once. They have different rec
 | Trigger   | Significant incident affecting the service | Personal-data breach likely to risk individuals                        |
 | Recipient | National CSIRT or competent authority      | Data protection supervisory authority                                  |
 | Stages    | Early warning, notification, final report  | Notification to authority, communication to individuals when high risk |
-| Clock     | Check directive text and national law      | Check Article 33 text                                                  |
+| Clock     | 24 h / 72 h / one month, see Article 23(4) | 72 hours after becoming aware, where feasible (Article 33)             |
 
 See [[compliance/pci-dss-and-gdpr-for-devops-logs-and-data]] for the data side. Run one incident timeline and feed both notifications from it.
 
@@ -148,6 +148,6 @@ Keep logs long enough to cover the time window you may need to reconstruct, and 
 ## Sources
 
 - EUR-Lex, [Directive (EU) 2022/2555 (NIS2)](https://eur-lex.europa.eu/eli/dir/2022/2555/oj).
-- EUR-Lex, Commission Implementing Regulation (EU) 2024/2690: search EUR-Lex by number and confirm scope.
+- EUR-Lex, [Commission Implementing Regulation (EU) 2024/2690](https://eur-lex.europa.eu/eli/reg_impl/2024/2690/oj): confirm scope.
 - ENISA, NIS2 pages on [enisa.europa.eu](https://www.enisa.europa.eu/): find the current guidance.
 - EUR-Lex, [Regulation (EU) 2016/679 (GDPR)](https://eur-lex.europa.eu/eli/reg/2016/679/oj).

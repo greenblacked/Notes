@@ -104,7 +104,7 @@ docker login "$ART"
 docker pull "$ART/docker/library/alpine:3.20"
 
 # Helm (classic repository index)
-helm repo add example "https://$ART/artifactory/helm" --username ci-reader --pass-stdin
+printf '%s' "$ART_TOKEN" | helm repo add example "https://$ART/artifactory/helm" --username ci-reader --password-stdin
 helm repo update
 
 # npm: scoped registry plus the virtual repository
@@ -138,14 +138,14 @@ The Docker URL form (repository path, subdomain or port) depends on how the reve
 Validation after any change:
 
 ```bash title="validate.sh"
-jf config add example --url=https://artifactory.example.com --user=ci-reader --interactive=false
+jf config add example --url=https://artifactory.example.com --user=ci-reader --access-token="$ART_TOKEN" --interactive=false
 jf rt ping --server-id=example
 
 curl -sS -I -H "Authorization: Bearer $ART_TOKEN" \
   https://artifactory.example.com/artifactory/api/repositories/docker
 
 docker pull artifactory.example.com/docker/library/alpine:3.20
-helm repo add example https://artifactory.example.com/artifactory/helm && helm search repo example
+printf '%s' "$ART_TOKEN" | helm repo add example https://artifactory.example.com/artifactory/helm --username ci-reader --password-stdin && helm search repo example
 ```
 
 Check the JFrog CLI documentation for the current flags before putting these in a pipeline.

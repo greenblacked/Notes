@@ -122,7 +122,7 @@ gcloud compute target-https-proxies list --project="${PROJECT_ID}" \
 
 ## Org policy guardrails as preventive evidence
 
-Detective evidence shows the state today; preventive controls show it cannot drift. Org policy can require CMEK for chosen services and restrict which projects hold keys. Constraint names I believe exist are `constraints/gcp.restrictNonCmekServices` and `constraints/gcp.restrictCmekCryptoKeyProjects`; there is also a constraint for minimum TLS version. Verify every name and its behaviour in the current docs before enforcing, because a wrong constraint can block deployments. The pattern for rolling them out safely (dry run, then enforce) is in [[compliance/gcp-organization-policy-guardrails]].
+Detective evidence shows the state today; preventive controls show it cannot drift. Org policy can require CMEK for chosen services and restrict which projects hold keys. The relevant constraints are `constraints/gcp.restrictNonCmekServices`, `constraints/gcp.restrictCmekCryptoKeyProjects` and `constraints/gcp.restrictTLSVersion`. The last one restricts TLS versions on requests to Google Cloud APIs, not on your own load balancers; those are governed by SSL policies. Verify every name and its behaviour in the current docs before enforcing, because a wrong constraint can block deployments. The pattern for rolling them out safely (dry run, then enforce) is in [[compliance/gcp-organization-policy-guardrails]].
 
 A Terraform plan check can also reject new resources that omit a key; see [[patterns/terraform-plan-policy-checks]] for how to write such a check in CI.
 

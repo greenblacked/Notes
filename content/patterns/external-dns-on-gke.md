@@ -168,7 +168,7 @@ Export the zone first. It is the only reliable rollback.
 
 ```bash title="export zone records"
 gcloud dns record-sets export "zone-backup-$(date +%Y%m%d).yaml" \
-  --zone=example-com --project=example-dns --zone-file-format=false
+  --zone=example-com --project=example-dns
 ```
 
 Check `gcloud dns record-sets export --help` for the supported formats. Store the file somewhere access-controlled; zones can contain internal host names.
@@ -218,6 +218,6 @@ Monitor the controller's error logs and its metrics endpoint. Alert when it has 
 
 ## Sources
 
-- https://kubernetes-sigs.github.io/external-dns/latest/
-- https://kubernetes-sigs.github.io/external-dns/latest/docs/tutorials/gke/
-- https://cloud.google.com/dns/docs/access-control
+- [kubernetes-sigs.github.io/external-dns/latest](https://kubernetes-sigs.github.io/external-dns/latest/)
+- [kubernetes-sigs.github.io/external-dns/latest/docs/tutorials/gke](https://kubernetes-sigs.github.io/external-dns/latest/docs/tutorials/gke/)
+- [cloud.google.com/dns/docs/access-control](https://cloud.google.com/dns/docs/access-control)

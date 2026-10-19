@@ -34,7 +34,7 @@ DORA is Regulation (EU) 2022/2554 on digital operational resilience for the fina
 - **Financial entities** across many categories (banks, insurers, investment firms, payment and crypto-asset service providers, and others). The list is in the regulation.
 - **ICT third-party service providers**, which are reached through the contracts that financial entities must have with them. Some providers can be designated critical and come under direct oversight.
 
-If your team or company is outside the EU, including in Ukraine, the regulation does not bind you directly. It matters if you serve EU financial entities, who will require contract terms, evidence, audit rights and exit plans from you. Ask your customers which parts they expect and treat the answer as a contractual requirement.
+If your team or company is outside the EU, the regulation does not bind you directly. It matters if you serve EU financial entities, who will require contract terms, evidence, audit rights and exit plans from you. Ask your customers which parts they expect and treat the answer as a contractual requirement.
 
 ## The pillars in engineering terms
 
@@ -77,18 +77,26 @@ Engineering's part is to record the facts the classification needs, as they happ
 
 Fields to capture in the incident record:
 
-| Field                             | Why it matters                                                                        |
-| --------------------------------- | ------------------------------------------------------------------------------------- |
-| Detection time (UTC)              | Start of reporting clocks is defined from detection or classification; check the text |
-| Services and functions affected   | Critical or important functions are treated differently                               |
-| Clients and transactions affected | Used in classification thresholds                                                     |
-| Duration and downtime             | Used in classification thresholds                                                     |
-| Geographical spread               | Cross-border impact                                                                   |
-| Data losses                       | Availability, integrity, confidentiality                                              |
-| Root cause and mitigation         | Needed for the final report                                                           |
-| Third party involved              | Links to the provider register                                                        |
+| Field                             | Why it matters                                                                                 |
+| --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Detection time (UTC)              | Start of reporting clocks is defined from detection or classification; check the text          |
+| Services and functions affected   | Critical or important functions are treated differently                                        |
+| Clients and transactions affected | Used in classification thresholds                                                              |
+| Duration and downtime             | Used in classification thresholds                                                              |
+| Geographical spread               | Cross-border impact                                                                            |
+| Data losses                       | Availability, integrity, confidentiality                                                       |
+| Root cause and mitigation         | Needed for the final report                                                                    |
+| Third party involved              | Links to the provider register                                                                 |
+| Reputational impact               | The classification RTS lists it as a criterion: record press, customer and regulator reactions |
+| Economic impact                   | Also a criterion: direct costs, fees, compensation and remediation spend, as far as known      |
 
 Build the incident record on [[runbooks/incident-response]], with the same timeline and decision log you would keep for the sibling regime in [[nis2-basics-for-engineering-teams]].
+
+### Keeping the record honest during the incident
+
+Fill the fields while the incident runs, with a timestamp for each change of belief. Classification often changes as facts arrive: an incident first judged minor can become major once the number of affected clients is known. Keep the early assessment and every revision, because a supervisor will ask when you knew what. Reputational and economic impact are usually unknown at the start; write "unknown at <time>" instead of leaving the field empty, and assign someone outside the engineering response (communications, finance) to supply them.
+
+Test the process before you need it. Run a tabletop exercise where the scenario crosses a classification threshold, and check that the on-call engineer can produce the table above within the first hour. Gaps found there are cheap; gaps found in a real reporting window are not.
 
 ## Register of information on ICT third-party services
 

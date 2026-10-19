@@ -102,14 +102,14 @@ _Illustrative._
 
 BuildKit reuses a step when the instruction and its inputs are the same, **and** every earlier step was reused. The first miss invalidates everything after it. The usual causes:
 
-| Cause                             | Why it invalidates                                                                                  | What to do                                                                             |
-| --------------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| A changed file in `COPY` or `ADD` | The cache key includes the content (checksum) of the copied files, not just the instruction text.   | Copy only what the next step needs, and copy it late.                                  |
-| A changed `ARG` or `ENV` value    | The value is part of the instruction's input for steps that use it, so a new value means a new key. | Avoid volatile values (build time, commit SHA) early in the file.                      |
-| Instruction order                 | One changed step invalidates every step below it.                                                   | Put rarely changing steps first.                                                       |
-| A changed base image              | A new digest for the `FROM` tag is a different parent.                                              | Pin by digest where you need reproducibility ([[learn/building-and-shipping-images]]). |
-| `--no-cache`                      | Ignores all cached steps.                                                                           | Use it deliberately, for example in a scheduled "clean" build.                         |
-| `--no-cache-filter=STAGE`         | Ignores the cache for the named stages only.                                                        | Rebuild just the stage that fetches things that change upstream.                       |
+| Cause                             | Why it invalidates                                                                                                | What to do                                                                             |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| A changed file in `COPY` or `ADD` | The cache key includes the content (checksum) of the copied files, not just the instruction text.                 | Copy only what the next step needs, and copy it late.                                  |
+| A changed `ARG` or `ENV` value    | Every later `RUN` sees the `ARG` in its environment, so a new value is a cache miss for all of them, used or not. | Avoid volatile values (build time, commit SHA) early in the file.                      |
+| Instruction order                 | One changed step invalidates every step below it.                                                                 | Put rarely changing steps first.                                                       |
+| A changed base image              | A new digest for the `FROM` tag is a different parent.                                                            | Pin by digest where you need reproducibility ([[learn/building-and-shipping-images]]). |
+| `--no-cache`                      | Ignores all cached steps.                                                                                         | Use it deliberately, for example in a scheduled "clean" build.                         |
+| `--no-cache-filter=STAGE`         | Ignores the cache for the named stages only.                                                                      | Rebuild just the stage that fetches things that change upstream.                       |
 
 A classic trap: `RUN apt-get update && apt-get install -y curl` stays cached for months, so a security fix in the package index never arrives. The cache cannot know that the outside world changed. The answer is a periodic `--no-cache` or `--no-cache-filter` build, plus rebuilding when the base image is updated ([[patterns/automated-dependency-updates]]).
 
@@ -394,7 +394,7 @@ Clean up: `cd ~ && rm -rf ~/c5`, then `docker rmi c5:base c5:ordered c5:mount` a
 
 ## Next steps
 
-Next lesson: continue with [[learn/container-storage-networking-and-compose|Containers 04: Volumes, networks and Docker Compose]] if you have not done it, then return to your pipeline in [[learn/first-pipeline-gitlab-ci-and-jenkins|Delivery 02]] and add the measurements to a build job. Previous lesson on how images and layers work: [[learn/containers-under-the-hood|Containers 01]].
+Next lesson: [[learn/kubernetes-architecture-and-kind|Kubernetes 01]]; if you skipped it, do [[learn/container-storage-networking-and-compose|Containers 04]] first. Then return to your pipeline in [[learn/first-pipeline-gitlab-ci-and-jenkins|Delivery 02]] and add the measurements to a build job. Previous lesson on how images and layers work: [[learn/containers-under-the-hood|Containers 01]].
 
 To go deeper:
 

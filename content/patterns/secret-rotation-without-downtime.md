@@ -57,20 +57,27 @@ A secret in Secret Manager holds immutable **versions**. Adding a value creates 
 export PROJECT_ID="example-prod"
 export SECRET="payments-db-password"
 
-# 1. Add the new value as a new version. Read it from stdin, not from the command line.
-openssl rand -base64 32 | tr -d '\n' | \
+# 1. Generate the new value into a variable (never echo it).
+NEW_PW="$(openssl rand -base64 32 | tr -d '\n')"
+
+# 2. Set it in the target system first (database ALTER USER, or the API of the target),
+#    so the target accepts the credential before any consumer can see it.
+
+# 3. Then add it as a new Secret Manager version. Read it from stdin, not from the command line.
+printf '%s' "${NEW_PW}" | \
   gcloud secrets versions add "${SECRET}" --project="${PROJECT_ID}" --data-file=-
+unset NEW_PW
 
 gcloud secrets versions list "${SECRET}" --project="${PROJECT_ID}"
 
-# 2. Later, after consumers have moved: disable the old version (reversible)
+# 4. Later, after consumers have moved: disable the old version (reversible)
 gcloud secrets versions disable 3 --secret="${SECRET}" --project="${PROJECT_ID}"
 
-# 3. Rollback if something still needed it
+# 5. Rollback if something still needed it
 gcloud secrets versions enable 3 --secret="${SECRET}" --project="${PROJECT_ID}"
 ```
 
-Replace version `3` with the version number that holds the old value. Piping from stdin keeps the value out of shell history and the process list. The new password must also be set in the target system in the same job; see [Database users](#database-users).
+Replace version `3` with the version number that holds the old value. Piping from stdin keeps the value out of shell history and the process list. The order matters: the target system accepts the new password (step 2) before the new version exists (step 3), so a consumer that reads `latest` never gets a credential that does not work yet. See [Database users](#database-users).
 
 ### The `latest` alias pitfall
 
@@ -182,6 +189,8 @@ gcloud logging read '
   --format='table(timestamp, protoPayload.authenticationInfo.principalEmail)'
 ```
 
+Consumers that read `latest` may appear under `versions/latest` rather than the number; also check those reads and the target system's login signal before disabling.
+
 An empty result for a period longer than the longest refresh interval plus restart time means the old version is unused by anything that goes through Secret Manager. The target database also has its own signal: check the login events or connection list for the old user (`pg_stat_activity` on Postgres) before revoking. Forward logs to your SIEM, see [[gcp-audit-logs-siem]].
 
 After the disable, watch error rates and the readiness of every consumer for at least one full refresh cycle.
@@ -208,13 +217,14 @@ After the disable, watch error rates and the readiness of every consumer for at 
 - [[leaked-credential-rotation]]
 - [[cloud-kms-key-management]]
 - [[gke-workload-identity]]
+- [[secrets-architecture-gcp-and-gke]]
 - [[postgres-connection-pooling-gke]]
 - [[artifactory-access-tokens-and-oidc-for-ci]]
 - [[cert-manager-dns01-cloud-dns]]
 
 ## Sources
 
-- https://cloud.google.com/secret-manager/docs/secret-rotation
-- https://cloud.google.com/secret-manager/docs/manage-secret-versions
-- https://external-secrets.io/latest/
-- https://cloud.google.com/sql/docs/postgres/iam-authentication
+- [cloud.google.com/secret-manager/docs/secret-rotation](https://cloud.google.com/secret-manager/docs/secret-rotation)
+- [cloud.google.com/secret-manager/docs/manage-secret-versions](https://cloud.google.com/secret-manager/docs/manage-secret-versions)
+- [external-secrets.io/latest](https://external-secrets.io/latest/)
+- [cloud.google.com/sql/docs/postgres/iam-authentication](https://cloud.google.com/sql/docs/postgres/iam-authentication)

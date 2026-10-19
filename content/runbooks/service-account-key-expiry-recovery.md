@@ -74,7 +74,7 @@ Admin Activity audit logs are on by default; check the Cloud Audit Logs document
 
 Common causes:
 
-- **Organisation policy.** An organisation policy constraint can limit the lifetime of user-managed keys. I believe the constraint is `iam.serviceAccountKeyExpiryHours`, but verify the name, whether it exists in your environment and how it applies in the current Organization Policy documentation. Check which policies apply to the project:
+- **Organisation policy.** An organisation policy constraint can limit the lifetime of user-managed keys. The list constraint `iam.serviceAccountKeyExpiryHours` limits the lifetime of user-managed keys; check the current Organization Policy documentation for the allowed values and how it applies to existing keys. Check which policies apply to the project:
 
 ```bash
 gcloud resource-manager org-policies list --project "$PROJECT"

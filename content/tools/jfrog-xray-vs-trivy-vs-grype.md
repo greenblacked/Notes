@@ -85,13 +85,13 @@ GitLab CI job:
 scan-image:
   stage: test
   image:
-    name: aquasec/trivy:0.0.0 # pin a real version or digest after checking the current release
+    name: aquasec/trivy:X.Y.Z@sha256:0000000000000000000000000000000000000000000000000000000000000000 # placeholder: pin a real version and digest after checking the current release
     entrypoint: [""]
   variables:
     TRIVY_CACHE_DIR: .trivycache
     IMAGE_DIGEST: $CI_REGISTRY_IMAGE@$BUILD_DIGEST # passed from the build job
   cache:
-    key: trivy-db
+    key: "trivy-db-${CI_COMMIT_REF_PROTECTED}" # separate cache for protected refs so a merge request cannot poison the DB the protected scan trusts
     paths: [.trivycache/]
   script:
     - trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$IMAGE_DIGEST"
@@ -106,7 +106,7 @@ Jenkins stage:
 stage('Scan image') {
   steps {
     sh '''
-      set -euo pipefail
+      set -eu # sh is dash on Debian agents, so no pipefail here
       trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "${IMAGE}@${DIGEST}"
     '''
   }

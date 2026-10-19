@@ -71,8 +71,8 @@ ingress:
   host: "{{ .Release.Name }}.example.com"
 ```
 
-```yaml title="templates/ingress.yaml (excerpt)"
-host: { { tpl .Values.ingress.host . | quote } }
+```text title="templates/ingress.yaml (excerpt)"
+host: {{ tpl .Values.ingress.host . | quote }}
 ```
 
 It is powerful and risky: a value can now run template logic, including `include` and `lookup`, so you accept template code from whoever controls the values. Use it for a few documented fields (hostnames, annotations), not for everything. Document each `tpl` field in the chart README.
@@ -351,7 +351,7 @@ You need a kind cluster, Helm and Docker. Work in `~/helm`. Output is illustrati
    Expected: a parse error or broken YAML.
    If you see something else: if it renders, look at the output indentation; a missing `nindent` leaves the labels at the wrong depth.
 
-6. **Add a dependency from a local path.** For a lab with no registry, use a `file://` repository: create a tiny `redis-like` chart with `helm create ../cachechart`, then add to `Chart.yaml`:
+6. **Add a dependency from a local path.** For a lab with no registry, use a `file://` repository: create a tiny `redis-like` chart with `helm create ./cachechart` from `~/helm`, then add to `Chart.yaml` of `web`:
 
    ```yaml
    dependencies:
@@ -360,6 +360,8 @@ You need a kind cluster, Helm and Docker. Work in `~/helm`. Output is illustrati
        repository: "file://../cachechart"
        condition: cachechart.enabled
    ```
+
+   Because the exercise 3 schema sets `additionalProperties: false`, also add `"cachechart": { "type": "object" }` to `properties` in `values.schema.json`, or exercise 7 will reject `--set cachechart.enabled=...`.
 
    ```bash
    helm dependency update ./web

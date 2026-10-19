@@ -101,6 +101,11 @@ while read -r product cycle; do
     echo "WARN ${product} ${cycle}: no EOL data found, check the slug and cycle"
     continue
   fi
+  if [ "${eol}" = "true" ]; then
+    echo "FAIL ${product} ${cycle}: already end-of-life"
+    fail=1
+    continue
+  fi
   if [ "${eol}" = "false" ]; then
     echo "OK   ${product} ${cycle}: no EOL date published"
     continue
@@ -127,6 +132,7 @@ eol-check:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $EOL_CHECK == "true"'
   before_script:
+    # Prefer a prebuilt tools image pinned by digest; if you install at job time, pin package versions.
     - apk add --no-cache bash curl jq coreutils
   script:
     - bash ci/eol-check.sh ci/tracked-eol.txt

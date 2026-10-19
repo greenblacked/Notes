@@ -82,14 +82,14 @@ for i in $(seq 1 20); do
 done
 ```
 
-Compare internal and external names. Internal names failing points at kube-dns or the cache. Only external names failing points at upstream forwarding, firewall egress or Cloud NAT. Query the resolver in `resolv.conf` directly and then the kube-dns Service IP to separate the node cache from the backends:
+Compare internal and external names. Internal names failing points at kube-dns or the cache. Only external names failing points at upstream forwarding, firewall egress or Cloud NAT. Query the resolver in `resolv.conf` directly, then query a kube-dns Pod IP directly (or the `kube-dns-upstream` Service, if your cluster has one) to bypass the node cache. With NodeLocal DNSCache the Pods keep the kube-dns Service IP as nameserver and the node cache intercepts that address, so querying the Service IP cannot separate the cache from the backends:
 
 ```bash
-KUBE_DNS_IP=$(kubectl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIP}')
-kubectl -n "$NS" exec dnstest -- dig +tries=1 +time=2 @"$KUBE_DNS_IP" example.com | grep -E 'status:|Query time'
+KUBE_DNS_POD_IP=$(kubectl -n kube-system get pods -l k8s-app=kube-dns -o jsonpath='{.items[0].status.podIP}')
+kubectl -n "$NS" exec dnstest -- dig +tries=1 +time=2 @"$KUBE_DNS_POD_IP" example.com | grep -E 'status:|Query time'
 ```
 
-If the direct kube-dns query is healthy while the default resolver is not, the problem is the NodeLocal cache or the path to it.
+If the direct kube-dns Pod query is healthy while the default resolver is not, the problem is the NodeLocal cache or the path to it.
 
 ### 3. kube-dns health and capacity
 
@@ -136,7 +136,7 @@ spec:
 
 3. Fix chatty clients (no connection reuse, lookups per request) in the application.
 
-Test with a canary Deployment first. Lowering `ndots` can break short in-cluster names (`svc.ns`), so keep in-cluster calls fully qualified.
+Test with a canary Deployment first. Lowering `ndots` means in-cluster names with that many dots or more (`svc.ns.svc`) are first tried as absolute names, which adds a failed query; keep in-cluster calls short (`svc.ns`) or fully qualified with a trailing dot.
 
 ### 5. Node level: conntrack and UDP races
 
@@ -239,14 +239,14 @@ Back up before editing: `kubectl -n kube-system get cm kube-dns-autoscaler -o ya
 
 ## Troubleshooting
 
-| Symptom                                           | Likely cause and fix                                                                              |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `dig @kube-dns-ip` fine, default resolver fails   | NodeLocal cache Pod down on that node, or NetworkPolicy blocks the cache address.                 |
-| Every external lookup is slow, in-cluster is fast | `ndots` amplification or a slow upstream. Use FQDN with trailing dot; check upstream latency.     |
-| Intermittent timeouts under load                  | Conntrack exhaustion or kube-dns saturation. Check node counters and kube-dns CPU.                |
-| `SERVFAIL` for one private zone only              | Forwarding or peering for that zone. See [[cloud-dns-hybrid-and-multi-project]].                  |
-| Fix works then regresses after node upgrade       | Settings applied by hand were overwritten. Move them into Terraform or the managed add-on config. |
-| NodeLocal enable made nodes recreate              | Expected side effect in some cases. Plan the window and PDBs.                                     |
+| Symptom                                               | Likely cause and fix                                                                              |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `dig @<kube-dns Pod IP>` fine, default resolver fails | NodeLocal cache Pod down on that node, or NetworkPolicy blocks the cache address.                 |
+| Every external lookup is slow, in-cluster is fast     | `ndots` amplification or a slow upstream. Use FQDN with trailing dot; check upstream latency.     |
+| Intermittent timeouts under load                      | Conntrack exhaustion or kube-dns saturation. Check node counters and kube-dns CPU.                |
+| `SERVFAIL` for one private zone only                  | Forwarding or peering for that zone. See [[cloud-dns-hybrid-and-multi-project]].                  |
+| Fix works then regresses after node upgrade           | Settings applied by hand were overwritten. Move them into Terraform or the managed add-on config. |
+| NodeLocal enable made nodes recreate                  | Expected side effect in some cases. Plan the window and PDBs.                                     |
 
 ## Related
 

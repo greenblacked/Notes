@@ -41,14 +41,14 @@ Ingest runs when a change merges to the default branch, so the index holds only 
 
 **Index metadata with every chunk:**
 
-| Field           | Use                                                     |
-| --------------- | ------------------------------------------------------- |
-| `path`          | Citation, and the link the responder opens              |
-| `owner`         | Who to ask, and who gets stale-page reports             |
-| `service`       | Filtering to the service in the alert                   |
-| `last-verified` | Staleness warning ([[verifying-ai-generated-runbooks]]) |
-| `acl_groups`    | Who may see the chunk                                   |
-| `commit`        | Which version was indexed, for debugging                |
+| Field           | Use                                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| `path`          | Citation, and the link the responder opens                                                                 |
+| `owner`         | Who to ask, and who gets stale-page reports                                                                |
+| `service`       | Filtering to the service in the alert                                                                      |
+| `last_verified` | Staleness warning; copied from the runbook's `verified` front matter ([[verifying-ai-generated-runbooks]]) |
+| `acl_groups`    | Who may see the chunk                                                                                      |
+| `commit`        | Which version was indexed, for debugging                                                                   |
 
 ## Access control at retrieval time
 
@@ -65,7 +65,7 @@ The rule is simple and often broken: **filter by the caller's groups in the quer
 
 The assistant is allowed to answer only from retrieved chunks, and every answer shows where each statement came from:
 
-- Each answer lists the **source path** and the **last-verified date** of every chunk used.
+- Each answer lists the **source path** and the **`last_verified` date** of every chunk used.
 - A post-processing step checks that each cited path was in the retrieved set. An answer that cites something it was not given is discarded.
 - If retrieval returns nothing above your relevance threshold, the answer is "no matching runbook found", with the closest titles. Do not let the model fill the gap from general knowledge during an incident.
 - Show the chunk text next to the summary, so the responder can read the original instead of trusting the paraphrase.
@@ -75,8 +75,8 @@ The assistant is allowed to answer only from retrieved chunks, and every answer 
 
 A confident answer from an old page is the worst outcome. Make age visible and, where it matters, loud:
 
-- Compare `last-verified` with a threshold per service tier. Past the threshold the answer starts with a warning: "This runbook was last verified 2025-11-02 (owner: team-checkout); check commands before running."
-- Missing `last-verified` counts as stale.
+- Compare `last_verified` with a threshold per service tier. Past the threshold the answer starts with a warning: "This runbook was last verified 2025-11-02 (owner: team-checkout); check commands before running."
+- Missing `last_verified` counts as stale.
 - Prefer newer chunks when relevance is similar, but never hide an old page that is the only match.
 - Detect conflicts: if two retrieved chunks give different steps for the same thing, say so and cite both.
 - Send a weekly report of stale pages to their owners; fix the source, not the index.
@@ -121,7 +121,8 @@ Treat changes to the index, chunking, prompt or model as code changes. A merge r
 rag-eval:
   stage: test
   rules:
-    - changes: [rag/**/*, prompts/**/*]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: [rag/**/*, prompts/**/*]
   script:
     - python rag/eval.py --questions golden/questions.jsonl --repeat 3 --out score.json
     - python rag/compare.py --baseline golden/baseline.json --candidate score.json --max-drop 0

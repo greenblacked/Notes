@@ -131,7 +131,7 @@ The version numbers above are examples. Choose them from what your module's test
 
 ```hcl title="envs/prod/main.tf"
 module "cluster" {
-  source = "git::https://gitlab.example.com/platform/terraform-modules.git//gke-cluster?ref=v2.3.1"
+  source = "git::https://gitlab.example.com/platform/tf-modules.git//gke-cluster?ref=v2.3.1"
 
   name = "prod-eu"
 }
@@ -198,9 +198,11 @@ The verification is a plan against a copy of a real consumer: it must show moves
 ## Tests and examples
 
 - **Every shared module has an example** in `examples/` that CI runs `init`, `validate` and `plan` against, using a throwaway project or mocked providers.
-- **`terraform test` with `.tftest.hcl` files** covers the module's contract: validation rejects bad input, outputs have the expected shape, and a plan with defaults creates the expected resources. Plan-mode tests are cheap and need no credentials; apply-mode tests create real resources and belong in a scheduled job with a sandbox project. The test framework's syntax and command-line flags depend on the Terraform version; check the current docs for yours.
+- **`terraform test` with `.tftest.hcl` files** covers the module's contract: validation rejects bad input, outputs have the expected shape, and a plan with defaults creates the expected resources. Plan-mode tests with `mock_provider` (check the Terraform version that supports it) need no credentials; without a mock, the real provider is configured and needs them; apply-mode tests create real resources and belong in a scheduled job with a sandbox project. The test framework's syntax and command-line flags depend on the Terraform version; check the current docs for yours.
 
 ```hcl title="modules/gke-cluster/tests/basic.tftest.hcl"
+mock_provider "google" {}
+
 run "rejects_bad_name" {
   command = plan
 

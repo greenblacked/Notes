@@ -41,6 +41,9 @@ CONTROLLER=jenkins-0                         # controller Pod name
 
 ## Steps
 
+> [!note] Credentials on the command line
+> Passing a token with `-u` puts it in the process arguments, where other users on a shared host can read it. On a shared host use a `~/.netrc` file with mode 600 and `curl -n`, or a header file passed with `-H @file`.
+
 ### 1. Confirm controller health
 
 ```bash
@@ -129,8 +132,8 @@ The quiet-down and safe-restart endpoints require a POST, and authentication wit
 curl -sS -X POST -u "$JENKINS_USER:$JENKINS_TOKEN" "$JENKINS_URL/quietDown"
 
 # Wait until no builds are running
-curl -sS -u "$JENKINS_USER:$JENKINS_TOKEN" "$JENKINS_URL/computer/api/json?tree=computer[executors[currentExecutable[url]]]" \
-  | jq '[.computer[].executors[].currentExecutable] | map(select(.!=null)) | length'
+curl -sS -u "$JENKINS_USER:$JENKINS_TOKEN" "$JENKINS_URL/computer/api/json?tree=computer[executors[currentExecutable[url]],oneOffExecutors[currentExecutable[url]]]" \
+  | jq '[.computer[] | ((.executors // []) + (.oneOffExecutors // []))[] | .currentExecutable] | map(select(. != null)) | length'
 
 # Restart once idle, or when the maximum wait you chose has passed
 curl -sS -X POST -u "$JENKINS_USER:$JENKINS_TOKEN" "$JENKINS_URL/safeRestart"

@@ -44,13 +44,15 @@ deploy:production:
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
   script:
-    - echo "${GCP_ID_TOKEN}" > "${CI_PROJECT_DIR}/.id_token"
+    # Keep the token outside the project directory so no artifacts: or cache: path can pick it up
+    - CRED_DIR="$(mktemp -d)"
+    - echo "${GCP_ID_TOKEN}" > "${CRED_DIR}/id_token"
     - gcloud iam workload-identity-pools create-cred-config
       projects/123456789012/locations/global/workloadIdentityPools/ci-prod/providers/gitlab
       --service-account=deployer@example-prod.iam.gserviceaccount.com
-      --credential-source-file="${CI_PROJECT_DIR}/.id_token"
-      --output-file="${CI_PROJECT_DIR}/.wif.json"
-    - export GOOGLE_APPLICATION_CREDENTIALS="${CI_PROJECT_DIR}/.wif.json"
+      --credential-source-file="${CRED_DIR}/id_token"
+      --output-file="${CRED_DIR}/wif.json"
+    - export GOOGLE_APPLICATION_CREDENTIALS="${CRED_DIR}/wif.json"
     - gcloud auth login --cred-file="${GOOGLE_APPLICATION_CREDENTIALS}"
 ```
 

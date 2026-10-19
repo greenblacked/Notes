@@ -58,7 +58,7 @@ resource "google_secret_manager_secret" "db_password" {
 ```
 
 ```yaml title="external-secret.yaml"
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: payments-db

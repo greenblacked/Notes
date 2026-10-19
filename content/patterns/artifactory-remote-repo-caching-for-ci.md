@@ -72,7 +72,7 @@ Set the repository base URL once, in a CI variable, so rollback is a variable ch
 ```bash title="ci-env.sh"
 export ARTIFACTORY_URL="https://artifactory.example.com/artifactory"
 export NPM_REGISTRY="${ARTIFACTORY_URL}/api/npm/npm/"
-export PIP_INDEX_URL="https://ci-reader:${ARTIFACTORY_READ_TOKEN}@artifactory.example.com/artifactory/api/pypi/pypi/simple"
+export PIP_INDEX_URL="https://artifactory.example.com/artifactory/api/pypi/pypi/simple"  # credential-free; auth comes from ~/.netrc (mode 600, written from a masked variable)
 export MAVEN_MIRROR_URL="${ARTIFACTORY_URL}/maven"
 export HELM_REPO_URL="${ARTIFACTORY_URL}/helm"
 export DOCKER_PREFIX="artifactory.example.com/docker"
@@ -82,7 +82,7 @@ export DOCKER_PREFIX="artifactory.example.com/docker"
 
 There are two mechanisms, and they behave differently:
 
-1. **Daemon `registry-mirrors`.** Applies only to Docker Hub pulls of unprefixed images. Configure it on runner nodes.
+1. **Daemon `registry-mirrors`.** Applies only to Docker Hub pulls through the daemon. Configure it on runner nodes. The daemon mirror does not send Artifactory credentials (check the current Docker docs), so it needs anonymous read on that virtual repository; where anonymous access is disabled, prefer option 2.
 2. **Image prefix rewrite.** The image reference itself points at Artifactory, for example `artifactory.example.com/docker/library/alpine`. Works for any upstream, and is the only option for BuildKit builds in a container without access to the node daemon config.
 
 ```json title="/etc/docker/daemon.json"
@@ -120,7 +120,7 @@ index-url = https://artifactory.example.com/artifactory/api/pypi/pypi/simple
 ```
 
 ```bash title="pip"
-pip config list
+pip config list   # prints index-url as configured; keep credentials out of it (use ~/.netrc)
 ```
 
 ```xml title="settings.xml"
@@ -174,15 +174,15 @@ Check the current docs for how your version resolves a name that exists in sever
 
 ## Failure modes
 
-| Symptom                               | Likely cause                                                                                                               | Fix                                                                                            |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| New release not visible for hours     | Metadata cache period longer than expected                                                                                 | Lower it for that remote, or expire the cache entry for one package                            |
-| Build fails during an upstream outage | Cold cache: that dependency was never fetched through the proxy                                                            | Pre-warm by building main through the proxy; keep retention long enough                        |
-| Still rate-limited by Docker Hub      | Images are referenced with a fully qualified registry that skips the mirror, or `FROM` in a base build stage has no prefix | Use the prefix rewrite; grep Dockerfiles and Helm values for `docker.io` and unprefixed images |
-| 401 on pull for some projects         | Token lacks permission on the virtual repository, or expired                                                               | Check the permission target and the token expiry                                               |
-| Wrong package version installed       | Virtual repository resolution order or a public name collision                                                             | Fix order and exclude patterns, then clear the cached entry                                    |
-| Disk fills                            | No retention on remotes                                                                                                    | Add cleanup policies; alert on repository storage                                              |
-| Everything fails at once              | Artifactory itself is now a single point of failure                                                                        | Run it highly available per your hosting decision; keep the rollback variable below ready      |
+| Symptom                               | Likely cause                                                                                                                        | Fix                                                                                            |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| New release not visible for hours     | Metadata cache period longer than expected                                                                                          | Lower it for that remote, or expire the cache entry for one package                            |
+| Build fails during an upstream outage | Cold cache: that dependency was never fetched through the proxy                                                                     | Pre-warm by building main through the proxy; keep retention long enough                        |
+| Still rate-limited by Docker Hub      | BuildKit or containerised builders do not use the daemon's `registry-mirrors`, or images come from registries other than Docker Hub | Use the prefix rewrite; grep Dockerfiles and Helm values for `docker.io` and unprefixed images |
+| 401 on pull for some projects         | Token lacks permission on the virtual repository, or expired                                                                        | Check the permission target and the token expiry                                               |
+| Wrong package version installed       | Virtual repository resolution order or a public name collision                                                                      | Fix order and exclude patterns, then clear the cached entry                                    |
+| Disk fills                            | No retention on remotes                                                                                                             | Add cleanup policies; alert on repository storage                                              |
+| Everything fails at once              | Artifactory itself is now a single point of failure                                                                                 | Run it highly available per your hosting decision; keep the rollback variable below ready      |
 
 Artifactory becoming the dependency of every build is the main trade-off of this pattern. The hosting decision is in [[0011-artifactory-hosting-saas-or-self-managed]], and the resolver rule in [[0007-language-packages-resolve-through-artifactory]].
 
@@ -194,7 +194,7 @@ docker info | grep -A2 'Registry Mirrors'
 
 # Package managers point at Artifactory
 npm config get registry
-pip config list
+pip config list   # must show a credential-free index-url
 
 # A pull is served from the cache: second pull is fast and the repo shows a cached file
 curl -fsS -H "Authorization: Bearer ${ARTIFACTORY_READ_TOKEN}" \
@@ -225,8 +225,8 @@ Keep the upstream values documented next to the variables so the switch can be d
 
 ## Sources
 
-- https://jfrog.com/help/r/jfrog-artifactory-documentation
-- https://docs.docker.com/docker-hub/usage/
-- https://docs.docker.com/docker-hub/mirror/
-- https://docs.npmjs.com/cli/v10/using-npm/config
-- https://pip.pypa.io/en/stable/topics/configuration/
+- [jfrog.com/help/r/jfrog-artifactory-documentation](https://jfrog.com/help/r/jfrog-artifactory-documentation)
+- [docs.docker.com/docker-hub/usage](https://docs.docker.com/docker-hub/usage/)
+- [docs.docker.com/docker-hub/mirror](https://docs.docker.com/docker-hub/mirror/)
+- [docs.npmjs.com/cli/v10/using-npm/config](https://docs.npmjs.com/cli/v10/using-npm/config)
+- [pip.pypa.io/en/stable/topics/configuration](https://pip.pypa.io/en/stable/topics/configuration/)

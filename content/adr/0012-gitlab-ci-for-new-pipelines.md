@@ -123,6 +123,7 @@ curl -fsS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
         "${GITLAB_URL}/api/v4/projects/${id}/repository/files/.gitlab-ci.yml?ref=main" || true
     done | grep -v '^200'
 
+# -H/-u expose the token in the process list on a shared host; prefer a curl config file (-K) or ~/.netrc written from a masked variable.
 # Jenkins: list jobs and review that the count only goes down over time
 curl -fsS --user "${JENKINS_USER}:${JENKINS_TOKEN}" \
   "https://jenkins.example.com/api/json?tree=jobs[name]" | jq '.jobs | length'

@@ -91,6 +91,7 @@ GITLAB_URL="https://gitlab.example.com"
 GROUP_ID="42" # example: numeric ID of your group
 GITLAB_TOKEN="${GITLAB_TOKEN:?set a read-only API token}"
 
+# -H/-u expose the token in the process list on a shared host; prefer a curl config file (-K) or ~/.netrc written from a masked variable.
 # 1. Find consumers that include the templates project without a version-tag ref.
 #    Review the output: any line that is not a vX.Y.Z tag is a violation.
 curl -fsS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \

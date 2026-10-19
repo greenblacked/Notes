@@ -186,7 +186,7 @@ You need Docker on the lab VM. All screens and output are illustrative; this les
 3. **Create a token and store it.** Generate a project analysis token (or the narrowest type your version offers) and save it:
 
    ```bash
-   umask 077 && printf '%s' 'PASTE_TOKEN_HERE' > ~/.lab-sonar-token
+   ( umask 077; read -rs -p 'Token: ' t && printf '%s' "$t" > ~/.lab-sonar-token )
    ```
 
    Expected: a file readable only by you.

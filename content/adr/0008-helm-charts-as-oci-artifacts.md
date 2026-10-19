@@ -33,7 +33,7 @@ Helm supports OCI registries as a first-class storage for charts, and Artifactor
 We will **store and pull Helm charts as OCI artifacts** in Artifactory, with immutable chart versions, and retire the HTTP index repository.
 
 - Charts are published to a dedicated OCI repository following [[0003-artifactory-repository-layout]], for example `helm-oci-local`, and promoted between stages like any other artifact ([[0004-build-once-promote-between-repositories]]).
-- A chart version is **never overwritten**. The repository has overwrite disabled for released versions, and CI refuses to publish a version that already exists.
+- A chart version is **never overwritten**. Overwrite is prevented by granting no Delete/Overwrite permission on production repositories except to the promotion identity (check the current Artifactory permission model), and CI refuses to publish a version that already exists.
 - Chart versions follow SemVer and are produced by the release process in [[release-versioning-and-changelog-automation]].
 - Argo CD reads charts directly from the OCI registry ([[0001-gitops-with-argocd]]).
 - Charts pass the quality gates in [[helm-chart-ci-quality-gates]] before they are pushed, and follow [[helm-chart-conventions]].

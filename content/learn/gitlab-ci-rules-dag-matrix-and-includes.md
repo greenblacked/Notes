@@ -365,7 +365,15 @@ You need the `ci-lab` project from Delivery 02, a runner (shared runners on GitL
    Expected: `ship` starts before `slow-test` finishes. Fix it with `needs: [build-app, slow-test, lint]`.
    If you see something else: this is the point of the exercise: `needs` listing fewer jobs than the stage would have waited for.
 
-7. **Use a matrix.** Add a `test` job with `parallel: matrix: [{ NAME: ["a", "b"], MODE: ["fast", "slow"] }]` and `script: ["echo $NAME $MODE"]`.
+7. **Use a matrix.** Add a `test` job with `script: ["echo $NAME $MODE"]` and this matrix:
+
+   ```yaml
+   parallel:
+     matrix:
+       - NAME: ["a", "b"]
+         MODE: ["fast", "slow"]
+   ```
+
    Expected: four jobs named like `test: [a, fast]`.
    If you see something else: a validation error about the matrix means a value is not a list of strings.
 

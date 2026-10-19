@@ -43,7 +43,7 @@ With surge, GKE creates extra nodes with the new version, then drains and delete
 
 Higher surge speeds the upgrade up in proportion to the pool size, but each batch drains more Pods at the same time, so PDBs and the readiness time of your workloads become the limit. The surge nodes also count against project quota, and an upgrade that cannot get quota fails or stalls. Check the quota in the pool's region before raising it.
 
-A rollback of a surge upgrade does not exist as a button. Once nodes are replaced, going back means creating a new pool at the old version (if the version is still offered) and moving workloads. Plan upgrades in dev and stage first.
+A failed or cancelled upgrade can be rolled back with `gcloud container node-pools rollback`. A completed upgrade can be downgraded only within the supported version skew (check the docs); otherwise going back means creating a new pool at the old version (if it is still offered) and moving workloads. Plan upgrades in dev and stage first.
 
 ## Blue-green upgrades
 
@@ -162,14 +162,14 @@ Before:
 After:
 
 1. `kubectl get nodes -o wide` shows the expected version on every node.
-2. No Pods Pending or crash-looping: `kubectl get pods -A --field-selector=status.phase!=Running`.
+2. No Pods Pending or crash-looping: `kubectl get pods -A --field-selector=status.phase=Pending` and `kubectl get pods -A | grep -E 'CrashLoopBackOff|Error|ImagePullBackOff'` (crash-looping Pods have phase Running, so a phase filter alone misses them).
 3. SLO dashboards are normal, see [[slo-burn-rate-alerting]].
 4. The old pool or blue nodes are gone after the soak and billing for them has stopped.
 
 ## Rollback
 
 - **Blue-green, during soak.** Use the rollback action in the console or the gcloud command listed in the upgrade docs. Blue nodes are uncordoned and workloads return. Look up the exact command for your version before you need it.
-- **Blue-green, after soak** and **surge**. There is no in-place rollback. Create a new pool at the previous version if GKE still offers it, taint the upgraded pool, drain it into the new one, and delete it. Control plane downgrades are generally not supported, so confirm in the docs.
+- **Blue-green, after soak** and **surge**. A failed or cancelled upgrade can be rolled back with `gcloud container node-pools rollback`. A completed upgrade can be downgraded within the supported skew (check the docs); otherwise create a new pool at the previous version if GKE still offers it, taint the upgraded pool, drain it into the new one, and delete it. Control plane downgrades are generally not supported, so confirm in the docs.
 - **Settings.** Reverting the strategy in Terraform changes only future upgrades.
 
 ## Related
@@ -183,7 +183,7 @@ After:
 
 ## Sources
 
-- https://cloud.google.com/kubernetes-engine/docs/concepts/node-pool-upgrade-strategies
-- https://cloud.google.com/kubernetes-engine/docs/how-to/node-pool-upgrade-strategies
-- https://cloud.google.com/kubernetes-engine/docs/concepts/maintenance-windows-and-exclusions
-- https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_node_pool
+- [cloud.google.com/kubernetes-engine/docs/concepts/node-pool-upgrade-strategies](https://cloud.google.com/kubernetes-engine/docs/concepts/node-pool-upgrade-strategies)
+- [cloud.google.com/kubernetes-engine/docs/how-to/node-pool-upgrade-strategies](https://cloud.google.com/kubernetes-engine/docs/how-to/node-pool-upgrade-strategies)
+- [cloud.google.com/kubernetes-engine/docs/concepts/maintenance-windows-and-exclusions](https://cloud.google.com/kubernetes-engine/docs/concepts/maintenance-windows-and-exclusions)
+- [registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_node_pool](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_node_pool)

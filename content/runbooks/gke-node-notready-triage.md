@@ -77,7 +77,7 @@ One node, one pool, or one zone changes the diagnosis completely.
 
 ```bash
 kubectl get nodes -L topology.kubernetes.io/zone,cloud.google.com/gke-nodepool \
-  --no-headers | awk '{print $2, $NF}' | sort | uniq -c
+  --no-headers | awk '{print $2, $(NF-1), $NF}' | sort | uniq -c
 
 kubectl get nodes -o json | jq -r '.items[] | select(([.status.conditions[]|select(.type=="Ready")][0].status)!="True") | .metadata.name'
 ```
@@ -153,7 +153,6 @@ kubectl drain "$NODE" --ignore-daemonsets --delete-emptydir-data --timeout=300s
 4. **Delete the instance** so the managed instance group recreates it. This is how you force a replacement when repair is slow:
 
 ```bash
-# Pool instance group name from the node's metadata or the console; do not guess it
 gcloud compute instances delete "$NODE" --zone "$ZONE"
 ```
 

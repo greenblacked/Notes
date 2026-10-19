@@ -72,11 +72,11 @@ gcloud artifacts repositories create docker-local \
   --repository-format=docker \
   --mode=standard-repository
 
-# Virtual repository: one URL, ordered upstreams (lower priority number wins)
+# Virtual repository: one URL, ordered upstreams (higher priority value wins)
 cat > upstreams.json <<'EOF'
 [
-  {"id": "internal", "repository": "projects/example-project/locations/europe-west1/repositories/docker-local", "priority": 10},
-  {"id": "dockerhub", "repository": "projects/example-project/locations/europe-west1/repositories/dockerhub-cache", "priority": 20}
+  {"id": "internal", "repository": "projects/example-project/locations/europe-west1/repositories/docker-local", "priority": 100},
+  {"id": "dockerhub", "repository": "projects/example-project/locations/europe-west1/repositories/dockerhub-cache", "priority": 50}
 ]
 EOF
 
@@ -88,7 +88,7 @@ gcloud artifacts repositories create docker \
   --upstream-policy-file=upstreams.json
 ```
 
-Put internal repositories at a lower priority number (higher precedence) than remote ones, so a public image can never shadow an internal name. The same dependency-confusion reasoning applies to Artifactory virtual repositories; see [[artifactory-repository-design]].
+Give internal repositories a higher priority value than remote ones, so a public image can never shadow an internal name. The same dependency-confusion reasoning applies to Artifactory virtual repositories; see [[artifactory-repository-design]].
 
 ## Security, scanning and signing hooks
 
@@ -157,7 +157,7 @@ Artifactory and Nexus both have free or open-source entry points and paid tiers,
 Confirm that a self-hosted Artifactory is healthy and reachable with the JFrog CLI:
 
 ```bash title="check-artifactory.sh"
-jf config add example --url=https://artifactory.example.com --user=ci-reader --interactive=false
+jf config add example --url=https://artifactory.example.com --user=ci-reader --access-token="$ART_TOKEN" --interactive=false
 jf rt ping --server-id=example
 ```
 

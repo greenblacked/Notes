@@ -44,7 +44,7 @@ variables:
 
 publish-build-info:
   stage: publish
-  image: releases-docker.jfrog.io/jfrog/jfrog-cli-v2-jf:latest # pin a version or digest in real use
+  image: releases-docker.jfrog.io/jfrog/jfrog-cli-v2-jf:X.Y.Z@sha256:0000000000000000000000000000000000000000000000000000000000000000 # change: pinned version and digest
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
@@ -100,6 +100,28 @@ The chain breaks when someone removes a link:
 - Make production repositories not allow overwrite or delete for normal users.
 - Export build info JSON to the evidence bucket on promotion, so the record survives an Artifactory migration or accidental deletion.
 
+## Build retention and exporting build info
+
+Build info has its own lifecycle, separate from artifact retention. Old builds can be discarded by a build-retention setting or a cleanup job, and the artifacts they describe can outlive the record that explains them. Set the retention for builds that reach production to at least the audit and legal retention period, and keep the discard rules for everything else.
+
+```bash title="scripts/build-retention-and-export.sh"
+set -euo pipefail
+
+BUILD_NAME="${BUILD_NAME:?set the build name}"
+BUILD_NUMBER="${BUILD_NUMBER:?set the build number}"
+EVIDENCE_BUCKET="gs://example-org-evidence" # change: locked evidence bucket
+
+# Discard old non-production builds only; check "jf rt build-discard --help" for flags in your CLI version.
+jf rt build-discard "${BUILD_NAME}" --max-days=90 --exclude-builds="${BUILD_NUMBER}"
+
+# Export the build info JSON for the promoted build to the evidence bucket.
+jf rt curl -XGET "/api/build/${BUILD_NAME}/${BUILD_NUMBER}" > "buildinfo-${BUILD_NAME}-${BUILD_NUMBER}.json"
+gcloud storage cp "buildinfo-${BUILD_NAME}-${BUILD_NUMBER}.json" \
+  "${EVIDENCE_BUCKET}/buildinfo/$(date -u +%Y/%m)/"
+```
+
+Two checks make this real. First, run the trace script below against an artifact from the oldest period you must cover and confirm the build info still resolves. Second, confirm the evidence bucket copy matches the live record by comparing checksums, because the export is what survives a migration or an accidental deletion. A legal hold ([[legal-hold-for-logs-and-artifacts]]) overrides any discard rule, so make the discard job skip held builds.
+
 ## Verifying an artifact years later
 
 Start from the digest recorded in the deploy record, then walk back.
@@ -109,16 +131,21 @@ set -euo pipefail
 
 SHA256="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" # change: digest from the deploy record
 
-# 1. Find the file by checksum with AQL.
+# 1. Find the file by checksum with AQL, including its build properties.
 cat > query.aql <<AQL
-items.find({"sha256":"${SHA256}"}).include("repo","path","name","created","@build.name","@build.number")
+items.find({"sha256":"${SHA256}"}).include("repo","path","name","created","property.key","property.value")
 AQL
-jf rt curl -XPOST /api/search/aql -H "Content-Type: text/plain" -d @query.aql
+jf rt curl -XPOST /api/search/aql -H "Content-Type: text/plain" -d @query.aql > aql-result.json
 
-# 2. Fetch the build info (name and number come from step 1).
-jf rt curl -XGET "/api/build/example-org-api/1042" > buildinfo.json
+# 2. Read the build name and number from the properties of the first result.
+BUILD_NAME="$(jq -r '.results[0].properties[] | select(.key=="build.name") | .value' aql-result.json)"
+BUILD_NUMBER="$(jq -r '.results[0].properties[] | select(.key=="build.number") | .value' aql-result.json)"
+: "${BUILD_NAME:?no build.name property on the artifact}" "${BUILD_NUMBER:?no build.number property}"
 
-# 3. Walk to the commit and the CI run.
+# 3. Fetch the build info.
+jf rt curl -XGET "/api/build/${BUILD_NAME}/${BUILD_NUMBER}" > buildinfo.json
+
+# 4. Walk to the commit and the CI run.
 jq -r '.buildInfo | {started, url, vcs: .vcs[0].revision, vcsUrl: .vcs[0].url}' buildinfo.json
 ```
 

@@ -87,7 +87,7 @@ In every case, attest and sign by digest, not by tag.
 build-kaniko:
   stage: build
   image:
-    name: gcr.io/kaniko-project/executor:debug
+    name: gcr.io/kaniko-project/executor:vX.Y.Z-debug@sha256:0000000000000000000000000000000000000000000000000000000000000000 # placeholder: pin a tag and digest, not a moving tag
     entrypoint: [""]
   script:
     - mkdir -p /kaniko/.docker

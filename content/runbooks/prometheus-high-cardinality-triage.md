@@ -189,7 +189,7 @@ Deleting series with the admin API is optional and risky:
 
 ```bash
 # Requires --web.enable-admin-api, which is off by default and should stay off in shared environments.
-curl -s -X POST -g "$PROM/api/v1/admin/tsdb/delete_series?match[]={__name__=\"http_requests_total\",path=~\".+\"}"
+curl -s -X POST "$PROM/api/v1/admin/tsdb/delete_series" --data-urlencode 'match[]={__name__="http_requests_total",path=~".+"}'
 curl -s -X POST "$PROM/api/v1/admin/tsdb/clean_tombstones"
 ```
 

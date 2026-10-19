@@ -103,7 +103,9 @@ A CI check keeps the catalog honest. This job fails when the descriptor is missi
 ```yaml title=".gitlab-ci.yml (job fragment)"
 catalog-check:
   stage: test
-  image: python:3-slim
+  image: python:0.0.0-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000 # placeholder: pin the real version and digest
+  before_script:
+    - pip install --no-cache-dir pyyaml # pin the version (or use a prebuilt tools image) in real use
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
@@ -124,7 +126,7 @@ catalog-check:
       PY
 ```
 
-Pin the image and install a YAML library in your own base image in real use; the example assumes one is available. Check the current Backstage descriptor documentation for kinds and fields.
+The example installs PyYAML in `before_script` because the stock Python image does not include it. In real use, pin the image and the library version, or bake both into your own tools image. Check the current Backstage descriptor documentation for kinds and fields.
 
 ## Self-service infrastructure
 

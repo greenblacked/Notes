@@ -84,7 +84,7 @@ Base images come from a short allowlist in one place, not from whatever a develo
 - Approved bases are mirrored or proxied into our registry, so builds do not depend on a public registry being reachable and so that the digests we pin are the digests we store. The repository layout is in [[artifactory-artifact-naming-and-versioning]].
 - Images on the allowlist are rebuilt on a schedule and when a critical vulnerability lands, following [[vulnerability-management-slas]]. An entry whose owner stops patching it is removed, and services using it get a deadline to move.
 
-The gate checks `FROM` lines against the allowlist. A minimal check is a script that extracts every image reference and fails if its repository path is not a prefix in the list; it does not need to be clever.
+The gate checks `FROM` lines against the allowlist. A minimal check is a script that extracts every image reference and fails if its repository path is not an exact line in the list (`grep -qxF` matches the whole line); it does not need to be clever.
 
 ```bash title="scripts/check-base-images.sh"
 #!/usr/bin/env bash
@@ -154,7 +154,7 @@ dockerfile-lint:
     - ./scripts/check-base-images.sh
 ```
 
-The version and digest in the job image are examples; pin the release you have approved. Job image pinning is part of [[ci-pipeline-standard]]. A scanner for the built image (Trivy or similar) is a separate gate; see [[vulnerability-management-slas]].
+The version and digest in the job image are examples; pin the release you have approved. The job needs a shell, `find`, `xargs`, `awk` and bash, which the upstream hadolint image does not have (it is shell-less). Mirror the `-debian` or `-alpine` variant of the hadolint image (and install bash on alpine in the mirrored image), or use a pinned tools image that contains hadolint, bash, awk and find. Job image pinning is part of [[ci-pipeline-standard]]. A scanner for the built image (Trivy or similar) is a separate gate; see [[vulnerability-management-slas]].
 
 ## Labels and build metadata
 

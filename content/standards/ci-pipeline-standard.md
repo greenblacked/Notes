@@ -26,14 +26,14 @@ Applies to pipelines in repositories that build, test or deploy software or infr
 
 Every pipeline has these stages, in this order. A repository may add stages but not drop one without an exception.
 
-| Stage             | Purpose                                                        | What it must block                                                              |
-| ----------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `lint`            | Format, static checks, Dockerfile, YAML, shell, IaC validation | Merge on any failure                                                            |
-| `test`            | Unit and integration tests                                     | Merge on any failure; flaky tests are quarantined, not retried away (see below) |
-| `scan`            | Secret scanning, dependency and image vulnerability scan, SAST | Merge when findings exceed the policy in [[vulnerability-management-slas]]      |
-| `build`           | Build the artifact once, tag it, push it                       | Anything downstream if the artifact cannot be built reproducibly                |
-| `sign-and-attest` | Sign the artifact and attach SBOM and provenance               | Deploy of an unsigned artifact                                                  |
-| `deploy`          | Promote to environments, with approval for production          | Production without the approval and the protected-environment rules             |
+| Stage             | Purpose                                                                                  | What it must block                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `lint`            | Format, static checks, Dockerfile, YAML, shell, IaC validation                           | Merge on any failure                                                            |
+| `test`            | Unit and integration tests                                                               | Merge on any failure; flaky tests are quarantined, not retried away (see below) |
+| `scan`            | Secret scanning, dependency vulnerability scan, SAST (before build)                      | Merge when findings exceed the policy in [[vulnerability-management-slas]]      |
+| `build`           | Build the artifact once, tag it, push it                                                 | Anything downstream if the artifact cannot be built reproducibly                |
+| `sign-and-attest` | Image vulnerability scan of the built image, then sign it and attach SBOM and provenance | Deploy of an unscanned or unsigned artifact                                     |
+| `deploy`          | Promote to environments, with approval for production                                    | Production without the approval and the protected-environment rules             |
 
 Rules for the stage set:
 
@@ -43,7 +43,7 @@ Rules for the stage set:
 - **Only the default branch and tags deploy.** Merge request pipelines never reach a shared environment.
 
 ```yaml title=".gitlab-ci.yml"
-stages: [lint, test, scan, build, sign, deploy]
+stages: [lint, test, scan, build, sign-and-attest, deploy]
 
 default:
   image: registry.example.com/ci/base:1.8.0@sha256:0000000000000000000000000000000000000000000000000000000000000000
@@ -79,13 +79,29 @@ build-image:
   needs: [unit-tests]
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
   script: ["./scripts/build-and-push.sh"]
+  interruptible: false
+
+# Needs the built image, so it runs after build, not in the scan stage.
+image-scan:
+  stage: sign-and-attest
+  needs: [build-image]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script: ["./scripts/scan-image.sh"]
+
+# Tag pipelines never rebuild. They resolve the digest built for the same
+# commit on the default branch and retag that digest (build once, promote).
+promote-image:
+  stage: build
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  script: ['./scripts/promote-image.sh "$CI_COMMIT_SHA" "$CI_COMMIT_TAG"']
   interruptible: false
 
 deploy-prod:
   stage: deploy
-  needs: [build-image]
+  needs: [promote-image]
   environment:
     name: production
     deployment_tier: production
@@ -97,7 +113,7 @@ deploy-prod:
   interruptible: false
 ```
 
-The image tag, digest and timeouts are examples. `retry: when` values are listed in the [GitLab CI YAML reference](https://docs.gitlab.com/ci/yaml/); check the current `retry:when` values there before relying on a name.
+The scripts (`build-and-push.sh`, `scan-image.sh`, `promote-image.sh`), image tag, digest and timeouts are examples. `promote-image.sh` must fail if no image was built for the tagged commit, rather than building one. `retry: when` values are listed in the [GitLab CI YAML reference](https://docs.gitlab.com/ci/yaml/); check the current `retry:when` values there before relying on a name.
 
 ## Pinning
 

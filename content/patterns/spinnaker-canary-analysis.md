@@ -175,6 +175,6 @@ Automatic rollback on fail is only the canary part. Keep the general rollback pa
 
 ## Sources
 
-- https://spinnaker.io/docs/guides/user/canary/
-- https://spinnaker.io/docs/guides/user/canary/config/
-- https://github.com/spinnaker/kayenta
+- [spinnaker.io/docs/guides/user/canary](https://spinnaker.io/docs/guides/user/canary/)
+- [spinnaker.io/docs/guides/user/canary/config](https://spinnaker.io/docs/guides/user/canary/config/)
+- [github.com/spinnaker/kayenta](https://github.com/spinnaker/kayenta)

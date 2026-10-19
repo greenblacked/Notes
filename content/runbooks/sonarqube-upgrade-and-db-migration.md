@@ -44,6 +44,9 @@ DB_USER=sonarqube                          # the password comes from PGPASSFILE 
 
 ## Steps
 
+> [!note] Credentials on the command line
+> Passing a token with `-u` puts it in the process arguments, where other users on a shared host can read it. On a shared host use a `~/.netrc` file with mode 600 and `curl -n`, or a header file passed with `-H @file`.
+
 ### 1. Pre-checks
 
 ```bash
@@ -154,10 +157,13 @@ curl -sS -u "$SONAR_TOKEN:" "$SONAR_URL/api/plugins/installed" | jq '.plugins | 
 There is no supported in-place downgrade; verify this for your release in the documentation. Rollback means returning to the pre-upgrade state:
 
 1. Stop the new server.
-2. Restore the database from the backup (drop and recreate the database or restore into an empty one, per your database tooling), and verify the checksum first.
+2. Restore the database from the backup: drop and recreate the database, or restore into an empty one. Do not restore with `pg_restore --clean` over the migrated database: it drops only the objects that are in the dump, so tables and indexes added by the new version stay behind and the schema ends up mixed. Verify the checksum first.
 
 ```bash
-pg_restore -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" --clean --if-exists "$BACKUP_DIR/$DB_NAME.dump"
+dropdb -h "$DB_HOST" -U "$DB_USER" "$DB_NAME"
+createdb -h "$DB_HOST" -U "$DB_USER" -O "$DB_USER" "$DB_NAME"
+sha256sum -c "$BACKUP_DIR/$DB_NAME.dump.sha256"
+pg_restore -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" --no-owner "$BACKUP_DIR/$DB_NAME.dump"
 ```
 
 3. Restore the `data`, `extensions` and `conf` directories from the archive, or redeploy the previous image tag and chart revision.

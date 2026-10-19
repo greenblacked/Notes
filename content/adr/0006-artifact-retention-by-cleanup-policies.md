@@ -90,8 +90,9 @@ curl -fsS -X POST \
 
 Confirm nothing in prod is a candidate. The same query against `payments-docker-prod-local` must not be wired to any delete job:
 
-```bash title="check-prod-excluded.sh"
-# Review the policy list: no policy may include a *-prod-local repository.
+```bash title="list-prod-repositories.sh"
+# Lists the prod repositories. Compare them by hand against the cleanup policy list:
+# no policy may include a *-prod-local repository (query the cleanup-policy API for your version to automate this).
 curl -fsS -H "Authorization: Bearer ${AF_TOKEN}" \
   "${AF_URL}/artifactory/api/repositories" | jq -r '.[].key' | grep -- '-prod-local$'
 ```

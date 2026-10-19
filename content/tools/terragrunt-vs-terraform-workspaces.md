@@ -55,7 +55,8 @@ If you use workspaces, guard them in CI:
 
 ```bash title="guard-workspace.sh"
 set -euo pipefail
-EXPECTED="${TF_WORKSPACE:?set TF_WORKSPACE explicitly}"
+EXPECTED="${EXPECTED_WORKSPACE:?set EXPECTED_WORKSPACE}"
+unset TF_WORKSPACE # TF_WORKSPACE would make "workspace show" echo itself and always pass
 ACTUAL="$(terraform workspace show)"
 if [ "$ACTUAL" != "$EXPECTED" ]; then
   echo "workspace mismatch: expected $EXPECTED, got $ACTUAL" >&2
@@ -166,7 +167,7 @@ Plan only what changed and run each plan with the credentials of that environmen
 
 ## Failure modes
 
-- **Wrong workspace applied** (workspaces): guard with `terraform workspace show` and set `TF_WORKSPACE` in CI.
+- **Wrong workspace applied** (workspaces): compare `terraform workspace show` against an expected value held in a separate CI variable (with `TF_WORKSPACE` unset), or select the workspace explicitly through `TF_WORKSPACE` in CI so it is never implicit.
 - **Copies drift** (directories): move shared logic to modules and keep environment roots to a few lines; a CI check can diff the roots.
 - **Dependency cycles or outdated outputs** (Terragrunt): a unit planned against stale dependency outputs. Apply in order, and use mock outputs only for planning, never for apply.
 - **State lock left behind**: a cancelled job leaves a lock object in the bucket. Confirm no run is active, then `terraform force-unlock <id>`; see [[terraform-state-recovery]].

@@ -61,7 +61,7 @@ flowchart LR
   G[Grafana] --> Q
 ```
 
-Each Prometheus runs a sidecar that uploads completed two-hour blocks to object storage. Thanos Query fans out to the sidecars for recent data and to Store Gateways for historical data, and deduplicates replicas by an external label. The Compactor merges and downsamples blocks in the bucket. The alternative ingest path, Thanos Receive, accepts `remote_write` and suits clusters where the sidecar cannot reach the server.
+Each Prometheus runs a sidecar that uploads completed two-hour blocks to object storage. Thanos Query fans out to the sidecars for recent data and to Store Gateways for historical data, and deduplicates replicas by an external label. The Compactor merges and downsamples blocks in the bucket. The alternative ingest path, Thanos Receive, accepts `remote_write` and suits remote or firewalled clusters where Thanos Query cannot reach a sidecar, or where you prefer a push model.
 
 The attraction is that adoption is incremental: you can add a sidecar to an existing Prometheus without changing how you scrape.
 

@@ -93,10 +93,10 @@ Work in a clean working directory or clear `.terraform/` so provider binaries fr
 ```bash
 rm -rf .terraform
 tofu version
-tofu init -upgrade
+tofu init
 ```
 
-`-upgrade` re-resolves providers within the version constraints and rewrites the lock file entries for OpenTofu's registry. Expect a diff in `.terraform.lock.hcl`: hashes change when the provider source changes. Review it; the provider versions should not jump unless your constraints allowed it. Prefer pinning constraints so this step changes the registry, not the versions.
+Plain `tofu init` honours the existing `.terraform.lock.hcl`, so provider versions stay pinned and only the registry changes. Use `-upgrade` only if init fails on the lock file, and then review every version change in the diff; hashes may be added for OpenTofu's registry, which is expected. Prefer pinned constraints so this step changes the registry, not the versions.
 
 **Gate 3:** `tofu init` succeeds, and the provider versions in the lock file are the ones you expect.
 

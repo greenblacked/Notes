@@ -93,8 +93,10 @@ kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}{"\n"}'
 gcloud container clusters get-credentials "$CLUSTER" --location "$LOCATION"
 
 # Network reachability and TLS to the endpoint, with timing (replace with your endpoint)
+# Verify the server certificate against the cluster CA instead of disabling TLS checks
 ENDPOINT=203.0.113.10
-curl -sk -o /dev/null -w 'code=%{http_code} connect=%{time_connect}s total=%{time_total}s\n' \
+gcloud container clusters describe "$CLUSTER" --location "$LOCATION" --format='value(masterAuth.clusterCaCertificate)' | base64 -d > ca.pem
+curl -sS --cacert ca.pem -o /dev/null -w 'code=%{http_code} connect=%{time_connect}s total=%{time_total}s\n' \
   "https://$ENDPOINT/healthz"
 ```
 
@@ -167,9 +169,9 @@ Use Cloud Logging for Kubernetes audit logs to find the heaviest callers by user
 
 ```bash
 kubectl get --raw='/readyz?verbose' | tail -3
-kubectl get apiservices | grep -vc True        # expect 0
+kubectl get apiservices --no-headers | grep -vc True        # expect 0
 kubectl get nodes
-kubectl auth can-i create pods -n default      # a quick write-path check
+kubectl auth can-i create pods -n default      # RBAC check only; line below exercises admission
 kubectl -n default create configmap probe-$(date +%s) --from-literal=ok=1 --dry-run=server -o name
 ```
 

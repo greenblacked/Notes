@@ -50,6 +50,8 @@ deploy-production:
     - ./scripts/promote-and-bump.sh "${CI_COMMIT_TAG}"
 ```
 
+Break-glass only: the normal path is the release workflow, which creates the tag. The maintainer group may run this script when the workflow is unavailable, and the use is recorded in the change log.
+
 ```bash title="cut-release.sh"
 set -euo pipefail
 VERSION="1.4.0"
@@ -94,6 +96,7 @@ GITLAB_URL="https://gitlab.example.com"
 PROJECT_ID="1234"
 # GITLAB_TOKEN must be a read-only API token provided by your environment
 
+# -H/-u expose the token in the process list on a shared host; prefer a curl config file (-K) or ~/.netrc written from a masked variable.
 # Tag protection includes v*
 curl -sS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
   "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/protected_tags" | jq -r '.[].name'
@@ -102,8 +105,9 @@ curl -sS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
 curl -sS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
   "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/protected_environments" | jq -r '.[].name'
 
-# Every release tag is annotated and matches SemVer (prints offenders)
+# Every release tag matches SemVer and is annotated (prints offenders)
 git tag --list 'v*' | grep -Ev '^v[0-9]+\.[0-9]+\.[0-9]+$' || true
+git for-each-ref 'refs/tags/v*' --format='%(objecttype) %(refname:short)' | awk '$1!="tag"{print "lightweight: "$2}'
 ```
 
 ## References

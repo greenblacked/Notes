@@ -38,15 +38,14 @@ Client configuration points at the virtual repository (naming in [[0003-artifact
 registry=https://artifactory.example.com/artifactory/api/npm/npm-virtual/
 # Token is injected by CI as NPM_TOKEN; never commit it.
 //artifactory.example.com/artifactory/api/npm/npm-virtual/:_authToken=${NPM_TOKEN}
-always-auth=true
 ```
 
 ```ini title="pip.conf"
 [global]
-index-url = https://__token__:${PIP_TOKEN}@artifactory.example.com/artifactory/api/pypi/pypi-virtual/simple
+index-url = https://artifactory.example.com/artifactory/api/pypi/pypi-virtual/simple
 ```
 
-In practice, render `pip.conf` in the job from a CI variable so the token is not stored in the file. Some pip versions do not expand environment variables in `pip.conf`; the safe form is to set `PIP_INDEX_URL` as a masked CI variable instead.
+In practice, render `pip.conf` in the job from a CI variable so the token is not stored in the file. pip does not expand environment variables in `pip.conf`; the safe form is to set `PIP_INDEX_URL` as a masked CI variable instead, or to keep `index-url` free of credentials and supply them through `~/.netrc` (mode 600, written from a masked variable). Never run `pip config list` or verbose installs in CI logs with credentials in the URL, because pip prints the index URL.
 
 ```xml title="settings.xml"
 <settings>

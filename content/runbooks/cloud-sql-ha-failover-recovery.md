@@ -94,7 +94,7 @@ Pools often hold dead connections. Look for errors that appear only on the first
 kubectl -n "$NS" logs deploy/api --tail=200 | grep -Ei 'connection (reset|refused|closed)|broken pipe|server closed|timeout'
 ```
 
-If PgBouncer sits between the app and the database, check that it reconnects and drops dead server connections; see [[postgres-connection-pooling-gke]]. A PgBouncer `server_lifetime`, `server_check_query` and `server_reset_query` configuration is how it detects bad connections; check the current PgBouncer docs for names and defaults.
+If PgBouncer sits between the app and the database, check that it reconnects and drops dead server connections; see [[postgres-connection-pooling-gke]]. PgBouncer's `server_check_query`, `server_check_delay`, `server_lifetime` and `server_idle_timeout` control how it detects and recycles bad server connections; check the current PgBouncer docs for names and defaults.
 
 ### 4. Force clean reconnects
 

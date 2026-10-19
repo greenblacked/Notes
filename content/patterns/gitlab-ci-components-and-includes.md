@@ -58,18 +58,19 @@ spec:
     push:
       type: boolean
       default: false
-    registry_env:
-      default: dev
-      options: [dev, staging, prod]
 ---
 docker-build-$[[ inputs.image_name ]]:
   stage: $[[ inputs.stage ]]
   image: docker:cli
   script:
-    - docker buildx build -f "$[[ inputs.dockerfile ]]" -t "$CI_REGISTRY_IMAGE/$[[ inputs.image_name ]]:$CI_COMMIT_SHORT_SHA" "$[[ inputs.context ]]"
+    - |
+      if [ "$[[ inputs.push ]]" = "true" ]; then OUTPUT="--push"; else OUTPUT="--load"; fi
+      docker buildx build "$OUTPUT" -f "$[[ inputs.dockerfile ]]" -t "$CI_REGISTRY_IMAGE/$[[ inputs.image_name ]]:$CI_COMMIT_SHORT_SHA" "$[[ inputs.context ]]"
   rules:
     - if: "$CI_COMMIT_BRANCH"
 ```
+
+The job needs a BuildKit or Docker daemon to talk to (a rootless BuildKit service, not privileged Docker-in-Docker); see [[buildkit-registry-cache-in-ci]]. The `push` input switches between `--push` and `--load`.
 
 Input features to use deliberately (check the docs for your version):
 
@@ -89,12 +90,11 @@ include:
     inputs:
       image_name: payments-api
       push: true
-      registry_env: staging
 
 stages: [build, test, deploy]
 ```
 
-**Pin a full version for production pipelines.** `@1.4.2` is reproducible; moving references such as `~latest` or a branch name give you whatever was published last, which turns a component release into an unreviewed change to every consumer at once. Use moving references only in sandbox projects, to try upcoming versions.
+**Pin a full version for production pipelines.** `@1.4.2` is reproducible (only if tags are protected; pin a full commit SHA for strict immutability); moving references such as `~latest` or a branch name give you whatever was published last, which turns a component release into an unreviewed change to every consumer at once. Use moving references only in sandbox projects, to try upcoming versions.
 
 ## Publishing to the catalog
 
@@ -177,6 +177,6 @@ The endpoint parameters can differ between versions; check the CI Lint API docs.
 
 ## Sources
 
-- https://docs.gitlab.com/ci/components/
-- https://docs.gitlab.com/ci/yaml/#include
-- https://docs.gitlab.com/ci/inputs/
+- [docs.gitlab.com/ci/components](https://docs.gitlab.com/ci/components/)
+- [docs.gitlab.com/ci/yaml/#include](https://docs.gitlab.com/ci/yaml/#include)
+- [docs.gitlab.com/ci/inputs](https://docs.gitlab.com/ci/inputs/)

@@ -52,7 +52,7 @@ Deploy it on GKE behind an internal load balancer, reachable only from your VPC 
 
 - One credential per team and per environment, issued by the gateway and revocable alone. A shared key makes it impossible to tell who caused a spike.
 - Require a `job` identifier (pipeline or tool name) on each request, and refuse requests without it.
-- Record team, model and job as labels on every metric and log line. Keep the label values few and controlled; avoid free-text labels that create unbounded series.
+- Record team, model and job (as the metric label `llm_job`) as labels on every metric and log line. Keep the label values few and controlled; avoid free-text labels that create unbounded series.
 - Report spend per team monthly through the same showback process as other cloud costs ([[finops-cost-allocation-and-guardrails]]).
 - Rolling out a tool to a team includes issuing its key and budget first ([[rolling-out-ai-tools-in-a-team]]).
 
@@ -129,12 +129,12 @@ groups:
         annotations:
           summary: "Token rate for {{ $labels.team }} on {{ $labels.model }} is above its normal level"
       - alert: LlmJobRunaway
-        expr: max by (team, job) (llm_gateway_job_requests) > 40
+        expr: max by (team, llm_job) (llm_gateway_job_requests) > 40
         labels:
           severity: warning
 ```
 
-Labels are `team`, `model` and `job`. Page only for user-facing symptoms; route cost alerts to the owning team's queue, in line with the alerting practice in the Prometheus documentation.
+Labels are `team`, `model` and `llm_job`. Do not name it `job`: Prometheus reserves that for the scrape job. Page only for user-facing symptoms; route cost alerts to the owning team's queue, in line with the alerting practice in the Prometheus documentation.
 
 ## Kill switch
 
@@ -172,7 +172,7 @@ Log a hash of the input, not the input itself, when it may contain sensitive dat
 
 - **Budget bypass.** A team calls the provider directly with a personal key. Block provider hosts at egress for everything except the gateway ([[securing-ai-agents-in-ci-and-cloud]]).
 - **Retry storms.** A provider outage turns every client's retries into a flood. Use capped backoff with jitter and a circuit breaker in the gateway.
-- **Metric label explosion.** Free-text labels such as prompt hashes blow up Prometheus. Keep `team`, `model`, `job` only, and put detail in logs.
+- **Metric label explosion.** Free-text labels such as prompt hashes blow up Prometheus. Keep `team`, `model`, `llm_job` only, and put detail in logs.
 - **Silent downgrade.** A cheaper model is substituted and quality drops. Tiering changes go through the evaluation gate and are logged.
 - **Cache poisoning or leakage.** A shared cache returns another team's answer. Namespace by team.
 - **Kill switch that nobody can use.** Test it, and make sure on-call knows where it is.

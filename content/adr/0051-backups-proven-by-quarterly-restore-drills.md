@@ -92,7 +92,8 @@ EVIDENCE_DIR="./evidence/restore-drills"
 
 # Each tier 1 and tier 2 system has a drill record from the last 95 days (prints systems without one)
 for system in orders-db checkout-gke terraform-state; do
-  find "${EVIDENCE_DIR}/${system}" -name '*.md' -mtime -95 2>/dev/null | grep -q . || echo "NO RECENT DRILL: ${system}"
+  # Use the commit date: file mtime is the checkout time in a Git repository
+  [ -n "$(git -C "${EVIDENCE_DIR}" log -1 --since='95 days ago' --format=%H -- "${system}")" ] || echo "NO RECENT DRILL: ${system}"
 done
 
 # Recorded RTO is the measured one: grep for the field in the latest records

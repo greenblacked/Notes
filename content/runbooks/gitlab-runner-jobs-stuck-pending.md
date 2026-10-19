@@ -79,7 +79,7 @@ kubectl -n "$RUNNER_NS" exec deploy/gitlab-runner -- gitlab-runner verify
 kubectl -n "$RUNNER_NS" exec deploy/gitlab-runner -- gitlab-runner list
 ```
 
-`verify` checks that the runner can still talk to GitLab with its token and removes registrations that are no longer valid, so read its output before running it in production. Compare with the runner admin page in GitLab: the "last contact" time should be recent. An old contact time with a healthy-looking process points at network, proxy, DNS or an expired or revoked authentication token. Check the runner documentation for how tokens are managed in your GitLab version.
+`verify` checks that each registered runner can still authenticate to GitLab. With `--delete` it also removes invalid entries from `config.toml`, so do not add that flag in production until you have read the plain output. Compare with the runner admin page in GitLab: the "last contact" time should be recent. An old contact time with a healthy-looking process points at network, proxy, DNS or an expired or revoked authentication token. Check the runner documentation for how tokens are managed in your GitLab version.
 
 ### 3. Check concurrency limits
 

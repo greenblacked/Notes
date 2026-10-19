@@ -39,6 +39,8 @@ CLUSTER=prod-1
 POOL=default-pool
 NS=example-app
 POD=example-app-7c9f6d5b8-abcde
+REGION=europe-west1
+SUBNET=example-subnet  # the node subnet, from: gcloud container clusters describe "$CLUSTER" --location "$LOCATION" --format="value(subnetwork)"
 gcloud config set project "$PROJECT"
 ```
 
@@ -143,9 +145,13 @@ Reproduce outside the Pod to separate the registry from Kubernetes. With a debug
 
 ```bash
 NODE=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.spec.nodeName}')
-kubectl debug node/"$NODE" -it --image=busybox:1.36 -- chroot /host \
-  crictl pull "$REGISTRY/$PROJECT/$REPO/$IMAGE:$TAG"
+kubectl debug node/"$NODE" -it --image=busybox:1.36 -- chroot /host sh -c 'TOKEN=$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token | sed -E "s/.*\"access_token\":\"([^\"]+)\".*/\1/"); crictl pull --creds "oauth2accesstoken:$TOKEN" "$0"' "$REGISTRY/$PROJECT/$REPO/$IMAGE:$TAG"
 ```
+
+> [!warning] Node debug Pods are privileged
+> `kubectl debug node/...` creates a privileged Pod with the host filesystem mounted. Delete it afterwards (`kubectl delete pod node-debugger-...`). Pod Security `restricted` namespaces block it, so run it in a dedicated namespace (`-n`).
+
+Without `--creds`, crictl pulls anonymously and a private repository always returns 401. The busybox debug image itself comes from Docker Hub; in a private cluster use a mirrored image.
 
 If `crictl` is not on the host path, use the container runtime's own tooling for your node image; check the GKE documentation for the supported way to run it. A successful `crictl pull` means the node is fine and the problem is in the Pod spec (pull secret, reference, image policy); a failing pull gives the registry's real error text.
 

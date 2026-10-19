@@ -50,7 +50,7 @@ Keep the boundary explicit in documentation and in repository ownership. Applica
 
 ## Origin lock-down
 
-Lock the origin on two levels.
+Lock the origin on three levels.
 
 **1. Network allowlist.** Create a Cloud Armor policy that allows only Cloudflare's published proxy ranges and denies everything else. The ranges change, so automate it: a scheduled job fetches the current list from Cloudflare, compares it with the policy, and applies a change through a reviewed pipeline. Do not paste ranges by hand. The command shape, with a documentation range as a placeholder:
 
@@ -81,17 +81,36 @@ gcloud compute security-policies rules create 1000 \
 
 A policy may need several rules because of per-rule limits on the number of ranges; check the current Cloud Armor documentation. The sync job must handle splitting, additions and removals, and alert when the live policy differs from the published list. A stale allowlist breaks legitimate traffic when Cloudflare adds ranges, and silently keeps stale permission when it drops them.
 
+Creating the policy does nothing until it is attached to the backend services behind the load balancer. With the GKE Gateway controller you do not create those backend services yourself; attach the policy with a `GCPBackendPolicy` that targets each Service:
+
+```yaml title="gcp-backend-policy.yaml"
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: payments-api
+  namespace: payments
+spec:
+  default:
+    securityPolicy: edge-origin-lockdown
+  targetRef:
+    group: ""
+    kind: Service
+    name: payments-api
+```
+
+Every Service behind the Gateway needs such a policy, or that backend stays open to direct traffic and the bypass remains. Audit for Services without one as part of the verify step. Check the GKE documentation "Configure Gateway resources using Policies" for the current fields and API version.
+
 **2. Authentication of the connection.** An IP allowlist is not identity: anyone using a Cloudflare account can send requests from Cloudflare's addresses to your origin. Authenticated origin pulls (mutual TLS between Cloudflare and the origin) or a secret header checked at the origin make sure the request came through your zone. Choose one, based on what your load balancer and plan support, and check the current Cloudflare and Google documentation. Treat a shared secret header as a weak control: it must be long, rotated and stripped from logs.
 
 **3. No direct DNS.** Never publish an A record for the origin IP outside Cloudflare, and avoid hostnames that leak it (`origin.example.com` in public DNS, certificate transparency logs, old records). Scan for historic exposure and, if the origin was ever exposed, change the load balancer address.
 
 ## TLS on each hop
 
-| Hop                         | Certificate                                     | Notes                                                                              |
-| --------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
-| User to Cloudflare          | Cloudflare edge certificate                     | Managed by Cloudflare                                                              |
-| Cloudflare to load balancer | A certificate on the Gateway listener           | Use a trusted or origin CA certificate; set the Cloudflare mode to full validation |
-| Load balancer to pods       | Backend protocol HTTPS or HTTP/2 where required | Decide per service; plain HTTP inside the VPC is a risk decision                   |
+| Hop                         | Certificate                                     | Notes                                                                                    |
+| --------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| User to Cloudflare          | Cloudflare edge certificate                     | Managed by Cloudflare                                                                    |
+| Cloudflare to load balancer | A certificate on the Gateway listener           | Use a trusted or origin CA certificate; set the Cloudflare SSL/TLS mode to Full (strict) |
+| Load balancer to pods       | Backend protocol HTTPS or HTTP/2 where required | Decide per service; plain HTTP inside the VPC is a risk decision                         |
 
 Own each certificate: record who issues it, where it lives and how it renews. An expiry on the Gateway listener takes the site down while the edge still looks healthy. See [[runbooks/tls-certificate-renewal]]. Avoid "flexible" modes that leave the Cloudflare-to-origin leg unencrypted.
 
@@ -159,7 +178,7 @@ spec:
 
 `allowedRoutes` is the control that stops a team in an unrelated namespace from claiming a hostname on the shared Gateway. Label only the namespaces that are allowed to attach, and protect the label with RBAC and admission policy so a team cannot label its own namespace.
 
-Health checks are configured separately from Kubernetes readiness probes in some implementations (through a policy resource attached to the Service). Align them, or the load balancer marks backends unhealthy while Kubernetes considers them ready.
+Health checks are configured separately from Kubernetes readiness probes in some implementations (on GKE, through a `HealthCheckPolicy` attached to the Service). Align them, or the load balancer marks backends unhealthy while Kubernetes considers them ready.
 
 ## Shared versus per-team gateways
 
@@ -221,10 +240,13 @@ kubectl --context "$CTX" get gateway,httproute -A
 # Through Cloudflare: expect 200
 curl -sS -o /dev/null -w 'via edge: %{http_code}\n' https://app.example.com/payments/healthz
 
-# Direct to the origin, bypassing Cloudflare: expect a refusal (403, or a TLS failure)
-curl -sv --resolve app.example.com:443:"${ORIGIN_IP}" \
-  https://app.example.com/payments/healthz -o /dev/null -w 'direct: %{http_code}\n' 2>&1 \
-  | tail -n 20
+# Direct to the origin, bypassing Cloudflare: expect a refusal (403, or a TLS
+# failure, which makes curl print 000 and exit non-zero; both are fine here)
+code=$(curl -s -o /dev/null -w '%{http_code}' \
+  --resolve app.example.com:443:"${ORIGIN_IP}" \
+  https://app.example.com/payments/healthz || true)
+echo "direct: ${code}"
+[ "$code" != "200" ] || { echo "origin exposed" >&2; exit 1; }
 
 # Armor policy attached to the backend service
 gcloud compute backend-services list --global --format='table(name,securityPolicy)'
@@ -259,3 +281,4 @@ Check the current docs, particularly for GatewayClass names and Cloudflare range
 - [[runbooks/tls-certificate-renewal]]
 - [[runbooks/network-troubleshooting-dns-mtu-tls-load-balancers]]
 - [[patterns/zero-downtime-deployments-kubernetes]]
+- [[0023-gateway-api-for-north-south-traffic]]

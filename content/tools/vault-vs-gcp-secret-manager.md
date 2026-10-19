@@ -130,7 +130,7 @@ spec:
 volumes:
   - name: secrets
     csi:
-      driver: secrets-store.csi.k8s.io
+      driver: secrets-store-gke.csi.k8s.io # driver name for the GKE Secret Manager add-on; verify in the current docs
       readOnly: true
       volumeAttributes:
         secretProviderClass: app-secrets

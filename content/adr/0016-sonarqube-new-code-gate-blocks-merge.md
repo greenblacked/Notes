@@ -39,7 +39,7 @@ We will make the **SonarQube quality gate on new code a required check for mergi
 ```yaml title=".gitlab-ci.yml (excerpt)"
 sonarqube-check:
   stage: test
-  image: sonarsource/sonar-scanner-cli:<pin-a-version-by-digest>
+  image: sonarsource/sonar-scanner-cli@sha256:<reviewed-digest>
   variables:
     SONAR_HOST_URL: https://sonarqube.example.com
     GIT_DEPTH: "0" # full history so new-code detection and blame work
@@ -95,6 +95,7 @@ SONAR_TOKEN="${SONAR_TOKEN:?set a read-only token}"
 PROJECT_KEY="payments-api"
 
 # Which gate is assigned to the project? (expect the shared gate name)
+# -H/-u expose the token in the process list on a shared host; prefer a curl config file (-K) or ~/.netrc written from a masked variable.
 curl -fsS -u "${SONAR_TOKEN}:" \
   "${SONAR_URL}/api/qualitygates/get_by_project?project=${PROJECT_KEY}" | jq -r '.qualityGate.name'
 

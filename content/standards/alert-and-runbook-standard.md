@@ -22,7 +22,7 @@ An alert is a request for a human to do something now. A runbook is what that hu
 2. **Alert on symptoms, not causes.** Page on what users feel (errors, latency, saturation that is about to cause either), and use cause-level signals (a node is down, a pod restarted) as dashboard panels and as diagnosis steps in the runbook. The Google SRE guidance on [monitoring distributed systems](https://sre.google/sre-book/monitoring-distributed-systems/) and the Prometheus [alerting practices](https://prometheus.io/docs/practices/alerting/) say the same.
 3. **Every alert has a runbook and an owner.** An alert with no runbook link is a defect, not a draft.
 4. **Fewer, better alerts.** Duplicated pages for one fault are routed and grouped so the engineer gets one notification.
-5. **Alerts are code.** Rules live in Git, are reviewed and tested, and are deployed by pipeline (ADR [[adr/0046-dashboards-and-alert-rules-as-code]]).
+5. **Alerts are code.** Rules live in Git, are reviewed and tested, and are deployed by pipeline (ADR [[adr/0046-dashboards-and-alert-rules-as-code]]). Paging follows ADR [[adr/0045-page-only-on-slo-burn-rate]]: a `page` alert is an SLO burn-rate alert.
 
 ## Required labels and annotations
 
@@ -82,7 +82,7 @@ The timings are examples; tune them from your own incident data. Receiver settin
 
 ## Naming and durations
 
-- **Alert names** are `<Service><Symptom>` in CamelCase: `OrdersApiHighErrorRatio`, `OrdersApiLatencySloBurn`, `PaymentsQueueBacklog`. The name says what is wrong, not how it was measured. Avoid `Alert`, `Warning` and `Critical` in names.
+- **Alert names** are `<Service><Symptom>` in CamelCase: `OrdersApiErrorBudgetFastBurn`, `OrdersApiLatencySloBurn`, `PaymentsQueueBacklog`. The name says what is wrong, not how it was measured. Avoid `Alert`, `Warning` and `Critical` in names.
 - **`for:` durations** keep a short spike from paging. The value depends on the signal: a fast burn-rate alert may use a few minutes, a disk-fill prediction an hour. Choose it from how long the condition must last before a human can do something about it, and write that reason in a comment. A `for: 0m` page needs a justification.
 - **Alert on ratios and rates, not raw counts**, so the rule survives traffic changes.
 - **Do not alert on a single instance** unless that instance is the service. Aggregate with `sum by (service)`.
@@ -101,22 +101,32 @@ spec:
   groups:
     - name: orders-api.slo
       rules:
-        - alert: OrdersApiHighErrorRatio
+        # Multi-window burn rate, as in ADR 0045: 14.4 x the 0.1% budget of a
+        # 99.9% objective, over a short and a long window. for: 2m because both
+        # windows already filter spikes; a human can act within minutes.
+        - alert: OrdersApiErrorBudgetFastBurn
           expr: |
-            sum(rate(http_requests_total{service="orders-api",code=~"5.."}[5m]))
-              /
-            sum(rate(http_requests_total{service="orders-api"}[5m])) > 0.02
-          for: 10m
+            (
+              sum(rate(http_requests_total{service="orders-api",code=~"5.."}[5m]))
+              / sum(rate(http_requests_total{service="orders-api"}[5m]))
+            ) > (14.4 * 0.001)
+            and
+            (
+              sum(rate(http_requests_total{service="orders-api",code=~"5.."}[1h]))
+              / sum(rate(http_requests_total{service="orders-api"}[1h]))
+            ) > (14.4 * 0.001)
+          for: 2m
           labels:
             severity: page
             team: team-orders
             service: orders-api
           annotations:
-            summary: "orders-api is returning errors to users"
+            summary: "orders-api is burning its error budget fast"
             description: >-
               5xx ratio is {{ $value | humanizePercentage }} over 5 minutes
-              (threshold 2%). Users see failed checkouts.
-            runbook_url: "https://runbooks.example.com/orders-api/high-error-ratio"
+              (fast-burn threshold 1.44%, 14.4x the budget of a 99.9% objective).
+              Users see failed checkouts.
+            runbook_url: "https://runbooks.example.com/orders-api/error-budget-fast-burn"
 
         - alert: OrdersApiDiskFillingSoon
           expr: predict_linear(node_filesystem_avail_bytes{service="orders-api"}[6h], 24 * 3600) < 0
@@ -131,7 +141,7 @@ spec:
             runbook_url: "https://runbooks.example.com/orders-api/disk-filling"
 ```
 
-The threshold, window and metric names are examples; derive real ones from your SLO. For managed Prometheus the same rules are expressed through its rule resource; check the current Google Cloud Managed Service for Prometheus docs for the resource name. The decision between self-managed and managed metrics is in [[prometheus-vs-cloud-monitoring]].
+The objective (99.9%), multiplier (14.4), windows and metric names are examples; derive real ones from your SLO and check them against [[slo-burn-rate-alerting]]. For managed Prometheus the same rules are expressed through its rule resource; check the current Google Cloud Managed Service for Prometheus docs for the resource name. The decision between self-managed and managed metrics is in [[prometheus-vs-cloud-monitoring]].
 
 ## Testing alerts
 
@@ -140,11 +150,12 @@ An alert that has never fired in a test may never fire in production. Run two ch
 **1. Syntax and rule unit tests with `promtool`.**
 
 ```bash title="CI commands"
-promtool check rules rules/*.yaml
+yq '.spec' rules/orders-api.yaml > rules/orders-api.rules.yaml
+promtool check rules rules/*.rules.yaml
 promtool test rules tests/alerts_test.yml
 ```
 
-`promtool check rules` expects the plain Prometheus rule-file format, so a `PrometheusRule` custom resource is first converted or its `spec` extracted in CI. Check the [unit testing docs](https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/) for the file format of your version.
+`promtool check rules` expects the plain Prometheus rule-file format, not a `PrometheusRule` custom resource, so the first command extracts the `spec` into a rule file (do not commit the generated `*.rules.yaml`). Check the [unit testing docs](https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/) for the file format of your version.
 
 ```yaml title="tests/alerts_test.yml"
 rule_files:
@@ -161,22 +172,22 @@ tests:
         values: "0+10x30"
     alert_rule_test:
       - eval_time: 20m
-        alertname: OrdersApiHighErrorRatio
+        alertname: OrdersApiErrorBudgetFastBurn
         exp_alerts:
           - exp_labels:
               severity: page
               team: team-orders
               service: orders-api
             exp_annotations:
-              summary: "orders-api is returning errors to users"
-              description: "5xx ratio is 9.091% over 5 minutes (threshold 2%). Users see failed checkouts."
-              runbook_url: "https://runbooks.example.com/orders-api/high-error-ratio"
-      - eval_time: 5m
-        alertname: OrdersApiHighErrorRatio
+              summary: "orders-api is burning its error budget fast"
+              description: "5xx ratio is 9.091% over 5 minutes (fast-burn threshold 1.44%, 14.4x the budget of a 99.9% objective). Users see failed checkouts."
+              runbook_url: "https://runbooks.example.com/orders-api/error-budget-fast-burn"
+      - eval_time: 1m
+        alertname: OrdersApiErrorBudgetFastBurn
         exp_alerts: []
 ```
 
-The second case checks that the alert does not fire before `for:` has elapsed.
+The second case checks that the alert is still pending, not firing, before `for:` has elapsed.
 
 **2. Every `runbook_url` resolves.** A dead link is found in a pipeline, not during an incident.
 
@@ -221,16 +232,16 @@ Every runbook linked from an alert has these sections, in this order. Short is g
 7. **Owner**: a team alias, not a person.
 8. **`last_tested`**: the date of the last dry run or real use.
 
-```markdown title="runbooks/orders-api/high-error-ratio.md"
+```markdown title="runbooks/orders-api/error-budget-fast-burn.md"
 ---
-title: OrdersApiHighErrorRatio
+title: OrdersApiErrorBudgetFastBurn
 owner: team-orders
 last_tested: 2026-09-14
 ---
 
 ## Symptom
 
-Alert `OrdersApiHighErrorRatio` fires: more than 2% of requests return 5xx for 10 minutes.
+Alert `OrdersApiErrorBudgetFastBurn` fires: the 5xx ratio is above 1.44% (14.4x the budget of a 99.9% objective) over both 5 minutes and 1 hour.
 
 ## User impact
 
@@ -313,6 +324,7 @@ An alert that nobody acts on trains people to ignore the pager. Review each quar
 ## Related
 
 - [[slo-burn-rate-alerting]]: what to page on.
+- [[adr/0045-page-only-on-slo-burn-rate]]: the decision that pages are SLO burn-rate alerts.
 - [[incident-response]]: what happens after the page.
 - [[blameless-postmortems]]: feeding runbook fixes back.
 - [[prometheus-vs-cloud-monitoring]]: where the rules run.

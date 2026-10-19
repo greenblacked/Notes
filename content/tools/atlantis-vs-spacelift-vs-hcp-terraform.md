@@ -56,14 +56,14 @@ projects:
     dir: live/dev/platform
     workspace: default
     autoplan:
-      when_modified: ["*.tf", "../../modules/**/*.tf"]
+      when_modified: ["*.tf", "../../../modules/**/*.tf"]
       enabled: true
     apply_requirements: [approved, mergeable]
   - name: platform-prod
     dir: live/prod/platform
     workspace: default
     autoplan:
-      when_modified: ["*.tf", "../../modules/**/*.tf"]
+      when_modified: ["*.tf", "../../../modules/**/*.tf"]
       enabled: true
     apply_requirements: [approved, mergeable]
 ```

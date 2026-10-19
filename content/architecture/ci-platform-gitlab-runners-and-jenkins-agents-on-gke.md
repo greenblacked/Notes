@@ -60,7 +60,7 @@ Taint each pool and add tolerations in the runner or pod template so the schedul
 
 ## Trust zones
 
-A trust zone is a set of jobs that are equally trusted, with its own runners, namespace, service account and egress. Three zones cover most organisations.
+A trust zone is a set of jobs that are equally trusted, with its own runners, namespace, service account and egress. Three zones cover most organisations. [[0014-gitlab-runners-kubernetes-executor-on-gke]] records a two-group variant (`ci-untrusted` and `ci-protected`) in which zones 2 and 3 below are merged into `ci-protected` and deploys run there; split them as here when build and deploy identities must not share a runner pool.
 
 ```mermaid
 flowchart LR
@@ -130,7 +130,7 @@ assertion.project_path == "platform/payments-api"
 && assertion.ref == "main"
 ```
 
-For Jenkins, agents run with a Kubernetes service account bound to a Google service account through Workload Identity (see [[patterns/gke-workload-identity]]), with one service account per trust zone. Jenkins has no built-in per-build OIDC token equivalent, so the pod identity is the boundary; this is a reason to keep Jenkins agent pools small and per zone.
+For Jenkins, agents run with a Kubernetes service account bound to a Google service account through Workload Identity (see [[patterns/gke-workload-identity]]), with one service account per trust zone. Jenkins core has no per-build OIDC token equivalent. The OpenID Connect Provider plugin can issue per-build ID tokens for Workload Identity Federation; check its current status and maintenance before relying on it. Without it, the pod identity is the boundary; this is a reason to keep Jenkins agent pools small and per zone.
 
 ## Caching and dependencies
 
@@ -194,9 +194,14 @@ kubectl --context "$CTX" get pods -A -o json \
       | .metadata.namespace + "/" + .metadata.name'
 
 # Zone 1 cannot reach the metadata server (expect a timeout)
-kubectl --context "$CTX" -n ci-mr run nettest --rm -i --restart=Never \
+if kubectl --context "$CTX" -n ci-mr run nettest --rm -i --restart=Never \
   --image=curlimages/curl -- curl -s -m 5 -H "Metadata-Flavor: Google" \
-  http://metadata.google.internal/computeMetadata/v1/ || echo "blocked as expected"
+  http://metadata.google.internal/computeMetadata/v1/; then
+  echo "FAIL: zone 1 reaches metadata" >&2
+  exit 1
+else
+  echo "blocked as expected"
+fi
 ```
 
 Then run a merge request pipeline that tries to read a protected variable and to request a cloud token, and confirm both fail.
@@ -230,3 +235,6 @@ Check the current docs for each; names and flows change.
 - [[architecture/gke-platform-topology-and-tenancy]]
 - [[patterns/kubernetes-network-policies]]
 - [[architecture/artifact-management-architecture-artifactory-ha]]
+- [[0014-gitlab-runners-kubernetes-executor-on-gke]]
+- [[0026-keyless-ci-auth-with-workload-identity-federation]]
+- [[0015-no-privileged-image-builds-in-ci]]

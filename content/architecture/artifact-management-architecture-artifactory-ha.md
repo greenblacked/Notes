@@ -36,16 +36,16 @@ Use three repository types with a strict naming scheme, because the name is the 
 
 | Type    | Purpose                                              | Who writes             | Example name                    |
 | ------- | ---------------------------------------------------- | ---------------------- | ------------------------------- |
-| Local   | Artifacts your organisation builds                   | CI service identities  | `docker-dev-local`              |
-| Remote  | Cached proxy of an upstream registry                 | Nobody; fetched on use | `docker-hub-remote`             |
+| Local   | Artifacts your organisation builds                   | CI service identities  | `payments-docker-dev-local`     |
+| Remote  | Cached proxy of an upstream registry                 | Nobody; fetched on use | `npm-npmjs-remote`              |
 | Virtual | One URL that aggregates local and remote for clients | Nobody                 | `docker-virtual`, `npm-virtual` |
 
-Naming pattern: `<package-type>-<purpose or environment>-<type>`. Keep one local repository per environment stage (`-dev-local`, `-stage-local`, `-prod-local`) so promotion is a move or copy between repositories, as described in [[patterns/artifact-promotion-artifactory]].
+Naming follows [[0003-artifactory-repository-layout]]: `<team>-<type>-<stage>-local` for local, `<type>-<upstream>-remote` for remote and `<type>-virtual` for virtual repositories. Keep one local repository per environment stage (`payments-docker-dev-local`, `payments-docker-stage-local`, `payments-docker-prod-local`) so promotion is a move or copy between repositories, as described in [[patterns/artifact-promotion-artifactory]].
 
 Rules that keep the model predictable:
 
 - Clients only ever see the virtual repository. Which local or remote repositories sit behind it can change without touching a pipeline.
-- Resolution order inside a virtual repository matters. Put local repositories before remote ones so an internal package name cannot be shadowed by a public package of the same name (dependency confusion). Check the current docs for how your package type handles priority and for any per-package-type exclusion patterns.
+- Resolution order inside a virtual repository matters. Put local repositories before remote ones so an internal package name cannot be shadowed by a public package of the same name (dependency confusion). Ordering alone is not enough for npm and PyPI, because version metadata is merged across the virtual repository and the highest version wins. Add exclude patterns for internal scopes and names on remote repositories and enable priority resolution on the local repository. Check the current docs for how your package type handles priority and for any per-package-type exclusion patterns.
 - Production deploys pull from the `-prod-local` repository only, never from a remote or a dev repository.
 
 ## HA topology
@@ -84,20 +84,20 @@ Design points:
 - **Nodes.** Two or more, spread across zones. Size by concurrent builds, not by users. Check the JFrog sizing guidance for current recommendations.
 - **Where it runs.** On GKE with the official Helm chart, or on VMs in a managed instance group. The Helm route gives rolling upgrades and a declarative config; the VM route gives simpler networking to a private database. Either is valid.
 
-A database fragment for `system.yaml`. The host is a placeholder and the password is read from the environment, never written to the file:
+A database fragment for `system.yaml`. The host is a placeholder and the password is not written to the file:
 
 ```yaml title="system.yaml (database fragment)"
 shared:
   database:
     type: postgresql
     driver: org.postgresql.Driver
-    url: jdbc:postgresql://10.0.0.5:5432/artifactory
+    url: jdbc:postgresql://artifactory-db.internal.example.com:5432/artifactory
     username: artifactory
-    # Injected at start-up from Secret Manager, never committed
-    password: "${ARTIFACTORY_DB_PASSWORD}"
+    # password: set JF_SHARED_DATABASE_PASSWORD from a Kubernetes Secret synced
+    # from Secret Manager (or the Helm chart's database secret settings), never committed
 ```
 
-Check the JFrog documentation for the current key names and for how the chart or installer expects the filestore to be configured, because these have changed between releases. Pull the password from Secret Manager at deploy time as described in [[patterns/external-secrets-with-secret-manager]]; do not put it in Helm values in Git.
+`system.yaml` does not expand shell-style variables, so a `${...}` value would be read as the literal password; Artifactory overrides keys through `JF_`-prefixed environment variables instead. Check the JFrog documentation for the current key names and for how the chart or installer expects the filestore to be configured, because these have changed between releases. Pull the password from Secret Manager at deploy time as described in [[patterns/external-secrets-with-secret-manager]]; do not put it in Helm values in Git.
 
 ## Remote repositories as the single egress
 
@@ -160,7 +160,7 @@ Choose a tier for the service with [[architecture/disaster-recovery-tiers-rpo-rt
 
 ## Pitfalls
 
-- Treating the virtual repository order as unimportant and then shadowing an internal package with a public one.
+- Treating the virtual repository order as unimportant, or relying on order alone for npm and PyPI, and then shadowing an internal package with a public one. Use exclude patterns and priority resolution as well.
 - Pointing every region's builds at one distant instance and discovering the latency only under load.
 - Configuring HA but leaving the database as a single zonal instance.
 - Letting `latest` tags into production repositories. Promote by digest.
@@ -187,8 +187,12 @@ curl -fsS https://artifactory.example.com/artifactory/api/system/ping
 
 # Anonymous access must be refused for an internal repository
 code=$(curl -s -o /dev/null -w '%{http_code}' \
-  https://artifactory.example.com/artifactory/docker-virtual/v2/_catalog)
-echo "anonymous catalog status: ${code}"   # expect 401 or 403
+  https://artifactory.example.com/artifactory/api/docker/docker-virtual/v2/_catalog)
+echo "anonymous catalog status: ${code}"
+case "$code" in
+  401|403) ;;
+  *) echo "anonymous access not refused: $code" >&2; exit 1 ;;
+esac
 ```
 
 Also test the failure paths on purpose: stop one node and confirm builds continue; fail over the database in a non-production environment and measure the interruption; take a replication target offline and confirm the lag alert fires.
@@ -216,3 +220,6 @@ Also test the failure paths on purpose: stop one node and confirm builds continu
 - [[architecture/disaster-recovery-tiers-rpo-rto]]
 - [[architecture/backup-architecture-gke-cloud-sql-gcs]]
 - [[architecture/software-supply-chain-end-to-end]]
+- [[0002-artifactory-as-single-artifact-store]]
+- [[0003-artifactory-repository-layout]]
+- [[0011-artifactory-hosting-saas-or-self-managed]]

@@ -93,7 +93,7 @@ Stateless first. Every piece of state in a request path multiplies complexity.
 - **Databases.** There are three honest designs:
   1. **One writer region, read replicas elsewhere.** Writes go to the primary region, even from users near the other region. Simple and common. Failover of the writer is a database promotion, a DR event handled as in [[architecture/disaster-recovery-tiers-rpo-rto]] (data layer choices; do not duplicate that here). It is active-active for reads and stateless compute only.
   2. **Partition by tenant or user.** Each partition has a home region. Routing must send a request to the home region, and a region loss still needs a plan for its partitions.
-  3. **A globally consistent store**, such as Spanner with a multi-region configuration. It supports writes from several regions with strong consistency, at the price of write latency and a different data model and cost profile. Check the instance configuration docs for the available configurations.
+  3. **A globally consistent store**, such as Spanner with a multi-region configuration. It supports writes from several regions with strong consistency, at the price of write latency (writes commit through the configuration's leader region, so writes from far regions pay that round trip) and a different data model and cost profile. Check the instance configuration docs for the available configurations.
 
 Be honest in design review about which of the three you chose. "Active-active" with a single writer is a valid design, but the failure drill for the writer region is a database promotion, not a load balancer drain.
 
@@ -143,7 +143,7 @@ spec:
           selfHeal: true
 ```
 
-Waves are only an annotation here. Enforce ordering with sync waves, a promotion pipeline that bumps one overlay at a time, or a rollout controller. Check the current ApplicationSet docs for generator and progressive sync options.
+Waves are only an annotation here. Enforce ordering with ApplicationSet progressive syncs (the `RollingSync` strategy; check its current maturity), a promotion pipeline that bumps one region's overlay at a time, or a rollout controller. Sync waves only order resources within one Application, not across the Applications an ApplicationSet creates. Check the current ApplicationSet docs for generator and progressive sync options.
 
 ## Capacity
 
@@ -203,11 +203,15 @@ for ctx in "$CTX_A" "$CTX_B"; do
   kubectl --context "$ctx" -n payments get pods -l app=payments-api
 done
 
-# Both regions serve the same release (digests must match)
-diff \
+# Both regions serve the same release (image references must match; they
+# should be digests, see the supply chain note)
+if ! diff \
   <(kubectl --context "$CTX_A" -n payments get deploy payments-api -o jsonpath='{.spec.template.spec.containers[0].image}') \
-  <(kubectl --context "$CTX_B" -n payments get deploy payments-api -o jsonpath='{.spec.template.spec.containers[0].image}') \
-  && echo "images match"
+  <(kubectl --context "$CTX_B" -n payments get deploy payments-api -o jsonpath='{.spec.template.spec.containers[0].image}'); then
+  echo "image mismatch between regions" >&2
+  exit 1
+fi
+echo "images match"
 
 # Backend health as the load balancer sees it
 gcloud compute backend-services get-health payments-api-global --global
@@ -239,3 +243,5 @@ Check the current docs; multi-cluster features and their requirements change.
 - [[architecture/edge-and-ingress-cloudflare-gclb-gateway-api]]
 - [[runbooks/game-day-chaos-gke]]
 - [[patterns/progressive-delivery-argo-rollouts]]
+- [[0028-primary-and-dr-regions-per-environment]]
+- [[0001-gitops-with-argocd]]

@@ -91,7 +91,7 @@ Harder:
 set -euo pipefail
 
 # Git module sources without a version tag (expected: no output)
-grep -rn --include='*.tf' 'source *= *"git::' . | grep -v 'ref=v[0-9]'
+grep -rn --include='*.tf' 'source *= *"git::' . | grep -v 'ref=v[0-9]' || true
 
 # Every root module has required_version and a lock file (expected: no output)
 for d in $(find envs -name main.tf -exec dirname {} \;); do

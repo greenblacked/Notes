@@ -48,8 +48,8 @@ spec:
               kinds: [Pod]
       verifyImages:
         - imageReferences:
-            - "registry.example.com/*"
-          mutateDigest: true
+            - "artifactory.example.com/*"
+          mutateDigest: false # enable together with Enforce; Kyverno rejects mutateDigest while the action is Audit
           required: true
           attestors:
             - entries:
@@ -59,7 +59,7 @@ spec:
 ```
 
 > [!info] Claims not checked against current docs
-> The `ClusterPolicy` schema for `verifyImages` (field names such as `validationFailureAction` have changed across Kyverno releases), the supported subject matching syntax, and the Binary Authorization feature set. Verify against the Kyverno docs for the installed version, and test in a scratch cluster.
+> The `ClusterPolicy` schema for `verifyImages` (field names such as `validationFailureAction` have changed across Kyverno releases; recent versions use a rule-level `failureAction` in place of `validationFailureAction`), the supported subject matching syntax, and the Binary Authorization feature set. Verify against the Kyverno docs for the installed version, and test in a scratch cluster.
 
 ## Consequences
 
@@ -94,7 +94,7 @@ kubectl get clusterpolicy verify-image-signatures \
 
 # Negative test: an unsigned image is rejected in an enforced namespace (expected: denied)
 kubectl run unsigned-test --namespace "${NS}" --restart=Never --dry-run=server \
-  --image=registry.example.com/test/unsigned@sha256:1111111111111111111111111111111111111111111111111111111111111111
+  --image=artifactory.example.com/payments-docker-prod-local/test/unsigned@sha256:1111111111111111111111111111111111111111111111111111111111111111
 
 # Kyverno is highly available
 kubectl get deploy -n kyverno -o custom-columns=NAME:.metadata.name,READY:.status.readyReplicas

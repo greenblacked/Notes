@@ -113,8 +113,10 @@ gcloud container clusters get-credentials "${CLUSTER}" --location "${LOCATION}" 
 kubectl get serviceaccounts -n ci-untrusted -o json \
   | jq -r '.items[] | select(.metadata.annotations["iam.gke.io/gcp-service-account"] != null) | .metadata.name'
 
-# No privileged runner configuration in either namespace (expect "ok")
-kubectl get configmap -n ci-untrusted -o yaml | grep -q 'privileged = true' && echo "VIOLATION" || echo "ok"
+# No privileged runner configuration in either namespace (expect "ok: <ns>" twice)
+for ns in ci-untrusted ci-protected; do
+  kubectl get configmap -n "$ns" -o yaml | grep -q 'privileged = true' && echo "VIOLATION: $ns" || echo "ok: $ns"
+done
 
 # Pods in runner namespaces have requests set (expect no output)
 kubectl get pods -A -o json \

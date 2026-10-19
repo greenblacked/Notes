@@ -69,6 +69,7 @@ flowchart LR
    from collections import Counter
 
    RULES = [
+       (re.compile(r'"[^"]*"'), "<str>"),
        (re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"), "<uuid>"),
        (re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b"), "<ip>"),
        (re.compile(r"\b\d+\b"), "<n>"),
@@ -124,7 +125,10 @@ route:
     - receiver: ai-triage
       matchers:
         - severity=~"warning|critical"
-      continue: true # keep going so the pager route still matches
+      continue: true # copy to triage, then keep matching the next routes
+    - receiver: pager
+      matchers:
+        - severity=~"warning|critical"
 
 receivers:
   - name: pager
@@ -136,7 +140,7 @@ receivers:
         max_alerts: 20
 ```
 
-`continue: true` is the important line: the triage route must sit beside the paging route, never in front of it. `send_resolved: true` lets the service see when alerts clear, which you need for feedback. Check the field names in the Alertmanager configuration reference for your version.
+`continue: true` is the important line: the triage route must come before an explicit paging route and have `continue: true`; a matching child route stops the parent's default receiver from being used. `send_resolved: true` lets the service see when alerts clear, which you need for feedback. Check the field names in the Alertmanager configuration reference for your version.
 
 The service groups by `groupKey` (so one summary per group, not per alert), pulls a bounded window of related logs and metrics, and posts to the incident channel or ticket:
 

@@ -15,7 +15,7 @@ draft: false
 How to get a namespace out of `Terminating`. Deleting a namespace deletes everything in it, and the namespace controller waits until every resource is gone. When it hangs, one of three things is wrong: the API cannot enumerate the resource types, resources remain that a controller must clean up, or a finalizer has no controller to remove it. Work out which, fix the cause, and only then consider forcing.
 
 > [!info] Scope and verification
-> The commands were not run against a live cluster and the note is not marked `verified`. The condition names quoted below come from the Kubernetes namespace controller as known to the author; check them against `kubectl get ns -o yaml` on your cluster and the current Kubernetes documentation.
+> The commands were not run against a live cluster and the note is not marked `verified`. The condition names quoted below come from the Kubernetes namespace controller; check them against `kubectl get ns -o yaml` on your cluster and the current Kubernetes documentation.
 
 ## When to use
 
@@ -147,7 +147,7 @@ A common copy-paste fix in the wild uses `kubectl proxy` and `curl` for the same
 
 ```bash
 kubectl get ns "$NS"                       # NotFound
-kubectl get apiservices | grep -vc True    # 0
+kubectl get apiservices --no-headers | grep -vc True    # 0
 # no orphans: spot-check the cloud side
 gcloud compute forwarding-rules list --filter="description~$NS"
 gcloud compute disks list --filter="labels.kubernetes_io_created-for_pvc_namespace=$NS"

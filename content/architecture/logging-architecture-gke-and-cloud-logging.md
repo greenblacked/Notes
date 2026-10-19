@@ -51,13 +51,14 @@ flowchart LR
   R2 -->|_Required: admin activity| REQ[(Project _Required bucket)]
   FS[Folder sink: include children<br/>filter: app logs of prod] --> CENTRAL[(Central logging project<br/>custom bucket: app-prod)]
   R2 --> FS
-  CENTRAL --> VIEWS[Log views per team]
+  CENTRAL --> VIEWS[Per-team buckets or views]
   AUDIT[Audit sink] -.-> SIEM[SIEM or audit bucket<br/>see audit pattern]
 ```
 
 Practices:
 
 - **Sinks per environment folder to a central logging project.** A central project gives one place to apply retention, access and cost control, and keeps workload project owners from deleting evidence. Create one aggregated sink per environment folder with children included.
+- **Avoid storing the same logs twice.** The folder sink copies production application logs into the central bucket, but each child project's `_Default` sink still stores them too, so they are stored and billed twice. Either add a matching exclusion to each child project's `_Default` sink, or create the folder sink with `--intercept-children`, so child sinks other than `_Required` do not also store them. Interception changes what project owners see in their own project (the logs are no longer there), so agree it with them first. Check the current Cloud Logging docs for the exact behaviour.
 - **Exclusion filters** on the `_Default` sink drop low-value, high-volume logs (load balancer health checks, noisy debug) before they are stored. Exclusions do not affect other sinks, so excluded logs can still be routed elsewhere if needed. Be careful: logs excluded from storage are gone and cannot be recovered.
 - **Log-based metrics** are computed from the stream, independent of storage. Use them for SLIs instead of storing everything for a query later.
 - **Audit logs and security routing** are covered in [[patterns/gcp-audit-logs-siem]]. Do not duplicate that sink design here.
@@ -129,7 +130,7 @@ Check the current Cloud Logging docs for the rules on shortening retention, loca
 
 ## Access
 
-- **Log views** let you grant a team access to a subset of a bucket (for example `resource.labels.namespace_name="team-a"`) without giving them the whole bucket. Create one view per team, and grant the log viewer role on the view, not on the project.
+- **Log views** let you grant access to a subset of a bucket, but their filters are limited (the source project, `resource.type` and `LOG_ID()`; check the current docs on log view filters), so a view cannot filter on `resource.labels.namespace_name`. For per-team access, route each team's logs into its own bucket (split by namespace in the sink filter) or into a bucket per data class, or use a project per team with a view filtered by `SOURCE()`. Grant the log viewer role on the view or bucket, not on the project.
 - **IAM on the central project** is limited to the platform team and the security team. Application teams read through views.
 - **Restricted bucket for sensitive logs** with a separate group and an access log of who queried it.
 - Separate **writers** (sinks, agents) from **readers** and from **administrators** who can change retention or delete buckets. The ability to shorten retention is the ability to destroy evidence.
@@ -165,7 +166,7 @@ Logging cost follows ingestion volume first, then retention, then analytics usag
 - Creating a sink and not granting its writer identity.
 - Using one bucket for logs with different sensitivity and retention.
 - Logging request bodies, tokens or full URLs with query strings.
-- Giving every developer project-wide log viewer instead of per-team views.
+- Giving every developer project-wide log viewer instead of per-team buckets or views.
 - Treating exclusion filters as access control. They are cost control.
 
 ## Verify
@@ -202,7 +203,7 @@ Also write a test log line from a pod with a unique marker and confirm it appear
 1. Standardise structured JSON on stdout for one service and confirm the fields parse.
 2. Add exclusions for the biggest noise sources after measuring them.
 3. Create the central logging project, a custom bucket and one folder sink, and verify delivery.
-4. Add per-team log views and remove broad viewer roles.
+4. Add per-team buckets or views and remove broad viewer roles.
 5. Add data class buckets and retention per class.
 6. Add ingest dashboards, alerts on sink errors, and a regular exclusion review.
 
@@ -225,3 +226,4 @@ Check the current docs for retention rules, quotas and flags.
 - [[architecture/finops-cost-allocation-and-guardrails]]
 - [[architecture/gcp-resource-hierarchy-and-landing-zone]]
 - [[architecture/multi-tenant-prometheus-architecture]]
+- [[0044-central-log-sinks-and-retention-tiers]]

@@ -27,7 +27,7 @@ We want one team accountable for address space and firewall policy, and applicat
 All networks come from a **Shared VPC host project** owned by the platform team. Service projects attach to it and use shared subnets. Projects do not get a default network.
 
 - The host project owns the VPCs, subnets, secondary ranges for GKE Pods and Services, Cloud NAT, routes and firewall policies. See [[shared-vpc-hub-and-spoke]] for the topology.
-- Service projects receive **subnet-level** `roles/compute.networkUser` for the identities that need it: the project's deployers and the GKE service agents. Project-level grants on the host are not used.
+- Service projects receive **subnet-level** `roles/compute.networkUser` for the identities that need it: the project's deployers and the GKE service agents. Project-level grants on the host are limited to what GKE requires: `roles/container.hostServiceAgentUser` for each service project's GKE service agent (check the GKE Shared VPC guide).
 - Firewall rules are written as firewall policies in the host project, in Terraform ([[0030-terraform-manages-gcp-infrastructure]]).
 - Organization policy, set on the folders from [[0024-gcp-folders-by-policy-boundary]]:
   - `compute.skipDefaultNetworkCreation` so new projects have no default network.

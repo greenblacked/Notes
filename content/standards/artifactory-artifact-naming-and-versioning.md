@@ -26,12 +26,13 @@ Applies to every repository, permission target and artifact we manage in Artifac
 
 Keys follow one scheme so a human can read the kind, type and stage from the name.
 
-| Kind    | Pattern                                                            | Examples                                                |
-| ------- | ------------------------------------------------------------------ | ------------------------------------------------------- |
-| Local   | `<team>-<type>-<stage>-local`                                      | `payments-docker-dev-local`, `payments-helm-prod-local` |
-| Remote  | `<type>-<upstream>-remote`                                         | `npm-npmjs-remote`, `maven-central-remote`              |
-| Virtual | `<type>-virtual`, or `<type>-<group>-virtual` for a consumer group | `docker-virtual`, `docker-prod-virtual`                 |
+| Kind    | Pattern                                                                     | Examples                                                  |
+| ------- | --------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Local   | `<team>-<type>-<stage>-local`                                               | `payments-docker-dev-local`, `payments-helm-prod-local`   |
+| Remote  | `<type>-<upstream>-remote`                                                  | `npm-npmjs-remote`, `maven-central-remote`                |
+| Virtual | `<type>-virtual`; `<type>-<group>-virtual` only after a new ADR (see below) | `docker-virtual`; with the new ADR, `docker-prod-virtual` |
 
+- The group-virtual form `<type>-<group>-virtual` does not pass the key validation in ADR [[adr/0003-artifactory-repository-layout]] (`^[a-z0-9]+-virtual$`). Using it needs a new ADR that widens the check to `^[a-z0-9]+(-[a-z0-9]+)?-virtual$`; until then use `<type>-virtual`.
 - `<type>` is the package type: `docker`, `helm`, `maven`, `npm`, `generic`.
 - `<stage>` is `dev`, `stage` or `prod`, matching the promotion model.
 - `<team>` is a stable team or product slug, not an org-chart name. A repository key is never renamed; a reorganisation changes permissions, not keys.
@@ -89,13 +90,13 @@ Permissions follow the principle that humans read and automation writes.
 
 Names are lowercase and stable. They describe the artifact, not the pipeline that built it.
 
-| Package type | Name pattern                                       | Example                                                      | Notes                                                                   |
-| ------------ | -------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| Docker       | `<registry>/<team>/<service>:<version>`            | `registry.example.com/payments/orders-api:1.4.2`             | Path is lowercase; no `latest`; deploy by digest                        |
-| Helm (OCI)   | `oci://<registry>/helm/<chart>` with chart version | `oci://registry.example.com/helm/orders-api` version `3.2.0` | Chart name equals the directory name; see [[helm-chart-standard]]       |
-| Maven        | `<groupId>:<artifactId>:<version>`                 | `com.example.payments:orders-client:1.4.2`                   | `groupId` is reverse-DNS on a domain we own; no `-SNAPSHOT` in prod     |
-| npm          | `@<scope>/<package>@<version>`                     | `@example-payments/orders-client@1.4.2`                      | The scope is ours and is excluded from remotes                          |
-| Generic      | `<team>/<service>/<version>/<file>`                | `payments/orders-api/1.4.2/orders-api-linux-amd64.tar.gz`    | Include OS and architecture in the file name; ship a checksum alongside |
+| Package type | Name pattern                                                     | Example                                                              | Notes                                                                   |
+| ------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Docker       | `<registry>/<virtual-key>/<team>/<service>:<version>`            | `registry.example.com/docker-virtual/payments/orders-api:1.4.2`      | Path is lowercase; no `latest`; deploy by digest                        |
+| Helm (OCI)   | `oci://<registry>/<helm-virtual-key>/<chart>` with chart version | `oci://registry.example.com/helm-virtual/orders-api` version `3.2.0` | Chart name equals the directory name; see [[helm-chart-standard]]       |
+| Maven        | `<groupId>:<artifactId>:<version>`                               | `com.example.payments:orders-client:1.4.2`                           | `groupId` is reverse-DNS on a domain we own; no `-SNAPSHOT` in prod     |
+| npm          | `@<scope>/<package>@<version>`                                   | `@example-payments/orders-client@1.4.2`                              | The scope is ours and is excluded from remotes                          |
+| Generic      | `<team>/<service>/<version>/<file>`                              | `payments/orders-api/1.4.2/orders-api-linux-amd64.tar.gz`            | Include OS and architecture in the file name; ship a checksum alongside |
 
 Image naming rules in the Dockerfile itself (labels, tags) are in [[dockerfile-standard]].
 
@@ -105,7 +106,7 @@ Image naming rules in the Dockerfile itself (labels, tags) are in [[dockerfile-s
 - **`<semver>-<shortsha>` for builds** from branches and merge requests, for example `1.4.2-3f9a1c2`. This ties an artifact to a commit without claiming a release.
 - **Digest for deploys.** Manifests and charts reference `image@sha256:...`. The tag is informational. The digest is what promotion records and what rollback redeploys (ADR [[adr/0048-rollback-by-redeploying-previous-digest]]).
 - **`latest` is never a deploy reference**, and no pipeline pushes it. It may exist in a dev repository for convenience only if a policy allows; it is blocked in stage and prod.
-- **Snapshots stay in dev.** Maven `-SNAPSHOT` and npm pre-release tags (`-rc.1`) are valid in dev and stage; the prod local rejects them via repository layout or a promotion check.
+- **Pre-releases never reach prod.** Maven `-SNAPSHOT` and npm pre-release tags (`-rc.1`) are valid in dev and stage; the prod local rejects them via repository layout or a promotion check.
 - **No re-tagging.** Moving a tag to a different digest is treated as an incident. Enable the immutable-tag option where the package type offers it (check the current JFrog docs).
 
 Choosing the version number itself, from commits to changelog, is automated in [[release-versioning-and-changelog-automation]]. Dependency bumps that consume these versions are handled by [[automated-dependency-updates]].

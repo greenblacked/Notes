@@ -112,6 +112,13 @@ Never remove a value without a deprecation window. The process:
 {{- end }}
 ```
 
+A named template runs only when something includes it. Include it from a file that always renders, such as the top of `templates/NOTES.txt` (`NOTES.txt` is rendered on every install and upgrade; check the current Helm docs for how `helm template` treats it):
+
+```yaml title="templates/NOTES.txt"
+{{ include "orders-api.deprecations" . }}
+orders-api installed. Verify with: kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ .Release.Name }}
+```
+
 3. **Release** the deprecation as a minor version, with a changelog line.
 4. **Remove** the old value in the next major version, and **no sooner than one minor release after the warning shipped**. The one-minor window is a proposed team default, labelled as such; a longer window is better when consumers are many.
 5. Update the schema in the removing release so the old key is rejected with a clear message, because `additionalProperties: false` turns a leftover key into an error at lint time rather than a silent no-op.
@@ -148,16 +155,16 @@ helm diff upgrade orders ./charts/orders-api -n "$NS" -f ci/default-values.yaml
 
 Every rule maps to a check. Rules without a check are enforced in review and listed in the checklist.
 
-| Rule                                        | Check                                                                                   |
-| ------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `apiVersion: v2`, chart metadata            | `helm lint --strict`                                                                    |
-| Values valid against schema                 | `helm lint --strict -f ci/*-values.yaml` (the schema runs as part of lint and template) |
-| Rendered manifests are valid Kubernetes     | `helm template ... \| kubeconform -strict -summary`                                     |
-| Labels, probes, resources, no cluster-scope | `conftest test` on rendered output ([[conftest-policy-gate-for-manifests]])             |
-| Dependencies pinned and lock in sync        | `helm dependency build` in CI; a diff check that `Chart.lock` has no changes            |
-| Upgrade works from last release             | `helm upgrade --install --dry-run` and the upgrade test above                           |
-| Version bumped when the chart changed       | A script comparing `Chart.yaml` `version` with the target branch                        |
-| No secret-like values                       | Secret scanning ([[secret-scanning-pre-commit-and-ci]])                                 |
+| Rule                                        | Check                                                                                                             |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `apiVersion: v2`, chart metadata            | `helm lint --strict`                                                                                              |
+| Values valid against schema                 | `for f in ci/*-values.yaml; do helm lint --strict . -f "$f"; done` (the schema runs as part of lint and template) |
+| Rendered manifests are valid Kubernetes     | `helm template ... \| kubeconform -strict -summary`                                                               |
+| Labels, probes, resources, no cluster-scope | `conftest test` on rendered output ([[conftest-policy-gate-for-manifests]])                                       |
+| Dependencies pinned and lock in sync        | `helm dependency build` in CI; a diff check that `Chart.lock` has no changes                                      |
+| Upgrade works from last release             | `helm upgrade --install --dry-run` and the upgrade test above                                                     |
+| Version bumped when the chart changed       | A script comparing `Chart.yaml` `version` with the target branch                                                  |
+| No secret-like values                       | Secret scanning ([[secret-scanning-pre-commit-and-ci]])                                                           |
 
 ```bash title="CI commands"
 helm dependency build charts/orders-api

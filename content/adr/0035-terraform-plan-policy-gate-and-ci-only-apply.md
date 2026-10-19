@@ -26,6 +26,7 @@ When engineers apply from their laptops, three things go wrong. The applied code
 Infrastructure changes follow one path: merge request, plan, policy check, approval, CI apply.
 
 1. Every MR runs `terraform plan` and stores the plan output as a job artifact with a short expiry. Plan files are treated as secrets because they can contain sensitive values (see [[0032-terraform-state-in-gcs-per-environment]]).
+   MR plans use a separate read-only plan identity per environment. Its Workload Identity Federation condition allows only merge request pipelines of the infrastructure project. Production plans run only on protected refs, or the MR plan targets non-production and production is planned post-merge, so an unprotected branch can never read production state.
 2. The plan is converted with `terraform show -json` and evaluated by Conftest policies (see [[terraform-plan-policy-checks]]): for example no public buckets, no deletes of protected resource types without a labelled exception, and required labels on every resource.
 3. Apply runs only from CI on the protected default branch, after merge, in a **protected environment** that requires an approval for production. The approver is not the author (see [[separation-of-duties-in-deployments]]).
 4. The apply job applies the saved plan from the approved pipeline, not a fresh plan, so the reviewed change is the applied change.
@@ -42,12 +43,13 @@ plan:
     - conftest test --policy policy/ tfplan.json
   artifacts:
     paths: [tfplan, tfplan.json]
-    expire_in: 1 day
+    access: developer # plan files are secrets; default artifact access is wider (check current GitLab docs)
+    expire_in: 1 hour
 
 apply:
   stage: apply
   script:
-    - terraform apply -input=false tfplan
+    - terraform apply -input=false tfplan # tfplan arrives via needs: [plan] with artifacts: true
   environment:
     name: production
   rules:

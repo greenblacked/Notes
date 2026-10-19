@@ -42,7 +42,7 @@ Score each candidate on the same rows, with a link to the evidence for every sco
 
 ## Scoring and the gate to the bake-off
 
-Give each non-must-pass row 0 (absent), 1 (partial) or 2 (meets our need), with evidence. A **must-pass row that scores 0 fails the tool outright**; do not average it away with good scores elsewhere. Record why, because the same tool may pass a year later.
+Give each row 0 (absent), 1 (partial) or 2 (meets our need), with evidence. A **must-pass row that scores 0 fails the tool outright**; do not average it away with good scores elsewhere. Record why, because the same tool may pass a year later.
 
 Only tools that clear the gate enter the bake-off. This keeps you from spending engineer time comparing something you could never roll out, and from putting your repositories into a tool whose terms you have not read. If few tools survive, say so and stop; a bake-off of one is a demo.
 
@@ -86,16 +86,20 @@ set -euo pipefail
 TOOL="$1"      # change: the tool identifier from your registry
 TASK_ID="$2"   # change: the task directory name, for example 0007-fix-values
 
-git clone --quiet "$CI_REPOSITORY_URL" work && cd work
+# Clone the target repo named by the task, not the harness repo, so no job token lands in work/.git/config.
+git clone --quiet "$(cat "tasks/${TASK_ID}/repo-url")" work && cd work
 git checkout --quiet "$(cat "../tasks/${TASK_ID}/start-commit")"
 git switch --quiet -c "bakeoff/${TOOL}/${TASK_ID}"
 
-timeout 900 "../adapters/${TOOL}.sh" "../tasks/${TASK_ID}/prompt.txt" || echo "tool exited non-zero"
-
 started=$(date +%s)
+timeout 900 "../adapters/${TOOL}.sh" "../tasks/${TASK_ID}/prompt.txt" || echo "tool exited non-zero"
+tool_seconds=$(( $(date +%s) - started ))
+
 if ../tasks/"${TASK_ID}"/check.sh; then tests=pass; else tests=fail; fi
-echo "{\"tool\":\"${TOOL}\",\"task\":\"${TASK_ID}\",\"tests\":\"${tests}\",\"check_seconds\":$(( $(date +%s) - started ))}" >> ../results.jsonl
+echo "{\"tool\":\"${TOOL}\",\"task\":\"${TASK_ID}\",\"tests\":\"${tests}\",\"tool_seconds\":${tool_seconds},\"seconds_to_check_done\":$(( $(date +%s) - started ))}" >> ../results.jsonl
 ```
+
+Keep known-good diffs and check scripts out of the job workspace (fetch the check only after the tool step), and run the adapter with the working directory limited to `work/`. If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
 
 Each adapter is a thin script that feeds the prompt to the tool non-interactively; write them once and review them like production code.
 

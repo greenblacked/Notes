@@ -74,7 +74,7 @@ set -euo pipefail
 find . -name 'terragrunt.hcl' -not -path './.git/*'
 
 # Every module call is pinned by tag (expected: no output)
-grep -rn --include='*.tf' 'source *= *"git::' envs/ | grep -v 'ref=v[0-9]'
+grep -rn --include='*.tf' 'source *= *"git::' envs/ | grep -v 'ref=v[0-9]' || true
 
 # Backend blocks differ only in bucket and prefix: print them for review
 grep -rn --include='backend.tf' -A3 'backend "gcs"' envs/

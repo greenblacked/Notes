@@ -65,8 +65,10 @@ spec:
   validations:
     - expression: >-
         object.spec.template.spec.containers.all(c,
-        !c.image.endsWith(':latest'))
-      message: "Images must not use the latest tag."
+        c.image.contains('@sha256:') ||
+        (c.image.split('/')[size(c.image.split('/'))-1].contains(':') &&
+        !c.image.endsWith(':latest')))
+      message: "Images must use a digest or an explicit non-latest tag."
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding

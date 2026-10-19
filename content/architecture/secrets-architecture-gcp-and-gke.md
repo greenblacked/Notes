@@ -196,3 +196,4 @@ Check the current docs, especially for the GKE-specific Secret Manager add-on an
 - [[runbooks/leaked-credential-rotation]]
 - [[architecture/iam-groups-and-ci-workload-identity-federation]]
 - [[patterns/gcp-audit-logs-siem]]
+- [[0036-secret-manager-as-secrets-system-of-record]]

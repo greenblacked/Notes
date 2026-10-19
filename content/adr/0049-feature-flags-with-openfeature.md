@@ -27,7 +27,7 @@ The standards and tooling in this space move quickly, so this record fixes the p
 
 Proposed: we will use the **OpenFeature SDK** as the only flag API in application code, and we will choose the **provider** (self-hosted flagd or a managed vendor) after evaluation.
 
-Accepted part, effective now for new code:
+Proposed rules for new code:
 
 - Application code calls OpenFeature, never a vendor SDK directly. The provider is configured in one place at start-up, so replacing it does not touch business code.
 - Every flag has an owner, a type (release, experiment, ops or permission) and, for temporary flags, an expiry date. A release flag that is fully on is removed from the code within an agreed time. Expired flags raise a ticket automatically.

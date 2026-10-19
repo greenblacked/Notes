@@ -28,7 +28,7 @@ Ordinary ingress or load balancer certificates belong in [[tls-certificate-renew
 
 ## Preconditions
 
-- Cluster-admin or an equivalent role, with a working kubeconfig. Admission webhooks do not block reads, and most webhooks do not cover the resources you need to edit the webhook configuration itself.
+- Cluster-admin or an equivalent role, with a working kubeconfig. Admission webhooks do not block reads, and the API server never calls webhooks for requests on webhook configuration objects, so you can always edit them.
 - Knowing whether the certificate is managed by cert-manager, by the webhook's own operator (many policy engines and operators generate their own), or by hand.
 - Awareness that this may be a security control. Bypassing it, even briefly, has a security impact that must be recorded.
 
@@ -46,7 +46,7 @@ WEBHOOK_CFG=example-validating-webhook  # name of the ValidatingWebhookConfigura
 kubectl get validatingwebhookconfigurations,mutatingwebhookconfigurations
 ```
 
-If the API server returns the same error for all writes, you will not be able to create new objects, but you can still read and edit the webhook configurations themselves, unless one of them covers its own kind (rare, and a cause for concern).
+If the API server returns the same error for all writes, you will not be able to create new objects, but you can still read and edit the webhook configurations themselves,.
 
 ### 2. Find the failing webhook
 

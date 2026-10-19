@@ -112,12 +112,11 @@ npm reads its registry and credentials from `.npmrc`. The key idea is that the _
 registry=https://artifactory.example.com/artifactory/api/npm/npm/
 @acme:registry=https://artifactory.example.com/artifactory/api/npm/npm/
 //artifactory.example.com/artifactory/api/npm/npm/:_authToken=${NPM_TOKEN}
-always-auth=true
 ```
 
 - `registry=` sends all installs through the **virtual** repository (here named `npm`; the URL layout `/artifactory/api/npm/<repo-key>/` is standard but check the current docs and your instance).
 - `@acme:registry=` pins the scope `@acme` to your registry, which is part of the dependency-confusion defence.
-- The `_authToken` line uses `${NPM_TOKEN}`, which npm expands from the environment at run time. CI provides the variable from a masked variable or a secret manager; the file is safe to commit. The option names and the behaviour of `always-auth` differ between npm versions: see the `.npmrc` documentation for your npm.
+- The `_authToken` line uses `${NPM_TOKEN}`, which npm expands from the environment at run time. CI provides the variable from a masked variable or a secret manager; the file is safe to commit. Option names differ between npm versions: see the `.npmrc` documentation for your npm.
 - Install in CI with `npm ci`, which installs exactly what `package-lock.json` says and fails if the lockfile and `package.json` disagree.
 
 ```bash title="install and publish"
@@ -140,7 +139,7 @@ Helm charts live in a Helm repository in Artifactory. There are two styles, and 
 ```bash title="classic repository and OCI"
 # classic
 helm repo add acme https://artifactory.example.com/artifactory/api/helm/helm-virtual \
-  --username ci-lab --pass-stdin < ~/.lab-artifactory-token
+  --username ci-lab --password-stdin < ~/.lab-artifactory-token
 helm repo update
 helm search repo acme/
 
@@ -232,7 +231,7 @@ These exercises need an Artifactory instance you are allowed to use and a user w
 
    ```bash
    grep -n 'authToken' .npmrc
-   git add .npmrc && git diff --cached | grep -c "$(cat ~/.lab-artifactory-token)" || true
+   git add .npmrc && git diff --cached | grep -c -F -f ~/.lab-artifactory-token || true
    ```
 
    Expected: the line shows `${NPM_TOKEN}`, and the count is `0`.

@@ -92,7 +92,7 @@ A verification example. The flags and the predicate type name must be checked ag
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="registry.example.com/docker-prod-local/payments-api"
+IMAGE="registry.example.com/payments-docker-prod-local/payments-api"
 DIGEST="sha256:0000000000000000000000000000000000000000000000000000000000000000"  # replace with the real digest
 
 # Keyless verification: identity and issuer are what you expect, not any signer.
@@ -104,7 +104,7 @@ cosign verify-attestation \
   "${IMAGE}@${DIGEST}"
 ```
 
-The example verifies by digest and pins the signer's identity and issuer. Accepting "any valid signature" defeats the purpose.
+Keyless signing with a self-managed GitLab needs a private Sigstore deployment (Fulcio and Rekor) that trusts its issuer; with gitlab.com use `https://gitlab.com` as the issuer. Check the current Sigstore docs. The example verifies by digest and pins the signer's identity and issuer. Accepting "any valid signature" defeats the purpose.
 
 ## Promotion by digest
 
@@ -160,14 +160,24 @@ set -euo pipefail
 CTX="gke_example-prod_europe-west1_gke-prod-ew1"
 
 # 1. An unsigned image is refused in the production namespace (expect a denial)
-kubectl --context "$CTX" -n payments run unsigned-test \
-  --image=registry.example.com/docker-dev-local/unsigned-test:1 --restart=Never \
-  --dry-run=server -o yaml || echo "denied as expected"
+if kubectl --context "$CTX" -n payments run unsigned-test \
+  --image=registry.example.com/payments-docker-dev-local/unsigned-test:1 --restart=Never \
+  --dry-run=server -o name; then
+  echo "FAIL: unsigned image admitted" >&2
+  exit 1
+else
+  echo "denied as expected"
+fi
 
-# 2. Every running image is pinned by digest
-kubectl --context "$CTX" get pods -A \
-  -o jsonpath='{range .items[*].status.containerStatuses[*]}{.imageID}{"\n"}{end}' \
-  | grep -v '@sha256:' || echo "all images carry a digest"
+# 2. Every container in the pod spec is pinned by digest (the spec, not the
+#    runtime's resolved imageID, which carries a digest even for tags)
+if kubectl --context "$CTX" get pods -A \
+  -o jsonpath='{range .items[*].spec.containers[*]}{.image}{"\n"}{end}' \
+  | grep -v '@sha256:'; then
+  echo "images not pinned by digest" >&2
+  exit 1
+fi
+echo "all images pinned by digest"
 
 # 3. Attestations verify for a deployed image (see verify-attestation.sh)
 ```
@@ -204,3 +214,7 @@ Check the current docs for versions, tracks and flags.
 - [[architecture/iam-groups-and-ci-workload-identity-federation]]
 - [[architecture/gitops-repo-topology-and-promotion]]
 - [[architecture/artifact-management-architecture-artifactory-ha]]
+- [[0010-deploy-images-by-digest]]
+- [[0037-keyless-cosign-image-signing]]
+- [[0038-kyverno-verifies-image-signatures-at-admission]]
+- [[0039-cyclonedx-as-canonical-sbom-format]]

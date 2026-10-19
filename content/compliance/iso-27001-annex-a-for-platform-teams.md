@@ -31,27 +31,27 @@ The standard text of 27001 and of 27002 (the guidance document) is sold by ISO a
 
 ## How the 2022 Annex A is structured
 
-The 2022 edition groups the controls into four themes: organisational, people, physical and technological. The edition reduced and reorganised the controls compared with the 2013 one, and added new ones such as cloud services use, configuration management, monitoring activities and secure coding. Take the exact count and numbering from ISO/IEC 27001:2022 and 27002:2022, not from memory or blog posts.
+The 2022 edition has 93 controls in four themes: organisational, people, physical and technological. It reduced and reorganised the controls compared with the 2013 edition, and added new ones such as use of cloud services, configuration management, monitoring activities and secure coding. Confirm numbering against ISO/IEC 27001:2022 and 27002:2022 rather than blog posts.
 
-The 2013 edition has a transition deadline for certified organisations. Check the exact date with your certification body or the ISO announcement, because it is a dated fact that I will not state from memory.
+The transition from the 2013 edition ended on 31 October 2025, so certificates based on 2013 are no longer valid. Confirm your own certificate's edition with your certification body.
 
 ## Controls a platform team usually owns
 
-The "typical reference" column is deliberately a pointer: confirm it against the standard text.
+The control numbers below are the 2022 numbering as a pointer for engineers; confirm them against the standard text.
 
-| Control area                      | Typical Annex A reference (check against the standard text) | Usual owner             | Evidence a platform provides                       |
-| --------------------------------- | ----------------------------------------------------------- | ----------------------- | -------------------------------------------------- |
-| Access control, privileged access | Organisational and technological themes                     | Platform lead, security | IAM exports, access review records                 |
-| Secure authentication             | Technological theme                                         | Security, IT            | IdP settings, MFA enforcement report               |
-| Use of cloud services             | Organisational theme                                        | Platform lead           | Org policy exports, supplier register entry        |
-| Configuration management          | Technological theme                                         | Platform lead           | Terraform in Git, drift reports, kube-bench output |
-| Vulnerability management          | Technological theme                                         | Security, platform      | Scan reports, exception register                   |
-| Logging and monitoring            | Technological theme                                         | Platform, SRE           | Cloud Audit Logs config, alert rules               |
-| Secure development                | Technological theme                                         | Engineering leads       | Branch protection, SAST/SBOM jobs, review records  |
-| Separation of environments        | Technological theme                                         | Platform lead           | Project and network layout, IAM per environment    |
-| Change management                 | Organisational and technological themes                     | Engineering manager     | MR approvals, deploy records                       |
-| Cryptography                      | Technological theme                                         | Security, platform      | KMS key inventory, TLS policy exports              |
-| Information backup                | Technological theme                                         | SRE                     | Backup config, restore test records                |
+| Control area                      | 2022 control numbers (confirm against the text) | Usual owner             | Evidence a platform provides                       |
+| --------------------------------- | ----------------------------------------------- | ----------------------- | -------------------------------------------------- |
+| Access control, privileged access | 5.15, 5.18, 8.2                                 | Platform lead, security | IAM exports, access review records                 |
+| Secure authentication             | 8.5                                             | Security, IT            | IdP settings, MFA enforcement report               |
+| Use of cloud services             | 5.23                                            | Platform lead           | Org policy exports, supplier register entry        |
+| Configuration management          | 8.9                                             | Platform lead           | Terraform in Git, drift reports, kube-bench output |
+| Vulnerability management          | 8.8                                             | Security, platform      | Scan reports, exception register                   |
+| Logging and monitoring            | 8.15, 8.16                                      | Platform, SRE           | Cloud Audit Logs config, alert rules               |
+| Secure development                | 8.25, 8.28                                      | Engineering leads       | Branch protection, SAST/SBOM jobs, review records  |
+| Separation of environments        | 8.31                                            | Platform lead           | Project and network layout, IAM per environment    |
+| Change management                 | 8.32                                            | Engineering manager     | MR approvals, deploy records                       |
+| Cryptography                      | 8.24                                            | Security, platform      | KMS key inventory, TLS policy exports              |
+| Information backup                | 8.13                                            | SRE                     | Backup config, restore test records                |
 
 ## Evidence per control
 
@@ -74,14 +74,14 @@ TO="2026-10-01T00:00:00Z"        # change: end of the review window (UTC)
 
 gcloud logging read \
   "logName=\"projects/${PROJECT_ID}/logs/cloudaudit.googleapis.com%2Factivity\"
-   AND protoPayload.methodName=\"SetIamPolicy\"
+   AND protoPayload.methodName:\"SetIamPolicy\"
    AND timestamp>=\"${FROM}\" AND timestamp<\"${TO}\"" \
   --project="${PROJECT_ID}" \
   --format="json(timestamp,protoPayload.authenticationInfo.principalEmail,protoPayload.resourceName,protoPayload.methodName)" \
   > "iam-changes-${PROJECT_ID}-$(date -u +%Y-%m).json"
 ```
 
-Admin Activity logs are written by default and cannot be turned off; Data Access logs are mostly opt-in. Check the current Cloud Audit Logs documentation for what each log type covers.
+The substring match (`:`) catches service-level methods such as `google.iam.admin.v1.SetIAMPolicy`; bucket IAM changes use `storage.setIamPermissions`, so add that method name to the filter if buckets are in scope. Admin Activity logs are written by default and cannot be turned off; Data Access logs are mostly opt-in. Check the current Cloud Audit Logs documentation for what each log type covers.
 
 ## Technological controls in CI/CD
 
@@ -102,7 +102,7 @@ Keep the gates in shared pipeline templates under CODEOWNERS so product teams ca
 The SoA lists each control, whether it applies, why, and how it is implemented. Engineering supplies the last two columns. A row might look like this:
 
 ```yaml title="soa/example-entry.yaml"
-control: "<reference from the 2022 Annex A, confirm against the standard text>"
+control: "8.31" # 2022 numbering, confirm against the standard text
 title: "Separation of development, test and production environments"
 applicable: true
 justification: "Production data and workloads run in separate GCP projects with separate IAM."

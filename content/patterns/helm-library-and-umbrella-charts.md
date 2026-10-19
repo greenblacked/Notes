@@ -100,8 +100,8 @@ dependencies:
     repository: oci://artifactory.example.com/helm-internal-local
 ```
 
-```yaml title="payments-api/templates/deployment.yaml"
-{ { include "platform-lib.deployment" . } }
+```text title="payments-api/templates/deployment.yaml"
+{{ include "platform-lib.deployment" . }}
 ```
 
 ```bash title="resolve and lock"
@@ -217,6 +217,6 @@ For an umbrella, additionally render with every `condition` and `tags` combinati
 
 ## Sources
 
-- https://helm.sh/docs/topics/library_charts/
-- https://helm.sh/docs/topics/charts/#chart-dependencies
-- https://helm.sh/docs/helm/helm_dependency/
+- [helm.sh/docs/topics/library_charts](https://helm.sh/docs/topics/library_charts/)
+- [helm.sh/docs/topics/charts/#chart-dependencies](https://helm.sh/docs/topics/charts/#chart-dependencies)
+- [helm.sh/docs/helm/helm_dependency](https://helm.sh/docs/helm/helm_dependency/)

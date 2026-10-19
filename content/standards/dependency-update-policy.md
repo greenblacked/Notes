@@ -59,7 +59,7 @@ A missed deadline is visible on the measurement dashboard and is escalated to th
 
 Automation merges what is cheap to verify and cheap to reverse, and never what changes production behaviour without a person looking at the diff. See the [Renovate automerge concepts](https://docs.renovatebot.com/key-concepts/automerge/).
 
-**May auto-merge after all required checks are green** (all of these must hold):
+**May auto-merge after all required checks are green** (any one of these, and only after all required checks are green):
 
 - patch and digest updates for development dependencies and test tooling;
 - patch updates for libraries with a good test suite, in repositories with a required test gate;
@@ -99,15 +99,13 @@ Auto-merge also requires a **minimum release age** so that a release which is ya
       "matchPackageNames": ["registry.example.com/base/**"],
       "automerge": false,
       "addLabels": ["base-image"]
-    },
-    {
-      "vulnerabilityAlerts": { "labels": ["security"], "minimumReleaseAge": null }
     }
-  ]
+  ],
+  "vulnerabilityAlerts": { "labels": ["security"], "minimumReleaseAge": null }
 }
 ```
 
-This excerpt only shows how each policy line maps to a rule. The full configuration (schedules, grouping, presets, runner setup) stays in [[automated-dependency-updates]]. Option names such as `minimumReleaseAge`, `matchManagers` and `vulnerabilityAlerts` change between releases; check the current Renovate docs ([configuration options](https://docs.renovatebot.com/configuration-options/)) before copying.
+This excerpt only shows how each policy line maps to a rule. The full configuration (schedules, grouping, presets, runner setup) stays in [[automated-dependency-updates]]. Option names such as `minimumReleaseAge`, `matchManagers` and `vulnerabilityAlerts` change between releases; check the current Renovate docs ([configuration options](https://docs.renovatebot.com/configuration-options/)) before copying. `vulnerabilityAlerts` is a top-level option, not a `packageRules` entry. An invalid config can silently stop all updates, so run `renovate-config-validator` in CI.
 
 ## Ownership and approval of majors
 

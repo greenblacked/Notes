@@ -25,7 +25,7 @@ Admission control can only trust what it can verify. Without signatures, any ima
 Every release image is signed with **cosign, by digest**.
 
 - **Sign digests, not tags.** Tags move; a signature on a digest cannot be redirected. The digest comes from the push step (see [[0010-deploy-images-by-digest]]).
-- **GitLab CI signs keylessly.** The job requests a GitLab OIDC token (`id_tokens`), and cosign exchanges it for a short-lived certificate from Fulcio. The verification identity is pinned to the project path and the protected ref, never a wildcard over the instance.
+- **GitLab CI signs keylessly.** The job requests a GitLab OIDC token (`id_tokens`), and cosign exchanges it for a short-lived certificate from Fulcio. The verification identity is pinned to the project path and the protected ref, never a wildcard over the instance. Public-good Fulcio accepts only configured OIDC issuers (gitlab.com is one); a self-managed GitLab needs a private Sigstore (Fulcio and Rekor) or the KMS key path. Check the Fulcio issuer list.
 - **Jenkins signs with a Cloud KMS key.** Jenkins has no equivalent OIDC identity we trust, so a KMS key with signing-only permission is used, accessed through federation (see [[cloud-kms-key-management]] and [[0026-keyless-ci-auth-with-workload-identity-federation]]).
 - **Attestations travel with the image.** The SBOM (see [[0039-cyclonedx-as-canonical-sbom-format]]) and build provenance (see [[slsa-build-provenance]]) are attached as signed attestations.
 - **Public transparency log.** Keyless signing records entries in the public Rekor log, so the identity string, which includes the project path, becomes publicly visible. If project paths are sensitive, use the KMS path or a private Sigstore deployment. This is decided per registry and recorded in the platform standard.
@@ -45,7 +45,7 @@ sign-image:
 
 ```bash title="verify-signature.sh"
 set -euo pipefail
-IMAGE="registry.example.com/payments/api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+IMAGE="artifactory.example.com/payments-docker-prod-local/payments/api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 cosign verify "${IMAGE}" \
   --certificate-identity "https://gitlab.example.com/payments/api//.gitlab-ci.yml@refs/tags/v1.2.3" \
@@ -82,14 +82,15 @@ Harder:
 
 ```bash title="validate-signing.sh"
 set -euo pipefail
-IMAGE="registry.example.com/payments/api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+IMAGE="artifactory.example.com/payments-docker-prod-local/payments/api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 # A signature exists for the digest (expected: output lists signatures)
 cosign tree "${IMAGE}"
 
 # Negative test: an unsigned image must fail verification (expected: non-zero exit)
-! cosign verify "registry.example.com/test/unsigned@sha256:1111111111111111111111111111111111111111111111111111111111111111" \
+! cosign verify "artifactory.example.com/payments-docker-prod-local/test/unsigned@sha256:1111111111111111111111111111111111111111111111111111111111111111" \
   --certificate-identity-regexp '.*' --certificate-oidc-issuer "https://gitlab.example.com"
+# '.*' is only acceptable here because we expect FAILURE; never use it for positive verification
 ```
 
 ## References

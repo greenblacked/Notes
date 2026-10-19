@@ -105,12 +105,13 @@ Replace `OWNER`, `REPO` and `RULESET_ID` with real values. The first call lists 
 
 ```bash title="GitLab: list protected branches"
 glab api "projects/$(printf '%s' 'GROUP/PROJECT' | jq -sRr @uri)/protected_branches"
-# or, with curl and a read-only token in $GITLAB_TOKEN:
-curl -sS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+# or, with curl and a read-only token in $GITLAB_TOKEN. The header is read from a
+# process substitution so the token is not in the process arguments:
+curl -sS -K <(printf 'header = "PRIVATE-TOKEN: %s"\n' "$GITLAB_TOKEN") \
   "https://gitlab.example.com/api/v4/projects/PROJECT_ID/protected_branches"
 ```
 
-Check the fields `allow_force_push`, `push_access_levels` and `merge_access_levels`; the API reference for your GitLab version lists them. Keep the token read-only and out of the shell history.
+Check the fields `allow_force_push`, `push_access_levels` and `merge_access_levels`; the API reference for your GitLab version lists them. Keep the token read-only and out of the shell history. Passing it with `--header` or `-u` would expose it to other users on a shared host through `ps`.
 
 ## Merge method
 
@@ -130,26 +131,25 @@ Check the fields `allow_force_push`, `push_access_levels` and `merge_access_leve
 
 A hotfix is a normal change made faster, never a different process. It keeps review and CI.
 
-1. Branch from the **release tag** that is in production (or from `main` if production is at `main`'s head): `fix/<short-kebab>`.
+1. Branch from the **release tag** that is in production (or from `main` only if `main` equals the production tag): `fix/<short-kebab>`.
 2. Make the smallest possible fix, with a test.
-3. Open a merge request into `main` (or the release branch, if one exists), with expedited review but the same required checks.
-4. Cut a patch release (`vX.Y.Z+1`) from the merged commit and deploy it.
+3. If `main` has moved past the production tag, create `release/vX.Y` from that tag and open the merge request into it; otherwise open it into `main`. Expedited review, same required checks.
+4. Cut a patch release (`vX.Y.Z+1`) from the release branch, or from `main` only if `main` equals the production tag, and deploy it.
 5. **Forward-port**: if the fix landed on a release branch, merge or cherry-pick it into `main` the same day, so the next release does not regress. A hotfix that exists only on a release branch is a regression waiting for the next release.
 
 ```mermaid
 gitGraph
   commit id: "feat A"
   commit id: "feat B" tag: "v1.4.0"
-  branch fix/null-config
-  checkout fix/null-config
-  commit id: "fix: handle null config"
+  branch release/v1.4
+  commit id: "fix: handle null config" tag: "v1.4.1"
   checkout main
   commit id: "feat C"
-  merge fix/null-config id: "merge hotfix" tag: "v1.4.1"
+  cherry-pick id: "fix: handle null config"
   commit id: "feat D"
 ```
 
-In the picture the fix branches from the release tag, merges back into `main`, and is released as `v1.4.1`; `feat C` waits for the next minor if it is not ready for production. If your production runs a release branch, merge the hotfix into both the release branch and `main`.
+In the picture `main` has already moved past `v1.4.0` with `feat C`, so the fix is made on `release/v1.4`, branched from the production tag, and released as `v1.4.1` from there. `feat C` waits for the next minor. The fix is then forward-ported to `main` (merge or cherry-pick) the same day. If `main` still equals the production tag, skip the release branch and release the fix from `main`.
 
 ## Stale branches and cleanup
 

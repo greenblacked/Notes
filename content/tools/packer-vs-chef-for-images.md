@@ -52,7 +52,7 @@ flowchart LR
 
 ## Packer on GCE: googlecompute builder, image families, promotion by family
 
-A minimal HCL2 template for a GCE image that applies a Chef run and then a shell hardening step:
+A minimal HCL2 template for a GCE image that applies a Chef run and then a shell hardening step. The `chef-solo` provisioner is not bundled with Packer, so it is declared as a plugin; check whether that plugin is still maintained before relying on it, and fall back to a `shell` provisioner that runs `chef-client --local-mode` if it is not:
 
 ```hcl title="base.pkr.hcl"
 packer {
@@ -60,6 +60,10 @@ packer {
     googlecompute = {
       source  = "github.com/hashicorp/googlecompute"
       version = ">= 1.1.0" # check the current release and pin a range you have tested
+    }
+    chef = {
+      source  = "github.com/hashicorp/chef"
+      version = ">= 1.0.0" # check the plugin's current release and maintenance status
     }
   }
 }

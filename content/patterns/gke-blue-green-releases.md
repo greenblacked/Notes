@@ -213,6 +213,6 @@ With Argo CD ([[0001-gitops-with-argocd]]), do not run `kubectl patch` by hand. 
 
 ## Sources
 
-- https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api
-- https://gateway-api.sigs.k8s.io/guides/traffic-splitting/
-- https://kubernetes.io/docs/concepts/services-networking/service/
+- [cloud.google.com/kubernetes-engine/docs/concepts/gateway-api](https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api)
+- [gateway-api.sigs.k8s.io/guides/traffic-splitting](https://gateway-api.sigs.k8s.io/guides/traffic-splitting/)
+- [kubernetes.io/docs/concepts/services-networking/service](https://kubernetes.io/docs/concepts/services-networking/service/)

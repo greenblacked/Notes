@@ -28,7 +28,7 @@ We need scanning to be enforced where artifacts are stored and promoted ([[0004-
 We will use **JFrog Xray as the gate in the artifact store**: promotion from one stage repository to the next is blocked when a policy is violated.
 
 - **Watches** cover the stage and prod local repositories and the build info of released builds. Dev repositories are scanned for feedback but never block developers from iterating.
-- **Policies** are defined on severity (and on licence rules where [[open-source-license-compliance]] requires it). For prod, a violation sets "fail build" and "block download"; for stage it fails the promotion job but does not block download.
+- **Policies** are defined on severity (and on licence rules where [[open-source-license-compliance]] requires it). For prod, a violation sets "fail build" and "block download"; for stage it fails the promotion job but does not block download. The promotion job runs `jf build-scan` first and promotes only on exit code 0, because `jf rt build-promote` itself does not consult Xray (an alternative is Release Bundles v2 with an Xray block-promotion action; check the current JFrog docs).
 - The **remediation timelines** (how fast each severity must be fixed) are not repeated here: they live in [[vulnerability-management-slas]]. This record only decides where the gate is and what it blocks.
 - **Exceptions are time-boxed and owned.** A waiver names the CVE, the artifact scope, an owner, a reason and an expiry, and goes through [[policy-exception-and-waiver-process]]. No permanent ignore rules.
 - **Break-glass:** a new advisory can block an urgent release. A named release owner may approve a time-limited waiver for a specific build, and the use is reviewed afterwards. The path is documented so that nobody disables the policy under pressure.
@@ -61,7 +61,7 @@ Harder or newly required:
 
 ## Validation
 
-Prove the gate works by promoting a known-vulnerable test image, which must be refused, and by checking that a clean image is promoted. Set the variables first. The CLI flags are an assumption; confirm them with `jf rt build-promote --help` for your version.
+Prove the gate works by promoting a known-vulnerable test image, which must be refused, and by checking that a clean image is promoted. Set the variables first. The CLI flags are an assumption; confirm them with `jf build-scan --help` for your version.
 
 ```bash title="validate-0005.sh"
 set -o pipefail
@@ -69,12 +69,12 @@ AF_URL="https://artifactory.example.com"
 BUILD_NAME="gate-test-vulnerable"
 BUILD_NUMBER="1"
 
-# Expected: non-zero exit and a policy violation message
-if jf rt build-promote "${BUILD_NAME}" "${BUILD_NUMBER}" payments-docker-stage-local \
-     --url "${AF_URL}/artifactory"; then
-  echo "FAIL: vulnerable build was promoted"; exit 1
+# Expected: non-zero exit and a policy violation message from the scan,
+# so the promotion job (which runs only after a clean scan) stops here
+if jf build-scan "${BUILD_NAME}" "${BUILD_NUMBER}"; then
+  echo "FAIL: vulnerable build passed the scan"; exit 1
 else
-  echo "OK: promotion was blocked"
+  echo "OK: scan failed, promotion job stops here"
 fi
 ```
 

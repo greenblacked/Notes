@@ -38,7 +38,7 @@ Define in advance which incidents get a review, so it is not a negotiation after
 | Repeated minor incidents with the same cause           | Review the pattern as one item         |
 | Any incident the on-call or the manager asks to review | Yes; no justification needed           |
 
-Tie error-budget breaches to the policy in [[error-budget-policy]], and use [[slo-burn-rate-alerting]] to define which burn events count as incidents. For the response itself see [[incident-response]].
+Tie error-budget breaches to the policy in [[error-budget-policy]], and use [[slo-burn-rate-alerting]] to define which burn events count as incidents. For the response itself see [[incident-response]]. Severity levels are defined in [[0050-incident-severity-levels-and-roles]].
 
 The service levels from the standard apply unchanged: for SEV1 and SEV2 the review meeting takes place within 5 working days of the incident, and the final report is published within 10 working days. Do not invent a second set.
 
@@ -117,7 +117,7 @@ The review is wasted if actions do not finish. Track them like work.
 - **Verify, don't just close.** Someone confirms the fix works, for instance in a game day or in later incident data.
 
 ```text title="gitlab-labels.txt"
-Labels for incident actions (scoped labels, GitLab):
+Labels for incident actions (GitLab scoped labels; a paid-tier feature, check the current docs for your tier):
 
 incident::postmortem-action        # marks every action item issue
 severity::sev1 | severity::sev2 | severity::sev3
@@ -179,6 +179,7 @@ Watch for Goodhart effects: when closure rate becomes a target, actions get smal
 ## Sources
 
 - [Google SRE book: Postmortem culture](https://sre.google/sre-book/postmortem-culture/): blameless postmortem practice.
+- [GitLab labels](https://docs.gitlab.com/user/project/labels/): scoped labels and tier availability. Check the current docs.
 - [Atlassian incident management handbook](https://www.atlassian.com/incident-management/handbook/postmortems): postmortem guidance. Check the current page before relying on it.
 
 ## Related
@@ -190,3 +191,4 @@ Watch for Goodhart effects: when closure rate becomes a target, actions get smal
 - [[dora-metrics]]
 - [[managing-conflict]]
 - [[on-call-compensation-and-recovery]]
+- [[0050-incident-severity-levels-and-roles]]

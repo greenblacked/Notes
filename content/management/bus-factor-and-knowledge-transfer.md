@@ -41,7 +41,7 @@ SINCE="${SINCE:-12 months ago}"
 cd "${REPO_DIR}"
 for dir in $(git ls-tree -d --name-only HEAD); do
   echo "== ${dir}"
-  git shortlog -sn --no-merges --since="${SINCE}" -- "${dir}" | head -5
+  git shortlog -sn --no-merges --since="${SINCE}" HEAD -- "${dir}" | head -5
 done
 ```
 

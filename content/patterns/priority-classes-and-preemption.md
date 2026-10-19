@@ -148,7 +148,7 @@ spec:
               memory: 1Gi
 ```
 
-This needs a `headroom-low` PriorityClass with a value below `batch` (for example 10, or negative; check the docs for allowed ranges). When a real Pod arrives, it preempts a balloon Pod and starts immediately; the evicted balloon goes Pending and triggers the autoscaler to add a node in the background. You pay for the idle capacity. Size it from observed scale-up bursts, and see [[kubernetes-autoscaling]].
+This needs a `headroom-low` PriorityClass with a value below `batch` (for example 10, or negative; check the docs for allowed ranges). Keep the value at or above the autoscaler's expendable-pods priority cutoff (default -10; check the GKE and cluster-autoscaler docs), or evicted balloons will not trigger a scale-up. When a real Pod arrives, it preempts a balloon Pod and starts immediately; the evicted balloon goes Pending and triggers the autoscaler to add a node in the background. You pay for the idle capacity. Size it from observed scale-up bursts, and see [[kubernetes-autoscaling]].
 
 Verify the image tag in your own registry mirror before using it. The tag above is an example.
 
@@ -188,7 +188,7 @@ For monitoring, count Pending Pods per class and alert when `prod-high` Pods sta
 ## Rollback
 
 1. Stop new use: remove the class from the offending chart, or relax the admission rule.
-2. Existing Pods keep their resolved priority number, so changing a class value has no effect on them until they are recreated. Roll the Deployments.
+2. A PriorityClass `value` cannot be changed in place: create a new class with the new value, repoint workloads, roll them, then delete the old class. Existing Pods keep their resolved number until recreated.
 3. A `PriorityClass` that is in use can still be deleted, but new Pods that name it are rejected. Remove references first.
 4. To undo `globalDefault`, set another class as default or none, then roll workloads.
 
@@ -203,6 +203,6 @@ For monitoring, count Pending Pods per class and alert when `prod-high` Pods sta
 
 ## Sources
 
-- https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
-- https://kubernetes.io/docs/concepts/policy/resource-quotas/
-- https://cloud.google.com/kubernetes-engine/docs/how-to/capacity-provisioning
+- [kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/)
+- [kubernetes.io/docs/concepts/policy/resource-quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/)
+- [cloud.google.com/kubernetes-engine/docs/how-to/capacity-provisioning](https://cloud.google.com/kubernetes-engine/docs/how-to/capacity-provisioning)

@@ -74,7 +74,7 @@ spec:
         cpu: 100m
         memory: 128Mi
       default:
-        memory: 256Mi
+        memory: 128Mi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

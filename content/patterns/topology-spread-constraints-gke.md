@@ -183,5 +183,5 @@ Spread constraints are part of the Pod template, so changing them triggers a rol
 
 ## Sources
 
-- https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
-- https://cloud.google.com/kubernetes-engine/docs/concepts/regional-clusters
+- [kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/)
+- [cloud.google.com/kubernetes-engine/docs/concepts/regional-clusters](https://cloud.google.com/kubernetes-engine/docs/concepts/regional-clusters)

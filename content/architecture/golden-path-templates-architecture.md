@@ -118,7 +118,7 @@ Rollout practice:
 - Auto-merge patch updates when the service pipeline is green; require a human for minor and major.
 - Track how many services run each version in a dashboard. A long tail on an old major is a risk and a support cost.
 
-A renovate fragment for the GitLab component and a Helm dependency (check the current Renovate docs for manager names and options):
+A renovate fragment for the GitLab component and a Helm dependency (check the current Renovate docs for manager names and options). Project includes (`include: project` with a `ref`) are handled by the `gitlabci-include` manager; components by `gitlabci`:
 
 ```json title="renovate.json"
 {
@@ -128,13 +128,13 @@ A renovate fragment for the GitLab component and a Helm dependency (check the cu
   "helmv3": { "enabled": true },
   "packageRules": [
     {
-      "matchPackagePatterns": ["platform/ci-components/", "platform-lib"],
+      "matchPackageNames": ["/platform\\/ci-components\\//", "/platform-lib/"],
       "groupName": "platform golden path",
       "automerge": false
     },
     {
       "matchUpdateTypes": ["patch"],
-      "matchPackagePatterns": ["platform/ci-components/", "platform-lib"],
+      "matchPackageNames": ["/platform\\/ci-components\\//", "/platform-lib/"],
       "automerge": true
     }
   ]
@@ -193,17 +193,21 @@ trap 'rm -rf "$WORK"' EXIT
   --owner group:default/platform-team \
   --out "$WORK/sample-service"
 
+REPO_ROOT="$(pwd)"
 cd "$WORK/sample-service"
 
 # 2. Static checks on the generated output
 test -f catalog-info.yaml
 test -f .platform/template.yaml
-! grep -R --line-number -E 'ref: *(main|master)|:latest' .gitlab-ci.yml
+if grep -R --line-number -E 'ref: *(main|master)|:latest' .gitlab-ci.yml; then
+  echo "floating ref in generated CI" >&2
+  exit 1
+fi
 
 # 3. The generated chart renders and passes policy
 helm dependency build ./chart
 helm template sample ./chart > rendered.yaml
-conftest test rendered.yaml --policy ../../policy
+conftest test rendered.yaml --policy "$REPO_ROOT/policy"
 
 # 4. The container builds
 docker build -t sample-service:test .
@@ -238,3 +242,5 @@ Check the current docs for syntax and supported versions.
 - [[patterns/conftest-policy-gate-for-manifests]]
 - [[patterns/dockerfile-hardening]]
 - [[patterns/release-versioning-and-changelog-automation]]
+- [[0013-versioned-central-ci-templates]]
+- [[0040-golden-base-images-owned-by-platform]]

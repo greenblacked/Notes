@@ -44,6 +44,7 @@ resource "google_sql_database_instance" "payments" {
   deletion_protection = true
 
   settings {
+    edition           = "ENTERPRISE" # new POSTGRES_16 instances may default to Enterprise Plus, which rejects db-custom tiers; check the current default edition
     tier              = "db-custom-4-16384"
     availability_type = "REGIONAL"
 

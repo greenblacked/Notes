@@ -1,6 +1,6 @@
 ---
 title: "Multi-tenant Prometheus: per-team scraping, central storage and tenant isolation"
-description: "Reference design for multi-tenant metrics on GKE with Prometheus, Thanos, Mimir or Managed Service for Prometheus: tenant identity, query isolation and limits."
+description: "Reference design for multi-tenant metrics on GKE with Prometheus, Thanos, Mimir or managed Prometheus: tenant identity, query isolation and limits."
 type: reference
 tags:
   - architecture
@@ -37,7 +37,7 @@ This note describes how to offer Prometheus metrics to many teams on shared GKE 
 | Mimir                          | Horizontally scalable store with native multi-tenancy via a tenant ID     | Per-tenant limits and isolation built in            | A larger system to operate and size                                  |
 | Managed Service for Prometheus | Google-managed collection and global storage                              | No storage to run; integrates with Cloud Monitoring | Pricing model by samples, isolation by project and IAM, less control |
 
-There is no universal winner. Federation is acceptable for two or three teams. When teams need hard isolation and per-tenant limits on your own infrastructure, a store with native tenancy is the cleaner fit. When you would rather not operate storage, a managed service is the right trade. Do not quote prices from memory; check the current pricing page for the managed option and model the sample volume.
+There is no universal winner. Federation is acceptable for two or three teams. When teams need hard isolation and per-tenant limits on your own infrastructure, a store with native tenancy is the cleaner fit. When you would rather not operate storage, a managed service is the right trade; [[0042-managed-prometheus-for-application-metrics]] chose Managed Service for Prometheus for application metrics. Do not quote prices from memory; check the current pricing page for the managed option and model the sample volume.
 
 ## Architecture
 
@@ -125,7 +125,7 @@ Alert on limit use before it bites: warn at a stated percentage of the series bu
 rules-check:
   stage: test
   image:
-    name: prom/prometheus:latest # pin by digest in real use
+    name: prom/prometheus:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000 # placeholder: pin the real version and digest
     entrypoint: [""]
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -176,7 +176,8 @@ READ="https://metrics-read.example.com"
 curl -sS -G "$READ/team-a/api/v1/query" \
   --data-urlencode 'query=count(up{team="team-a"})'
 
-# 2. The same proxy path must not return another tenant's data (expect empty)
+# 2. The same proxy path must not return another tenant's data
+#    (expect an empty result or a 400 rejection, never team-b series)
 curl -sS -G "$READ/team-a/api/v1/query" \
   --data-urlencode 'query=count(up{team="team-b"})'
 
@@ -219,3 +220,4 @@ Check the current docs for limit names, defaults and project status.
 - [[patterns/slo-burn-rate-alerting]]
 - [[architecture/finops-cost-allocation-and-guardrails]]
 - [[architecture/logging-architecture-gke-and-cloud-logging]]
+- [[0042-managed-prometheus-for-application-metrics]]

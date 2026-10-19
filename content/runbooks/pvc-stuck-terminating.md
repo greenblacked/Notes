@@ -89,8 +89,8 @@ kubectl describe pv "$PV" | sed -n '/Finalizers:/,/Source:/p;/Events:/,$p'
 The `volumeHandle` on GKE persistent disk volumes holds the disk's project, location and name. Compare it with the disk:
 
 ```bash
-DISK=pvc-0000-example
-ZONE=europe-west1-b
+DISK=$(kubectl get pv "$PV" -o jsonpath='{.spec.csi.volumeHandle}' | awk -F/ '{print $NF}')
+ZONE=$(kubectl get pv "$PV" -o jsonpath='{.spec.csi.volumeHandle}' | awk -F/ '{print $4}')
 gcloud compute disks describe "$DISK" --zone "$ZONE" \
   --format="yaml(name,status,users,sizeGb,type,labels)"
 ```
@@ -148,6 +148,8 @@ gcloud compute disks describe "$DISK" --zone "$ZONE" --format="value(users)"
 
 3. If a Pod is `Terminating` on a dead node and blocks the detach, deal with that Pod first; see [[kubernetes-pod-troubleshooting]].
 
+Regional disks use `regions/` in the handle and need `--region` instead of `--zone`.
+
 Most stuck claims clear at this step.
 
 ### 6. Last resort: patch out the finalizer
@@ -155,6 +157,7 @@ Most stuck claims clear at this step.
 Only when no Pod, attachment or controller holds the object, the data is backed up, and the reclaim policy is `Retain` (or you accept the disk deletion):
 
 ```bash
+kubectl -n "$NS" get pvc "$PVC" -o yaml > pvc-backup.yaml; kubectl get pv "$PV" -o yaml > pv-backup.yaml
 kubectl -n "$NS" patch pvc "$PVC" --type=merge -p '{"metadata":{"finalizers":null}}'
 # for a PV that is stuck
 kubectl patch pv "$PV" --type=merge -p '{"metadata":{"finalizers":null}}'
@@ -184,7 +187,7 @@ If you kept the data, restore the reclaim policy and confirm a Pod can mount a f
 - Reclaim policy: set it back to its original value with `kubectl patch pv "$PV" -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'` only after the claim state is settled.
 - Scaled-down workloads: scale back up; the StatefulSet recreates Pods and reattaches the claims that still exist.
 - Deleted objects cannot be recovered: restore from the snapshot taken in step 3, creating a new disk and a PV that points at it, or from your backup tool.
-- If a finalizer patch was a mistake, there is nothing to undo. Recreate the object from the saved YAML (`kubectl get pvc -o yaml > pvc-backup.yaml` before step 6).
+- If a finalizer patch was a mistake, there is nothing to undo. Recreate the object from the saved YAML (`pvc-backup.yaml` and `pv-backup.yaml`, saved at the start of step 6).
 
 ## Troubleshooting
 

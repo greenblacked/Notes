@@ -51,13 +51,14 @@ build {
   provisioner "shell" {
     script = "scripts/install.sh"
   }
-  provisioner "shell" {
-    inline = ["inspec exec /tmp/profiles/host-baseline --chef-license accept-no-persist"]
+  # Runs from the build host against the temporary instance, so InSpec is not installed in the image
+  provisioner "inspec" {
+    profile = "profiles/host-baseline"
   }
 }
 ```
 
-The license flag in the InSpec step depends on the InSpec version in use; check the current InSpec docs.
+The InSpec provisioner comes from a Packer plugin and its options (including licence acceptance) depend on the InSpec version in use; check the plugin and InSpec docs.
 
 > [!info] Claims not checked against current docs
 > Chef and InSpec licensing terms (they changed over the years, so check them before citing cost as a reason), Packer plugin and builder option names, and the current rolling-update options of managed instance groups.
@@ -96,7 +97,11 @@ gcloud compute images list --project="${PROJECT_ID}" \
 
 # Instances not created from the family (review: legacy Chef hosts)
 gcloud compute instances list --project="${PROJECT_ID}" \
-  --format="table(name, disks[0].source.basename(), labels.managed_by)"
+  --format="table(name, labels.managed_by)"
+
+# Source image of each disk (review: disks not created from the family)
+gcloud compute disks list --project="${PROJECT_ID}" \
+  --format="table(name, sourceImage.basename(), users[0].basename())"
 ```
 
 ## References

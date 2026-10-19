@@ -142,21 +142,28 @@ An empty array is the goal. Every row that comes back needs an explanation attac
 
 ## A Jenkins equivalent
 
-In Jenkins the approval is a Pipeline `input` step, and the proof is the build record. Restrict who may answer with `submitter`, and keep the build history for the audit period.
+In Jenkins the approval is a Pipeline `input` step, and the proof is the build record. Restrict who may answer with `submitter`. Use `agent none` at the top and the stage-level `input` directive so the wait does not occupy an executor. Build rotation is count-based and does not guarantee the audit period, so copy the approval record to the evidence bucket as well.
 
 ```groovy title="Jenkinsfile"
 pipeline {
-  agent any
-  options { buildDiscarder(logRotator(numToKeepStr: '1000')) } // keep records for the audit period
+  agent none // do not hold an executor while waiting for approval
+  options {
+    // count-based; also write the approval to the evidence bucket, since build rotation is not a retention control
+    buildDiscarder(logRotator(numToKeepStr: '1000'))
+  }
   stages {
     stage('Approve production') {
+      input {
+        message 'Deploy to production?'
+        submitter 'release-approvers'   // change: Jenkins group allowed to approve
+        submitterParameter 'APPROVED_BY'
+      }
       steps {
-        input message: 'Deploy to production?',
-              submitter: 'release-approvers',   // change: Jenkins group allowed to approve
-              submitterParameter: 'APPROVED_BY'
+        script { env.APPROVED_BY = APPROVED_BY } // keep the approver for later stages and the evidence record
       }
     }
     stage('Deploy') {
+      agent any
       steps {
         echo "Approved by ${env.APPROVED_BY}"
         // deploy by image digest here

@@ -56,7 +56,7 @@ cosign verify \
   "${IMAGE}@${DIGEST}"
 ```
 
-The digest above is a placeholder: in a pipeline take it from the build output. Keep the identity regex as tight as you can; a loose one such as `.*` accepts a signature from any project on the issuer. Keyless depends on the public Sigstore services unless you host a private instance; confirm availability and data-publication implications (identities are written to a public log) against your policy.
+The digest above is a placeholder: in a pipeline take it from the build output. Keep the identity regex as tight as you can; a loose one such as `.*` accepts a signature from any project on the issuer. The public Sigstore Fulcio accepts only certain OIDC issuers (for GitLab, gitlab.com); keyless signing with a self-managed issuer such as `https://gitlab.example.com` in the examples needs a private Sigstore deployment. Keyless otherwise depends on the public Sigstore services; confirm availability and data-publication implications (identities are written to a public log) against your policy.
 
 ### KMS keys with cosign
 

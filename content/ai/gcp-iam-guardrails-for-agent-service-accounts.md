@@ -88,7 +88,7 @@ Attach it at the project, folder or organisation with the CLI. Check the argumen
 set -euo pipefail
 
 PROJECT_ID="example-project"
-# The attachment point is URL-encoded: cloudresourcemanager.googleapis.com/projects/<id>
+# Plain form for gcloud; the REST API takes it URL-encoded: cloudresourcemanager.googleapis.com%2Fprojects%2F<id>
 gcloud iam policies create agent-deny \
   --attachment-point="cloudresourcemanager.googleapis.com/projects/${PROJECT_ID}" \
   --kind=denypolicies \

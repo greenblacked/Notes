@@ -55,8 +55,9 @@ set -euo pipefail
 : "${ARTIFACTORY_URL:?}" "${ADMIN_TOKEN:?}"
 
 # Field names and scope syntax: check the current JFrog access token REST documentation.
+# -K reads the header from a process substitution, so the bootstrap token never appears in argv (visible in ps).
 curl -fsS -X POST "${ARTIFACTORY_URL}/access/api/v1/tokens" \
-  -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  -K <(printf 'header = "Authorization: Bearer %s"\n' "${ADMIN_TOKEN}") \
   -d "username=ci-deploy-dev" \
   -d "scope=applied-permissions/groups:ci-deploy-dev" \
   -d "expires_in=3600" \
@@ -95,7 +96,7 @@ sequenceDiagram
 ```yaml title=".gitlab-ci.yml"
 promote-prod:
   stage: release
-  image: releases-docker.jfrog.io/jfrog/jfrog-cli-v2-jf:latest
+  image: releases-docker.jfrog.io/jfrog/jfrog-cli-v2-jf:X.Y.Z@sha256:0000000000000000000000000000000000000000000000000000000000000000
   id_tokens:
     ARTIFACTORY_ID_TOKEN:
       aud: https://artifactory.example.com
@@ -104,15 +105,15 @@ promote-prod:
     OIDC_PROVIDER_NAME: gitlab-ci
   script:
     - >
-      jf eot "${OIDC_PROVIDER_NAME}" "${ARTIFACTORY_ID_TOKEN}"
-      --oidc-audience "https://artifactory.example.com"
+      export JF_ACCESS_TOKEN="$(jf eot "${OIDC_PROVIDER_NAME}" "${ARTIFACTORY_ID_TOKEN}"
+      --oidc-audience "https://artifactory.example.com" | jq -r .AccessToken)"
     - jf rt ping
-    - jf rt build-promote "${CI_PROJECT_NAME}" "${CI_PIPELINE_ID}" prod-local
+    - jf rt build-promote --copy=true "${CI_PROJECT_NAME}" "${CI_PIPELINE_ID}" prod-local
   rules:
     - if: '$CI_COMMIT_TAG && $CI_COMMIT_REF_PROTECTED == "true"'
 ```
 
-Do not pin a floating `latest` image tag in production pipelines; pin a version or digest ([[dockerfile-hardening]]). The exact CLI command for the exchange (shown here as `jf eot`) and its flags differ by version: confirm with `jf --help` and the CLI documentation before use.
+The image reference above is a placeholder: replace `X.Y.Z` and the digest with a real pinned version ([[dockerfile-hardening]]). `jf eot` prints the exchanged token rather than configuring the CLI, so the job captures it into `JF_ACCESS_TOKEN`; the output field name (`AccessToken` here) is an assumption to confirm in the CLI docs. `--copy=true` makes the promotion copy instead of move, so `ci-promote-prod` does not need delete permission on the staging repository. The exact CLI command for the exchange (shown here as `jf eot`) and its flags differ by version: confirm with `jf --help` and the CLI documentation before use.
 
 ### The identity mapping
 
@@ -198,10 +199,12 @@ After any exposure: revoke, review the Artifactory audit and request logs for th
 jf rt ping
 
 # Positive: protected tag pipeline can promote
-# Negative: the same job on an unprotected branch must be refused
+# Negative: the production job only runs on protected tags, so pushing an unprotected branch tests nothing.
+# Instead add a temporary job, with no protected-ref rule, that runs only the token exchange:
+#   jf eot "${OIDC_PROVIDER_NAME}" "${ARTIFACTORY_ID_TOKEN}" --oidc-audience "https://artifactory.example.com"
 git switch -c test/unprotected-oidc
 git push origin test/unprotected-oidc
-# Expect the exchange or the promote step to fail with 401/403 and no token minted.
+# Expect the exchange to be refused (401/403) and no token minted. Then delete the temporary job and branch.
 ```
 
 Also confirm in the Artifactory audit log that tokens carry the expected username and short expiry, and that `ci-read` cannot deploy: try a deploy with the read credential and expect 403.
@@ -225,6 +228,6 @@ Also confirm in the Artifactory audit log that tokens carry the expected usernam
 
 ## Sources
 
-- https://jfrog.com/help/r/jfrog-platform-administration-documentation
-- https://docs.jfrog-applications.jfrog.io/jfrog-applications/jfrog-cli
-- https://docs.gitlab.com/ci/secrets/id_token_authentication/
+- [jfrog.com/help/r/jfrog-platform-administration-documentation](https://jfrog.com/help/r/jfrog-platform-administration-documentation)
+- [docs.jfrog-applications.jfrog.io/jfrog-applications/jfrog-cli](https://docs.jfrog-applications.jfrog.io/jfrog-applications/jfrog-cli)
+- [docs.gitlab.com/ci/secrets/id_token_authentication](https://docs.gitlab.com/ci/secrets/id_token_authentication/)

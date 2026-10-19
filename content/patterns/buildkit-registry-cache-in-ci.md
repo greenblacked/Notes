@@ -71,34 +71,35 @@ variables:
 
 build-image:
   stage: build
-  image: docker:cli
-  services:
-    - name: docker:dind
-      command: ["--tls=false"]
+  image:
+    name: moby/buildkit:rootless
+    entrypoint: [""]
   variables:
-    DOCKER_HOST: tcp://docker:2375
+    BUILDKITD_FLAGS: --oci-worker-no-process-sandbox
   before_script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-    - docker buildx create --name ci --driver docker-container --use
+    - mkdir -p ~/.docker
+    - printf '{"auths":{"%s":{"auth":"%s"}}}' "$CI_REGISTRY" "$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')" > ~/.docker/config.json
   script:
     - |
       CACHE_TO=""
       if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
-        CACHE_TO="--cache-to type=registry,ref=${CACHE_REF}:${CI_COMMIT_REF_SLUG},mode=max"
+        CACHE_TO="--export-cache type=registry,ref=${CACHE_REF}:${CI_COMMIT_REF_SLUG},mode=max"
       fi
-      docker buildx build \
-        --cache-from type=registry,ref=${CACHE_REF}:main \
-        --cache-from type=registry,ref=${CACHE_REF}:${CI_COMMIT_REF_SLUG} \
+      buildctl-daemonless.sh build \
+        --frontend dockerfile.v0 --local context=. --local dockerfile=. \
+        --import-cache type=registry,ref=${CACHE_REF}:main \
+        --import-cache type=registry,ref=${CACHE_REF}:${CI_COMMIT_REF_SLUG} \
         ${CACHE_TO} \
-        --tag "${IMAGE}:${CI_COMMIT_SHORT_SHA}" \
-        --push .
+        --output type=image,name=${IMAGE}:${CI_COMMIT_SHORT_SHA},push=true
 ```
+
+This is the rootless form required by [[0015-no-privileged-image-builds-in-ci]]: no privileged container and no Docker daemon. If your runner's security context or AppArmor profile blocks rootless BuildKit, check the rootless section of the BuildKit docs rather than switching to privileged Docker-in-Docker. Runner setup is in [[gitlab-runners-on-gke]].
 
 Notes:
 
-- `--cache-to` is added **only** when the ref is protected. Merge request pipelines and unprotected branches read the cache and never write it.
-- A missing cache ref on the first run is not an error for `--cache-from`; BuildKit continues cold. Confirm this on your version.
-- The `dind` service with `--tls=false` shown here runs privileged and is only an illustration. This repository's position on privileged builds is in [[0015-no-privileged-image-builds-in-ci]]; prefer a rootless BuildKit or Kaniko-style builder pod where your policy requires it, with the same `--cache-from` and `--cache-to` arguments (BuildKit's `buildctl --export-cache` and `--import-cache` use the same attributes). Runner setup is in [[gitlab-runners-on-gke]].
+- `--export-cache` is added **only** when the ref is protected. Merge request pipelines and unprotected branches read the cache and never write it.
+- A missing cache ref on the first run is not an error for the import side; BuildKit continues cold. Confirm this on your version.
+- `docker buildx build` takes the same cache attributes as `--cache-from` and `--cache-to` (`type=registry,ref=...,mode=max`); `buildctl` spells them `--import-cache` and `--export-cache`. A job that uses Docker or buildx needs a BuildKit or Docker daemon you operate; this repository does not allow a privileged one ([[0015-no-privileged-image-builds-in-ci]]).
 - Registry pushes from the job use the job token or an identity as described in [[artifactory-access-tokens-and-oidc-for-ci]], not a long-lived password.
 
 ## Jenkins
@@ -116,9 +117,13 @@ pipeline {
           containers:
             - name: buildkit
               image: moby/buildkit:rootless
-              args: ["--oci-worker-no-process-sandbox"]
+              command: ["cat"]
+              env:
+                - name: BUILDKITD_FLAGS
+                  value: "--oci-worker-no-process-sandbox"
               securityContext:
                 seccompProfile: { type: Unconfined }
+                appArmorProfile: { type: Unconfined }
                 runAsUser: 1000
               tty: true
       '''
@@ -198,10 +203,12 @@ Record three numbers for one representative service: cold build time, build time
 - [[gitlab-runners-on-gke]]
 - [[artifactory-remote-repo-caching-for-ci]]
 - [[0015-no-privileged-image-builds-in-ci]]
+- [[kaniko-vs-buildkit-vs-cloud-build]]
+- [[image-build-speed-cache-mounts-and-measurement]]
 
 ## Sources
 
-- https://docs.docker.com/build/cache/
-- https://docs.docker.com/build/cache/backends/
-- https://docs.docker.com/build/cache/backends/registry/
-- https://docs.docker.com/build/ci/
+- [docs.docker.com/build/cache](https://docs.docker.com/build/cache/)
+- [docs.docker.com/build/cache/backends](https://docs.docker.com/build/cache/backends/)
+- [docs.docker.com/build/cache/backends/registry](https://docs.docker.com/build/cache/backends/registry/)
+- [docs.docker.com/build/ci](https://docs.docker.com/build/ci/)

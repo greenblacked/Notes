@@ -148,7 +148,7 @@ The service is decommissioned when all of these hold: exit criteria met, consume
 
 ## Example: retiring Chef
 
-Chef is a typical long-lived dependency: cookbooks, run lists, nodes registered to a server, data bags and vault secrets. Consumer discovery means nodes still checking in, cookbooks still referenced and pipelines that run `knife`. The migration path and image build approach are in [[chef-to-immutable-images-migration]]. For the retirement: criteria are zero nodes checked in during a full release cycle, secrets rotated and moved, and cookbooks archived in version control; the Chef server is then frozen, archived and shut down following the timeline above. The same process applied to the Jenkins controllers is in [[jenkins-to-gitlab-migration-programme]].
+Chef is a typical long-lived dependency: cookbooks, run lists, nodes registered to a server, data bags and vault secrets. Consumer discovery means nodes still checking in, cookbooks still referenced and pipelines that run `knife`. The migration path and image build approach are in [[chef-to-immutable-images-migration]]. The decision itself is [[0041-retire-chef-for-immutable-images]]. For the retirement: criteria are zero nodes checked in during a full release cycle, secrets rotated and moved, and cookbooks archived in version control; the Chef server is then frozen, archived and shut down following the timeline above. The same process applied to the Jenkins controllers is in [[jenkins-to-gitlab-migration-programme]].
 
 ## Common mistakes
 
@@ -171,6 +171,7 @@ Chef is a typical long-lived dependency: cookbooks, run lists, nodes registered 
 - [[stakeholder-communication]]
 - [[team-reorg-runbook]]
 - [[chef-to-immutable-images-migration]]
+- [[0041-retire-chef-for-immutable-images]]
 - [[finops-cost-allocation-and-guardrails]]
 - [[audit-evidence-collection-and-retention]]
 - [[production-change-checklist]]

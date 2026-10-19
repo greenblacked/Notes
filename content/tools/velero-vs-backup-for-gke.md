@@ -44,7 +44,7 @@ Many teams therefore back up only stateful namespaces, and rely on [[argocd-vs-f
 
 Both capture Kubernetes API objects, and both handle volumes, but the mechanics differ.
 
-**Velero** stores the manifests as a tarball in object storage and takes volume snapshots through CSI (a `VolumeSnapshotClass` is required) or copies file contents with the node agent (formerly Restic or Kopia integration) for volumes that cannot snapshot. File-system backup is portable and slow; snapshots are fast and tied to the cloud.
+**Velero** stores the manifests as a tarball in object storage and takes volume snapshots through CSI (a `VolumeSnapshotClass` is required) or copies file contents with the node agent (file-system backup, using the Kopia or legacy Restic uploader) for volumes that cannot snapshot. File-system backup is portable and slow; snapshots are fast and tied to the cloud.
 
 **Backup for GKE** records cluster resources and uses Persistent Disk snapshots under a backup plan with a schedule and retention, managed by Google. You enable the add-on on the cluster and define plans in Terraform or `gcloud`.
 

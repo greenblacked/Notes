@@ -106,7 +106,7 @@ gcloud certificate-manager maps entries create shop-entry \
 Then create the CNAME the describe command printed, in the zone for `example.com`, and attach the map to the load balancer (the Gateway API integration takes the map by annotation; the exact resource and annotation names are in the current GKE Gateway documentation). Verify the record from outside:
 
 ```bash title="check the authorization record"
-dig +short CNAME _acme-challenge.example.com
+dig +short CNAME _acme-challenge.shop.example.com
 ```
 
 Use the Terraform resources for all of this in practice, so the zone record and the authorization are created together; see [[cloud-dns-hybrid-and-multi-project]] for where DNS zones live in a multi-project setup.

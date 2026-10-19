@@ -76,13 +76,15 @@ jq '[
       address,
       type,
       actions: .change.actions,
+      replacement: ((.change.actions | sort) == ["create","delete"]),
       changed: (
         (.change.after // {}) as $a
         | (.change.before // {}) as $b
         | ([($a | keys[]), ($b | keys[])] | unique | map(select($a[.] != $b[.])))
       )
     }
-]' plan.json > review-input.json
+  ]
+  | sort_by(if (.actions | index("delete")) then 0 else 1 end)' plan.json > review-input.json
 ```
 
 Values for `changed` attributes never leave the runner. Attributes that are unknown until apply do not appear in `after`, so they may be missing from `changed`; add `after_unknown` keys if you want them listed.
@@ -161,8 +163,6 @@ llm-review:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   allow_failure: true
-  variables:
-    GIT_STRATEGY: none
   script:
     - sh scan-and-review.sh review-input.json review-output.json # no GitLab token in this job
   artifacts:
@@ -172,12 +172,14 @@ llm-review:
 llm-post:
   stage: post
   needs: [llm-review]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   allow_failure: true
   script:
     - sh post-mr-note.sh review-output.json # read_api + note-only token; updates one note
 ```
 
-Update a single note in place (find it by a marker string) rather than adding a new comment on every push, so the thread stays readable. The plan job's own artifacts stay short-lived because `tfplan` and `plan.json` contain secrets.
+Update a single note in place (find it by a marker string) rather than adding a new comment on every push, so the thread stays readable. The plan job keeps `tfplan` and `plan.json` out of its artifacts entirely because they contain secrets; only the compact `review-input.json` is published, with a short expiry.
 
 ## Failure modes
 

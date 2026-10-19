@@ -33,7 +33,7 @@ A digest (`sha256:...`) identifies the content itself. Build once and promote ([
 We will **deploy container images by digest** and never rely on a mutable tag for what runs in a cluster.
 
 - After the image push, CI **resolves the digest** and records it. The GitOps bump commit writes `image: repo@sha256:...` ([[gitops-repo-topology-and-promotion]]). A human-readable tag may be kept in a label, an annotation or a comment so people can still read the version.
-- **Tag overwrite is disabled** in production repositories, and release tags are immutable by repository setting ([[0003-artifactory-repository-layout]]).
+- **Tag overwrite is prevented** in production repositories: overwrite is prevented by granting no Delete/Overwrite permission on production repositories except to the promotion identity (check the current Artifactory permission model) ([[0003-artifactory-repository-layout]]).
 - **Admission checks the digest and its signature**, see [[0038-kyverno-verifies-image-signatures-at-admission]] and [[0037-keyless-cosign-image-signing]]. A manifest with a bare tag is rejected or at least reported in production namespaces.
 - Rollback is a revert to an earlier digest ([[0048-rollback-by-redeploying-previous-digest]]).
 - For multi-architecture images, the digest of the **image index** is what is pinned, so each node resolves its own architecture.
