@@ -58,11 +58,11 @@ Home, section index and tags pages are not notes in this sense: they take no `ty
 
 ## Metadata sheet
 
-`type`, `status`, `verified` and `decided` are shown in a small spec sheet under the title, next to the modified date and the reading time: `type` and `status` as chips (`accepted` green, `proposed` blue, `deprecated`, `superseded` and `rejected` amber), then `decided`, `verified` and the modified date as full dates. A page with none of the four fields shows no sheet, and a missing field is simply left out. The home page lists every note in an index, grouped by folder, with its type, status and `verified` date (the modified date when there is none). Section indexes, the tags pages and files named `template.md` are left out of it.
+`type`, `verified` and `decided` are shown in a small spec sheet under the title, next to the modified date and the reading time: `type` as a chip, then `decided`, `verified` and the modified date as full dates. `status` is not displayed. A page with none of the three fields shows no sheet, and a missing field is simply left out. The home page lists every note in an index, grouped by folder, with its type and `verified` date (the modified date when there is none). Section indexes, the tags pages and files named `template.md` are left out of it.
 
 - `verified` is a promise. Set it only to the day you actually compared the note with the system, document or command output it describes, and move it forward only after repeating that check. Leave it out when you have not checked; an old honest date is better than a fresh guess. It is not the same as `modified`, which records the last edit.
 - Write dates unquoted (`2026-10-11`). YAML reads them as dates, and the sheet handles quoted strings as well.
-- `status` is lowercase, as listed in [[adr/index#Lifecycle|the ADR lifecycle]]. Other values are shown as given in a neutral chip.
+- `status` is lowercase, as listed in [[adr/index#Lifecycle|the ADR lifecycle]]. It records the ADR's lifecycle in the source and is not shown on the site.
 
 ## Reading aids
 

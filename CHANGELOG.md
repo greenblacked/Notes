@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 - 160 new notes across all sections: 50 architecture decision records (0002 to 0051, covering Artifactory, CI/CD, the Kubernetes platform, GCP foundations, infrastructure as code, security and supply chain, observability, and operations and release), 20 tool comparisons and deep dives, 15 patterns, 15 runbooks, 10 standards, 10 reference architectures, 10 compliance notes, 10 management guides, 10 AI notes and 10 learning lessons, with more Artifactory and wider DevOps tooling coverage. Their section indexes list them.
 
+### Changed
+
+- Stage and every host but production on `notes.szolotov.com` now serve a crawlable `robots.txt` (`User-agent: *`, `Allow: /`, no sitemap) instead of `Disallow: /`, and keep `X-Robots-Tag: noindex, nofollow` on every response. A crawler that may not fetch a page never sees its noindex, so a blocked page could still be indexed by its URL. `scripts/smoke-test.sh` in `noindex` mode now requires noindex on `/` and on `robots.txt`, and fails on `Disallow: /` or a `Sitemap:` line. Production is unchanged.
+- The status of a note is no longer shown on the site: the Status column of the home page index, the Status chip in the spec sheet under the title and the Status column of the ADR records table are gone. The `status` frontmatter field is unchanged. The index has four columns on wide screens, and the phone card shows the type and number on its first line.
+
 ## [0.6.0] - 2026-10-19
 
 ### Added
