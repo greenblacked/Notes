@@ -356,14 +356,78 @@ const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)"
 // particular not the colours when a saved dark theme is applied while the page loads.
 requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add("motion-ready")))
 
-// A theme change (the toggle, or the OS) cross-fades: .theme-fade makes every colour transition on
-// one curve and duration, and goes again once the fade is over.
-let themeTimer = 0
+// A theme change. .theme-switching turns every transition off for the one recalc that flips the
+// colours, so the flip does not start a transition on every element; it goes again once the new
+// theme has painted. A click on the toggle is caught first (capture phase, before Quartz's own
+// listener on the button), so the class is on before the flip. Where the View Transitions API
+// exists and motion is allowed, the click is replayed inside startViewTransition: the whole page
+// then cross-fades as one snapshot (--dur-theme). Otherwise the colours flip in one frame.
+const SWITCHING = "theme-switching"
+type ViewTransitionLike = { ready: Promise<void>; finished: Promise<void> }
+type StartViewTransition = (update: () => void) => ViewTransitionLike
+let switchId = 0
+let replaying = false
+
+function beginSwitch() {
+  root.classList.add(SWITCHING)
+  return ++switchId
+}
+// Taking the class off restyles the tree once (no visible change); do it when the page is idle.
+function endSwitch(id: number) {
+  const done = () => {
+    if (id === switchId) root.classList.remove(SWITCHING)
+  }
+  const idle = (
+    window as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
+  ).requestIdleCallback // missing on Safari
+  if (typeof idle === "function") idle.call(window, done, { timeout: 500 })
+  else window.setTimeout(done, 60)
+}
+const afterPaint = (fn: () => void) => requestAnimationFrame(() => requestAnimationFrame(fn))
+
+document.addEventListener(
+  "click",
+  (e) => {
+    if (replaying) return
+    const target = e.target
+    const btn = target instanceof Element ? target.closest<HTMLElement>(".darkmode") : null
+    if (!btn) return
+    const start = (document as Document & { startViewTransition?: StartViewTransition })
+      .startViewTransition
+    if (reducedMotion() || typeof start !== "function") {
+      const id = beginSwitch() // Quartz's listener on the button flips the theme right after this
+      afterPaint(() => endSwitch(id))
+      return
+    }
+    e.stopImmediatePropagation()
+    let id = 0
+    const vt = start.call(document, () => {
+      id = beginSwitch()
+      replaying = true
+      try {
+        btn.click()
+      } finally {
+        replaying = false
+      }
+    })
+    vt.ready.catch(() => {}) // skipped (hidden tab, a second click): the update still ran
+    vt.finished.finally(() => endSwitch(id))
+  },
+  true,
+)
+
+// The OS colour scheme changing (Quartz follows it): this listener is added before Quartz's, which
+// is added at "nav", so the class is on before that flip too.
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  const id = beginSwitch()
+  afterPaint(() => endSwitch(id))
+})
+
+// Any other source of "themechange": switch transitions off from here on.
 document.addEventListener("themechange", () => {
-  if (reducedMotion()) return
-  root.classList.add("theme-fade")
-  window.clearTimeout(themeTimer)
-  themeTimer = window.setTimeout(() => root.classList.remove("theme-fade"), 450)
+  if (root.classList.contains(SWITCHING)) return
+  const id = beginSwitch()
+  afterPaint(() => endSwitch(id))
 })
 
 // The page change. The router fetches the next page, fires "prenav", morphs it into the document
@@ -372,8 +436,8 @@ document.addEventListener("themechange", () => {
 // new page; at "nav" the sheet gets data-enter, which the CSS turns into a fade and a small rise
 // (opacity and transform only, no layout shift). The initial page load, which also fires "nav",
 // does not animate. A link to a #heading fades without the rise, so the scroll target stays exact.
-// (The View Transitions API is not used: the router swaps the DOM inside its own async function,
-// so there is no callback to hand to startViewTransition without patching Quartz's router.)
+// (The View Transitions API is used only for the theme cross-fade; page changes do not use it: the
+// router swaps the DOM inside its own async function, so there is no callback to hand to startViewTransition without patching Quartz's router.)
 let navigating = false
 let enterTimer = 0
 document.addEventListener("prenav", () => {

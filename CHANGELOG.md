@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Switching between light and dark is near-instant: the page cross-fades as one snapshot (180ms) where the browser supports view transitions, and flips in one frame elsewhere or with reduced motion, instead of fading thousands of elements one by one.
 - The section links row of the top bar slides away while reading down a page and comes back on scrolling up or at the top. It stays while it has keyboard focus, while the Browse drawer or search is open, on short landscape windows and without JavaScript. Nothing on the page moves when it hides.
 - The GitHub environment of Deploy stage is now `stage` (was `staging`); the repository secrets are shared, and a `main`-only branch policy on `stage` is recommended.
 - The stage site is public and not indexed: no Cloudflare Access. The Worker sends `X-Robots-Tag: noindex, nofollow` and a disallow-all `robots.txt` on every host but production on `notes.szolotov.com`. Deploy stage smoke-tests the workers.dev Preview URL for the real site (HTTP 200, the expected version, noindex) and fails on any redirect except the Cloudflare Access login of that workers.dev URL (see Fixed).

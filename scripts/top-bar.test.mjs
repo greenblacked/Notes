@@ -153,3 +153,36 @@ test("section row tuck: the deferred script", () => {
   // The bundler strips the first "export" of every *.inline.ts, even inside a comment.
   assert.ok(!/export/.test(main), "no 'export' in the inline script")
 })
+
+const topBar = read("local-plugins/top-bar/scripts/top-bar.inline.ts")
+
+test("theme switch: no per-element theme fade, transitions off for the flip", () => {
+  assert.ok(!scss.includes("theme-fade"), "the per-element .theme-fade is gone")
+  assert.ok(!topBar.includes("theme-fade"))
+  assert.match(
+    scss,
+    /:root\.theme-switching \*:not\(\.darkmode > svg\),[\s\S]*?\{\s*transition:\s*none !important;/,
+  )
+  assert.ok(
+    !/transition-property:[^;]*\b(opacity|transform|visibility)\b[^;]*!important/.test(scss),
+    "no global forced transform/opacity/visibility transition",
+  )
+})
+
+test("theme switch: one snapshot cross-fade, short, motion-gated, click-through", () => {
+  const dur = scss.match(/--dur-theme:\s*(\d+)ms/)
+  assert.ok(dur && Number(dur[1]) <= 200, "--dur-theme must be 200ms or less")
+  assert.match(
+    scss,
+    /@media \(prefers-reduced-motion: no-preference\)\s*\{\s*::view-transition-group\(root\),\s*::view-transition-old\(root\),\s*::view-transition-new\(root\)\s*\{[^}]*animation-duration:\s*var\(--dur-theme\)/,
+  )
+  assert.match(scss, /::view-transition\s*\{\s*pointer-events:\s*none;/)
+})
+
+test("theme switch: script feature-detects the API, respects reduced motion, no fixed timer", () => {
+  assert.match(topBar, /typeof start !== "function"/)
+  assert.match(topBar, /reducedMotion\(\) \|\| typeof start/)
+  assert.match(topBar, /addEventListener\(\s*"click",[\s\S]*?,\s*true,?\s*\)/)
+  assert.match(topBar, /vt\.ready\.catch\(/)
+  assert.ok(!/setTimeout\([^)]*theme[^)]*,\s*450\)/.test(topBar), "the fixed 450ms timer is gone")
+})

@@ -95,11 +95,12 @@ $unicode-ranges: (
   // both ways, --ease-drawer is a spring-like settle without overshoot (the drawer sits on the
   // screen edge, so overshoot would show a gap) and --ease-spring overshoots slightly, for small
   // things such as the theme icon. Only cheap properties are transitioned: opacity, transform,
-  // colours and box-shadow, never `all` and never layout.
+  // colours and box-shadow, never `all` and never layout. --dur-theme is the cross-fade of the whole
+  // page on a theme change (one snapshot fade, see .theme-switching).
   --dur-fast: 180ms;
   --dur: 260ms;
   --dur-slow: 380ms;
-  --dur-theme: 300ms;
+  --dur-theme: 180ms;
   --dur-drawer-in: 360ms;
   --dur-drawer-out: 260ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -239,21 +240,31 @@ $unicode-ranges: (
     text-decoration-color var(--dur-fast) var(--ease-out);
 }
 
-// Toggling the theme: the top-bar script puts .theme-fade on the root for the length of the fade
-// (on the "themechange" event, never on load). Every colour, the sun/moon icon and the surfaces
-// cross-fade on the same curve and duration, over whatever shorter transition a component has.
+// Changing the theme. The top-bar script puts .theme-switching on the root in the same style
+// recalc that flips saved-theme, and takes it off once the switch has painted. While it is on,
+// nothing transitions, so a flip costs one recalc and no per-element transitions; the theme icon
+// keeps its own turn. Where the View Transitions API exists, the whole page cross-fades as one
+// snapshot (cheap: compositor only). Elsewhere, and with reduced motion, the colours flip in one
+// frame.
+:root.theme-switching,
+:root.theme-switching *:not(.darkmode > svg),
+:root.theme-switching *::before,
+:root.theme-switching *::after {
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: no-preference) {
-  :root.theme-fade,
-  :root.theme-fade *,
-  :root.theme-fade *::before,
-  :root.theme-fade *::after {
-    transition-property:
-      color, background-color, border-color, fill, stroke, box-shadow, text-decoration-color, opacity, transform,
-      visibility !important;
-    transition-duration: var(--dur-theme) !important;
-    transition-timing-function: var(--ease-in-out) !important;
-    transition-delay: 0s !important;
+  ::view-transition-group(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: var(--dur-theme);
+    animation-timing-function: var(--ease-in-out);
   }
+}
+
+// Clicks and taps during the short fade go to the page, not to the snapshot.
+::view-transition {
+  pointer-events: none;
 }
 
 // Reduced motion: no animation, no transition, no smooth scrolling anywhere.
