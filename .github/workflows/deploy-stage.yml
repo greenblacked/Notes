@@ -15,8 +15,9 @@ name: Deploy stage
 # lifecycle scripts) and receives only public/ from the build as an artifact; the Worker
 # code is never taken from it.
 #
-# Result: the `upload` job's output `stage_result` (also a summary line `stage_result=<level>` and
-# a notice) is one of:
+# Result: the `result` job's output `stage_result` (the `upload` job's, with a skipped upload
+# mapped to `skipped`; the upload job also writes a summary line `stage_result=<level>` and a
+# notice) is one of:
 #   verified         the workers.dev smoke test read this build, and the Cloudflare API confirms
 #                    this upload is the active stage deployment.
 #   uploaded-active  the API confirms it, but Cloudflare Access kept the smoke test from the
@@ -468,3 +469,22 @@ jobs:
                 ;;
             esac
           } >>"$GITHUB_STEP_SUMMARY"
+
+  # The four-value contract in one place. A job that is skipped by its job-level `if:` (the build
+  # job found that main moved on) has no outputs at all, so `needs.upload.outputs.stage_result` is
+  # empty there. This job maps that case to `skipped`; an upload job that ran but failed, was
+  # cancelled or produced no result stays `failure`. Read `needs.result.outputs.stage_result`.
+  result:
+    name: Stage result
+    needs: [build, upload]
+    if: ${{ always() && needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      stage_result: ${{ needs.upload.result == 'skipped' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}
+    steps:
+      - name: Report the stage result
+        env:
+          STAGE_RESULT: ${{ needs.upload.result == 'skipped' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}
+        run: echo "stage_result=$STAGE_RESULT"

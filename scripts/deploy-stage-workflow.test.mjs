@@ -356,3 +356,25 @@ test("the workflow never claims what it did not check", () => {
     assert.ok(!raw.includes(x), x)
   }
 })
+
+test("the result job maps a skipped upload to skipped and a silent one to failure", () => {
+  const result = workflow.jobs.result
+  assert.ok(result)
+  assert.deepEqual(result.needs, ["build", "upload"])
+  assert.equal(result.if, "${{ always() && needs.build.result == 'success' }}")
+  const expr = result.outputs.stage_result
+  assert.equal(
+    expr,
+    "${{ needs.upload.result == 'skipped' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}",
+  )
+  // Evaluate the expression the way Actions does for the three upload outcomes.
+  const evaluate = (uploadResult, output) =>
+    (uploadResult === "skipped" && "skipped") || output || "failure"
+  assert.equal(evaluate("skipped", ""), "skipped")
+  assert.equal(evaluate("failure", ""), "failure")
+  assert.equal(evaluate("cancelled", ""), "failure")
+  assert.equal(evaluate("success", ""), "failure")
+  assert.equal(evaluate("success", "verified"), "verified")
+  assert.equal(evaluate("failure", "failure"), "failure")
+  assert.equal(JSON.stringify(result).includes("secrets."), false)
+})
