@@ -233,7 +233,8 @@ export const SKIP_MESSAGE =
 // one with HTTP 403 and a Cloudflare authentication or permission error. Nothing is uploaded; the
 // job ends successfully. Any other 403 (a WAF or edge block page, another error code) stays a failure.
 class StageNotDeployable extends Error {}
-const ACCESS_DENIED_CODES = new Set([10000, 9109])
+// 1010 is what the API returned (2026-10-19) for a token without Account > Access: Apps and Policies.
+const ACCESS_DENIED_CODES = new Set([10000, 9109, 1010])
 
 // Create an Access application. A 403 here (and only here) means the token cannot create one.
 async function createApp(client, body) {

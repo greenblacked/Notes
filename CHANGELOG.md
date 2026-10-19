@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Fixed
+
+- Deploy stage now also skips (instead of failing) when the Access API answers the app creation with HTTP 403 and Cloudflare code 1010, which is what a token without the Access permission gets.
+
 ### Changed
 
 - Deploy stage ends successfully without uploading anything when no Access application covers stage and the token cannot create one (HTTP 403 from the Access API): a notice and the job summary say "Stage skipped", and the later steps and the teardown are skipped. Any other error, and any unsafe Access application, still fails the run.

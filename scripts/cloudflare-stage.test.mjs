@@ -413,6 +413,19 @@ test("ensure-access skips stage (exit 0, deployable=false) when no app covers it
   assert.ok(!r.text.includes(TOKEN))
 })
 
+test("ensure-access skips stage when the create is 403 with code 1010 (token without Access permission)", async () => {
+  const r = await ensureWith({
+    ...cleanRoutes([]),
+    "POST /accounts/acc/access/apps": {
+      status: 403,
+      body: { success: false, errors: [{ code: 1010 }] },
+    },
+  })
+  assert.equal(r.code, 0, r.text)
+  assert.equal(r.output, "deployable=false\n")
+  assert.match(r.text, /::notice::Stage skipped/)
+})
+
 test("ensure-access skips also when the dev app copy is refused with 403", async () => {
   const dev = {
     id: "d1",
