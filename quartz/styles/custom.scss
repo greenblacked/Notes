@@ -130,15 +130,9 @@ $unicode-ranges: (
   --warning: #7a4a00;
   --danger: #8e1f1f;
 
-  // Chips: text on a tint of the status colour, darker than the status colour where AA needs it.
+  // Chips: text on a tint, darker where AA needs it.
   --chip-neutral-bg: #efe6d2;
   --chip-neutral-fg: #4a3f2c;
-  --chip-accepted-bg: #e1eddc;
-  --chip-accepted-fg: #1d5a33;
-  --chip-proposed-bg: #e3e9f1;
-  --chip-proposed-fg: #2a4a72;
-  --chip-warning-bg: #f4e6c6;
-  --chip-warning-fg: #6e4300;
 
   // Rules are the Quartz "lightgray" at two thirds strength: thin and light, never the only cue.
   --rule: color-mix(in srgb, var(--lightgray) 65%, transparent);
@@ -182,12 +176,6 @@ $unicode-ranges: (
 
   --chip-neutral-bg: #2c261d;
   --chip-neutral-fg: #d6caae;
-  --chip-accepted-bg: #1d2c21;
-  --chip-accepted-fg: #9bd6aa;
-  --chip-proposed-bg: #1f2a38;
-  --chip-proposed-fg: #a9c3e4;
-  --chip-warning-bg: #35291a;
-  --chip-warning-fg: #e8c070;
 
   --scrim: rgba(0, 0, 0, 0.5);
 
@@ -1650,28 +1638,6 @@ blockquote:not(.callout) {
   color: var(--dark);
 }
 
-.chip-status {
-  background: var(--chip-neutral-bg);
-  color: var(--chip-neutral-fg);
-  text-transform: capitalize;
-
-  &[data-tone="accepted"] {
-    background: var(--chip-accepted-bg);
-    border-color: color-mix(in srgb, var(--accepted) 55%, transparent);
-    color: var(--chip-accepted-fg);
-  }
-  &[data-tone="proposed"] {
-    background: var(--chip-proposed-bg);
-    border-color: color-mix(in srgb, var(--chip-proposed-fg) 45%, transparent);
-    color: var(--chip-proposed-fg);
-  }
-  &[data-tone="warning"] {
-    background: var(--chip-warning-bg);
-    border-color: color-mix(in srgb, var(--warning) 55%, transparent);
-    color: var(--chip-warning-fg);
-  }
-}
-
 // Tags, everywhere: a light chip with the tag's name, no "#" and no capitals.
 a.tag-link,
 a.internal.tag-link {
@@ -1900,7 +1866,7 @@ body[data-slug="index"] {
 }
 
 .note-index {
-  --ni-cols: 3.6rem minmax(0, 1fr) 5.5rem 6.75rem 9.25rem;
+  --ni-cols: 3.6rem minmax(0, 1fr) 5.5rem 9.25rem;
   container-type: inline-size;
   margin-top: 3rem;
   font-variant-numeric: lining-nums tabular-nums;
@@ -2024,9 +1990,8 @@ body[data-slug="index"] {
     overflow-wrap: anywhere;
   }
 
-  // An empty type or status cell shows a dash.
-  & .note-index-type:empty::before,
-  & .note-index-status:empty::before {
+  // An empty type cell shows a dash.
+  & .note-index-type:empty::before {
     content: "\2014";
     color: var(--gray);
   }
@@ -2061,13 +2026,13 @@ body[data-slug="index"] {
       margin-top: 0.75rem;
     }
 
-    // A card: type and status on the first line with the number, the title, then the date.
+    // A card: type on the first line with the number, the title, then the date.
     & .note-index-row {
-      grid-template-columns: auto auto minmax(0, 1fr);
+      grid-template-columns: auto minmax(0, 1fr);
       grid-template-areas:
-        "type status no"
-        "name name name"
-        "date date date";
+        "type no"
+        "name name"
+        "date date";
       gap: 0.4rem 0.6rem;
       align-items: center;
       padding: 0.85rem 1rem;
@@ -2086,14 +2051,10 @@ body[data-slug="index"] {
     & .note-index-type {
       grid-area: type;
     }
-    & .note-index-status {
-      grid-area: status;
-    }
     & .note-index-date {
       grid-area: date;
     }
-    & .note-index-type:empty,
-    & .note-index-status:empty {
+    & .note-index-type:empty {
       display: none;
     }
   }
@@ -3537,12 +3498,6 @@ body[data-slug="404"] .center article {
     --danger: #8e1f1f;
     --chip-neutral-bg: #efe6d2;
     --chip-neutral-fg: #4a3f2c;
-    --chip-accepted-bg: #e1eddc;
-    --chip-accepted-fg: #1d5a33;
-    --chip-proposed-bg: #e3e9f1;
-    --chip-proposed-fg: #2a4a72;
-    --chip-warning-bg: #f4e6c6;
-    --chip-warning-fg: #6e4300;
   }
 
   html,
