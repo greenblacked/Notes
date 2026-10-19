@@ -316,7 +316,7 @@ jobs:
       # host as a notice and ends the test with the result `access`. The content is then not
       # checked from CI, and the run's result is at best `uploaded-active`. Any other redirect or
       # failure fails; a reachable Preview must pass every check (HTTP 200, this build, headers,
-      # noindex).
+      # noindex, crawlable robots.txt).
       - name: Smoke-test the workers.dev Preview URL
         id: smoke
         if: steps.fresh.outputs.current == 'true'

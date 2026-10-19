@@ -29,7 +29,7 @@ function site(overrides = {}) {
     if (path === "/version.txt") {
       res.writeHead(200, { "cache-control": "no-store" }).end(`${VERSION}\n`)
     } else if (path === "/robots.txt") {
-      res.writeHead(200, headers).end("User-agent: *\nDisallow: /\n")
+      res.writeHead(200, headers).end("User-agent: *\nAllow: /\n")
     } else if (path === "/static/graph.json") {
       res
         .writeHead(200, { "content-type": "application/json" })
@@ -84,6 +84,38 @@ test("a healthy site passes", async () => {
   const { code, out } = await run(s.url)
   assert.equal(code, 0, out)
   assert.match(out, /Smoke test passed/)
+})
+
+test("a noindex host whose robots.txt blocks crawling fails", async () => {
+  const s = await start({
+    "/robots.txt": (res) => res.writeHead(200, headers).end("User-agent: *\nDisallow: /\n"),
+  })
+  const { code, out } = await run(s.url)
+  assert.equal(code, 1, out)
+  assert.match(out, /must not contain 'Disallow: \/'/)
+})
+
+test("a noindex host whose robots.txt lists a sitemap fails", async () => {
+  const s = await start({
+    "/robots.txt": (res) =>
+      res
+        .writeHead(200, headers)
+        .end("User-agent: *\nAllow: /\n\nSitemap: https://x/sitemap.xml\n"),
+  })
+  const { code, out } = await run(s.url)
+  assert.equal(code, 1, out)
+  assert.match(out, /must not list a sitemap/)
+})
+
+test("robots.txt without X-Robots-Tag noindex fails on a noindex host", async () => {
+  const bare = { ...headers }
+  delete bare["x-robots-tag"]
+  const s = await start({
+    "/robots.txt": (res) => res.writeHead(200, bare).end("User-agent: *\nAllow: /\n"),
+  })
+  const { code, out } = await run(s.url)
+  assert.equal(code, 1, out)
+  assert.match(out, /robots\.txt must send X-Robots-Tag: noindex/)
 })
 
 test("a redirect on /version.txt fails and is not followed", async () => {
