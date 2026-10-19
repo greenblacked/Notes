@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-19
+
 ### Added
 
 - The full graph of all notes, from every page (toolbar button or Ctrl/Cmd+G), with Obsidian-style depth, search, tag and orphan toggles, section colours with a legend, node size by links, a list view, and settings remembered in this browser; the `/static/graph.json` slim index it reads.
@@ -32,12 +34,11 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 - Deploy stage ends successfully without uploading anything when no Access application covers stage and the token cannot create one (HTTP 403 from the Access API): a notice and the job summary say "Stage skipped", and the later steps and the teardown are skipped. Any other error, and any unsafe Access application, still fails the run.
 - The note's local graph is now `local-plugins/note-graph`, drawn with Canvas 2D; the graph no longer downloads the full content index. Tags no longer count as depth hops, as in Obsidian.
-- The pre-production site is **stage** again, at https://stage.notes.szolotov.com (the Worker Preview `stage`, behind Cloudflare Access). **Deploy stage** (`deploy-stage.yml`) runs on every merge to `main` and on Run workflow from `main`, only for the owner, in the environment `staging`. There is no `dev` branch: pull requests go into `main`, CI and Dependabot run for `main` only, and dev.notes.szolotov.com is retired automatically after a verified stage deploy.
+- The pre-production site is **stage**, at https://stage.notes.szolotov.com (the Worker Preview `stage`, behind Cloudflare Access). The flow is main-only: pull requests go into `main`, CI and Dependabot run for `main` only, **Deploy stage** (`deploy-stage.yml`) deploys every merge to `main` (and Run workflow from `main`), only for the owner, in the environment `staging`, and production is cut from `main` with Cut release. The Dev Preview (`deploy-dev.yml`) and dev.notes.szolotov.com are retired automatically after a verified stage deploy.
 - Deploy stage refuses to upload unless the Cloudflare API shows an Access application covering stage and no Custom Domain or DNS record for the host. After the upload, the workers.dev Preview URL must redirect to Access, otherwise the Preview is deleted; the stage Preview is also deleted after any failed or cancelled step once the upload was attempted (`SMOKE_REQUIRE_ACCESS` in `scripts/smoke-test.sh`, `scripts/cloudflare-stage.mjs`). `DEV_SMOKE_TEST` is gone.
 - `/version.txt` on stage reads `stage+<sha>`; `NOTES_VERSION` accepts `stage` instead of `dev`; `npm run preview:dev` is `npm run preview:stage`.
 - A Deploy stage run skips the upload and succeeds when `main` moved on during the run, because the newer run deploys.
 - Production starts only by dispatch on a `vX.Y.Z` tag (from Cut release, or Run workflow on a tag); on commits that include this change a pushed tag deploys nothing (a tag on an older commit runs that commit's own workflow).
-- The one-time `remove-stage` action is removed.
 - TypeScript 7.0.2 (native compiler) for `npm run check`; `tsconfig.json` uses `moduleResolution: "bundler"` (node10 was removed), types `micromorph` through `paths`, and `quartz/processors/parse.ts` takes the mdast `Root` type from `@types/mdast`.
 - `engines.node` is `>=22.12.0` (required by mermaid 12); `lodash-es` is overridden to `^4.18.1` (see Security).
 - The `DataMap.frontmatter` type is now inherited from `@quartz-community/types` 1.0, where `tags` is optional and `description`, `socialDescription` and `lang` are declared there; the build output is unchanged.
@@ -45,7 +46,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Removed
 
-- `release.yml`, and the `workflow_call` and tag-push triggers of `deploy-production.yml`.
+- `release.yml` and `deploy-dev.yml` (replaced by Cut release and Deploy stage), and the `workflow_call` and tag-push triggers of `deploy-production.yml`.
 - The `pixi.js` dependency and `static/vendor/{d3,pixi}.min.js`; the community graph plugin is disabled.
 
 ### Fixed
