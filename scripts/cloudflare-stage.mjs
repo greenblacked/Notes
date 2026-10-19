@@ -284,8 +284,14 @@ function makeClient(fetchFn, env) {
                   : EDIT_SCOPE_HINT
             }`
           : ""
+      const codes = (Array.isArray(json?.errors) ? json.errors : [])
+        .map((x) => x?.code)
+        .filter((c) => Number.isInteger(c))
+      const codeText = codes.length
+        ? ` (code${codes.length > 1 ? "s" : ""} ${codes.join(", ")})`
+        : ""
       throw new ApiError(
-        `${method} ${path.split("?")[0]} failed with HTTP ${res.status}${hint}`,
+        `${method} ${path.split("?")[0]} failed with HTTP ${res.status}${codeText}${hint}`,
         res.status,
         json && json.success === false ? code : undefined,
       )
