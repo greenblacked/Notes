@@ -498,6 +498,7 @@ body {
 // supported the band is simply always there and the progress line stays out.
 // The bar must not get a filter, backdrop-filter, transform or contain of its own: the Browse
 // drawer and the search overlay are position: fixed inside it. The blur is on its ::before.
+// The section row tucks away on scroll (the tuck block after reading-progress); that transform is on a descendant.
 
 .page > #quartz-body > .sidebar.left.sidebar {
   grid-area: bar;
@@ -558,6 +559,7 @@ body {
     -webkit-backdrop-filter: blur(14px) saturate(1.15);
     backdrop-filter: blur(14px) saturate(1.15);
     pointer-events: none;
+    transition: bottom var(--dur) var(--ease-out);
   }
 
   &::after {
@@ -572,6 +574,7 @@ body {
     transform: scaleX(0);
     transform-origin: 0 50%;
     pointer-events: none;
+    transition: bottom var(--dur) var(--ease-out);
   }
 
   // With reduced motion the band stays solid (no fade from transparent) and there is no line.
@@ -603,6 +606,35 @@ body {
 @keyframes reading-progress {
   to {
     transform: scaleX(1);
+  }
+}
+
+// Reading down the page, the section row tucks away under the first row, and scrolling up (or
+// reaching the top) brings it back. The top-bar script sets data-bar-tucked on the root; without
+// JavaScript the row always shows. Nothing changes size: the bar keeps its height and --sticky-h,
+// so the page does not shift. Only the links slide up inside the row's own clip box, and the band
+// and the progress line move their bottom edge up. The band keeps catching clicks over row 1; the empty strip lets them through to the page.
+// With reduced motion the global rule makes it instant.
+@media not all and (max-height: 30rem) {
+  :root[data-bar-tucked] .page > #quartz-body > .sidebar.left.sidebar {
+    pointer-events: none;
+
+    & > :not(.section-row) {
+      pointer-events: auto;
+    }
+    &::before {
+      bottom: var(--sec-h);
+      // Solid while tucked: the translucent band let the accent rule of an h2 under its lower
+      // edge show through as a faint bar.
+      background: var(--desk);
+      pointer-events: auto;
+    }
+    &::after {
+      bottom: calc(var(--sec-h) - 1px);
+    }
+    & .section-row-links {
+      transform: translate3d(0, -100%, 0);
+    }
   }
 }
 
@@ -693,6 +725,7 @@ body {
   margin: 0;
   padding: 4px var(--bar-x);
   list-style: none;
+  transition: transform var(--dur) var(--ease-out);
 
   & li {
     flex: none;

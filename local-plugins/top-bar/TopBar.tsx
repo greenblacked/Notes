@@ -16,7 +16,8 @@ import earlyScript from "./scripts/top-bar.early.inline.ts"
  * current heading in the table of contents, marks the centre column as the main landmark and moves
  * the keyboard to the skip link's target (#content, rendered by local-plugins/content-start). A
  * second, tiny script (scripts/top-bar.early.inline.ts) runs in the head, before the page is
- * painted: it makes the search button and the focus of the section links work at once.
+ * painted: it makes the search button and the focus of the section links work at once. The script
+ * also tucks the section row away while the page is read downwards.
  */
 export default (() => {
   const TopBar: QuartzComponent = ({ fileData, cfg, displayClass }: QuartzComponentProps) => {
