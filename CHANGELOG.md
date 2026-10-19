@@ -10,14 +10,19 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 - **Cleanup deployments** (`cleanup-deployments.yml`, manual, from `main`, owner only): deletes the old deployment records of `dev`, `staging` and `repo-admin` and the failed ones of `stage`, so the Deployments list shows only `stage` and `production`. It never touches `production`.
 
-### Fixed
-
-- Deploy stage now also skips (instead of failing) when the Access API answers the app creation with HTTP 403 and Cloudflare code 1010, which is what a token without the Access permission gets.
-
 ### Changed
 
 - The GitHub environment of Deploy stage is now `stage` (was `staging`); the repository secrets are shared, and a `main`-only branch policy on `stage` is recommended.
-- Deploy stage ends successfully without uploading anything when no Access application covers stage and the token cannot create one (HTTP 403 from the Access API): a notice and the job summary say "Stage skipped", and the later steps and the teardown are skipped. Any other error, and any unsafe Access application, still fails the run.
+- The stage site is public and not indexed: no Cloudflare Access. The Worker sends `X-Robots-Tag: noindex, nofollow` and a disallow-all `robots.txt` on every host but production on `notes.szolotov.com`. Deploy stage smoke-tests the workers.dev Preview URL for the real site (HTTP 200, the expected version, noindex) and fails on any redirect.
+- Deploy stage deletes the old Preview `dev` when it still exists (idempotent).
+
+### Removed
+
+- The Cloudflare Access steps of Deploy stage (`scripts/cloudflare-stage.mjs` with its ensure, preflight and retire commands) and the `SMOKE_ALLOW_ACCESS` and `SMOKE_REQUIRE_ACCESS` switches of `scripts/smoke-test.sh`. The Cloudflare token needs no Access permission.
+
+### Fixed
+
+- Deploy stage deploys stage on every merge to `main` again; it no longer stops at a Cloudflare Access step the token cannot run.
 
 ## [0.5.0] - 2026-10-19
 
