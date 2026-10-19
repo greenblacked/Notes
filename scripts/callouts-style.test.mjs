@@ -28,17 +28,26 @@ test("no box, no capitals, no interface-type recipe", () => {
   assert.match(section, /\.callout-icon\s*\{\s*display:\s*none/)
 })
 
-test("the callout contains its float and does not clip the focus ring", () => {
+test("the callout contains its inline run-in and does not clip the focus ring", () => {
   assert.match(section, /display:\s*flow-root/)
   assert.match(section, /overflow:\s*visible/)
   assert.match(section, /@supports not \(display: flow-root\)/)
 })
 
-test("the run-in label applies only to callouts that do not fold", () => {
-  assert.match(
-    section,
-    /\.callout\[data-callout\]:not\(\.is-collapsible\)\s*\{[\s\S]*?float:\s*left/,
+test("the run-in is inline, not a float, and applies only to callouts that do not fold", () => {
+  const block = section.match(
+    /\.callout\[data-callout\]:not\(\.is-collapsible\)\s*\{[\s\S]*?\n\}\n/,
   )
+  assert.ok(block, "run-in block not found")
+  const run = block[0]
+  assert.doesNotMatch(section, /float:\s*left/)
+  assert.match(run, /& > \.callout-title\s*\{\s*display:\s*inline/)
+  assert.match(run, /& > \.callout-content\s*\{\s*display:\s*inline/)
+  assert.match(
+    run,
+    /> \.callout-content > p:first-child,\s*& > \.callout-title \+ p\s*\{\s*display:\s*inline/,
+  )
+  assert.doesNotMatch(run, /:has\(/)
 })
 
 test("the first body paragraph and every folded child lose the paragraph margin", () => {

@@ -2856,7 +2856,7 @@ sup a[data-footnote-ref] {
   --border: transparent;
   --bg: transparent;
 
-  display: flow-root; // contains the floated run-in label
+  display: flow-root; // contains the margins of the inline run-in
   overflow: visible; // the engine clips; that would cut off the focus ring
   border: 0;
   border-left: 1px solid var(--color);
@@ -2924,22 +2924,29 @@ sup a[data-footnote-ref] {
   }
 }
 
-// Run-in: the label floats and the first line of the text wraps beside it.
+// Run-in: the label, the content wrapper and the first paragraph are all inline, so the label and
+// the first words share one line box and the text wraps back to the left edge. Later paragraphs
+// are blocks inside the inline wrapper (block-in-inline splitting works in every engine, no
+// :has() needed). A list, code block or table as the first child is a block too, so the label
+// ends up on its own line above it.
 .callout[data-callout]:not(.is-collapsible) {
   & > .callout-title {
-    float: left;
-    margin-right: 0.5em;
+    display: inline;
+    margin-right: 0.25em;
   }
 
   & > .callout-content {
-    display: block;
-    overflow: visible; // a block formatting context would not wrap around the float
+    display: inline;
+    overflow: visible;
   }
 
-  // A code block, list or table does not sit beside the label.
+  & > .callout-content > p:first-child,
+  & > .callout-title + p {
+    display: inline;
+  }
+
   & > .callout-title + .callout-content > :first-child:not(p),
   & > .callout-title + :not(p):not(.callout-content) {
-    clear: left;
     margin-top: 0.6rem;
   }
 }
