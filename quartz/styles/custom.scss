@@ -243,9 +243,9 @@ $unicode-ranges: (
 // Changing the theme. The top-bar script puts .theme-switching on the root in the same style
 // recalc that flips saved-theme, and takes it off once the switch has painted. While it is on,
 // nothing transitions, so a flip costs one recalc and no per-element transitions; the theme icon
-// keeps its own turn. Where the View Transitions API exists, the whole page cross-fades as one
-// snapshot (cheap: compositor only). Elsewhere, and with reduced motion, the colours flip in one
-// frame.
+// keeps its own turn. Where the View Transitions API exists and the device has a mouse or
+// trackpad, the whole page cross-fades as one snapshot. Elsewhere (phones, tablets), and with
+// reduced motion, the colours flip in one frame.
 :root.theme-switching,
 :root.theme-switching *:not(.darkmode > svg),
 :root.theme-switching *::before,

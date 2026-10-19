@@ -360,7 +360,7 @@ requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add("moti
 // colours, so the flip does not start a transition on every element; it goes again once the new
 // theme has painted. A click on the toggle is caught first (capture phase, before Quartz's own
 // listener on the button), so the class is on before the flip. Where the View Transitions API
-// exists, motion is allowed and the device is fast (a fine pointer, a page of modest size), the
+// exists, motion is allowed and the device has a mouse or trackpad (a fine pointer), the
 // click is replayed inside startViewTransition: the whole page then cross-fades as one snapshot
 // (--dur-theme). Otherwise the colours flip in one frame: capturing the old snapshot costs
 // 100-200ms of main-thread time on a slow phone, which is slower than the flip itself.
@@ -386,12 +386,9 @@ function endSwitch(id: number) {
   if (typeof idle === "function") idle.call(window, done, { timeout: 500 })
   else window.setTimeout(done, 60)
 }
-const MAX_FADE_ELEMENTS = 1500
 // The cross-fade only where it does not delay the flip: a mouse or trackpad (not a phone or
-// tablet) and a page with a modest number of elements.
-const canFade = () =>
-  window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
-  document.querySelectorAll("*").length <= MAX_FADE_ELEMENTS
+// tablet). Measured on desktop Chromium, the snapshot settles in 67-139ms even on the largest page.
+const canFade = () => window.matchMedia("(hover: hover) and (pointer: fine)").matches
 const afterPaint = (fn: () => void) => requestAnimationFrame(() => requestAnimationFrame(fn))
 
 document.addEventListener(
