@@ -127,6 +127,7 @@ $unicode-ranges: (
   --graph-link: #b8ab94;
   --accepted: #1f6b3a;
   --warning: #7a4a00;
+  --danger: #8e1f1f;
 
   // Chips: text on a tint of the status colour, darker than the status colour where AA needs it.
   --chip-neutral-bg: #efe6d2;
@@ -176,6 +177,7 @@ $unicode-ranges: (
   --graph-link: #5e5446;
   --accepted: #8fd0a0;
   --warning: #e2b565;
+  --danger: #f09a8a;
 
   --chip-neutral-bg: #2c261d;
   --chip-neutral-fg: #d6caae;
@@ -2842,58 +2844,211 @@ sup a[data-footnote-ref] {
 // ============================================================================
 // Callouts
 // ============================================================================
-// A tinted note: rounded, a soft border and a coloured rule on its left edge, the title in small
-// interface type. The icon keeps the callout's own symbol; warning-like types use the warning
-// colour for the rule and the icon, tips the green.
+// A typeset aside, not a box: a hairline rule on the left in the type's tone, no fill, no icon,
+// no capitals. The label is an italic serif kind word (added by local-plugins/callouts) followed
+// by the title in roman semibold; in a callout that does not fold it runs into the first line of
+// the text. Danger, failure and bug take a double rule, so the emphasis does not rest on colour.
+// A callout that folds keeps its label on its own line, as a button with a hairline chevron.
+// The engine's styles are in callouts.scss and stay untouched; everything is overridden here.
 
 .callout[data-callout] {
-  --color: var(--secondary);
-  --border: var(--rule);
-  --bg: var(--surface);
+  --color: var(--gray); // tone of the rule and the kind word
+  --border: transparent;
+  --bg: transparent;
 
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--color);
-  border-radius: var(--radius-sm);
-  padding: 0 1.15rem 0.35rem 1.05rem;
-  margin: 1.5rem 0;
+  display: flow-root; // contains the floated run-in label
+  overflow: visible; // the engine clips; that would cut off the focus ring
+  border: 0;
+  border-left: 1px solid var(--color);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  padding: 0.1rem 0 0.1rem 0.95rem;
+  margin: 1.6rem 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--darkgray);
 
-  & .callout-title {
-    @extend %label;
-    gap: 0.5rem;
-    padding: 0.85rem 0 0.1rem;
-    color: var(--dark);
-
-    & .callout-icon {
-      color: var(--color);
-      width: 16px;
-      height: 16px;
-      flex: 0 0 16px;
-    }
-
-    & .callout-title-inner p {
-      margin: 0;
-      font-weight: 600;
-      color: var(--dark);
-    }
+  // The first line of a body written right under the title is a paragraph of the callout itself,
+  // not of .callout-content, so both are styled.
+  & > p,
+  & .callout-content p {
+    font-size: inherit;
+    line-height: inherit;
+    margin: 0.6rem 0 0;
   }
 
-  & .callout-content p {
-    font-size: 1rem;
-    line-height: 1.6;
+  & > .callout-title + p {
+    margin-top: 0;
+  }
+
+  & .callout-icon {
+    display: none;
+  }
+
+  // The label: reset the engine's flex row and the interface-type recipe.
+  & > .callout-title {
+    display: block;
+    padding: 0;
+    gap: 0;
+    margin: 0;
+    font-family: var(--serif);
+    font-size: inherit;
+    line-height: inherit;
+    letter-spacing: normal;
+    text-transform: none;
+    font-weight: 400;
+    color: var(--dark);
+
+    & .callout-title-inner,
+    & .callout-title-inner > p {
+      display: inline;
+      margin: 0;
+      color: inherit;
+      font-weight: 600;
+    }
+
+    & .callout-kind {
+      font-style: italic;
+      font-weight: 400;
+      color: var(--color);
+    }
+
+    // The title is the kind word itself ("Warning"): set it as the kind word.
+    &.callout-title-default .callout-title-inner > p {
+      font-style: italic;
+      font-weight: 400;
+      color: var(--color);
+    }
   }
 }
 
-.callout[data-callout="warning"],
-.callout[data-callout="caution"],
-.callout[data-callout="danger"],
-.callout[data-callout="failure"],
-.callout[data-callout="bug"] {
-  --color: var(--warning);
+// Run-in: the label floats and the first line of the text wraps beside it.
+.callout[data-callout]:not(.is-collapsible) {
+  & > .callout-title {
+    float: left;
+    margin-right: 0.5em;
+  }
+
+  & > .callout-content {
+    display: block;
+    overflow: visible; // a block formatting context would not wrap around the float
+  }
+
+  // A code block, list or table does not sit beside the label.
+  & > .callout-title + .callout-content > :first-child:not(p),
+  & > .callout-title + :not(p):not(.callout-content) {
+    clear: left;
+    margin-top: 0.6rem;
+  }
+}
+
+// Very old engines without flow-root fall back to clipping, at the cost of the focus ring.
+@supports not (display: flow-root) {
+  .callout[data-callout] {
+    overflow: hidden;
+  }
 }
 
 .callout[data-callout="tip"],
 .callout[data-callout="success"] {
   --color: var(--accepted);
+}
+
+.callout[data-callout="warning"] {
+  --color: var(--warning);
+}
+
+.callout[data-callout="danger"],
+.callout[data-callout="failure"],
+.callout[data-callout="bug"] {
+  --color: var(--danger);
+
+  border-left: 3px double var(--color);
+  padding-left: calc(0.95rem - 2px);
+}
+
+.callout[data-callout="quote"] > p,
+.callout[data-callout="quote"] .callout-content p {
+  font-style: italic;
+}
+
+// Callouts that fold: the label is a button on its own line, at least 44px high.
+.callout[data-callout].is-collapsible > .callout-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55em;
+  min-height: 2.75rem;
+  padding: 0.55rem 0;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (hover: hover) {
+  .callout[data-callout].is-collapsible > .callout-title:hover .callout-title-inner > p {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+}
+
+// The chevron is drawn with two borders instead of the engine's mask icon.
+.callout[data-callout] .callout-title > .fold-callout-icon {
+  order: -1;
+  flex: 0 0 0.42em;
+  width: 0.42em;
+  height: 0.42em;
+  padding: 0;
+  opacity: 1;
+  background: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+  border: solid var(--gray);
+  border-width: 0 1px 1px 0;
+  transform: translateY(-0.15em) rotate(45deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.callout[data-callout].is-collapsed > .callout-title > .fold-callout-icon {
+  transform: translateY(-0.05em) rotate(-45deg);
+}
+
+// Folded content is out of the tab order and away from assistive technology, and the first
+// paragraph (a direct child when the text follows the title) folds with the rest.
+.callout[data-callout].is-collapsible > .callout-content {
+  transition:
+    grid-template-rows var(--dur-fast) var(--ease-out),
+    visibility 0s linear 0s;
+}
+
+.callout[data-callout].is-collapsed > .callout-content {
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--dur-fast) var(--ease-out),
+    visibility 0s linear var(--dur-fast);
+}
+
+.callout[data-callout].is-collapsed > .callout-title ~ :not(.callout-content) {
+  display: none;
+}
+
+// The engine pulls the first folded child up by 1rem to make room for its own title padding.
+.callout[data-callout].is-collapsed > .callout-content > :first-child {
+  margin-top: 0;
+}
+
+@media all and ($mobile) {
+  .callout[data-callout] {
+    padding-left: 0.75rem;
+    margin: 1.35rem 0;
+  }
+
+  .callout[data-callout="danger"],
+  .callout[data-callout="failure"],
+  .callout[data-callout="bug"] {
+    padding-left: calc(0.75rem - 2px);
+  }
 }
 
 // ============================================================================
@@ -3322,6 +3477,7 @@ body[data-slug="404"] .center article {
     --surface: #f3efe6;
     --accepted: #1f6b3a;
     --warning: #7a4a00;
+    --danger: #8e1f1f;
     --chip-neutral-bg: #efe6d2;
     --chip-neutral-fg: #4a3f2c;
     --chip-accepted-bg: #e1eddc;
