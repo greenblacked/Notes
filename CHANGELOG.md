@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 ### Fixed
 
 - Folded callouts can be opened with the keyboard (Tab, Enter or Space), announce whether they are expanded, keep hidden answers out of the tab order and away from screen readers, and fold the first paragraph too.
+- Callout labels sit on the first line of the body (the paragraph margin no longer pushes the text down), folded callouts with several paragraphs leave no blank space under the title, and Enter and Space fold a callout in old browsers that send only `keyCode`.
 - Deploy stage deploys stage on every merge to `main` again; it no longer stops at a Cloudflare Access step the token cannot run.
 - Deploy stage no longer fails and deletes the stage Preview when the Cloudflare account protects workers.dev Preview URLs with Cloudflare Access. With the opt-in `SMOKE_ACCEPT_ACCESS=1` (Deploy stage only), `scripts/smoke-test.sh` treats a redirect to the Access login for that host as a notice, because the content cannot be checked from CI. Any other redirect or failure still fails, Deploy production never accepts Access, and the run summary says when stage was not verified from CI.
 

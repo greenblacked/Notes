@@ -18,15 +18,20 @@ export function installCalloutFold(doc) {
     return title && title === target ? title : null
   }
 
+  // Old iOS Safari (before 10.3) and old Android WebViews send keyCode only.
+  function isEnter(event) {
+    return event.key === "Enter" || (!event.key && event.keyCode === 13)
+  }
+
   function isSpace(event) {
-    return event.key === " " || event.key === "Spacebar"
+    return event.key === " " || event.key === "Spacebar" || (!event.key && event.keyCode === 32)
   }
 
   doc.addEventListener("keydown", function (event) {
     if (event.altKey || event.ctrlKey || event.metaKey || event.defaultPrevented) return
     var title = titleOf(event)
     if (!title) return
-    if (event.key === "Enter") {
+    if (isEnter(event)) {
       event.preventDefault()
       if (!event.repeat) title.click()
     } else if (isSpace(event)) {

@@ -14,10 +14,11 @@ const callout = ({ type = "warning", classes = "", title = "A title", fold = fal
   `${fold ? '<div class="fold-callout-icon"></div>' : ""}</div>` +
   `<div class="callout-content"><p>Body</p></div></blockquote>`
 
+// unified ignores a plugin attached twice, so a second pass runs the transformer on the output tree.
 function run(html, passes = 1) {
-  const processor = unified().use(rehypeRaw)
-  for (let i = 0; i < passes; i++) processor.use(rehypeCallouts)
+  const processor = unified().use(rehypeRaw).use(rehypeCallouts)
   const tree = processor.runSync({ type: "root", children: [{ type: "raw", value: html }] })
+  for (let i = 1; i < passes; i++) rehypeCallouts()(tree)
   return toHtml(tree)
 }
 
@@ -131,6 +132,16 @@ test("fold: Enter clicks once and prevents default; repeat does not click", () =
   assert.ok(e.prevented)
   f.fire("keydown", { key: "Enter", repeat: true, target: f.title })
   assert.equal(f.title.clicks, 1)
+})
+
+test("fold: keyCode-only events (no key) fold with Enter and Space", () => {
+  const f = fixture()
+  const down = f.fire("keydown", { keyCode: 13, target: f.title })
+  assert.ok(down.prevented)
+  assert.equal(f.title.clicks, 1)
+  f.fire("keydown", { keyCode: 32, target: f.title })
+  f.fire("keyup", { keyCode: 32, target: f.title })
+  assert.equal(f.title.clicks, 2)
 })
 
 test("fold: Space toggles on keyup, not keydown; Spacebar behaves the same", () => {

@@ -2878,7 +2878,8 @@ sup a[data-footnote-ref] {
     margin: 0.6rem 0 0;
   }
 
-  & > .callout-title + p {
+  & > .callout-title + p,
+  & > .callout-content > p:first-child {
     margin-top: 0;
   }
 
@@ -3033,9 +3034,12 @@ sup a[data-footnote-ref] {
   display: none;
 }
 
-// The engine pulls the first folded child up by 1rem to make room for its own title padding.
-.callout[data-callout].is-collapsed > .callout-content > :first-child {
+// The engine pulls the first folded child up by 1rem to make room for its own title padding, and
+// the paragraph margin above outranks its reset. The content is a grid, so margins of later
+// children do not collapse and each would add a row: clear them all.
+.callout[data-callout].is-collapsed > .callout-content > * {
   margin-top: 0;
+  margin-bottom: 0;
 }
 
 @media all and ($mobile) {

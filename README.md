@@ -6,17 +6,17 @@ The site is built with [Quartz](https://quartz.jzhao.xyz/) and served by a Cloud
 
 ## Repository layout
 
-| Path                           | Contents                                                                                                      |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `content/`                     | The notes: `adr/`, `patterns/`, `tools/`, `standards/`, `index.md`                                            |
-| `quartz/`                      | Vendored Quartz engine (do not edit; see "Quartz" below)                                                      |
-| `quartz.config.*`, `quartz.ts` | Site configuration and layout (our customisations)                                                            |
-| `local-plugins/`               | Local Quartz plugins: top bar, section row, metadata sheet, note index, linked-from, content-start, sidenotes |
-| `worker/`, `wrangler.jsonc`    | Cloudflare Worker (headers, robots) and its configuration                                                     |
-| `scripts/`                     | Build helpers, `smoke-test.sh`, `update-quartz.sh`                                                            |
-| `.github/`                     | Workflows, Dependabot, CODEOWNERS                                                                             |
-| `docs/`                        | [deployment.md](docs/deployment.md), [obsidian.md](docs/obsidian.md)                                          |
-| `docs/screenshots/`            | Screenshots shown in this README                                                                              |
+| Path                           | Contents                                                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `content/`                     | The notes: `adr/`, `patterns/`, `tools/`, `standards/`, `index.md`                                                      |
+| `quartz/`                      | Vendored Quartz engine (do not edit; see "Quartz" below)                                                                |
+| `quartz.config.*`, `quartz.ts` | Site configuration and layout (our customisations)                                                                      |
+| `local-plugins/`               | Local Quartz plugins: top bar, section row, metadata sheet, note index, linked-from, content-start, sidenotes, callouts |
+| `worker/`, `wrangler.jsonc`    | Cloudflare Worker (headers, robots) and its configuration                                                               |
+| `scripts/`                     | Build helpers, `smoke-test.sh`, `update-quartz.sh`                                                                      |
+| `.github/`                     | Workflows, Dependabot, CODEOWNERS                                                                                       |
+| `docs/`                        | [deployment.md](docs/deployment.md), [obsidian.md](docs/obsidian.md)                                                    |
+| `docs/screenshots/`            | Screenshots shown in this README                                                                                        |
 
 ## Local development
 
