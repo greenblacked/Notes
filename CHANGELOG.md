@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
-- **Browser smoke tests** (`npm run test:browser`, Playwright in Chromium and WebKit at desktop and phone sizes) against the built site served through the Worker. They cover the home page (no console errors, no sideways scroll), the search shortcut, the Browse drawer, the theme toggle, section navigation and Back, the tucking section row, keyboard folding of callouts and the graph dialog.
+- **Browser smoke tests** (`npm run test:browser`, Playwright in Chromium and WebKit at desktop and phone sizes) against the built site served through the Worker. They cover the home page (no console errors, no sideways scroll), the search shortcut, the Browse drawer, the theme toggle, section navigation and Back, the tucking section row, keyboard folding of callouts and the graph dialog. CI runs them in the new Browser smoke tests job, which CI OK requires (so it also gates releases).
 
 ### Changed
 

@@ -136,6 +136,46 @@ test("the attribution check runs in ci and gates CI OK", () => {
   assert.equal(checkout.with["fetch-depth"], 0)
 })
 
+test("the browser smoke tests run in ci and gate CI OK", () => {
+  const ci = wf["ci.yml"]
+  const job = ci.jobs.browser
+  assert.ok(job)
+  assert.deepEqual([job.needs].flat(), ["build-and-check"])
+  assert.deepEqual(job.permissions, { contents: "read" })
+  assert.ok(ci.jobs["ci-ok"].needs.includes("browser"))
+  const runs = job.steps.map((s) => s.run ?? "")
+  assert.ok(runs.some((r) => r.includes("npm run test:browser")))
+  assert.ok(runs.some((r) => r.includes("node scripts/check-artifact.mjs --root")))
+  const report = job.steps.find((s) => (s.uses ?? "").startsWith("actions/upload-artifact"))
+  assert.equal(report.if, "failure()")
+})
+
+test("playwright is never fetched by npx", () => {
+  for (const f of files) {
+    for (const job of Object.values(wf[f].jobs)) {
+      for (const s of job.steps ?? []) {
+        assert.doesNotMatch(
+          s.run ?? "",
+          /\bnpx\s+(?!--no-install\b)\S*playwright/,
+          `${f}: "${s.name}"`,
+        )
+      }
+    }
+  }
+  const install = wf["ci.yml"].jobs.browser.steps.find((s) => s.name === "Install browsers")
+  assert.match(install.run, /^\.\/node_modules\/\.bin\/playwright install /)
+})
+
+test("the CI build hands its output to the browser job", () => {
+  const upload = wf["ci.yml"].jobs["build-and-check"].steps.find((s) =>
+    (s.uses ?? "").startsWith("actions/upload-artifact@"),
+  )
+  assert.ok(upload)
+  assert.equal(upload.with.name, "ci-site")
+  assert.equal(upload.with["retention-days"], 1)
+  assert.equal(upload.with["if-no-files-found"], "error")
+})
+
 test("cleanup deployments is dispatch only, owner only, deployments: write only and refuses production", () => {
   const w = wf["cleanup-deployments.yml"]
   assert.deepEqual(Object.keys(w.on), ["workflow_dispatch"])
