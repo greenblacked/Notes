@@ -156,3 +156,28 @@ test("cleanup deployments is dispatch only, owner only, deployments: write only 
   assert.equal(w.jobs.cleanup.environment, undefined)
   assert.ok(w.jobs.cleanup.steps.every((s) => s.uses === undefined))
 })
+
+test("scripts run in the deploy jobs import only Node built-ins", () => {
+  const jobs = [
+    ["deploy-stage.yml", "upload"],
+    ["deploy-production.yml", "deploy"],
+  ]
+  const used = new Set()
+  for (const [f, job] of jobs) {
+    for (const s of wf[f].jobs[job].steps ?? []) {
+      for (const m of (s.run ?? "").matchAll(/node scripts\/([\w.-]+\.mjs)/g)) used.add(m[1])
+    }
+  }
+  for (const name of ["verify-preview-deployment.mjs", "read-wrangler-output.mjs"]) {
+    assert.ok(used.has(name), `${name} is run in a deploy job`)
+  }
+  for (const name of used) {
+    const source = readFileSync(join(root, "scripts", name), "utf8")
+    const specs = [
+      ...source.matchAll(/^\s*import\s[^;\n]*?from\s*["']([^"']+)["']/gm),
+      ...source.matchAll(/^\s*import\s*["']([^"']+)["']/gm),
+      ...source.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g),
+    ].map((m) => m[1])
+    for (const spec of specs) assert.ok(spec.startsWith("node:"), `${name} imports ${spec}`)
+  }
+})
