@@ -8,8 +8,9 @@
 #                     e.g. "1.2.3+<sha>", "main+<sha>" or "stage+<sha>"
 #   indexable|noindex what this host is expected to send: "indexable" (no noindex,
 #                     robots.txt allows crawling; only notes.szolotov.com in production) or
-#                     "noindex" (X-Robots-Tag noindex, robots.txt "Disallow: /"; the stage
-#                     Preview and every workers.dev URL)
+#                     "noindex" (X-Robots-Tag noindex on / and /robots.txt; robots.txt crawlable,
+#                     no "Disallow: /" and no "Sitemap:", so crawlers can read the noindex; the
+#                     stage Preview and every workers.dev URL)
 #
 # The version check is retried with a growing delay (custom domains and edge
 # propagation can lag a few minutes behind `wrangler deploy`). All other checks
@@ -279,10 +280,21 @@ run_checks() {
     else
       fail_on home "this host must send X-Robots-Tag: noindex, got '$robots_header'"
     fi
-    if grep -qiE '^[[:space:]]*Disallow:[[:space:]]*/[[:space:]]*$' <<<"$robots_body"; then
-      pass "robots.txt disallows everything"
+    robots_txt_header="$(header_value robots x-robots-tag)"
+    if [[ "${robots_txt_header,,}" == *noindex* ]]; then
+      pass "robots.txt sends X-Robots-Tag noindex ($robots_txt_header)"
     else
-      fail_on robots "robots.txt of this host must contain 'Disallow: /'"
+      fail_on robots "robots.txt must send X-Robots-Tag: noindex, got '$robots_txt_header'"
+    fi
+    if grep -qiE '^[[:space:]]*Disallow:[[:space:]]*/[[:space:]]*$' <<<"$robots_body"; then
+      fail_on robots "robots.txt of a noindex host must not contain 'Disallow: /' (crawlers could not read the noindex)"
+    else
+      pass "robots.txt does not block crawling"
+    fi
+    if grep -qiE '^[[:space:]]*Sitemap:' <<<"$robots_body"; then
+      fail_on robots "robots.txt of a noindex host must not list a sitemap"
+    else
+      pass "robots.txt lists no sitemap"
     fi
   else
     if [[ "${robots_header,,}" == *noindex* ]]; then

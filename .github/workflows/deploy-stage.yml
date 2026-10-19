@@ -285,7 +285,7 @@ jobs:
       # workers.dev Preview URLs with Cloudflare Access (an account setting this repository does
       # not manage): SMOKE_ACCEPT_ACCESS=1 accepts a redirect to the Access login for this exact
       # host as a notice, with the content checks skipped. Any other redirect or failure fails; a
-      # reachable Preview must pass every check (HTTP 200, this build, headers, noindex).
+      # reachable Preview must pass every check (HTTP 200, this build, headers, noindex, crawlable robots.txt).
       - name: Smoke-test the workers.dev Preview URL
         id: smoke
         if: steps.fresh.outputs.current == 'true'
