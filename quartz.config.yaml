@@ -32,7 +32,7 @@ configuration:
       code: IBM Plex Mono
     # Mapping: light = the sheet of paper (article, popovers, inputs), lightgray = rules, gray =
     # muted text, darkgray = body text, dark = headings and ink, secondary = accent and links,
-    # tertiary = link hover. The desk behind the sheet, the tints and the status colours are CSS
+    # tertiary = link hover. The desk behind the sheet, the tints and the accent colours are CSS
     # variables in quartz/styles/custom.scss; scripts/check-contrast.mjs checks both files.
     colors:
       lightMode:
@@ -210,7 +210,7 @@ plugins:
     options:
       links: {}
   # Local plugins (local-plugins/). The components are registered in quartz.ts.
-  # Spec sheet under the title, from the type, status, verified and decided frontmatter.
+  # Spec sheet under the title, from the type, verified and decided frontmatter.
   - source: ./local-plugins/note-meta
     enabled: true
     layout:

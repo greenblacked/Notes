@@ -11,24 +11,11 @@ export const TYPE_LABELS: Record<string, string> = {
   note: "Note",
 }
 
-/** Chip colour class per status. Anything else gets the neutral style. */
-export const STATUS_TONES: Record<string, "accepted" | "proposed" | "warning"> = {
-  accepted: "accepted",
-  proposed: "proposed",
-  deprecated: "warning",
-  superseded: "warning",
-  rejected: "warning",
-}
-
 const own = (map: object, key: string) => Object.prototype.hasOwnProperty.call(map, key)
 
 /** Label for a `type` value; unknown values (including `constructor` and the like) as written. */
 export const typeLabel = (type: string): string =>
   own(TYPE_LABELS, type) ? TYPE_LABELS[type] : type
-
-/** Chip tone for a `status` value; unknown values are neutral. */
-export const statusTone = (status: string): string =>
-  own(STATUS_TONES, status) ? STATUS_TONES[status] : "neutral"
 
 /**
  * YAML turns an unquoted `2026-10-11` into a Date (midnight UTC), while a quoted one stays a

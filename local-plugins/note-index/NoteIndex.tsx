@@ -1,7 +1,7 @@
 import { classNames } from "../../quartz/util/lang"
 import { resolveRelative, type FullSlug } from "../../quartz/util/path"
 import type { QuartzComponent, QuartzComponentProps } from "../../quartz/components/types"
-import { asLowerString, isoDay, statusTone, typeLabel } from "../note-meta/format"
+import { asLowerString, isoDay, typeLabel } from "../note-meta/format"
 import { SECTIONS } from "../top-bar/sections"
 
 /** Templates are copied, not read, so they stay out of the index. */
@@ -21,7 +21,7 @@ const pad = (n: number) => String(n).padStart(2, "0")
 /**
  * Home page body (condition `home`): a card per section (title, description, note count, last
  * update), then the index of every note, grouped by section. Each row has the
- * note's number and file name, its title, type and status chips and its verified date (or the
+ * note's number and file name, its title, type chip and its verified date (or the
  * modified date for notes that are not verified). It replaces a "recently updated" list: the
  * dates are in the index. Sections come from the first folder of the slug, in the order of
  * SECTIONS; a folder not listed there follows, titled after its index page.
@@ -102,7 +102,6 @@ export default (() => {
             <span>No.</span>
             <span>Title</span>
             <span>Type</span>
-            <span>Status</span>
             <span>Date</span>
           </div>
           {order.map((section, s) => {
@@ -133,7 +132,6 @@ export default (() => {
                   {notes.map((note, n) => {
                     const fm = (note.frontmatter ?? {}) as Record<string, unknown>
                     const type = asLowerString(fm.type)
-                    const status = asLowerString(fm.status)
                     const verified = isoDay(fm.verified)
                     const modified = isoDay(note.dates?.modified)
                     const date = verified ?? modified
@@ -153,13 +151,6 @@ export default (() => {
                           {type && (
                             <span class="chip chip-type" data-type={type}>
                               {typeLabel(type)}
-                            </span>
-                          )}
-                        </span>
-                        <span class="note-index-status">
-                          {status && (
-                            <span class="chip chip-status" data-tone={statusTone(status)}>
-                              {status}
                             </span>
                           )}
                         </span>

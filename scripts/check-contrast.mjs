@@ -173,7 +173,7 @@ for (const theme of ["light", "dark"]) {
   check(theme, "Accepted green as text on surface tint", c("accepted"), surface)
   check(theme, "Warning amber as text on surface tint", c("warning"), surface)
 
-  for (const kind of ["neutral", "accepted", "proposed", "warning"]) {
+  for (const kind of ["neutral"]) {
     check(
       theme,
       `Chip text on chip background (${kind})`,
