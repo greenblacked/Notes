@@ -311,8 +311,8 @@ jobs:
 
       # The custom domain usually answers runners with 403 (Bot Fight Mode); the workers.dev smoke
       # test above is the real check. A 200 here must still carry noindex. When the workers.dev URL
-      # is behind Access and this probe gets no 200, nothing checked the content from CI: the run
-      # still passes (runners usually get 403 here) and says so in a notice and the run summary.
+      # is behind Access, nothing checks the build from CI (this probe only reads the headers of /):
+      # the run still passes, whatever this probe gets, and says so in a notice and the run summary.
       - name: Probe the custom domain
         if: steps.fresh.outputs.current == 'true'
         env:
@@ -341,16 +341,16 @@ jobs:
           else
             echo "::notice::https://stage.notes.szolotov.com answered HTTP $code."
           fi
-          if [[ "$SMOKE_RESULT" != "verified" && "$code" != "200" ]]; then
-            echo "::notice::Stage content was not verified from CI: the workers.dev Preview URL is behind Cloudflare Access and the custom domain answered HTTP $code. The Preview was uploaded and kept; open https://stage.notes.szolotov.com/version.txt and expect stage+$SHA."
+          if [[ "$SMOKE_RESULT" != "verified" ]]; then
+            echo "::notice::Stage content was not verified from CI: the workers.dev Preview URL is behind Cloudflare Access and the custom domain probe only checked the response headers (HTTP $code), not the build. The Preview was uploaded and kept; open https://stage.notes.szolotov.com/version.txt and expect stage+$SHA."
             {
               echo
-              echo "Not verified from CI: workers.dev is behind Cloudflare Access and the custom domain answered HTTP $code. Check https://stage.notes.szolotov.com/version.txt in a browser."
+              echo "Not verified from CI: workers.dev is behind Cloudflare Access and the custom domain probe (HTTP $code) did not check the build. Check https://stage.notes.szolotov.com/version.txt in a browser."
             } >>"$GITHUB_STEP_SUMMARY"
           fi
 
       # Fail closed: once the upload was attempted, any failed or cancelled step after it takes the
-      # Preview down, so stage keeps only a verified build. A failed delete counts as "already gone"
+      # Preview down, so stage keeps only a build that passed every check it could run; see the Access note on the smoke step. A failed delete counts as "already gone"
       # only when Wrangler itself reports that the Preview "stage" was not found.
       - name: Take stage down unless it is verified
         if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled())

@@ -189,5 +189,8 @@ test("the custom domain probe fails only on an indexable 200 and reports an unve
   ])
     assert.ok(step.run.includes(x), x)
   assert.equal((step.run.match(/exit 1/g) ?? []).length, 1)
+  // The not-verified notice depends only on the smoke result, not on the probe status.
+  assert.ok(step.run.includes('if [[ "$SMOKE_RESULT" != "verified" ]]; then'))
+  assert.ok(!step.run.includes('"$code" != "200" ]]'))
   assert.equal(step["continue-on-error"], undefined)
 })
