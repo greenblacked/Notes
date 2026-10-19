@@ -1,7 +1,11 @@
 name: Cut release
 
 # Run on main with a version whose CHANGELOG section is already on main (Actions -> Cut release
-# -> Run workflow -> X.Y.Z). It validates, creates the annotated tag vX.Y.Z and the GitHub
+# -> Run workflow -> X.Y.Z). It requires a green CI push run for the commit and a most recent
+# Deploy stage run for it that updated stage successfully (otherwise it refuses: wait for
+# Deploy stage or re-run it); the only exception is the very first release, while no vX.Y.Z tag
+# exists yet, because stage needs the custom domain that the first production deploy creates
+# (a notice says so). It validates, creates the annotated tag vX.Y.Z and the GitHub
 # Release through the API (both carry the CHANGELOG section as their notes), then dispatches
 # deploy-production.yml on the tag. A tag created with GITHUB_TOKEN starts no push workflow, but
 # a workflow_dispatch made with GITHUB_TOKEN does start a run. Production then waits for the
@@ -27,7 +31,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write # the tag object, refs/tags/vX.Y.Z and the GitHub Release; never a code push
-      actions: write # dispatch deploy-production.yml (includes read for require-ci-success.sh)
+      actions: write # dispatch deploy-production.yml (includes read for require-ci-success.sh and require-stage-success.sh)
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -112,6 +116,12 @@ jobs:
 
       - name: Require a successful CI run for this commit
         run: .github/scripts/require-ci-success.sh
+
+      # Stage must serve this exact commit before it can be released: the most recently executed Deploy stage run
+      # for it on main must be green and must have run the upload (not skipped it). Skipped only
+      # while no vX.Y.Z tag exists yet (the first release); fails closed if the tag lookup errors.
+      - name: Require a successful Deploy stage run for this commit
+        run: .github/scripts/require-stage-success.sh
 
       - name: Write the release notes from CHANGELOG.md
         run: |
