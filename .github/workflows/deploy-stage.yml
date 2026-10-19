@@ -7,8 +7,8 @@ name: Deploy stage
 # production traffic.
 #
 # The `guard` job refuses any other ref, event, repository or actor, so the jobs that hold the
-# Cloudflare token only ever run code of `main` (the environment `stage` allows the branch
-# `main` only).
+# Cloudflare token only ever run code of `main` (a `main`-only branch policy on the
+# environment `stage` is recommended hardening; the guard is what enforces it).
 #
 # Two jobs: `build` runs the (third-party plugin) build code with no secrets and no
 # environment; `upload` has the secrets, installs only wrangler (tools/, without
