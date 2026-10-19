@@ -138,6 +138,7 @@ test("a 403 on the apps endpoint gives the scope message, and the token is never
   const r = await run(["preflight"], { "GET /accounts/acc/access/apps": { status: 403 } })
   assert.equal(r.code, 1)
   assert.match(r.text, /Access: Apps and Policies/)
+  assert.match(r.text, /failed with HTTP 403 \(code 10000\): /)
   assert.ok(!r.text.includes(TOKEN))
   const ok = await run(["preflight"], cleanRoutes([stageApp]))
   assert.ok(!ok.text.includes(TOKEN))
@@ -496,6 +497,10 @@ test("ensure-access still fails on a 403 that is not an auth error (non-JSON or 
     })
     assert.equal(code, 1, lines.join("\n"))
     assert.equal(existsSync(outFile) ? readFileSync(outFile, "utf8") : "", "")
+    const text = lines.join("\n")
+    if (body) assert.match(text, /failed with HTTP 403 \(code 1020\)/)
+    else assert.doesNotMatch(text, /\(code/)
+    assert.ok(!text.includes(OWNER_ENV.CLOUDFLARE_API_TOKEN ?? TOKEN))
   }
 })
 
