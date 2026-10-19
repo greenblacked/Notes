@@ -472,19 +472,20 @@ jobs:
 
   # The four-value contract in one place. A job that is skipped by its job-level `if:` (the build
   # job found that main moved on) has no outputs at all, so `needs.upload.outputs.stage_result` is
-  # empty there. This job maps that case to `skipped`; an upload job that ran but failed, was
-  # cancelled or produced no result stays `failure`. Read `needs.result.outputs.stage_result`.
+  # empty there. This job runs even when build fails or is cancelled and decides `skipped` from the
+  # build outputs (build succeeded and main moved on), never from the upload job's status; a failed
+  # or cancelled build, or an upload that failed, was cancelled or produced no result, is `failure`. Read `needs.result.outputs.stage_result`.
   result:
     name: Stage result
     needs: [build, upload]
-    if: ${{ always() && needs.build.result == 'success' }}
+    if: ${{ always() && github.repository == 'greenblacked/Notes' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
     outputs:
-      stage_result: ${{ needs.upload.result == 'skipped' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}
+      stage_result: ${{ needs.build.result == 'success' && needs.build.outputs.current != 'true' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}
     steps:
       - name: Report the stage result
         env:
-          STAGE_RESULT: ${{ needs.upload.result == 'skipped' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}
+          STAGE_RESULT: ${{ needs.build.result == 'success' && needs.build.outputs.current != 'true' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}
         run: echo "stage_result=$STAGE_RESULT"

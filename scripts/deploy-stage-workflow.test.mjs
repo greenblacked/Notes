@@ -357,24 +357,26 @@ test("the workflow never claims what it did not check", () => {
   }
 })
 
-test("the result job maps a skipped upload to skipped and a silent one to failure", () => {
+test("the result job reports skipped only when main moved on, and failure otherwise", () => {
   const result = workflow.jobs.result
   assert.ok(result)
   assert.deepEqual(result.needs, ["build", "upload"])
-  assert.equal(result.if, "${{ always() && needs.build.result == 'success' }}")
+  assert.equal(result.if, "${{ always() && github.repository == 'greenblacked/Notes' }}")
   const expr = result.outputs.stage_result
   assert.equal(
     expr,
-    "${{ needs.upload.result == 'skipped' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}",
+    "${{ needs.build.result == 'success' && needs.build.outputs.current != 'true' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}",
   )
-  // Evaluate the expression the way Actions does for the three upload outcomes.
-  const evaluate = (uploadResult, output) =>
-    (uploadResult === "skipped" && "skipped") || output || "failure"
-  assert.equal(evaluate("skipped", ""), "skipped")
-  assert.equal(evaluate("failure", ""), "failure")
-  assert.equal(evaluate("cancelled", ""), "failure")
-  assert.equal(evaluate("success", ""), "failure")
-  assert.equal(evaluate("success", "verified"), "verified")
-  assert.equal(evaluate("failure", "failure"), "failure")
+  assert.equal(result.steps[0].env.STAGE_RESULT, expr)
+  // Evaluate the expression the way Actions does (empty string is falsy).
+  const evaluate = (buildResult, current, output) =>
+    (buildResult === "success" && current !== "true" && "skipped") || output || "failure"
+  assert.equal(evaluate("failure", "", ""), "failure")
+  assert.equal(evaluate("cancelled", "", ""), "failure")
+  assert.equal(evaluate("success", "false", ""), "skipped")
+  assert.equal(evaluate("success", "true", ""), "failure")
+  assert.equal(evaluate("success", "true", "verified"), "verified")
+  assert.equal(evaluate("success", "true", "failure"), "failure")
+  assert.equal(evaluate("success", "true", "uploaded-active"), "uploaded-active")
   assert.equal(JSON.stringify(result).includes("secrets."), false)
 })
