@@ -103,3 +103,30 @@ test("the teardown comes after every step that holds secrets", () => {
     assert.ok(i >= 0 && i < teardown, `${n} runs before the teardown`)
   }
 })
+
+test("everything after ensure-access is gated on deployable, and nothing runs for a skipped stage", () => {
+  const ensure = upload.steps.find((s) => /Ensure Cloudflare Access/.test(s.name ?? ""))
+  assert.equal(ensure.id, "access")
+  const at = upload.steps.indexOf(ensure)
+  const gate = "steps.access.outputs.deployable == 'true'"
+  for (const s of upload.steps.slice(at + 1)) {
+    assert.ok(String(s.if ?? "").includes(gate), `step "${s.name}" is gated on ${gate}`)
+  }
+  const names = upload.steps.slice(at + 1).map((s) => s.name)
+  for (const n of [
+    "Update the stage Preview",
+    "Require Access on the workers.dev Preview URL",
+    "Probe the custom domain",
+    "Retire the dev Preview",
+    "Retire the dev Access app",
+    "Take stage down unless it is verified",
+  ]) {
+    assert.ok(names.includes(n), `${n} exists after ensure-access`)
+  }
+})
+
+test("ensure-access has no continue-on-error, so other errors still fail the job", () => {
+  const ensure = upload.steps.find((s) => s.id === "access")
+  assert.ok(ensure.run.includes("ensure-access"))
+  assert.equal(ensure["continue-on-error"], undefined)
+})

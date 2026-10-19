@@ -217,7 +217,11 @@ jobs:
       # Reads only when a stage Access app exists. When none covers stage it copies a dev-only
       # app, or else creates one that allows the owner's email (a public address). It runs before
       # the preflight on every deploy.
+      #
+      # When no app covers stage and the token has no Access permission (HTTP 403 on the create),
+      # the step succeeds with deployable=false: every later step is skipped, nothing is uploaded.
       - name: Ensure Cloudflare Access for stage
+        id: access
         if: steps.fresh.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -228,7 +232,7 @@ jobs:
       # Fail closed: nothing is uploaded unless an Access application covers stage and no Custom
       # Domain or DNS record shadows the Preview hostname.
       - name: Require Cloudflare Access and a clean hostname
-        if: steps.fresh.outputs.current == 'true'
+        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -239,7 +243,7 @@ jobs:
       # production or the routes.
       - name: Update the stage Preview
         id: preview
-        if: steps.fresh.outputs.current == 'true'
+        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -250,7 +254,7 @@ jobs:
       # attempted, not on whether Wrangler's output could be read.
       - name: Read the Preview URLs
         id: parse
-        if: steps.fresh.outputs.current == 'true'
+        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
         env:
           WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
         run: |
@@ -259,7 +263,7 @@ jobs:
           echo "$out" >>"$GITHUB_OUTPUT"
 
       - name: Require the custom domain Preview URL
-        if: steps.fresh.outputs.current == 'true'
+        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
         env:
           STAGE_URL: ${{ steps.parse.outputs.custom_url }}
         run: |
@@ -279,7 +283,7 @@ jobs:
       # login. There is no skip switch: a switch would turn the exposure check off.
       - name: Require Access on the workers.dev Preview URL
         id: access_wd
-        if: steps.fresh.outputs.current == 'true'
+        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
         env:
           SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
           WORKERS_DEV_URL: ${{ steps.parse.outputs.workers_dev_url }}
@@ -301,7 +305,7 @@ jobs:
 
       - name: Probe the custom domain
         id: access_cd
-        if: steps.fresh.outputs.current == 'true'
+        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
         run: |
           res="$(curl --proto '=https' --tlsv1.2 -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 30 \
             --user-agent 'notes-smoke-test/1 (+https://github.com/greenblacked/Notes)' \
@@ -324,7 +328,7 @@ jobs:
       # Idempotent. Remove once a run log shows both "nothing to delete" notices.
       - name: Retire the dev Preview
         id: retire
-        if: steps.fresh.outputs.current == 'true'
+        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -345,7 +349,7 @@ jobs:
           fi
 
       - name: Retire the dev Access app
-        if: steps.fresh.outputs.current == 'true'
+        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -357,7 +361,7 @@ jobs:
       # counts as "already gone" only when Wrangler itself reports that the Preview "stage" was
       # not found; any other error (bad token, unknown account, network) fails the step.
       - name: Take stage down unless it is verified
-        if: always() && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled() || steps.access_wd.outputs.exposed == 'true')
+        if: always() && steps.access.outputs.deployable == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled() || steps.access_wd.outputs.exposed == 'true')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -388,5 +392,5 @@ jobs:
           exit 1
 
       - name: Summary
-        if: steps.fresh.outputs.current == 'true'
+        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
         run: echo "stage serves ${SHA::7}" >>"$GITHUB_STEP_SUMMARY"
