@@ -386,3 +386,63 @@ test("the result job reports skipped only when main moved on, and failure otherw
   assert.equal(evaluate("success", "true", "uploaded-active"), "uploaded-active")
   assert.equal(JSON.stringify(result).includes("secrets."), false)
 })
+
+test("a superseded stage is left in place: no teardown, but the run still fails", () => {
+  const teardown = upload.steps.find((s) => s.id === "teardown")
+  assert.ok(teardown.if.includes("steps.active.outputs.superseded != 'true'"))
+  for (const needle of ["failure()", "cancelled()", "steps.preview.outcome"]) {
+    assert.ok(teardown.if.includes(needle), needle)
+  }
+  const active = upload.steps.find((s) => s.id === "active")
+  assert.equal(active["continue-on-error"], undefined)
+  // Env only: the superseded id reaches the shell through the environment.
+  assert.ok(!active.run.includes("${{"))
+  const env = {
+    DEPLOYMENT_ID: "d1",
+    SHA: "a".repeat(40),
+  }
+  const fake = (code, lines) => {
+    const dir = mkdtempSync(join(tmpdir(), "stage-node-"))
+    writeFileSync(join(dir, "node"), `#!/bin/bash\nprintf '%s\\n' ${lines}\nexit ${code}\n`, {
+      mode: 0o755,
+    })
+    return dir
+  }
+  const run = (code, lines) => {
+    const dir = fake(code, lines)
+    return bash(active, { ...env, PATH: `${dir}:${process.env.PATH}` })
+  }
+  const superseded = run(3, "'superseded=true' 'superseded_by=d2'")
+  assert.equal(superseded.status, 3)
+  assert.match(superseded.output, /^superseded=true$/m)
+  assert.match(superseded.output, /^superseded_by=d2$/m)
+  assert.match(
+    superseded.stdout,
+    /::error::Stage was superseded by deployment d2 and was left in place/,
+  )
+  const plain = run(1, "'x'")
+  assert.equal(plain.status, 1)
+  assert.doesNotMatch(plain.output, /superseded/)
+  assert.doesNotMatch(plain.stdout, /superseded/)
+  const ok = run(0, "'active=true' 'active_deployment_id=d1'")
+  assert.equal(ok.status, 0)
+  assert.match(ok.output, /^active=true$/m)
+
+  // Summary: a superseded run is a failure that did not take stage down.
+  const result = upload.steps.find((s) => s.id === "result")
+  assert.equal(result.env.SUPERSEDED, "${{ steps.active.outputs.superseded }}")
+  assert.equal(result.env.SUPERSEDED_BY, "${{ steps.active.outputs.superseded_by }}")
+  const r = bash(result, {
+    LEVEL: "",
+    DEPLOYMENT_ID: "d1",
+    PREVIEW_OUTCOME: "success",
+    TEARDOWN_OUTCOME: "skipped",
+    SUPERSEDED: "true",
+    SUPERSEDED_BY: "d2",
+  })
+  assert.match(r.output, /^stage_result=failure$/m)
+  assert.ok(r.summary.includes("Superseded"))
+  assert.ok(r.summary.includes("d2"))
+  assert.ok(!r.summary.includes("taken down"))
+  assert.ok(!/\bverified\b/.test(r.summary))
+})

@@ -8,8 +8,8 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
-- **Deploy stage** checks through the Cloudflare API that the stage Preview's latest deployment is the one the run uploaded (deployment id, the commit SHA as tag, the message `stage <sha7>`). Any mismatch fails the run and takes stage down.
-- Deploy stage reports `stage_result` (`verified`, `uploaded-active`, `failure` or `skipped`) as the output of its `result` job, as a `stage_result=<level>` line in the run summary and as a notice. A skipped upload (main moved on) is `skipped`; a failed or cancelled build or upload is `failure`.
+- **Deploy stage** checks through the Cloudflare API that the stage Preview's latest deployment is the one the run uploaded (deployment id, the commit SHA as tag, the message `stage <sha7>`). Any mismatch fails the run and takes stage down, except when a newer, valid deployment from someone else replaced the upload (superseded): the run still fails, but that deployment is left in place instead of being deleted.
+- Deploy stage reports `stage_result` (`verified`, `uploaded-active`, `failure` or `skipped`) as the output of its `result` job, as a `stage_result=<level>` line in the run summary and as a notice. A skipped upload (main moved on) is `skipped`; a failed, cancelled or superseded build or upload is `failure`.
 
 ### Changed
 

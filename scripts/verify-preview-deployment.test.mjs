@@ -9,6 +9,8 @@ import {
   MAX_ATTEMPTS,
   REQUEST_TIMEOUT_MS,
   RETRY_DELAY_MS,
+  EXIT_SUPERSEDED,
+  SupersededError,
   parseArgs,
 } from "./verify-preview-deployment.mjs"
 
@@ -274,4 +276,59 @@ test("outcomes still map: success after transient errors, hard failure at once",
   )
   await assert.rejects(main(argv, env, deps(wrongTag)), /workers\/tag/)
   assert.equal(wrongTag.calls.length, 2)
+})
+
+test("superseded: a different valid deployment after the whole budget", async () => {
+  const newer = reply(200, good({ id: "d2" }))
+  // A brief lag is still retried first: ours appears on the 3rd attempt, so not superseded.
+  const lag = fakeFetch(newer, newer, reply(200, good()))
+  assert.equal(await main(argv, env, deps(lag)), "active=true\nactive_deployment_id=d1")
+  const f = fakeFetch(newer)
+  await assert.rejects(main(argv, env, deps(f, 4)), (error) => {
+    assert.ok(error instanceof SupersededError)
+    assert.equal(error.deploymentId, "d2")
+    assert.match(error.message, /d2.*after 4 attempts/)
+    return true
+  })
+  assert.equal(f.calls.length, 4)
+  // Transient errors earlier in the budget do not hide a superseded final answer.
+  const mixed = fakeFetch(reply(500, {}), newer)
+  await assert.rejects(main(argv, env, deps(mixed, 3)), SupersededError)
+  assert.equal(EXIT_SUPERSEDED, 3)
+})
+
+test("not superseded: transient last attempt, malformed answer, or our own mismatch", async () => {
+  const newer = reply(200, good({ id: "d2" }))
+  // The last attempt was a transient error: unknown state, ordinary failure.
+  const transient = fakeFetch(newer, reply(502, {}))
+  await assert.rejects(main(argv, env, deps(transient, 2)), (error) => {
+    return !(error instanceof SupersededError) && /after 2 attempts/.test(error.message)
+  })
+  // A malformed id or no annotations object is not a valid other deployment.
+  for (const body of [
+    good({ id: undefined }),
+    good({ id: "bad id!" }),
+    good({ id: "d2", annotations: null }),
+  ]) {
+    await assert.rejects(main(argv, env, deps(fakeFetch(reply(200, body)), 2)), (error) => {
+      return !(error instanceof SupersededError) && /after 2 attempts/.test(error.message)
+    })
+  }
+  // Our deployment with a wrong tag, message or commit_sha fails at once, never superseded.
+  for (const ann of [
+    { "workers/tag": "b".repeat(40) },
+    { "workers/message": "x" },
+    { "workers/commit_sha": "c".repeat(40) },
+  ]) {
+    const f = fakeFetch(reply(200, good({}, ann)))
+    await assert.rejects(main(argv, env, deps(f)), (error) => !(error instanceof SupersededError))
+    assert.equal(f.calls.length, 1)
+  }
+})
+
+test("the CLI prints superseded outputs and exits 3, other failures exit 1", async () => {
+  const src = readFileSync(new URL("./verify-preview-deployment.mjs", import.meta.url), "utf8")
+  assert.ok(src.includes("superseded=true"))
+  assert.ok(src.includes("process.exit(EXIT_SUPERSEDED)"))
+  assert.ok(src.includes("process.exit(1)"))
 })

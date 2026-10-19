@@ -11,6 +11,12 @@
  *     active_deployment_id=<id>
  * and exits 1 with `error: <reason>` otherwise.
  *
+ * Superseded: when, after the whole retry budget, the last answer is still a well-formed
+ * deployment id different from ours (someone else uploaded to the Preview after this run), it
+ * prints `superseded=true` and `superseded_by=<id>` and exits 3, so the caller can leave the newer
+ * deployment alone. A tag or message mismatch on our own deployment, a transient error on the last
+ * attempt, or a malformed answer is an ordinary failure (exit 1).
+ *
  * "Active" means the Preview's `latest` deployment. A Preview has no gradual rollout: its URLs
  * serve the latest deployment. The check therefore requires `latest.id` to equal the deployment id
  * Wrangler reported for this upload, and the annotations the upload set (`workers/tag` = the
@@ -42,8 +48,34 @@ function fail(message) {
   throw new Error(message)
 }
 
-/** An id mismatch can be read-after-write lag, so it is retried. */
-class MismatchError extends Error {}
+/**
+ * An id mismatch can be read-after-write lag, so it is retried. `otherId` is set only when the
+ * latest deployment is a well-formed id different from ours (a candidate for "superseded").
+ */
+class MismatchError extends Error {
+  /** @param {string} message @param {string} [otherId] */
+  constructor(message, otherId) {
+    super(message)
+    this.otherId = otherId
+  }
+}
+
+/** Exit code of the CLI when a newer, valid deployment replaced ours (see SupersededError). */
+export const EXIT_SUPERSEDED = 3
+
+/**
+ * After the whole attempt budget the Preview's latest deployment is still a different, well-formed
+ * deployment (the last answer was that, not a transient error). Someone else uploaded to the
+ * Preview after this run; the caller must not delete it. Never thrown for a tag, message or
+ * commit_sha mismatch on our own deployment, nor when the last attempt was a transient error.
+ */
+export class SupersededError extends Error {
+  /** @param {string} message @param {string} deploymentId */
+  constructor(message, deploymentId) {
+    super(message)
+    this.deploymentId = deploymentId
+  }
+}
 
 const FLAGS = {
   "--worker": ["worker", (v) => /^[a-z0-9-]{1,63}$/.test(v)],
@@ -117,8 +149,10 @@ export function checkDeployment(body, expected) {
   const result = body.result
   if (!isObject(result)) fail("the API answer has no result object")
   if (result.id !== expected.deployment) {
+    const wellFormed = typeof result.id === "string" && /^[A-Za-z0-9-]{1,64}$/.test(result.id)
     throw new MismatchError(
       `the latest stage deployment is ${String(result.id)}, not the one this run uploaded (${expected.deployment})`,
+      wellFormed && isObject(result.annotations) ? result.id : undefined,
     )
   }
   const annotations = result.annotations
@@ -218,6 +252,8 @@ export async function main(argv, env, deps = {}) {
   const delayMs = deps.delayMs ?? RETRY_DELAY_MS
   const sleep = deps.sleep ?? defaultSleep
   let last = "no attempt was made"
+  /** The other deployment's id when the LAST attempt was a clean id mismatch, else undefined. */
+  let supersededBy
   for (let attempt = 1; attempt <= attempts; attempt++) {
     if (attempt > 1) await sleep(delayMs)
     try {
@@ -233,7 +269,11 @@ export async function main(argv, env, deps = {}) {
     } catch (error) {
       if (!(error instanceof MismatchError || error instanceof TransientError)) throw error
       last = error.message
+      supersededBy = error instanceof MismatchError ? error.otherId : undefined
     }
+  }
+  if (supersededBy !== undefined) {
+    throw new SupersededError(`${last} (after ${attempts} attempts; superseded)`, supersededBy)
   }
   return fail(`${last} (after ${attempts} attempts)`)
 }
@@ -242,6 +282,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     console.log(await main(process.argv.slice(2), process.env))
   } catch (error) {
+    if (error instanceof SupersededError) {
+      // stdout is appended to GITHUB_OUTPUT by the workflow; the exit code is distinct.
+      console.log(`superseded=true\nsuperseded_by=${error.deploymentId}`)
+      console.error(`error: ${error.message}`)
+      process.exit(EXIT_SUPERSEDED)
+    }
     console.error(`error: ${error instanceof Error ? error.message : error}`)
     process.exit(1)
   }

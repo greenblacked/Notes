@@ -290,10 +290,19 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           DEPLOYMENT_ID: ${{ steps.parse.outputs.deployment_id }}
         run: |
+          # Exit 3 means superseded: a newer valid deployment replaced ours (someone else uploaded
+          # to the Preview). The run still fails, but the teardown skips it so that deployment
+          # is not deleted.
+          rc=0
           out="$(node scripts/verify-preview-deployment.mjs --worker notes --preview stage \
-            --deployment "$DEPLOYMENT_ID" --tag "$SHA" --message "stage ${SHA::7}")"
+            --deployment "$DEPLOYMENT_ID" --tag "$SHA" --message "stage ${SHA::7}")" || rc=$?
           echo "$out"
           echo "$out" >>"$GITHUB_OUTPUT"
+          if [[ "$rc" == "3" ]]; then
+            by="$(sed -n 's/^superseded_by=//p' <<<"$out")"
+            echo "::error::Stage was superseded by deployment $by and was left in place; this run's upload ($DEPLOYMENT_ID) is no longer active. Run Deploy stage again."
+          fi
+          exit "$rc"
 
       - name: Require the custom domain Preview URL
         if: steps.fresh.outputs.current == 'true'
@@ -403,11 +412,12 @@ jobs:
 
       # Fail closed: once the upload was attempted, any failed or cancelled step after it takes the
       # Preview down, so stage keeps only an upload whose checks all passed (see `Decide the stage
-      # result`). A failed delete counts as "already gone" only when Wrangler
+      # result`). Exception: when the active check found the Preview superseded by a newer
+      # deployment (not ours), nothing is deleted; the run still fails. A failed delete counts as "already gone" only when Wrangler
       # itself reports that the Preview "stage" was not found.
       - name: Take stage down after a failed check
         id: teardown
-        if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled())
+        if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && steps.active.outputs.superseded != 'true' && (failure() || cancelled())
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -437,10 +447,12 @@ jobs:
         if: always() && steps.fresh.outputs.current == 'true'
         env:
           LEVEL: ${{ steps.level.outputs.level }}
-          DEPLOYMENT_ID: ${{ steps.active.outputs.active_deployment_id }}
+          DEPLOYMENT_ID: ${{ steps.active.outputs.active_deployment_id || steps.parse.outputs.deployment_id }}
           PROBE_CODE: ${{ steps.probe.outputs.code }}
           PREVIEW_OUTCOME: ${{ steps.preview.outcome }}
           TEARDOWN_OUTCOME: ${{ steps.teardown.outcome }}
+          SUPERSEDED: ${{ steps.active.outputs.superseded }}
+          SUPERSEDED_BY: ${{ steps.active.outputs.superseded_by }}
         run: |
           level="${LEVEL:-failure}"
           # The teardown ran (a failed or cancelled run): the Preview is gone, whatever LEVEL says.
@@ -464,6 +476,8 @@ jobs:
               *)
                 if [[ -z "$PREVIEW_OUTCOME" || "$PREVIEW_OUTCOME" == "skipped" ]]; then
                   echo "Failed before the upload; nothing was uploaded."
+                elif [[ "$SUPERSEDED" == "true" ]]; then
+                  echo "Superseded: the stage Preview's latest deployment is \`${SUPERSEDED_BY}\`, not this run's \`$DEPLOYMENT_ID\`. It was left in place and this run failed. Run Deploy stage again."
                 else
                   echo "A check failed after the upload; the stage Preview was taken down. See the first failed step."
                 fi
