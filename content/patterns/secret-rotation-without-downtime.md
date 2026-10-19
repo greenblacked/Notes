@@ -66,6 +66,7 @@ NEW_PW="$(openssl rand -base64 32 | tr -d '\n')"
 #    Do not change the password of the account that consumers use right now.
 
 # 3. Then add it as a new Secret Manager version. Read it from stdin, not from the command line.
+#    (A database secret holds a JSON object with username and password, see Database users.)
 printf '%s' "${NEW_PW}" | \
   gcloud secrets versions add "${SECRET}" --project="${PROJECT_ID}" --data-file=-
 unset NEW_PW
@@ -109,11 +110,19 @@ spec:
     name: db-credentials
     creationPolicy: Owner
   data:
+    - secretKey: username
+      remoteRef:
+        key: payments-db-password
+        version: "4"
+        property: username
     - secretKey: password
       remoteRef:
         key: payments-db-password
         version: "4"
+        property: password
 ```
+
+For a database the Secret Manager value is a JSON object holding both fields, for example `{"username":"app_b","password":"..."}`, because the login name changes every cycle (see [Database users](#database-users)). `property` selects one key of a JSON value; check the External Secrets docs for the exact field in your version. A secret with a single value (an API key) needs only one entry without `property`.
 
 - `refreshInterval` bounds how long after a change the cluster notices it. The rotation job must wait at least this long before it assumes every cluster has the new value.
 - There is also a refresh policy setting on the ExternalSecret (for example refreshing periodically versus only on creation); names vary by version, so check the docs. A secret that is only read on creation never rotates.
@@ -170,9 +179,14 @@ CREATE ROLE app_users NOLOGIN;
 GRANT CONNECT ON DATABASE payments TO app_users;
 GRANT USAGE ON SCHEMA public TO app_users;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_users;
+-- serial/bigserial columns call nextval(); without this inserts fail with
+-- "permission denied for sequence". Identity columns do not need it.
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_users;
 -- Tables created later by the migration role (here: migrator) get the same grants.
 ALTER DEFAULT PRIVILEGES FOR ROLE migrator IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_users;
+ALTER DEFAULT PRIVILEGES FOR ROLE migrator IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO app_users;
 
 CREATE ROLE app_a LOGIN;
 CREATE ROLE app_b LOGIN;
@@ -185,22 +199,32 @@ The rotation sequence, with `app_a` active and `app_b` inactive:
 
 1. Set a new password on the **inactive** role, `app_b`. Nothing uses it, so nothing breaks.
 2. Add a new Secret Manager version holding **both the username `app_b` and the new password**. The username changes every cycle, so the Secret carries both (two keys, or one JSON value) and the application reads both.
-3. Wait for External Secrets to refresh (at least `refreshInterval`), then roll the workloads and recycle the pooler. `app_a` still works, so Pods that have not moved yet keep running.
+3. Wait for External Secrets to refresh (at least `refreshInterval`), then roll the workloads and recycle the pooler. Make sure the pooler accepts both `app_a` and `app_b` (a pooler that authenticates clients from its own user list, such as PgBouncer's `auth_file`, must know `app_b` too; use an auth file or auth query, check the pooler docs). `app_a` still works, so Pods that have not moved yet keep running.
 4. Verify that no connection uses `app_a` (see [Verify](#verify)) and that the old Secret Manager version is unread.
 5. Disable the old Secret Manager version, wait, and only then lock the old role: `ALTER ROLE app_a NOLOGIN;`. At the next cycle `app_a` becomes the inactive one and gets the new password.
 
 ```bash title="step 1: new password on the inactive role (psql)"
-NEW_PW="$(openssl rand -base64 32 | tr -d '\n')"
-# psql substitutes :'pw' with a correctly quoted literal; this works from stdin, not with -c.
-psql "host=10.0.0.5 dbname=payments user=admin sslmode=verify-full" -v pw="${NEW_PW}" <<'SQL'
+export NEW_PW="$(openssl rand -base64 32 | tr -d '\n')"
+# The value reaches psql through the environment, so it is not in the psql arguments
+# (and so not in ps or /proc/<pid>/cmdline). \getenv needs psql 15 or newer.
+# psql then substitutes :'pw' with a correctly quoted literal; this works from stdin, not with -c.
+psql "host=10.0.0.5 dbname=payments user=admin sslmode=verify-full" <<'SQL'
+\getenv pw NEW_PW
 ALTER ROLE app_b WITH LOGIN PASSWORD :'pw';
 SQL
-# Then add NEW_PW (with the username app_b) to Secret Manager as in the commands above.
+
+# Add username and password together as one JSON version (the base64 alphabet needs no JSON escaping).
+# printf is a shell builtin, so the value stays off the command line.
+printf '{"username":"app_b","password":"%s"}' "${NEW_PW}" | \
+  gcloud secrets versions add "${SECRET}" --project="${PROJECT_ID}" --data-file=-
+unset NEW_PW
 ```
+
+Check your psql version first (`psql --version`); on older clients `\getenv` does not exist, so use a client 15 or newer, or a pre-hashed SCRAM verifier. The plaintext `ALTER ROLE` statement can reach the server log if `log_statement` covers DDL (or via other statement logging), so check the logging settings, or send a pre-computed SCRAM verifier instead of the plaintext password. `SECRET` and `PROJECT_ID` are the variables from the commands above.
 
 Replace the host, database name and admin user with your own. Keep the admin credentials out of the rotation job's reach where you can: give the job a role that may alter only `app_a` and `app_b` (`CREATEROLE` plus membership with admin option on those roles, check the PostgreSQL docs for the version you run). Note that a password change does not close existing sessions, so a role you leave valid for rollback keeps working until you set `NOLOGIN` and terminate its connections.
 
-Rollback follows the same shape: while `app_a` is still valid, re-pin the ExternalSecret to the previous version and the workloads go back to `app_a`. Mind connection limits and poolers: [[postgres-connection-pooling-gke]] explains why pools hold old credentials until connections are recycled, so the pooler needs a reload or restart too.
+Rollback follows the same shape: while `app_a` is still valid (not yet set to `NOLOGIN`), re-enable the old Secret Manager version if step 5 already disabled it (`gcloud secrets versions enable`; External Secrets cannot read a disabled version), then re-pin the ExternalSecret to it and the workloads go back to `app_a`. Mind connection limits and poolers: [[postgres-connection-pooling-gke]] explains why pools hold old credentials until connections are recycled, so the pooler needs a reload or restart too.
 
 **In-place change, only where two credentials are valid at once.** If the database or service lets one account hold two valid secrets at the same time, you can add the second one in place and skip the account swap. Do not assume it: PostgreSQL does not do this for a role password, and for other systems check the vendor docs for dual-password or multiple-key support before relying on it.
 
