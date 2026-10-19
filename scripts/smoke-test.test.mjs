@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
+import { mkdtempSync, readFileSync } from "node:fs"
 import { createServer } from "node:http"
+import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { after, test } from "node:test"
 import { fileURLToPath } from "node:url"
@@ -162,4 +164,90 @@ test("the old Access switches have no effect", async () => {
   const { code, out } = await run(s.url, { SMOKE_ALLOW_ACCESS: "1", SMOKE_REQUIRE_ACCESS: "1" })
   assert.equal(code, 1, out)
   assert.match(out, /redirects to a Cloudflare Access login/)
+})
+
+const loginFor = (path) =>
+  redirect(`https://team.cloudflareaccess.com/cdn-cgi/access/login/${path}`)
+const resultFile = () => join(mkdtempSync(join(tmpdir(), "smoke-")), "result")
+const readResult = (path) => readFileSync(path, "utf8")
+
+test("the opt-in accepts the Access login for this host", async () => {
+  const s = await start({ "/version.txt": loginFor("127.0.0.1?kid=x&redirect_url=%2F") })
+  const file = resultFile()
+  const { code, out } = await run(s.url, { SMOKE_ACCEPT_ACCESS: "1", SMOKE_RESULT_FILE: file })
+  assert.equal(code, 0, out)
+  assert.match(out, /::notice::.*behind Cloudflare Access.*content checks skipped/)
+  assert.match(out, /Smoke test skipped/)
+  assert.deepEqual(s.hits, ["/version.txt"])
+  assert.equal(readResult(file), "access\n")
+})
+
+test("without the opt-in the same Access redirect fails", async () => {
+  const s = await start({ "/version.txt": loginFor("127.0.0.1?kid=x") })
+  const file = resultFile()
+  const { code, out } = await run(s.url, { SMOKE_RESULT_FILE: file })
+  assert.equal(code, 1, out)
+  assert.match(out, /redirects to a Cloudflare Access login/)
+  assert.equal(readResult(file), "")
+})
+
+test("the opt-in does not accept a login for another host", async () => {
+  const s = await start({ "/version.txt": loginFor("stage-notes.example.workers.dev") })
+  const { code, out } = await run(s.url, { SMOKE_ACCEPT_ACCESS: "1" })
+  assert.equal(code, 1, out)
+  assert.match(out, /not for 127\.0\.0\.1/)
+})
+
+test("the opt-in does not accept a look-alike Access domain", async () => {
+  const s = await start({
+    "/version.txt": redirect(
+      "https://cloudflareaccess.com.evil.example/cdn-cgi/access/login/127.0.0.1",
+    ),
+  })
+  const { code, out } = await run(s.url, { SMOKE_ACCEPT_ACCESS: "1" })
+  assert.equal(code, 1, out)
+})
+
+test("the opt-in does not follow or accept a non-Access redirect", async () => {
+  const target = await start()
+  const s = await start({ "/version.txt": redirect(`${target.url}/version.txt`, 301) })
+  const { code, out } = await run(s.url, { SMOKE_ACCEPT_ACCESS: "1" })
+  assert.equal(code, 1, out)
+  assert.deepEqual(target.hits, [])
+})
+
+test("only the exact value 1 opts in", async () => {
+  const s = await start({ "/version.txt": loginFor("127.0.0.1") })
+  const { code, out } = await run(s.url, { SMOKE_ACCEPT_ACCESS: "true" })
+  assert.equal(code, 1, out)
+})
+
+test("the opt-in does not loosen a reachable site", async () => {
+  const s = await start({ "/static/graph.json": (res) => res.writeHead(404).end() })
+  const file = resultFile()
+  const { code, out } = await run(s.url, { SMOKE_ACCEPT_ACCESS: "1", SMOKE_RESULT_FILE: file })
+  assert.notEqual(code, 0, out)
+  assert.equal(readResult(file), "")
+})
+
+test("a healthy site with the opt-in is verified", async () => {
+  const s = await start()
+  const file = resultFile()
+  const { code, out } = await run(s.url, { SMOKE_ACCEPT_ACCESS: "1", SMOKE_RESULT_FILE: file })
+  assert.equal(code, 0, out)
+  assert.equal(readResult(file), "verified\n")
+})
+
+test("a 200 with an Access Location is not accepted by the opt-in", async () => {
+  const s = await start({
+    "/version.txt": (res) =>
+      res
+        .writeHead(200, {
+          location: "https://team.cloudflareaccess.com/cdn-cgi/access/login/127.0.0.1",
+        })
+        .end("other\n"),
+  })
+  const { code, out } = await run(s.url, { SMOKE_ACCEPT_ACCESS: "1" })
+  assert.equal(code, 1, out)
+  assert.match(out, /did not serve/)
 })

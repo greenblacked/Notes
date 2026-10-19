@@ -14,6 +14,16 @@
 # The version check is retried with a growing delay (custom domains and edge
 # propagation can lag a few minutes behind `wrangler deploy`). All other checks
 # run once the expected version is being served. Exits non-zero on any failure.
+#
+# Optional environment:
+#   SMOKE_ACCEPT_ACCESS=1   if /version.txt redirects (3xx) to the Cloudflare Access login for
+#                     this exact host, the test ends with exit 0 and a ::notice::. Content checks
+#                     are skipped because they cannot run through Access from CI. Only the stage
+#                     workers.dev Preview URL sets this; production never does. Any other value,
+#                     or no value, keeps the default: an Access redirect fails.
+#   SMOKE_RESULT_FILE=<path>  emptied at the start. The script writes "verified" when every check
+#                     passed, or "access" when it accepted the Access login. Nothing is written
+#                     on failure.
 set -euo pipefail
 
 if [[ $# -ne 3 ]]; then
@@ -37,6 +47,11 @@ MAX_ATTEMPTS="${SMOKE_MAX_ATTEMPTS:-10}"
 MAX_DELAY="${SMOKE_MAX_DELAY:-20}"
 CHECK_ROUNDS="${SMOKE_CHECK_ROUNDS:-6}"
 CHECK_DELAY="${SMOKE_CHECK_DELAY:-10}"
+ACCEPT_ACCESS="${SMOKE_ACCEPT_ACCESS:-}"
+RESULT_FILE="${SMOKE_RESULT_FILE:-}"
+HOST="${BASE_URL#*://}"
+HOST="${HOST%%/*}"
+HOST="${HOST%%:*}"
 # Identifiable User-Agent, so a Cloudflare WAF rule can recognise these requests
 # (see docs/deployment.md, Troubleshooting).
 USER_AGENT="${SMOKE_USER_AGENT:-notes-smoke-test/1 (+https://github.com/greenblacked/Notes)}"
@@ -53,6 +68,8 @@ fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+
+if [[ -n "$RESULT_FILE" ]]; then : >"$RESULT_FILE"; fi
 
 if [[ -n "$SMOKE_TEST_TOKEN" ]]; then
   # Passed through a file so the token never appears in the process list.
@@ -128,6 +145,13 @@ behind_access() {
   is_redirect "$2" && grep -qiE '^location:[[:space:]]*https://[^/[:space:]]+\.cloudflareaccess\.com/' "$WORK/$1.h"
 }
 
+# access_login_for_host <name>: true when Location is the Access login page for this very host
+# (https://<team>.cloudflareaccess.com/cdn-cgi/access/login/<host>), not just any Access URL.
+access_login_for_host() {
+  [[ "$HOST" =~ ^[A-Za-z0-9.-]+$ ]] || return 1
+  grep -qiE "^location:[[:space:]]*https://[a-z0-9-]+\.cloudflareaccess\.com/cdn-cgi/access/login/${HOST//./\\.}([/?#]|[[:space:]]*\$)" "$WORK/$1.h"
+}
+
 # fail_redirect <name> <path> <code>: a redirect is a failure, not something to follow.
 fail_redirect() {
   fail_on "$1" "GET $2 answered HTTP $3 redirecting to '$(header_value "$1" location)'; redirects are not followed and count as failures"
@@ -142,7 +166,18 @@ while true; do
   code="$(fetch "/version.txt?cb=$cb" version)"
   body="$(tr -d '\r\n' <"$WORK/version.b")"
   if behind_access version "$code"; then
+    if [[ "$ACCEPT_ACCESS" == "1" ]] && access_login_for_host version; then
+      echo "  attempt $attempt: HTTP $code to the Cloudflare Access login for $HOST"
+      echo "::notice::$BASE_URL is behind Cloudflare Access (redirect to its login page), so its content cannot be checked from CI; content checks skipped."
+      if [[ -n "$RESULT_FILE" ]]; then printf 'access\n' >"$RESULT_FILE"; fi
+      echo
+      echo "Smoke test skipped: Cloudflare Access login for $HOST"
+      exit 0
+    fi
     fail_on version "$BASE_URL redirects to a Cloudflare Access login; the site must be served directly"
+    if [[ "$ACCEPT_ACCESS" == "1" ]]; then
+      echo "        (the Access login is not for $HOST, so SMOKE_ACCEPT_ACCESS does not apply)"
+    fi
     echo
     echo "Smoke test FAILED ($FAILURES check(s) failed)"
     exit 1
@@ -279,4 +314,5 @@ if ((FAILURES > 0)); then
   echo "Smoke test FAILED ($FAILURES check(s) failed)"
   exit 1
 fi
+if [[ -n "$RESULT_FILE" ]]; then printf 'verified\n' >"$RESULT_FILE"; fi
 echo "Smoke test passed"
