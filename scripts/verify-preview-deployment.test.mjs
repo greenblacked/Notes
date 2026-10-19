@@ -12,6 +12,7 @@ import {
   EXIT_SUPERSEDED,
   SupersededError,
   parseArgs,
+  readPrevious,
 } from "./verify-preview-deployment.mjs"
 
 const SHA = "a".repeat(40)
@@ -30,6 +31,7 @@ const argv = [
   "--message",
   MESSAGE,
 ]
+const argvPrev = [...argv, "--previous", "d0"]
 const env = { CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: ACCOUNT }
 const good = (over = {}, annotations = {}) => ({
   success: true,
@@ -282,9 +284,9 @@ test("superseded: a different valid deployment after the whole budget", async ()
   const newer = reply(200, good({ id: "d2" }))
   // A brief lag is still retried first: ours appears on the 3rd attempt, so not superseded.
   const lag = fakeFetch(newer, newer, reply(200, good()))
-  assert.equal(await main(argv, env, deps(lag)), "active=true\nactive_deployment_id=d1")
+  assert.equal(await main(argvPrev, env, deps(lag)), "active=true\nactive_deployment_id=d1")
   const f = fakeFetch(newer)
-  await assert.rejects(main(argv, env, deps(f, 4)), (error) => {
+  await assert.rejects(main(argvPrev, env, deps(f, 4)), (error) => {
     assert.ok(error instanceof SupersededError)
     assert.equal(error.deploymentId, "d2")
     assert.match(error.message, /d2.*after 4 attempts/)
@@ -293,8 +295,41 @@ test("superseded: a different valid deployment after the whole budget", async ()
   assert.equal(f.calls.length, 4)
   // Transient errors earlier in the budget do not hide a superseded final answer.
   const mixed = fakeFetch(reply(500, {}), newer)
-  await assert.rejects(main(argv, env, deps(mixed, 3)), SupersededError)
+  await assert.rejects(main(argvPrev, env, deps(mixed, 3)), SupersededError)
   assert.equal(EXIT_SUPERSEDED, 3)
+})
+
+test("not superseded: a stale answer equal to the previous id, or no usable previous id", async () => {
+  const stale = reply(200, good({ id: "d0" }))
+  // Lag keeps returning the deployment this upload replaced: an ordinary failure, teardown runs.
+  const f = fakeFetch(stale)
+  await assert.rejects(main(argvPrev, env, deps(f, 3)), (error) => {
+    return !(error instanceof SupersededError) && /d0.*after 3 attempts/.test(error.message)
+  })
+  assert.equal(f.calls.length, 3)
+  // No --previous (pre-read failed or unknown): never superseded.
+  const other = reply(200, good({ id: "d2" }))
+  await assert.rejects(main(argv, env, deps(fakeFetch(other), 2)), (error) => {
+    return !(error instanceof SupersededError) && /after 2 attempts/.test(error.message)
+  })
+  // The Preview did not exist before (`none`): a different id is a real newer upload.
+  await assert.rejects(
+    main([...argv, "--previous", "none"], env, deps(fakeFetch(other), 2)),
+    SupersededError,
+  )
+})
+
+test("readPrevious: id, none for a missing Preview, unknown otherwise", async () => {
+  const opts = { token: TOKEN, accountId: ACCOUNT, worker: "notes", preview: "stage" }
+  const read = (f) => readPrevious({ ...opts, fetchImpl: f })
+  assert.equal(await read(fakeFetch(reply(200, good({ id: "d0" })))), "d0")
+  const err = (code) => reply(404, { success: false, errors: [{ code, message: "x" }] })
+  assert.equal(await read(fakeFetch(err(10025))), "none")
+  assert.equal(await read(fakeFetch(err(10222))), "none")
+  assert.equal(await read(fakeFetch(reply(500, {}))), "unknown")
+  assert.equal(await read(fakeFetch(new Error("boom"))), "unknown")
+  assert.equal(await read(fakeFetch(reply(200, good({ id: "bad id!" })))), "unknown")
+  assert.equal(await readPrevious({ ...opts, accountId: "nope" }), "unknown")
 })
 
 test("not superseded: transient last attempt, malformed answer, or our own mismatch", async () => {

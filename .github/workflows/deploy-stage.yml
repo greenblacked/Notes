@@ -256,6 +256,19 @@ jobs:
             fi
           fi
 
+      # The Preview's latest deployment before this upload. The active check uses it to tell a
+      # stale read of the replaced deployment from a newer upload by someone else. Never fails.
+      - name: Record the previous stage deployment
+        id: before
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          out="$(node scripts/verify-preview-deployment.mjs --read-previous --worker notes --preview stage)" || out="previous_deployment_id=unknown"
+          echo "$out"
+          echo "$out" >>"$GITHUB_OUTPUT"
+
       # `wrangler preview` creates or updates the Preview `stage`; its ENVIRONMENT var comes from
       # `previews.vars` in wrangler.jsonc (not production, so noindex). It does not touch
       # production or the routes.
@@ -289,13 +302,19 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           DEPLOYMENT_ID: ${{ steps.parse.outputs.deployment_id }}
+          PREVIOUS_ID: ${{ steps.before.outputs.previous_deployment_id }}
         run: |
           # Exit 3 means superseded: a newer valid deployment replaced ours (someone else uploaded
           # to the Preview). The run still fails, but the teardown skips it so that deployment
           # is not deleted.
           rc=0
+          previous=()
+          if [[ "$PREVIOUS_ID" =~ ^[A-Za-z0-9-]{1,64}$ && "$PREVIOUS_ID" != "unknown" ]]; then
+            previous=(--previous "$PREVIOUS_ID")
+          fi
           out="$(node scripts/verify-preview-deployment.mjs --worker notes --preview stage \
-            --deployment "$DEPLOYMENT_ID" --tag "$SHA" --message "stage ${SHA::7}")" || rc=$?
+            --deployment "$DEPLOYMENT_ID" --tag "$SHA" --message "stage ${SHA::7}" \
+            "${previous[@]}")" || rc=$?
           echo "$out"
           echo "$out" >>"$GITHUB_OUTPUT"
           if [[ "$rc" == "3" ]]; then
@@ -413,8 +432,8 @@ jobs:
       # Fail closed: once the upload was attempted, any failed or cancelled step after it takes the
       # Preview down, so stage keeps only an upload whose checks all passed (see `Decide the stage
       # result`). Exception: when the active check found the Preview superseded by a newer
-      # deployment (not ours), nothing is deleted; the run still fails. A failed delete counts as "already gone" only when Wrangler
-      # itself reports that the Preview "stage" was not found.
+      # deployment (not ours), nothing is deleted; the run still fails. A failed delete counts as
+      # "already gone" only when Wrangler itself reports that the Preview "stage" was not found.
       - name: Take stage down after a failed check
         id: teardown
         if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && steps.active.outputs.superseded != 'true' && (failure() || cancelled())

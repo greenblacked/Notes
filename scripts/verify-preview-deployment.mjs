@@ -12,10 +12,17 @@
  * and exits 1 with `error: <reason>` otherwise.
  *
  * Superseded: when, after the whole retry budget, the last answer is still a well-formed
- * deployment id different from ours (someone else uploaded to the Preview after this run), it
- * prints `superseded=true` and `superseded_by=<id>` and exits 3, so the caller can leave the newer
- * deployment alone. A tag or message mismatch on our own deployment, a transient error on the last
+ * deployment id different from ours AND different from the Preview's latest deployment before this
+ * run's upload (`--previous <id|none>`, read by `--read-previous` before the upload), it prints
+ * `superseded=true` and `superseded_by=<id>` and exits 3, so the caller can leave the newer
+ * deployment alone. An id equal to the previous one is a stale read (lag), not a newer upload: an
+ * ordinary failure. Without `--previous`, or when the pre-read failed (`unknown`), nothing is ever
+ * superseded. A tag or message mismatch on our own deployment, a transient error on the last
  * attempt, or a malformed answer is an ordinary failure (exit 1).
+ *
+ *   node scripts/verify-preview-deployment.mjs --read-previous --worker notes --preview stage
+ * prints `previous_deployment_id=<id>`, `none` (the Preview or its deployment does not exist yet)
+ * or `unknown` (the read failed), and always exits 0.
  *
  * "Active" means the Preview's `latest` deployment. A Preview has no gradual rollout: its URLs
  * serve the latest deployment. The check therefore requires `latest.id` to equal the deployment id
@@ -84,10 +91,15 @@ const FLAGS = {
   "--tag": ["tag", (v) => /^[0-9a-f]{40}$/.test(v)],
   "--message": ["message", (v) => v.length >= 1 && v.length <= 100],
 }
+/** Optional: the Preview's latest deployment id before this run's upload, or `none`. */
+const OPTIONAL_FLAGS = {
+  "--previous": ["previous", (v) => /^[A-Za-z0-9-]{1,64}$/.test(v)],
+}
 
 /**
  * @param {string[]} argv
- * @returns {{ worker: string, preview: string, deployment: string, tag: string, message: string }}
+ * @returns {{ worker: string, preview: string, deployment: string, tag: string, message: string,
+ *   previous?: string }}
  */
 export function parseArgs(argv) {
   /** @type {Record<string, string>} */
@@ -95,7 +107,7 @@ export function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i]
     const value = argv[i + 1]
-    const spec = FLAGS[flag]
+    const spec = FLAGS[flag] ?? OPTIONAL_FLAGS[flag]
     if (!spec || value === undefined) fail(USAGE)
     const [key, valid] = spec
     if (key in out || !valid(value)) fail(`${USAGE} (bad or repeated ${flag})`)
@@ -234,6 +246,29 @@ export async function fetchLatest({ token, accountId, worker, preview, fetchImpl
 }
 
 /**
+ * Reads the Preview's latest deployment id once, before the upload. Never throws: `none` when the
+ * Preview or its deployment does not exist yet, `unknown` on any other failure or odd answer.
+ *
+ * @param {{ token: string, accountId: string, worker: string, preview: string,
+ *   fetchImpl?: typeof fetch }} options
+ * @returns {Promise<string>}
+ */
+export async function readPrevious(options) {
+  try {
+    const body = await fetchLatest(options)
+    const id = isObject(body) && isObject(body.result) ? body.result.id : undefined
+    if (isObject(body) && body.success === true && typeof id === "string") {
+      return /^[A-Za-z0-9-]{1,64}$/.test(id) ? id : "unknown"
+    }
+    return "unknown"
+  } catch (error) {
+    const text = error instanceof Error ? error.message : ""
+    if (text.includes("does not exist)") || text.includes("has no deployment)")) return "none"
+    return "unknown"
+  }
+}
+
+/**
  * One bounded loop: at most `attempts` requests in total (default MAX_ATTEMPTS), one per
  * iteration, with `delayMs` between them. Transient errors and a stale deployment id both count
  * against that single budget; any other failure throws at once.
@@ -272,13 +307,37 @@ export async function main(argv, env, deps = {}) {
       supersededBy = error instanceof MismatchError ? error.otherId : undefined
     }
   }
-  if (supersededBy !== undefined) {
+  // Only a deployment that is neither ours nor the one that was live before our upload is newer
+  // than our upload. Without a known previous id, a stale read cannot be told from a newer upload.
+  if (supersededBy !== undefined && args.previous !== undefined && supersededBy !== args.previous) {
     throw new SupersededError(`${last} (after ${attempts} attempts; superseded)`, supersededBy)
   }
   return fail(`${last} (after ${attempts} attempts)`)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (process.argv[2] === "--read-previous") {
+    const argv = process.argv.slice(3)
+    let previous = "unknown"
+    if (
+      argv.length === 4 &&
+      argv[0] === "--worker" &&
+      argv[2] === "--preview" &&
+      /^[a-z0-9-]{1,63}$/.test(argv[1]) &&
+      /^[a-z0-9-]{1,63}$/.test(argv[3]) &&
+      process.env.CLOUDFLARE_API_TOKEN &&
+      /^[0-9a-f]{32}$/.test(process.env.CLOUDFLARE_ACCOUNT_ID ?? "")
+    ) {
+      previous = await readPrevious({
+        token: process.env.CLOUDFLARE_API_TOKEN,
+        accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
+        worker: argv[1],
+        preview: argv[3],
+      })
+    }
+    console.log(`previous_deployment_id=${previous}`)
+    process.exit(0)
+  }
   try {
     console.log(await main(process.argv.slice(2), process.env))
   } catch (error) {
