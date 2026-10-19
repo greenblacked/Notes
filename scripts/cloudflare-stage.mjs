@@ -219,9 +219,10 @@ export function coversPreview(app, host = null) {
 }
 
 class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, code) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -229,15 +230,18 @@ export const SKIP_MESSAGE =
   "Stage skipped: the Cloudflare token has no Access permission and no Access app protects stage.notes.szolotov.com; nothing was deployed."
 
 // Thrown by ensure-access only: no Access app covers stage and the Access API refused to create
-// one with HTTP 403. Nothing is uploaded; the job ends successfully.
+// one with HTTP 403 and a Cloudflare authentication or permission error. Nothing is uploaded; the
+// job ends successfully. Any other 403 (a WAF or edge block page, another error code) stays a failure.
 class StageNotDeployable extends Error {}
+const ACCESS_DENIED_CODES = new Set([10000, 9109])
 
 // Create an Access application. A 403 here (and only here) means the token cannot create one.
 async function createApp(client, body) {
   try {
     return await client.call("POST", `/accounts/${client.account}/access/apps`, body)
   } catch (e) {
-    if (e instanceof ApiError && e.status === 403) throw new StageNotDeployable(e.message)
+    if (e instanceof ApiError && e.status === 403 && ACCESS_DENIED_CODES.has(e.code))
+      throw new StageNotDeployable(e.message)
     throw e
   }
 }
@@ -283,6 +287,7 @@ function makeClient(fetchFn, env) {
       throw new ApiError(
         `${method} ${path.split("?")[0]} failed with HTTP ${res.status}${hint}`,
         res.status,
+        json && json.success === false ? code : undefined,
       )
     }
     return json
