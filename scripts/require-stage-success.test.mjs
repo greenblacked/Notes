@@ -176,6 +176,26 @@ test("ties on run_started_at fall back to run_number, then run_attempt", () => {
   assert.equal(b.code, 1, b.out)
 })
 
+test("refuses when any matching run has no run_started_at", () => {
+  for (const missing of [null, undefined]) {
+    const { code, out } = run({
+      pages: [
+        [mkRun({ run_number: 5 })],
+        [
+          mkRun({
+            run_number: 7,
+            run_started_at: missing,
+            status: "in_progress",
+            conclusion: null,
+          }),
+        ],
+      ],
+    })
+    assert.equal(code, 1, out)
+    assert.match(out, /no start time/)
+  }
+})
+
 test("refuses when there is no run", () => {
   const { code, out } = run({ pages: [[], []] })
   assert.equal(code, 1)

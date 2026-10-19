@@ -3,8 +3,9 @@
 # conclusion success AND its job "Update stage Preview" ran the step "Update the stage Preview"
 # with success. A run whose commit was no longer the head of main skips that step but still
 # succeeds, so a green run alone does not prove stage serves $SHA. Records the run checked in
-# $GITHUB_STEP_SUMMARY. "Most recently executed" is the latest run_started_at (a re-run keeps its
-# run number but gets a new start time), ties broken by run_number, then run_attempt. Used by cut-release.yml before it tags.
+# $GITHUB_STEP_SUMMARY. "Most recently executed" is the latest run_started_at (a re-run keeps
+# its run number but gets a new start time), ties broken by run_number, then run_attempt.
+# A matching run without a start time is refused (fail closed). Used by cut-release.yml before it tags.
 # The one exception is the very first release: while no release tag (vX.Y.Z) exists yet, the check
 # is skipped with a notice, because the stage Preview needs the custom domain, which only exists
 # after the first production deploy. If the tag lookup itself fails, the check fails closed.
@@ -56,9 +57,14 @@ fi
 runs="$(gh api "repos/$GH_REPO/actions/workflows/$workflow/runs?head_sha=$SHA&branch=main&per_page=100" \
   --paginate --jq '.workflow_runs[] | {id, run_number, run_attempt, run_started_at, head_sha, head_branch, status, conclusion}')"
 latest="$(jq -sc --arg sha "$SHA" \
-  'map(select(.head_sha == $sha and .head_branch == "main")) | max_by([(.run_started_at // ""), .run_number, .run_attempt]) // empty' <<<"$runs")"
+  'map(select(.head_sha == $sha and .head_branch == "main"))
+   | if any(.[]; (.run_started_at | type) != "string") then "MISSING"
+     else (max_by([.run_started_at, .run_number, .run_attempt]) // empty) end' <<<"$runs")"
 if [[ -z "$latest" ]]; then
   fail "No Deploy stage run found for $SHA on main. $retry"
+fi
+if [[ "$latest" == '"MISSING"' ]]; then
+  fail "A Deploy stage run for $SHA has no start time. $retry"
 fi
 
 id="$(jq -r '.id | tostring' <<<"$latest")"
