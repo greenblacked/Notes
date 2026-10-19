@@ -42,11 +42,14 @@ test("the run-in is inline, not a float, and applies only to callouts that do no
   const run = block[0]
   assert.doesNotMatch(section, /float:\s*left/)
   assert.match(run, /& > \.callout-title\s*\{\s*display:\s*inline/)
-  assert.match(run, /& > \.callout-content\s*\{\s*display:\s*inline/)
+  assert.match(run, /& > \.callout-title \+ \.callout-content\s*\{\s*display:\s*inline/)
   assert.match(
     run,
-    /> \.callout-content > p:first-child,\s*& > \.callout-title \+ p\s*\{\s*display:\s*inline/,
+    /& > \.callout-title \+ \.callout-content > p:first-child,\s*& > \.callout-title \+ p\s*\{\s*display:\s*inline/,
   )
+  // Content after a direct paragraph must stay a block.
+  assert.doesNotMatch(run, /\.callout-title \+ p \+ \.callout-content/)
+  assert.doesNotMatch(run, /&\s*>\s*\.callout-content\s*\{/)
   assert.doesNotMatch(run, /:has\(/)
 })
 

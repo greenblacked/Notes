@@ -2935,12 +2935,14 @@ sup a[data-footnote-ref] {
     margin-right: 0.25em;
   }
 
-  & > .callout-content {
+  // Content joins the title's line only when it follows the title directly. After a direct
+  // paragraph it stays a block, so its first paragraph starts a new line.
+  & > .callout-title + .callout-content {
     display: inline;
     overflow: visible;
   }
 
-  & > .callout-content > p:first-child,
+  & > .callout-title + .callout-content > p:first-child,
   & > .callout-title + p {
     display: inline;
   }
