@@ -488,4 +488,14 @@ jobs:
       - name: Report the stage result
         env:
           STAGE_RESULT: ${{ needs.build.result == 'success' && needs.build.outputs.current != 'true' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}
-        run: echo "stage_result=$STAGE_RESULT"
+        run: |
+          # Authoritative final value: also covers a skipped upload (main moved) and a build that
+          # failed before the upload job, where the upload job reports nothing.
+          level="${STAGE_RESULT:-failure}"
+          echo "::notice title=Stage result::$level"
+          {
+            echo
+            echo "### Stage result"
+            echo
+            echo "stage_result=$level"
+          } >>"$GITHUB_STEP_SUMMARY"

@@ -368,6 +368,12 @@ test("the result job reports skipped only when main moved on, and failure otherw
     "${{ needs.build.result == 'success' && needs.build.outputs.current != 'true' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}",
   )
   assert.equal(result.steps[0].env.STAGE_RESULT, expr)
+  // The result step always reports the final value: notice and summary line, env only.
+  const run = result.steps[0].run
+  assert.ok(run.includes('echo "::notice title=Stage result::$level"'))
+  assert.ok(run.includes('echo "stage_result=$level"'))
+  assert.ok(run.includes('>>"$GITHUB_STEP_SUMMARY"'))
+  assert.ok(!run.includes("${{"))
   // Evaluate the expression the way Actions does (empty string is falsy).
   const evaluate = (buildResult, current, output) =>
     (buildResult === "success" && current !== "true" && "skipped") || output || "failure"
