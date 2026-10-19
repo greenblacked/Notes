@@ -60,8 +60,8 @@ test("the guard accepts main only", () => {
   assert.ok(!run.includes("refs/heads/dev"))
 })
 
-test("the upload job uses the staging environment", () => {
-  assert.equal(upload.environment.name, "staging")
+test("the upload job uses the stage environment", () => {
+  assert.equal(upload.environment.name, "stage")
 })
 
 test("every freshness check targets main", () => {
