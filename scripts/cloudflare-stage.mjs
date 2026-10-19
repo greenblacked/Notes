@@ -4,11 +4,15 @@
 //                      Custom Domain or DNS record shadows the Preview hostname
 //   ensure-access      create the stage Access application when none covers stage: a copy of the
 //                      dev one when it exists, else a new one that allows STAGE_ACCESS_EMAIL
-//                      (Deploy stage runs it before every preflight)
+//                      (Deploy stage runs it before every preflight). When no app covers stage
+//                      and the Access API refuses the create with HTTP 403 (the token has no
+//                      Access permission), it writes deployable=false to GITHUB_OUTPUT and exits
+//                      0 so that the job uploads nothing; every other error still fails
 //   retire-dev-access  delete the Access application that covers only dev.notes.szolotov.com
 //                      (Deploy stage runs it after a verified deploy)
 // Reads CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. Never prints them, nor any policy
 // include/exclude value (they hold emails): only ids, names, types, hosts and decisions.
+import { appendFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 
 const API = "https://api.cloudflare.com/client/v4"
@@ -214,7 +218,29 @@ export function coversPreview(app, host = null) {
   )
 }
 
-class ApiError extends Error {}
+class ApiError extends Error {
+  constructor(message, status) {
+    super(message)
+    this.status = status
+  }
+}
+
+export const SKIP_MESSAGE =
+  "Stage skipped: the Cloudflare token has no Access permission and no Access app protects stage.notes.szolotov.com; nothing was deployed."
+
+// Thrown by ensure-access only: no Access app covers stage and the Access API refused to create
+// one with HTTP 403. Nothing is uploaded; the job ends successfully.
+class StageNotDeployable extends Error {}
+
+// Create an Access application. A 403 here (and only here) means the token cannot create one.
+async function createApp(client, body) {
+  try {
+    return await client.call("POST", `/accounts/${client.account}/access/apps`, body)
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 403) throw new StageNotDeployable(e.message)
+    throw e
+  }
+}
 
 function makeClient(fetchFn, env) {
   const token = env.CLOUDFLARE_API_TOKEN
@@ -254,7 +280,10 @@ function makeClient(fetchFn, env) {
                   : EDIT_SCOPE_HINT
             }`
           : ""
-      throw new ApiError(`${method} ${path.split("?")[0]} failed with HTTP ${res.status}${hint}`)
+      throw new ApiError(
+        `${method} ${path.split("?")[0]} failed with HTTP ${res.status}${hint}`,
+        res.status,
+      )
     }
     return json
   }
@@ -501,13 +530,14 @@ async function createOwnerApp(client, before, out) {
       },
     ],
   }
-  const created = await client.call("POST", `/accounts/${client.account}/access/apps`, body)
+  const created = await createApp(client, body)
   out(`Created Access application ${created.result?.id ?? "?"} for the owner on ${STAGE_HOST}`)
   const after = await accessCheck(client, out)
   if (!after.ok) throw new ApiError("the new Access application still does not protect stage")
   const host = await previewHostOf(client, out, "the app covers stage only; a re-run adds the host")
   const app = after.apps.find((a) => a.id === created.result?.id)
   if (host && app) await addPreviewHost(client, app, host, out)
+  return { deployable: true }
 }
 
 // An application this script created covers stage but not the Preview host (the subdomain lookup
@@ -531,7 +561,7 @@ async function ensureAccess(client, out) {
   if (before.ok) {
     out(`::notice::An Access application already protects ${STAGE_HOST}; nothing to do.`)
     await completePreviewHost(client, before, out)
-    return
+    return { deployable: true }
   }
   const dev = before.apps.find((a) => a.type === "self_hosted" && isDevOnly(a))
   if (!dev) return createOwnerApp(client, before, out)
@@ -557,10 +587,11 @@ async function ensureAccess(client, out) {
       ? policies.map((p, i) => ({ id: p.id, precedence: p.precedence ?? i + 1 }))
       : policies.map(copy),
   }
-  const created = await client.call("POST", `/accounts/${client.account}/access/apps`, body)
+  const created = await createApp(client, body)
   out(`Created Access application ${created.result?.id ?? "?"} for ${STAGE_HOST}`)
   const after = await accessCheck(client, out)
   if (!after.ok) throw new ApiError("the new Access application still does not protect stage")
+  return { deployable: true }
 }
 
 async function retireDevAccess(client, out) {
@@ -588,6 +619,14 @@ async function retireDevAccess(client, out) {
 
 const COMMANDS = { preflight, "ensure-access": ensureAccess, "retire-dev-access": retireDevAccess }
 
+// GitHub Actions files; both are no-ops outside Actions.
+function writeOutput(env, key, value) {
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `${key}=${value}\n`)
+}
+function writeSummary(env, line) {
+  if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${line}\n`)
+}
+
 export async function main(
   argv,
   { fetch: fetchFn = globalThis.fetch, env = process.env, out = console.log } = {},
@@ -598,9 +637,18 @@ export async function main(
     return 2
   }
   try {
-    await cmd(makeClient(fetchFn, env), out)
+    const result = await cmd(makeClient(fetchFn, env), out)
+    if (argv[0] === "ensure-access")
+      writeOutput(env, "deployable", result?.deployable ? "true" : "false")
     return 0
   } catch (e) {
+    if (e instanceof StageNotDeployable && argv[0] === "ensure-access") {
+      out(`Access API refused: ${e.message}`)
+      out(`::notice::${SKIP_MESSAGE}`)
+      writeOutput(env, "deployable", "false")
+      writeSummary(env, SKIP_MESSAGE)
+      return 0
+    }
     if (!(e instanceof ApiError)) throw e
     out(`::error::${e.message}`)
     return 1
