@@ -4,7 +4,7 @@
   // through worker/index.js, which adds security headers, serves /robots.txt and sets cache policy.
   //   - production: `wrangler deploy` from release tags (Cut release) at https://notes.szolotov.com
   //   - stage: a Worker Preview named `stage` (`wrangler preview`, deployed on every merge to
-  //     `main`) at https://stage.notes.szolotov.com, behind Cloudflare Access. See
+  //     `main`) at https://stage.notes.szolotov.com, public and noindex. See
   //     docs/deployment.md#stage-preview.
   "name": "notes",
   "main": "worker/index.js",
