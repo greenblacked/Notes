@@ -94,6 +94,7 @@ updates:
   "schedule": ["before 6am on monday"],
   "timezone": "Europe/Kyiv",
   "prConcurrentLimit": 5,
+  "minimumReleaseAge": "3 days",
   "packageRules": [
     {
       "matchUpdateTypes": ["minor", "patch"],
@@ -102,9 +103,14 @@ updates:
     },
     {
       "matchUpdateTypes": ["patch"],
+      "matchManagers": ["npm"],
       "matchCurrentVersion": "!/^0/",
       "automerge": true,
       "automergeType": "pr"
+    },
+    {
+      "matchManagers": ["terraform", "helm-values", "helmv3", "gitlabci", "dockerfile"],
+      "automerge": false
     },
     {
       "matchUpdateTypes": ["major"],
@@ -115,6 +121,8 @@ updates:
   "vulnerabilityAlerts": { "labels": ["security"] }
 }
 ```
+
+The `minimumReleaseAge` of 3 days is a proposed default from [[dependency-update-policy]], so a release that is yanked or found malicious within days is not adopted at once. Automerge is limited to patch updates of the `npm` manager (an example; list the ecosystems where you have a required test gate), and a later rule switches it off for Terraform, Helm, GitLab CI and Dockerfile updates, including base images, which a person reviews. Renovate applies matching `packageRules` in order, so the later `false` wins.
 
 Preset names and option keys change between releases, so validate the file (below) and read the current preset documentation before adopting any of them. The `Europe/Kyiv` timezone is an example; use yours.
 

@@ -115,6 +115,8 @@ promote-prod:
 
 The image reference above is a placeholder: replace `X.Y.Z` and the digest with a real pinned version ([[dockerfile-hardening]]). `jf eot` prints the exchanged token rather than configuring the CLI, so the job captures it into `JF_ACCESS_TOKEN`; the output field name (`AccessToken` here) is an assumption to confirm in the CLI docs. `--copy=true` makes the promotion copy instead of move, so `ci-promote-prod` does not need delete permission on the staging repository. The exact CLI command for the exchange (shown here as `jf eot`) and its flags differ by version: confirm with `jf --help` and the CLI documentation before use.
 
+One honest limit: in this example the GitLab ID token is a positional argument to `jf eot`, so the short-lived JWT is visible in the job pod's process list for as long as that command runs. That is accepted here because the token is short-lived, bound to one audience and useless outside the exchange, and the pod is single-tenant. If your CLI version can read the token from an environment variable or stdin, prefer that form (check the current JFrog CLI docs; do not assume a flag exists).
+
 ### The identity mapping
 
 The mapping is where least privilege is actually enforced. It must say "this claim set gets this group", and nothing broader. Illustrative claims, using GitLab's documented claim names:

@@ -60,14 +60,16 @@ docker network create jenkins-lab-net 2>/dev/null || true
 docker network connect jenkins-lab-net jenkins-lab    # the controller container from Delivery 02
 
 JENKINS_URL="http://jenkins-lab:8080"          # the controller as seen from the agent container
-AGENT_SECRET="$(cat ~/.agent1-secret)"         # Change: the secret from the node page, saved with mode 600
-
+# Change: ~/.agent1.env holds the secret from the node page, saved with mode 600:
+#   JENKINS_SECRET=<secret from the node page>
+# Verify the variable names (JENKINS_URL, JENKINS_AGENT_NAME, JENKINS_SECRET, JENKINS_WEB_SOCKET) in the image docs.
 docker run -d --name agent1 --init --network jenkins-lab-net \
-  jenkins/inbound-agent:<tag> \
-  -url "$JENKINS_URL" -secret "$AGENT_SECRET" -name agent1 -webSocket
+  --env-file ~/.agent1.env \
+  -e JENKINS_URL="$JENKINS_URL" -e JENKINS_AGENT_NAME=agent1 -e JENKINS_WEB_SOCKET=true \
+  jenkins/inbound-agent:<tag>
 ```
 
-`<tag>` is a tag you have checked on Docker Hub. The connection flags (`-webSocket`, `-url`, `-secret`, `-name`, `-workDir`) differ between versions of the agent, and some versions take them as environment variables instead; check the image documentation. The secret is a credential: read it from a file, do not paste it into a shared terminal or a script in Git.
+`<tag>` is a tag you have checked on Docker Hub. The connection flags (`-webSocket`, `-url`, `-secret`, `-name`, `-workDir`) differ between versions of the agent, and some versions take them as environment variables instead; check the image documentation. The secret is a credential. The example passes it as an environment variable from a file, not as a `-secret` argument, because command-line arguments show up in `ps` and in `docker inspect`. Environment variables still show in `docker inspect` for anyone with access to the Docker daemon, so outside a lab mount the secret as a file or use your orchestrator's secret mechanism (check the image documentation for a file-based form). Do not paste it into a shared terminal or a script in Git.
 
 ### Labels
 

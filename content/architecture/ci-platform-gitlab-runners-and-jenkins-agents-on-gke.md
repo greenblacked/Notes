@@ -194,8 +194,9 @@ kubectl --context "$CTX" get pods -A -o json \
       | .metadata.namespace + "/" + .metadata.name'
 
 # Zone 1 cannot reach the metadata server (expect a timeout)
+# Pinned to a version tag here; pin by digest in real use (look up the current tag and digest yourself).
 if kubectl --context "$CTX" -n ci-mr run nettest --rm -i --restart=Never \
-  --image=curlimages/curl -- curl -s -m 5 -H "Metadata-Flavor: Google" \
+  --image=curlimages/curl:8.10.1 -- curl -s -m 5 -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/; then
   echo "FAIL: zone 1 reaches metadata" >&2
   exit 1
