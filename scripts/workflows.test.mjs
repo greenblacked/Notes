@@ -174,7 +174,7 @@ test("scripts run in the deploy jobs import only Node built-ins", () => {
   for (const name of used) {
     const source = readFileSync(join(root, "scripts", name), "utf8")
     const specs = [
-      ...source.matchAll(/^\s*import\s[^;\n]*?from\s*["']([^"']+)["']/gm),
+      ...source.matchAll(/^\s*(?:import|export)\s[^;'"]*?from\s*["']([^"']+)["']/gm),
       ...source.matchAll(/^\s*import\s*["']([^"']+)["']/gm),
       ...source.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g),
     ].map((m) => m[1])
