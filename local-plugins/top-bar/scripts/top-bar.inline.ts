@@ -422,13 +422,6 @@ document.addEventListener(
   true,
 )
 
-// The OS colour scheme changing (Quartz follows it): this listener is added before Quartz's, which
-// is added at "nav", so the class is on before that flip too.
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-  const id = beginSwitch()
-  afterPaint(() => endSwitch(id))
-})
-
 // Any other source of "themechange": switch transitions off from here on.
 document.addEventListener("themechange", () => {
   if (root.classList.contains(SWITCHING)) return
