@@ -434,6 +434,71 @@ test("ensure-access reports deployable=true when stage is covered or created", a
   assert.equal(covered.summary, "")
 })
 
+test("ensure-access reports deployable=true after creating the owner app", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ensure-"))
+  const outFile = join(dir, "output")
+  const api = statefulApi([])
+  const code = await main(["ensure-access"], {
+    fetch: api.fetchFn,
+    env: { ...OWNER_ENV, GITHUB_OUTPUT: outFile },
+    out: () => {},
+  })
+  assert.equal(code, 0)
+  assert.equal(api.calls.filter((c) => c.key === "POST apps").length, 1)
+  assert.equal(readFileSync(outFile, "utf8"), "deployable=true\n")
+})
+
+test("ensure-access fails without a valid STAGE_ACCESS_EMAIL and never posts", async () => {
+  for (const email of [undefined, "nope"]) {
+    const env = { ...OWNER_ENV }
+    if (email === undefined) delete env.STAGE_ACCESS_EMAIL
+    else env.STAGE_ACCESS_EMAIL = email
+    const r = await ensureWith(
+      { ...cleanRoutes([]), "POST /accounts/acc/access/apps": { status: 403 } },
+      env,
+    )
+    assert.equal(r.code, 1)
+    assert.equal(r.output, "")
+    assert.ok(!r.calls.some((c) => c.key === "POST /accounts/acc/access/apps"))
+  }
+})
+
+test("ensure-access fails on a network error", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ensure-"))
+  const outFile = join(dir, "output")
+  const lines = []
+  const code = await main(["ensure-access"], {
+    fetch: async () => {
+      throw new Error("boom")
+    },
+    env: { ...OWNER_ENV, GITHUB_OUTPUT: outFile },
+    out: (l) => lines.push(l),
+  })
+  assert.equal(code, 1)
+  assert.equal(existsSync(outFile) ? readFileSync(outFile, "utf8") : "", "")
+})
+
+test("ensure-access still fails on a 403 that is not an auth error (non-JSON or other code)", async () => {
+  const bodies = [{ success: false, errors: [{ code: 1020 }] }, null]
+  for (const body of bodies) {
+    const dir = mkdtempSync(join(tmpdir(), "ensure-"))
+    const outFile = join(dir, "output")
+    const base = fakeFetch(cleanRoutes([]))
+    const lines = []
+    const code = await main(["ensure-access"], {
+      fetch: async (url, init = {}) => {
+        if (init.method === "POST")
+          return new Response(body ? JSON.stringify(body) : "<html>blocked</html>", { status: 403 })
+        return base(url, init)
+      },
+      env: { ...OWNER_ENV, GITHUB_OUTPUT: outFile },
+      out: (l) => lines.push(l),
+    })
+    assert.equal(code, 1, lines.join("\n"))
+    assert.equal(existsSync(outFile) ? readFileSync(outFile, "utf8") : "", "")
+  }
+})
+
 test("ensure-access still fails on a 5xx from the create", async () => {
   const r = await ensureWith({
     ...cleanRoutes([]),

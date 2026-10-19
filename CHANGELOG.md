@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Changed
+
+- Deploy stage ends successfully without uploading anything when no Access application covers stage and the token cannot create one (HTTP 403 from the Access API): a notice and the job summary say "Stage skipped", and the later steps and the teardown are skipped. Any other error, and any unsafe Access application, still fails the run.
+
 ## [0.5.0] - 2026-10-19
 
 ### Added
@@ -32,7 +36,6 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
-- Deploy stage ends successfully without uploading anything when no Access application covers stage and the token cannot create one (HTTP 403 from the Access API): a notice and the job summary say "Stage skipped", and the later steps and the teardown are skipped. Any other error, and any unsafe Access application, still fails the run.
 - The note's local graph is now `local-plugins/note-graph`, drawn with Canvas 2D; the graph no longer downloads the full content index. Tags no longer count as depth hops, as in Obsidian.
 - The pre-production site is **stage**, at https://stage.notes.szolotov.com (the Worker Preview `stage`, behind Cloudflare Access). The flow is main-only: pull requests go into `main`, CI and Dependabot run for `main` only, **Deploy stage** (`deploy-stage.yml`) deploys every merge to `main` (and Run workflow from `main`), only for the owner, in the environment `staging`, and production is cut from `main` with Cut release. The Dev Preview (`deploy-dev.yml`) and dev.notes.szolotov.com are retired automatically after a verified stage deploy.
 - Deploy stage refuses to upload unless the Cloudflare API shows an Access application covering stage and no Custom Domain or DNS record for the host. After the upload, the workers.dev Preview URL must redirect to Access, otherwise the Preview is deleted; the stage Preview is also deleted after any failed or cancelled step once the upload was attempted (`SMOKE_REQUIRE_ACCESS` in `scripts/smoke-test.sh`, `scripts/cloudflare-stage.mjs`). `DEV_SMOKE_TEST` is gone.
