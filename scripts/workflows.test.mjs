@@ -152,4 +152,6 @@ test("cleanup deployments is dispatch only, owner only, deployments: write only 
   assert.equal(w.on.workflow_dispatch.inputs.environments.default, "dev staging repo-admin")
   assert.equal(w.on.workflow_dispatch.inputs.include_failed_stage.default, true)
   assert.ok(!/environment=production/.test(text))
+  assert.equal(w.jobs.cleanup.environment, undefined)
+  assert.ok(w.jobs.cleanup.steps.every((s) => s.uses === undefined))
 })
