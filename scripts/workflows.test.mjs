@@ -108,6 +108,41 @@ test("cut-release re-checks the head of main right before creating the tag", () 
   assert.ok(!require.run.includes("${{"))
 })
 
+test("cut-release requires a green Deploy stage run after CI and before the notes", () => {
+  const cut = wf["cut-release.yml"].jobs.cut
+  const steps = cut.steps
+  const ci = steps.findIndex((s) => s.name === "Require a successful CI run for this commit")
+  const stage = steps.findIndex((s) => s.run === ".github/scripts/require-stage-success.sh")
+  const notes = steps.findIndex((s) => s.name === "Write the release notes from CHANGELOG.md")
+  assert.ok(ci >= 0 && stage > ci && notes > stage)
+  for (const key of ["if", "continue-on-error", "env", "with"]) {
+    assert.equal(steps[stage][key], undefined, key)
+  }
+  assert.equal(cut.env.GH_TOKEN, "${{ github.token }}")
+  assert.equal(cut.env.SHA, "${{ github.sha }}")
+  assert.equal(cut.permissions.actions, "write")
+})
+
+test("the stage gate names match deploy-stage.yml", () => {
+  const w = wf["deploy-stage.yml"]
+  assert.equal(w.name, "Deploy stage")
+  assert.equal(w.jobs.upload.name, "Update stage Preview")
+  const preview = w.jobs.upload.steps.filter((s) => s.name === "Update the stage Preview")
+  assert.equal(preview.length, 1)
+  assert.equal(preview[0].id, "preview")
+  const script = readFileSync(join(root, ".github", "scripts", "require-stage-success.sh"), "utf8")
+  for (const part of [
+    'workflow="deploy-stage.yml"',
+    "actions/workflows/$workflow/runs",
+    'job_name="Update stage Preview"',
+    'step_name="Update the stage Preview"',
+    "set -euo pipefail",
+  ]) {
+    assert.ok(script.includes(part), part)
+  }
+  assert.ok(!script.includes("event="))
+})
+
 test("ci runs for main only", () => {
   const on = wf["ci.yml"].on
   assert.deepEqual(on.pull_request.branches, ["main"])
