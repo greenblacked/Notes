@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 ### Added
 
 - **Cleanup deployments** (`cleanup-deployments.yml`, manual, from `main`, owner only): deletes the old deployment records of `dev`, `staging` and `repo-admin` and the failed ones of `stage`, so the Deployments list shows only `stage` and `production`. It never touches `production`.
+- **Delete merged branches** (`delete-merged-branches.yml`, manual, from `main`, owner only, dry run by default): deletes branches merged into `main` at their current head and the leftover branches named in its `extra` input (default `dev feature/notes-site`). It never deletes `main`, the default branch, Dependabot branches, protected branches or branches with an open pull request, and lists every decision with the branch head in the job summary.
 
 ### Changed
 

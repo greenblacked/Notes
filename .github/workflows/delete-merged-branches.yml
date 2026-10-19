@@ -1,0 +1,218 @@
+name: Delete merged branches
+
+# Deletes branches whose work is merged into main, plus the leftover branches named in `extra`.
+# Run workflow from `main`, only for the repository owner. It is a dry run by default and never
+# deletes main, the default branch, Dependabot branches, protected branches or a branch with an
+# open pull request. See docs/deployment.md#deleting-merged-branches.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only report what would be deleted (turn off to delete)"
+        type: boolean
+        default: true
+      extra:
+        description: "Branches to delete without a merged pull request, space separated (never main or dependabot/*)"
+        type: string
+        default: "dev feature/notes-site"
+
+permissions: {}
+
+concurrency:
+  group: delete-merged-branches
+  cancel-in-progress: false
+
+jobs:
+  delete:
+    name: Delete merged branches
+    # Forks never run it (their Actions skip quietly instead of failing).
+    if: github.repository == 'greenblacked/Notes'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # delete branch refs
+      pull-requests: read # list pull requests
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      REF: ${{ github.ref }}
+      EVENT: ${{ github.event_name }}
+      ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      EXTRA: ${{ inputs.extra }}
+    steps:
+      - name: Require main, the owner and valid inputs
+        run: |
+          set -euo pipefail
+          if [[ "$REPO" != "greenblacked/Notes" ]]; then
+            echo "::error::Unexpected repository '$REPO'."
+            exit 1
+          fi
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "::error::Delete merged branches runs only from main (this run was started from '$REF')."
+            exit 1
+          fi
+          if [[ "$EVENT" != "workflow_dispatch" ]]; then
+            echo "::error::Unexpected event '$EVENT'."
+            exit 1
+          fi
+          if [[ "$ACTOR" != "greenblacked" || "$TRIGGERING_ACTOR" != "greenblacked" ]]; then
+            echo "::error::Delete merged branches is limited to the repository owner (actor '$ACTOR', triggered by '$TRIGGERING_ACTOR')."
+            exit 1
+          fi
+          if [[ "$DRY_RUN" != "true" && "$DRY_RUN" != "false" ]]; then
+            echo "::error::dry_run must be true or false."
+            exit 1
+          fi
+          list_re='^[A-Za-z0-9._/-]+( [A-Za-z0-9._/-]+)*$'
+          if [[ -n "$EXTRA" && ! "$EXTRA" =~ $list_re ]]; then
+            echo "::error::The extra input must be branch names (letters, digits, '.', '_', '-', '/') separated by single spaces."
+            exit 1
+          fi
+          name_re='^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$'
+          for b in $EXTRA; do
+            if [[ ! "$b" =~ $name_re || "$b" == *..* || "$b" == *.lock || "$b" == *. || ${#b} -gt 100 ]]; then
+              echo "::error::'$b' is not a valid branch name."
+              exit 1
+            fi
+            shopt -s nocasematch
+            if [[ "$b" == "main" || "$b" == "head" || "$b" == dependabot/* ]]; then
+              echo "::error::Refusing to delete '$b' (main and dependabot/* are never deleted)."
+              exit 1
+            fi
+            shopt -u nocasematch
+          done
+
+      # A branch is deleted only when a pull request from it into main was merged at its current
+      # head (nothing was pushed after the merge), or when it is listed in `extra`. Open pull
+      # requests keep a branch; for `extra` only open Dependabot pull requests based on it do not,
+      # because GitHub closes them with the branch and Dependabot opens its updates against main.
+      - name: Delete the branches
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/delete-branches"
+          mkdir -p "$work"
+          : >"$work/rows.md"
+          failed=0
+          # Written on exit, so a failure partway through still lists what was already deleted.
+          # shellcheck disable=SC2317 # called from the EXIT trap
+          write_summary() {
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "### Delete merged branches (dry run, nothing deleted)"
+            else
+              echo "### Delete merged branches"
+            fi
+            echo
+            echo "| Branch | Head | Decision | Reason |"
+            echo "| --- | --- | --- | --- |"
+            cat "$work/rows.md"
+          } >>"$GITHUB_STEP_SUMMARY"
+          trap write_summary EXIT
+          default_branch=$(gh api "repos/$REPO" --jq '.default_branch')
+          gh api --paginate "repos/$REPO/branches?per_page=100" \
+            --jq '.[] | [.name, .commit.sha, (.protected | tostring)] | @tsv' >"$work/branches.tsv"
+          gh api --paginate "repos/$REPO/pulls?state=all&per_page=100" \
+            --jq '.[] | {number, state, merged: (.merged_at != null), author: (.user.login // ""), head_repo: (.head.repo.full_name // ""), head_ref: .head.ref, head_sha: .head.sha, base_ref: .base.ref}' \
+            | jq -s '.' >"$work/pulls.json"
+
+          OPEN_HEAD='.state == "open" and .head_repo == env.R and .head_ref == env.B'
+          OPEN_BASE_PEOPLE='.state == "open" and .base_ref == env.B and .author != "dependabot[bot]"'
+          OPEN_BASE_BOT='.state == "open" and .base_ref == env.B and .author == "dependabot[bot]"'
+          MERGED_AT_HEAD='.merged and .head_repo == env.R and .head_ref == env.B and .base_ref == "main" and .head_sha == env.S'
+
+          # Prints the matching pull requests as "#1 #2" (empty when none): branch, head SHA, condition.
+          pulls() {
+            B="$1" S="$2" R="$REPO" jq -r '[.[] | select('"$3"') | "#" + (.number | tostring)] | join(" ")' "$work/pulls.json"
+          }
+          cell() {
+            if [[ "$1" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+              printf '<code>%s</code>' "$1"
+            else
+              printf '(other characters, see the log)'
+            fi
+          }
+          # Records a decision: branch, head SHA, decision, reason.
+          report() {
+            echo "$1 ($2): $3, $4"
+            printf '| %s | %s | %s | %s |\n' "$(cell "$1")" "$2" "$3" "$4" >>"$work/rows.md"
+          }
+          # Deletes one branch unless this is a dry run or its head moved: branch, head SHA, reason.
+          remove() {
+            local path current
+            path=$(B="$1" jq -rn 'env.B | split("/") | map(@uri) | join("/")')
+            if [[ "$DRY_RUN" == "true" ]]; then
+              report "$1" "$2" "would delete" "$3"
+              return 0
+            fi
+            current=$(gh api "repos/$REPO/git/ref/heads/$path" --jq '.object.sha') || current=""
+            if [[ "$current" != "$2" ]]; then
+              report "$1" "$2" kept "its head changed during the run; run it again"
+              return 0
+            fi
+            if gh api -X DELETE "repos/$REPO/git/refs/heads/$path" >/dev/null; then
+              report "$1" "$2" deleted "$3"
+            else
+              report "$1" "$2" failed "GitHub refused the delete (a ruleset may block it)"
+              failed=1
+            fi
+          }
+
+          while IFS=$'\t' read -r -u 3 name sha protected; do
+            listed=false
+            for e in $EXTRA; do
+              if [[ "$e" == "$name" ]]; then listed=true; fi
+            done
+            if [[ "$name" == "main" || "$name" == "$default_branch" ]]; then
+              report "$name" "$sha" kept "main or the default branch"
+              continue
+            fi
+            if [[ "$name" == dependabot/* ]]; then
+              report "$name" "$sha" kept "Dependabot branch"
+              continue
+            fi
+            if [[ "$protected" == "true" ]]; then
+              report "$name" "$sha" kept "protected branch"
+              continue
+            fi
+            open_head=$(pulls "$name" "$sha" "$OPEN_HEAD")
+            if [[ -n "$open_head" ]]; then
+              report "$name" "$sha" kept "open pull request from it: $open_head"
+              continue
+            fi
+            open_people=$(pulls "$name" "$sha" "$OPEN_BASE_PEOPLE")
+            if [[ -n "$open_people" ]]; then
+              report "$name" "$sha" kept "base of open pull request $open_people"
+              continue
+            fi
+            open_bot=$(pulls "$name" "$sha" "$OPEN_BASE_BOT")
+            if [[ "$listed" == "true" ]]; then
+              reason="listed in extra"
+              if [[ -n "$open_bot" ]]; then
+                reason="$reason; GitHub closes the open Dependabot pull requests based on it ($open_bot)"
+              fi
+              remove "$name" "$sha" "$reason"
+              continue
+            fi
+            if [[ -n "$open_bot" ]]; then
+              report "$name" "$sha" kept "base of open Dependabot pull request $open_bot (list it in extra to delete it)"
+              continue
+            fi
+            merged=$(pulls "$name" "$sha" "$MERGED_AT_HEAD")
+            if [[ -z "$merged" ]]; then
+              report "$name" "$sha" kept "no pull request into main merged at its current head"
+              continue
+            fi
+            remove "$name" "$sha" "merged into main by $merged at its current head"
+          done 3<"$work/branches.tsv"
+
+          for e in $EXTRA; do
+            if ! awk -F '\t' -v b="$e" '$1 == b { found = 1 } END { exit !found }' "$work/branches.tsv"; then
+              report "$e" "-" "not found" "listed in extra, no such branch"
+            fi
+          done
+
+          if [[ "$failed" -ne 0 ]]; then
+            echo "::error::Some branches could not be deleted; see the summary."
+            exit 1
+          fi
