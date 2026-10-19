@@ -89,15 +89,17 @@ Lead time is the difference between the commit timestamp and the successful depl
 
 ## Measuring from Jenkins
 
-Jenkins does not model deployments natively. Add an explicit event at the end of a successful production job, for example from a shared library step (see [[jenkins-shared-libraries]]) that posts to a metrics store.
+Jenkins does not model deployments natively. Add an explicit event at the end of a successful production job, for example from a shared library step (see [[jenkins-shared-libraries]]) that posts to a metrics store. The endpoint must authenticate writers, otherwise anyone on the network can forge deployment records.
 
 ```bash title="Emit a deployment event (Jenkins post step)"
 EVENTS_URL="https://metrics.example.com/events"
+EVENTS_TOKEN="${EVENTS_TOKEN:?inject from a Jenkins credential via withCredentials}"
 SERVICE="payments-api"
 COMMIT_SHA="${GIT_COMMIT:?}"
 DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 curl --silent --fail --header "Content-Type: application/json" \
+  --header "Authorization: Bearer ${EVENTS_TOKEN}" \
   --data "{\"type\":\"deployment\",\"service\":\"${SERVICE}\",\"sha\":\"${COMMIT_SHA}\",\"at\":\"${DEPLOYED_AT}\",\"environment\":\"production\"}" \
   "${EVENTS_URL}"
 ```
