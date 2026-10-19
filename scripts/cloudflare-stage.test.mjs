@@ -1,4 +1,7 @@
 import assert from "node:assert/strict"
+import { existsSync, mkdtempSync, readFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { test } from "node:test"
 import {
   coversPreview,
@@ -135,6 +138,7 @@ test("a 403 on the apps endpoint gives the scope message, and the token is never
   const r = await run(["preflight"], { "GET /accounts/acc/access/apps": { status: 403 } })
   assert.equal(r.code, 1)
   assert.match(r.text, /Access: Apps and Policies/)
+  assert.match(r.text, /failed with HTTP 403 \(code 10000\): /)
   assert.ok(!r.text.includes(TOKEN))
   const ok = await run(["preflight"], cleanRoutes([stageApp]))
   assert.ok(!ok.text.includes(TOKEN))
@@ -372,18 +376,171 @@ test("ensure-access does not create a second app beside an unsafe one", async ()
   assert.ok(!api.calls.some((c) => c.key === "POST apps"))
 })
 
-test("ensure-access names the missing scope when the create is refused", async () => {
+function ensureWith(routes, env = OWNER_ENV) {
+  const dir = mkdtempSync(join(tmpdir(), "ensure-"))
+  const outFile = join(dir, "output")
+  const summaryFile = join(dir, "summary")
+  const lines = []
+  const calls = []
+  return main(["ensure-access"], {
+    fetch: fakeFetch(routes, calls),
+    env: { ...env, GITHUB_OUTPUT: outFile, GITHUB_STEP_SUMMARY: summaryFile },
+    out: (l) => lines.push(l),
+  }).then((code) => {
+    const read = (f) => (existsSync(f) ? readFileSync(f, "utf8") : "")
+    return {
+      code,
+      text: lines.join("\n"),
+      calls,
+      output: read(outFile),
+      summary: read(summaryFile),
+    }
+  })
+}
+
+test("ensure-access skips stage (exit 0, deployable=false) when no app covers it and the create is 403", async () => {
+  const r = await ensureWith({
+    ...cleanRoutes([]),
+    "POST /accounts/acc/access/apps": { status: 403 },
+  })
+  assert.equal(r.code, 0, r.text)
+  assert.equal(r.output, "deployable=false\n")
+  assert.match(r.text, /::notice::Stage skipped: the Cloudflare token has no Access permission/)
+  assert.equal(
+    r.summary,
+    "Stage skipped: the Cloudflare token has no Access permission and no Access app protects stage.notes.szolotov.com; nothing was deployed.\n",
+  )
+  assert.ok(!r.text.includes(TOKEN))
+})
+
+test("ensure-access skips also when the dev app copy is refused with 403", async () => {
+  const dev = {
+    id: "d1",
+    type: "self_hosted",
+    domain: "dev.notes.szolotov.com",
+    policies: [okPolicy],
+  }
+  const r = await ensureWith({
+    ...cleanRoutes([dev]),
+    "POST /accounts/acc/access/apps": { status: 403 },
+  })
+  assert.equal(r.code, 0, r.text)
+  assert.equal(r.output, "deployable=false\n")
+})
+
+test("ensure-access reports deployable=true when stage is covered or created", async () => {
+  const covered = await ensureWith(cleanRoutes([stageApp]))
+  assert.equal(covered.code, 0, covered.text)
+  assert.equal(covered.output, "deployable=true\n")
+  assert.equal(covered.summary, "")
+})
+
+test("ensure-access reports deployable=true after creating the owner app", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ensure-"))
+  const outFile = join(dir, "output")
+  const api = statefulApi([])
+  const code = await main(["ensure-access"], {
+    fetch: api.fetchFn,
+    env: { ...OWNER_ENV, GITHUB_OUTPUT: outFile },
+    out: () => {},
+  })
+  assert.equal(code, 0)
+  assert.equal(api.calls.filter((c) => c.key === "POST apps").length, 1)
+  assert.equal(readFileSync(outFile, "utf8"), "deployable=true\n")
+})
+
+test("ensure-access fails without a valid STAGE_ACCESS_EMAIL and never posts", async () => {
+  for (const email of [undefined, "nope"]) {
+    const env = { ...OWNER_ENV }
+    if (email === undefined) delete env.STAGE_ACCESS_EMAIL
+    else env.STAGE_ACCESS_EMAIL = email
+    const r = await ensureWith(
+      { ...cleanRoutes([]), "POST /accounts/acc/access/apps": { status: 403 } },
+      env,
+    )
+    assert.equal(r.code, 1)
+    assert.equal(r.output, "")
+    assert.ok(!r.calls.some((c) => c.key === "POST /accounts/acc/access/apps"))
+  }
+})
+
+test("ensure-access fails on a network error", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ensure-"))
+  const outFile = join(dir, "output")
   const lines = []
   const code = await main(["ensure-access"], {
-    fetch: fakeFetch({
-      ...cleanRoutes([]),
-      "POST /accounts/acc/access/apps": { status: 403 },
-    }),
-    env: OWNER_ENV,
+    fetch: async () => {
+      throw new Error("boom")
+    },
+    env: { ...OWNER_ENV, GITHUB_OUTPUT: outFile },
     out: (l) => lines.push(l),
   })
   assert.equal(code, 1)
-  assert.match(lines.join("\n"), /Account > Access: Apps and Policies > Edit/)
+  assert.equal(existsSync(outFile) ? readFileSync(outFile, "utf8") : "", "")
+})
+
+test("ensure-access still fails on a 403 that is not an auth error (non-JSON or other code)", async () => {
+  const bodies = [{ success: false, errors: [{ code: 1020 }] }, null]
+  for (const body of bodies) {
+    const dir = mkdtempSync(join(tmpdir(), "ensure-"))
+    const outFile = join(dir, "output")
+    const base = fakeFetch(cleanRoutes([]))
+    const lines = []
+    const code = await main(["ensure-access"], {
+      fetch: async (url, init = {}) => {
+        if (init.method === "POST")
+          return new Response(body ? JSON.stringify(body) : "<html>blocked</html>", { status: 403 })
+        return base(url, init)
+      },
+      env: { ...OWNER_ENV, GITHUB_OUTPUT: outFile },
+      out: (l) => lines.push(l),
+    })
+    assert.equal(code, 1, lines.join("\n"))
+    assert.equal(existsSync(outFile) ? readFileSync(outFile, "utf8") : "", "")
+    const text = lines.join("\n")
+    if (body) assert.match(text, /failed with HTTP 403 \(code 1020\)/)
+    else assert.doesNotMatch(text, /\(code/)
+    assert.ok(!text.includes(OWNER_ENV.CLOUDFLARE_API_TOKEN ?? TOKEN))
+  }
+})
+
+test("ensure-access still fails on a 5xx from the create", async () => {
+  const r = await ensureWith({
+    ...cleanRoutes([]),
+    "POST /accounts/acc/access/apps": { status: 500, body: { success: false } },
+  })
+  assert.equal(r.code, 1)
+  assert.equal(r.output, "")
+  assert.match(r.text, /::error::/)
+})
+
+test("ensure-access still fails on a 403 when the apps list itself is refused", async () => {
+  const r = await ensureWith({ "GET /accounts/acc/access/apps": { status: 403 } })
+  assert.equal(r.code, 1)
+  assert.equal(r.output, "")
+  assert.match(r.text, /Account · Access: Apps and Policies/)
+})
+
+test("ensure-access still fails on an unsafe app and never reaches the create", async () => {
+  const bypass = {
+    id: "b1",
+    type: "self_hosted",
+    domain: "stage.notes.szolotov.com",
+    policies: [{ id: "x", decision: "bypass", include: [{ everyone: {} }] }],
+  }
+  const r = await ensureWith({
+    ...cleanRoutes([bypass]),
+    "POST /accounts/acc/access/apps": { status: 403 },
+  })
+  assert.equal(r.code, 1)
+  assert.equal(r.output, "")
+  assert.ok(!r.calls.some((c) => c.key === "POST /accounts/acc/access/apps"))
+})
+
+test("ensure-access fails on a 502 from the apps list", async () => {
+  const r = await ensureWith({ "GET /accounts/acc/access/apps": { status: 502, body: {} } })
+  assert.equal(r.code, 1)
+  assert.equal(r.output, "")
 })
 
 test("retire-dev-access deletes only an exact dev-only app", async () => {
