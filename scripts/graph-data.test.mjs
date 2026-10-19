@@ -120,8 +120,8 @@ test("a built contentIndex.json, when present, gives a small graph", (t) => {
   const g = buildGraphData(JSON.parse(fs.readFileSync(file, "utf8")))
   assert.ok(g.nodes.length >= 100)
   const text = JSON.stringify(g)
-  assert.ok(text.length <= 80 * 1024, `graph.json is ${text.length} bytes`)
-  assert.ok(gzipSync(text).length <= 24 * 1024)
+  assert.ok(text.length <= 128 * 1024, `graph.json is ${text.length} bytes`)
+  assert.ok(gzipSync(text).length <= 32 * 1024)
 })
 
 test("contentIndexToData (dev fallback) agrees with buildGraphData", () => {

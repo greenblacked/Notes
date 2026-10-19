@@ -5,7 +5,7 @@ tags:
   - ai
   - meta
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-10-19
 draft: false
 ---
 
@@ -16,12 +16,25 @@ These notes cover using AI agents and assistants in delivery and operations with
 - [[securing-ai-agents-in-ci-and-cloud|Securing AI agents that have repository or cloud access]]: rules for running coding and operations agents in CI or with cloud credentials, covering tokens, triggers, isolation, egress, human gates and data handling.
 - [[ai-generated-code-policy-and-provenance|Policy for AI-generated code - review, provenance and audit trail]]: a team policy for code written with AI assistants covering ownership, review rules, optional provenance records, licence questions and evidence for auditors.
 - [[ai-code-review-bots|AI code review bots in GitLab and GitHub]]: run AI review on merge requests as an advisory reviewer that comments only, with deterministic gates kept, triage, usefulness metrics and data handling.
+- [[gcp-iam-guardrails-for-agent-service-accounts|GCP IAM guardrails for AI agent service accounts]]: one service account per task, IAM conditions, deny policies, short-lived impersonation and outer fences for agents in Google Cloud.
+- [[prompt-injection-test-harness-for-ci-agents|Testing CI agents against prompt injection, including tool and MCP inputs]]: a repeatable suite of planted instructions with canary secrets and fail-closed assertions on tool calls and egress.
+- [[ai-coding-assistant-admin-controls|Admin controls for AI coding assistants: seats, data, telemetry and deny rules]]: the settings an admin controls on coding assistants and how to verify each one.
+- [[llm-assisted-terraform-plan-review|LLM-assisted Terraform plan review: what the model checks and what it must not decide]]: an advisory model review of redacted plan JSON after deterministic gates, with a human approving every apply.
 
 ## Operations and teams
 
 - [[ai-assisted-incident-response|AI-assisted incident response, what to automate and what never to]]: how to use AI assistants during incidents and postmortems with read-only access, evidence-first prompts and a clear list of actions that always need a human.
 - [[rolling-out-ai-tools-in-a-team|Rolling out AI coding tools in a DevOps team]]: an engineering manager's guide to piloting AI coding and review assistants with a baseline, outcome metrics, security review, cost tracking and a go or no-go decision.
 - [[agent-skills-and-shared-workflows|Agent skills and shared workflows for platform teams]]: treat agent instructions, skills and prompt files as versioned platform assets with review, pinned consumption, least-privilege tool lists and tests.
+- [[llm-log-analysis-and-alert-triage|LLM-assisted log analysis and alert triage without losing evidence]]: deterministic clustering, evidence-linked summaries and advisory alert triage that never silences.
+- [[rag-over-runbooks-for-on-call|RAG over internal runbooks for on-call: access control, citations, staleness and evaluation]]: a retrieval assistant that enforces permissions, cites sources, flags stale pages and is gated on golden questions.
+- [[verifying-ai-generated-runbooks|Verifying AI-generated runbooks before on-call uses them]]: check every drafted step against the live system and a staging dry run, with a named owner and a last-verified date.
+
+## Evaluation and cost
+
+- [[evaluating-ai-tools-for-a-platform-team|Evaluating AI tools for a platform team: security scorecard and bake-off on your own repos]]: screen tools on data and security, then compare them on real past changes with CI-measured outcomes.
+- [[measuring-ai-impact-on-delivery|Measuring AI impact on delivery without fooling yourself]]: cohorts, a fixed baseline and counter-metrics around the DORA keys, instead of vanity figures.
+- [[llm-api-cost-control|Cost control for LLM APIs: gateway budgets, token caps and a kill switch]]: bound LLM spend with a gateway, per-team keys, caps, budget alerts, a kill switch and a tool-call audit trail.
 
 The owner's agent skills and workflows live in [the owner's AI skills catalogue](https://ai.szolotov.com).
 

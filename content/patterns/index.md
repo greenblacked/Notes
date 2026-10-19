@@ -5,7 +5,7 @@ tags:
   - patterns
   - meta
 created: 2026-10-10
-modified: 2026-10-17
+modified: 2026-10-19
 draft: false
 ---
 
@@ -25,6 +25,10 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[release-versioning-and-changelog-automation|Release versioning and changelog automation]]: derive versions and changelogs from Conventional Commits, and choose between a release merge request model and release on push, with configuration, linting and token handling.
 - [[helm-chart-ci-quality-gates|Helm chart CI quality gates]]: layered CI checks for Helm charts, from lint and a values matrix to unit tests, schema validation, kubeconform and chart-testing on changed charts only.
 - [[test-sharding-flaky-tests|Test sharding and flaky-test management in CI]]: split test suites by timing history on GitLab CI and Jenkins, retry only infrastructure failures, and run a quarantine process with owners and deadlines.
+- [[artifactory-remote-repo-caching-for-ci|Caching public registries through Artifactory remote repositories for CI]]: put Artifactory remote and virtual repositories in front of Docker Hub, npm, PyPI, Maven and Helm so CI survives upstream rate limits and outages.
+- [[artifactory-access-tokens-and-oidc-for-ci|Scoped Artifactory access for CI with access tokens and OIDC]]: replace shared Artifactory passwords in CI with short-lived scoped access tokens or OIDC federation from GitLab CI and Jenkins, with permission targets per repository.
+- [[buildkit-registry-cache-in-ci|BuildKit registry cache in CI]]: export and import BuildKit layer cache through a registry in GitLab CI and Jenkins for fast image builds, without letting untrusted branches poison the cache.
+- [[gitlab-ci-components-and-includes|Reusable GitLab CI components and includes with versioned inputs]]: share pipeline logic across projects with include, CI/CD components and the catalog, using typed inputs and pinned semver versions.
 
 ## Kubernetes and GKE
 
@@ -39,12 +43,20 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[progressive-delivery-argo-rollouts|Progressive delivery with Argo Rollouts and metric analysis]]: run canary releases with Argo Rollouts under Argo CD, gate each step on Prometheus metrics, and abort or promote safely.
 - [[stateful-workloads-gke|Stateful workloads on GKE: StatefulSets, PDBs and node upgrades]]: shape StatefulSets, PodDisruptionBudgets, zone spread and regional disks so a quorum-based workload survives GKE node upgrades and drains.
 - [[kubernetes-node-sysctls|Kernel and sysctl tuning for Kubernetes nodes]]: the Linux kernel limits that cause intermittent failures on Kubernetes nodes, how to measure each, and where to change it on GKE, self-managed nodes and in a pod.
+- [[gke-blue-green-releases|Blue-green releases on GKE with Service selectors and Gateway API weights]]: run two full stacks side by side on GKE, smoke-test the idle one, switch traffic by Service selector or HTTPRoute weights, and roll back in seconds.
+- [[spinnaker-canary-analysis|Canary analysis with Spinnaker and Kayenta]]: gate Spinnaker deployments to GKE on Kayenta canary judgement against Prometheus or Cloud Monitoring metrics, with abort and rollback paths.
+- [[gke-node-pool-upgrade-strategies|GKE node pool upgrade strategies: surge and blue-green]]: choose surge or blue-green upgrades per GKE node pool, set them in Terraform, and plan for PDBs, quota, soak time and rollback.
+- [[helm-library-and-umbrella-charts|Helm library charts and umbrella charts]]: share Helm templates through a library chart, decide when an umbrella chart is justified, and version and test both without value collisions.
+- [[pod-disruption-budgets-for-stateless-services|PodDisruptionBudgets for stateless services]]: choose minAvailable or maxUnavailable, set the unhealthy pod eviction policy, and avoid PDBs that deadlock GKE upgrades and node drains.
+- [[priority-classes-and-preemption|Pod priority classes and preemption]]: protect critical workloads with tiered PriorityClasses, keep batch jobs non-preempting, and avoid preemption storms on GKE Standard and Autopilot.
+- [[topology-spread-constraints-gke|Spreading stateless replicas across zones and nodes on GKE]]: use topologySpreadConstraints to spread replicas across zones and nodes, pick whenUnsatisfiable, and combine spread with PDBs, HPA and regional node pools.
 
 ## Infrastructure as code
 
 - [[terraform-module-and-state-layout|Terraform module and state layout]]: a repository layout, remote state in GCS, version pinning and GitLab plan/apply flow that keep Terraform changes small, reviewable and recoverable.
 - [[terraform-testing|Testing Terraform modules, static checks, terraform test and Terratest]]: three levels of Terraform module tests, from fmt and tflint to mocked terraform test runs and Terratest in a sandbox project, and when each one pays off.
 - [[terraform-plan-policy-checks|Policy checks on Terraform plans]]: evaluate Terraform plan JSON with Conftest and static scanners in GitLab CI, and treat plan files as secrets, so risky GCP changes are stopped before apply.
+- [[terraform-module-versioning|Terraform module versioning and upgrades]]: version shared Terraform modules with semver tags, pin consumers and providers, and roll module upgrades through environments without surprise plans.
 
 ## Data
 
@@ -57,12 +69,15 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[image-signing-and-admission-verification|Image signing with cosign and verification at admission]]: sign image digests in GitLab CI or Jenkins, define an identity policy per repository, and enforce it at admission with Kyverno or Binary Authorization.
 - [[cloud-kms-key-management|Cloud KMS key management and rotation]]: key rings and keys per environment on Google Cloud KMS, rotation, safe disable and destroy, IAM separation, org policy guardrails, CMEK for GKE and Cloud SQL.
 - [[gcp-audit-logs-siem|GCP audit logs and SIEM feeds]]: route Cloud Audit Logs, GKE audit logs and Security Command Center findings to a central project and a SIEM, with locked retention, cost control and detection filters.
+- [[secret-rotation-without-downtime|Rotating application secrets without downtime]]: rotate credentials with overlapping validity: add the new version, roll consumers, then revoke the old one, across Secret Manager and External Secrets.
 
 ## Edge
 
 - [[cloudflare-cache-strategy|Cloudflare cache strategy with Cache Rules, Cache-Control and purge]]: decide between origin headers and Cache Rules, set cache keys and stale directives, purge by tag or URL, and avoid caching personalised responses on Cloudflare.
 - [[edge-waf-rate-limiting|Edge WAF and rate limiting with Cloudflare and Cloud Armor]]: layer Cloudflare and Cloud Armor WAF and rate limits as code, with a log-first rollout, skip rules for probes, false-positive handling and rollback.
 - [[cloudflare-access-service-tokens|Cloudflare Access for internal apps with Terraform and service tokens]]: manage Cloudflare Access applications and policies as code, give CI and probes machine access with service tokens, rotate them, and validate the JWT at the origin.
+- [[cert-manager-dns01-cloud-dns|cert-manager issuance with DNS-01 on Cloud DNS]]: design cert-manager ClusterIssuers on GKE with a Cloud DNS DNS-01 solver and Workload Identity, staged on the ACME staging endpoint before production.
+- [[external-dns-on-gke|ExternalDNS on GKE with Cloud DNS]]: let ExternalDNS manage Cloud DNS records from Ingress, Service and Gateway resources with Workload Identity, ownership TXT records and a safe sync policy.
 
 ## Hosts
 

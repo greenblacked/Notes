@@ -32,6 +32,19 @@ Standards say how the team works: how notes are written, how production changes 
 - [[artifact-retention-policy|Artifact retention and cleanup policy]]: retention rules for CI artifacts, images, packages and caches across GitLab, GCS, Artifact Registry and Artifactory, with automated cleanup that protects anything deployed.
 - [[bash-scripts|Bash script standard]]: structure, safety rules and ShellCheck CI gating for Bash in ops repositories, with copy-ready templates and a rule for when to switch to Python.
 
+## Platform and delivery standards
+
+- [[alert-and-runbook-standard|Alert and runbook standard]]: actionable-only paging, required alert labels and annotations, severity routing, rule tests, and the required sections, testing and retirement of the runbooks alerts link to.
+- [[api-deprecation-policy|API deprecation policy for platform and Kubernetes APIs]]: announce, warn, sunset and remove stages for internal APIs, Deprecation and Sunset headers, consumer tracking, and the removed-API gate before GKE upgrades.
+- [[artifactory-artifact-naming-and-versioning|Artifactory repository and artifact naming standard]]: repository keys, virtual resolution order, write permissions, artifact names, immutable versions and build-info rules for Docker, Helm, Maven, npm and generic artifacts.
+- [[branching-and-merge-standard|Branching and merge standard]]: branch model and naming, protected branches, merge methods, required checks, release tags and the hotfix path for infrastructure and site repositories.
+- [[ci-pipeline-standard|CI pipeline standard for GitLab CI and Jenkins]]: required stages, pinning, timeouts, retries, caches, protected deploys and required checks for GitLab CI and Jenkins pipelines.
+- [[dependency-update-policy|Dependency update and end-of-life policy]]: update classes, deadlines, auto-merge limits, ownership of majors and end-of-life tracking for base images, CI tools, charts, providers, runtimes and GKE.
+- [[dockerfile-standard|Dockerfile standard]]: required and forbidden Dockerfile rules, a hadolint CI gate, a base-image allowlist, OCI labels and tag rules, with a reviewer checklist.
+- [[helm-chart-standard|Helm chart standard: required rules, versioning and exceptions]]: enforceable MUST and SHOULD rules for in-house Helm charts, chart version bump rules, values deprecation, CI enforcement and the exception path.
+- [[kubernetes-labels-and-annotations-standard|Kubernetes labels, annotations and naming standard]]: required labels and annotations, object naming rules, selector immutability, and how cost, ownership and policy tooling rely on them, with CI and admission enforcement.
+- [[terraform-module-standard|Terraform module standard]]: required files, input and output contracts, version constraints, lock file rules, testing and breaking-change rules for Terraform modules we publish or consume.
+
 ## Changing this site
 
 - Use Conventional Commits (for example `feat:`, `fix:`, `docs:`, `ci:`, `build:`, `chore:`, optionally scoped as `fix(ci):`) and keep the subject line to 72 characters or fewer.
