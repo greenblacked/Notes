@@ -13,9 +13,10 @@ const files = readdirSync(dir)
 const raw = Object.fromEntries(files.map((f) => [f, readFileSync(join(dir, f), "utf8")]))
 const wf = Object.fromEntries(files.map((f) => [f, parse(raw[f])]))
 
-test("the workflow set is exactly ci, cut-release, deploy-production and deploy-stage", () => {
+test("the workflow set is exactly ci, cleanup-deployments, cut-release, deploy-production and deploy-stage", () => {
   assert.deepEqual(files, [
     "ci.yml",
+    "cleanup-deployments.yml",
     "cut-release.yml",
     "deploy-production.yml",
     "deploy-stage.yml",
@@ -132,4 +133,25 @@ test("the attribution check runs in ci and gates CI OK", () => {
     (s.uses ?? "").startsWith("actions/checkout"),
   )
   assert.equal(checkout.with["fetch-depth"], 0)
+})
+
+test("cleanup deployments is dispatch only, owner only, deployments: write only and refuses production", () => {
+  const w = wf["cleanup-deployments.yml"]
+  assert.deepEqual(Object.keys(w.on), ["workflow_dispatch"])
+  assert.deepEqual(w.permissions, {})
+  assert.deepEqual(w.jobs.cleanup.permissions, { deployments: "write" })
+  const text = raw["cleanup-deployments.yml"]
+  const run = w.jobs.cleanup.steps.map((s) => s.run ?? "").join("\n")
+  assert.ok(run.includes("refs/heads/main"))
+  assert.ok(run.includes('"$ACTOR" != "greenblacked"'))
+  assert.ok(run.includes('"$TRIGGERING_ACTOR" != "greenblacked"'))
+  assert.ok(text.includes("github.repository == 'greenblacked/Notes'"))
+  assert.ok(run.includes("set -euo pipefail"))
+  assert.ok(run.includes("^[a-z0-9-]+( [a-z0-9-]+)*$"))
+  assert.ok(run.includes("*production*"))
+  assert.equal(w.on.workflow_dispatch.inputs.environments.default, "dev staging repo-admin")
+  assert.equal(w.on.workflow_dispatch.inputs.include_failed_stage.default, true)
+  assert.ok(!/environment=production/.test(text))
+  assert.equal(w.jobs.cleanup.environment, undefined)
+  assert.ok(w.jobs.cleanup.steps.every((s) => s.uses === undefined))
 })

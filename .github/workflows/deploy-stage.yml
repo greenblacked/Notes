@@ -2,13 +2,13 @@ name: Deploy stage
 
 # Runs on every push to `main` (a merged PR) and on Run workflow from `main`, only for the
 # repository owner. It updates the Worker Preview `stage` of the Worker `notes`, served at
-# https://stage.notes.szolotov.com behind Cloudflare Access (see
-# docs/deployment.md#stage-preview). Production is not touched: Previews never change
-# production traffic.
+# https://stage.notes.szolotov.com (public, not indexed: the Worker sends noindex on every host
+# but production; see docs/deployment.md#stage-preview). Production is not touched: Previews
+# never change production traffic.
 #
 # The `guard` job refuses any other ref, event, repository or actor, so the jobs that hold the
-# Cloudflare token only ever run code of `main` (the environment `staging` allows the branch
-# `main` only).
+# Cloudflare token only ever run code of `main` (a `main`-only branch policy on the
+# environment `stage` is recommended hardening; the guard is what enforces it).
 #
 # Two jobs: `build` runs the (third-party plugin) build code with no secrets and no
 # environment; `upload` has the secrets, installs only wrangler (tools/, without
@@ -156,7 +156,7 @@ jobs:
     permissions:
       contents: read
     environment:
-      name: staging
+      name: stage
       url: https://stage.notes.szolotov.com
     env:
       SHA: ${{ github.sha }}
@@ -214,121 +214,13 @@ jobs:
 
       # The token never lives at job level: each step that needs it sets it. Only wrangler and the
       # Node built-ins run next to it.
-      # Reads only when a stage Access app exists. When none covers stage it copies a dev-only
-      # app, or else creates one that allows the owner's email (a public address). It runs before
-      # the preflight on every deploy.
-      #
-      # When no app covers stage and the token has no Access permission (HTTP 403 on the create),
-      # the step succeeds with deployable=false: every later step is skipped, nothing is uploaded.
-      - name: Ensure Cloudflare Access for stage
-        id: access
-        if: steps.fresh.outputs.current == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-          STAGE_ACCESS_EMAIL: zolotov.98@gmail.com
-        run: node scripts/cloudflare-stage.mjs ensure-access
-
-      # Fail closed: nothing is uploaded unless an Access application covers stage and no Custom
-      # Domain or DNS record shadows the Preview hostname.
-      - name: Require Cloudflare Access and a clean hostname
-        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/cloudflare-stage.mjs preflight
-
-      # `wrangler preview` creates or updates the Preview `stage`; its ENVIRONMENT var comes from
-      # `previews.vars` in wrangler.jsonc (not production, so noindex). It does not touch
-      # production or the routes.
-      - name: Update the stage Preview
-        id: preview
-        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
-        run: tools/node_modules/.bin/wrangler preview --name stage --message "stage ${SHA::7}" --tag "$SHA"
-
-      # Parsing is its own step so that the teardown depends only on the upload having been
-      # attempted, not on whether Wrangler's output could be read.
-      - name: Read the Preview URLs
-        id: parse
-        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
-        env:
-          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
-        run: |
-          out="$(node scripts/read-wrangler-output.mjs --preview "$WRANGLER_OUTPUT_FILE_PATH")"
-          echo "$out"
-          echo "$out" >>"$GITHUB_OUTPUT"
-
-      - name: Require the custom domain Preview URL
-        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
-        env:
-          STAGE_URL: ${{ steps.parse.outputs.custom_url }}
-        run: |
-          if [[ "$STAGE_URL" != "https://stage.notes.szolotov.com" ]]; then
-            echo "::error::The stage Preview is not served at https://stage.notes.szolotov.com (Wrangler reported '$STAGE_URL'). notes.szolotov.com must be enabled for Production and Preview. See docs/deployment.md#stage-preview."
-            exit 1
-          fi
-          echo "::notice::Stage preview: https://stage.notes.szolotov.com"
-          {
-            echo "### Stage preview"
-            echo
-            echo "https://stage.notes.szolotov.com (commit \`${SHA::7}\`)"
-          } >>"$GITHUB_STEP_SUMMARY"
-
-      # Bot Fight Mode answers GitHub-hosted runners with 403 on the custom domains, so the
-      # exposure check runs on the Preview's workers.dev URL, which must redirect to the Access
-      # login. There is no skip switch: a switch would turn the exposure check off.
-      - name: Require Access on the workers.dev Preview URL
-        id: access_wd
-        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
-        env:
-          SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
-          WORKERS_DEV_URL: ${{ steps.parse.outputs.workers_dev_url }}
-          SMOKE_REQUIRE_ACCESS: "1"
-        run: |
-          if [[ -z "$WORKERS_DEV_URL" ]]; then
-            echo "::error::Wrangler reported no workers.dev URL for the Preview; enable preview_urls and workers_dev in wrangler.jsonc."
-            exit 1
-          fi
-          # Exit 3 marks an exposure. Any failure after the upload (including DNS, TLS or a 5xx
-          # while the Preview propagates) also takes the unverified Preview down in the teardown
-          # step, so the Preview stays only when every check passed.
-          rc=0
-          scripts/smoke-test.sh "$WORKERS_DEV_URL" "stage+$SHA" noindex || rc=$?
-          if [[ "$rc" -eq 3 ]]; then
-            echo "exposed=true" >>"$GITHUB_OUTPUT"
-          fi
-          exit "$rc"
-
-      - name: Probe the custom domain
-        id: access_cd
-        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
-        run: |
-          res="$(curl --proto '=https' --tlsv1.2 -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 30 \
-            --user-agent 'notes-smoke-test/1 (+https://github.com/greenblacked/Notes)' \
-            https://stage.notes.szolotov.com/version.txt || true)"
-          code="${res%% *}"
-          loc="${res#* }"
-          if [[ "$code" =~ ^2[0-9][0-9]$ ]]; then
-            echo "::error::stage.notes.szolotov.com is publicly reachable (not behind Cloudflare Access)."
-            exit 1
-          elif [[ "$code" =~ ^3[0-9][0-9]$ && "$loc" =~ ^https://[^/]+\.cloudflareaccess\.com/ ]]; then
-            echo "::notice::stage.notes.szolotov.com redirects to the Cloudflare Access login."
-          elif [[ "$code" == "403" ]]; then
-            echo "::notice::stage.notes.szolotov.com answered 403 (Bot Fight Mode); Access verified by the API preflight."
-          else
-            echo "::notice::stage.notes.szolotov.com answered HTTP $code."
-          fi
-
-      # Before the teardown on purpose: a failure here (for example no safe Access app left for
-      # stage after the dev app is deleted) triggers failure() and takes the Preview down.
-      # Idempotent. Remove once a run log shows both "nothing to delete" notices.
-      - name: Retire the dev Preview
+      # The old Preview `dev` (dev.notes.szolotov.com) is retired: delete it. Idempotent: a missing
+      # Preview counts as deleted only when Wrangler itself reports it as not found (API code
+      # 10025); any other error fails the run before anything is uploaded. Remove this step once a
+      # run log shows "nothing to delete".
+      - name: Delete the old dev Preview
         id: retire
-        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
+        if: steps.fresh.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -348,24 +240,96 @@ jobs:
             fi
           fi
 
-      - name: Retire the dev Access app
-        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
+      # `wrangler preview` creates or updates the Preview `stage`; its ENVIRONMENT var comes from
+      # `previews.vars` in wrangler.jsonc (not production, so noindex). It does not touch
+      # production or the routes.
+      - name: Update the stage Preview
+        id: preview
+        if: steps.fresh.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/cloudflare-stage.mjs retire-dev-access
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
+        run: tools/node_modules/.bin/wrangler preview --name stage --message "stage ${SHA::7}" --tag "$SHA"
 
-      # Fail closed: once the upload was attempted, any failed or cancelled step after it takes
-      # the Preview down. That covers a parse failure, a custom domain URL check that fails before
-      # Access is applied (which skips the Access probes) and a detected exposure. A failed delete
-      # counts as "already gone" only when Wrangler itself reports that the Preview "stage" was
-      # not found; any other error (bad token, unknown account, network) fails the step.
+      # Parsing is its own step so that the teardown depends only on the upload having been
+      # attempted, not on whether Wrangler's output could be read.
+      - name: Read the Preview URLs
+        id: parse
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
+        run: |
+          out="$(node scripts/read-wrangler-output.mjs --preview "$WRANGLER_OUTPUT_FILE_PATH")"
+          echo "$out"
+          echo "$out" >>"$GITHUB_OUTPUT"
+
+      - name: Require the custom domain Preview URL
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          STAGE_URL: ${{ steps.parse.outputs.custom_url }}
+        run: |
+          if [[ "$STAGE_URL" != "https://stage.notes.szolotov.com" ]]; then
+            echo "::error::The stage Preview is not served at https://stage.notes.szolotov.com (Wrangler reported '$STAGE_URL'). notes.szolotov.com must be enabled for Production and Preview. See docs/deployment.md#stage-preview."
+            exit 1
+          fi
+          echo "::notice::Stage preview: https://stage.notes.szolotov.com"
+          {
+            echo "### Stage preview"
+            echo
+            echo "https://stage.notes.szolotov.com (commit \`${SHA::7}\`)"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      # Bot Fight Mode answers GitHub-hosted runners with 403 on the custom domains, so the full
+      # smoke test runs on the Preview's workers.dev URL: it must serve this build with HTTP 200,
+      # the security headers, X-Robots-Tag noindex and a disallow-all robots.txt. Any redirect
+      # (a Cloudflare Access login included) fails.
+      - name: Smoke-test the workers.dev Preview URL
+        id: smoke
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          SMOKE_TEST_TOKEN: ${{ secrets.SMOKE_TEST_TOKEN }}
+          WORKERS_DEV_URL: ${{ steps.parse.outputs.workers_dev_url }}
+        run: |
+          if [[ -z "$WORKERS_DEV_URL" ]]; then
+            echo "::error::Wrangler reported no workers.dev URL for the Preview; enable preview_urls and workers_dev in wrangler.jsonc."
+            exit 1
+          fi
+          scripts/smoke-test.sh "$WORKERS_DEV_URL" "stage+$SHA" noindex
+
+      # The custom domain usually answers runners with 403 (Bot Fight Mode); the workers.dev smoke
+      # test above is the real check. A 200 here must still carry noindex.
+      - name: Probe the custom domain
+        if: steps.fresh.outputs.current == 'true'
+        run: |
+          probe="$RUNNER_TEMP/stage-probe.h"
+          : >"$probe"
+          code="$(curl --proto '=https' --tlsv1.2 -s -D "$probe" -o /dev/null -w '%{http_code}' --max-time 30 \
+            --user-agent 'notes-smoke-test/1 (+https://github.com/greenblacked/Notes)' \
+            https://stage.notes.szolotov.com/ || true)"
+          if [[ "$code" == "200" ]]; then
+            if grep -qiE '^x-robots-tag:.*noindex' "$probe"; then
+              echo "::notice::https://stage.notes.szolotov.com answered 200 with noindex."
+            else
+              echo "::error::https://stage.notes.szolotov.com answered 200 without X-Robots-Tag noindex; stage must not be indexed."
+              exit 1
+            fi
+          elif [[ "$code" == "403" ]]; then
+            echo "::notice::https://stage.notes.szolotov.com answered 403 to this runner (Bot Fight Mode); verification used workers.dev."
+          elif [[ "$code" =~ ^3[0-9][0-9]$ ]] && grep -qiE '^location:[[:space:]]*https://[^/[:space:]]+\.cloudflareaccess\.com/' "$probe"; then
+            echo "::warning::https://stage.notes.szolotov.com redirects to a Cloudflare Access login; stage is meant to be public."
+          else
+            echo "::notice::https://stage.notes.szolotov.com answered HTTP $code."
+          fi
+
+      # Fail closed: once the upload was attempted, any failed or cancelled step after it takes the
+      # Preview down, so stage keeps only a verified build. A failed delete counts as "already gone"
+      # only when Wrangler itself reports that the Preview "stage" was not found.
       - name: Take stage down unless it is verified
-        if: always() && steps.access.outputs.deployable == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled() || steps.access_wd.outputs.exposed == 'true')
+        if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled())
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-          EXPOSED: ${{ steps.access_wd.outputs.exposed }}
         run: |
           wrangler=tools/node_modules/.bin/wrangler
           if out="$("$wrangler" preview delete --name stage --skip-confirmation 2>&1)"; then
@@ -384,13 +348,9 @@ jobs:
               exit 1
             fi
           fi
-          if [[ "$EXPOSED" == "true" ]]; then
-            echo "::error::stage was reachable without Cloudflare Access and its Preview was deleted (or was absent). Fix Access, then run Deploy stage again."
-          else
-            echo "::error::stage was not fully verified; the Preview was deleted (or was absent). See the first failed step above."
-          fi
+          echo "::error::stage was not fully verified; the Preview was deleted (or was absent). See the first failed step above."
           exit 1
 
       - name: Summary
-        if: steps.fresh.outputs.current == 'true' && steps.access.outputs.deployable == 'true'
+        if: steps.fresh.outputs.current == 'true'
         run: echo "stage serves ${SHA::7}" >>"$GITHUB_STEP_SUMMARY"

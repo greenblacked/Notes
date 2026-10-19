@@ -1,0 +1,114 @@
+name: Cleanup deployments
+
+# One-time cleanup of old GitHub deployment records (the Deployments list of the repository).
+# Run workflow from `main`, only for the repository owner. It never touches `production` or the
+# successful `stage` deployments. See docs/deployment.md#one-time-cleanup-of-old-deployments.
+on:
+  workflow_dispatch:
+    inputs:
+      environments:
+        description: "Environments whose deployments are deleted, space separated (never production or stage)"
+        type: string
+        default: "dev staging repo-admin"
+      include_failed_stage:
+        description: "Also delete the failed or errored deployments of stage (never a successful one)"
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: cleanup-deployments
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Delete old deployments
+    # Forks never run it (their Actions skip quietly instead of failing).
+    if: github.repository == 'greenblacked/Notes'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      deployments: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      REF: ${{ github.ref }}
+      EVENT: ${{ github.event_name }}
+      ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      ENVIRONMENTS: ${{ inputs.environments }}
+      INCLUDE_FAILED_STAGE: ${{ inputs.include_failed_stage }}
+    steps:
+      - name: Require main, the owner and valid inputs
+        run: |
+          set -euo pipefail
+          if [[ "$REPO" != "greenblacked/Notes" ]]; then
+            echo "::error::Unexpected repository '$REPO'."
+            exit 1
+          fi
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "::error::Cleanup deployments runs only from main (this run was started from '$REF')."
+            exit 1
+          fi
+          if [[ "$EVENT" != "workflow_dispatch" ]]; then
+            echo "::error::Unexpected event '$EVENT'."
+            exit 1
+          fi
+          if [[ "$ACTOR" != "greenblacked" || "$TRIGGERING_ACTOR" != "greenblacked" ]]; then
+            echo "::error::Cleanup deployments is limited to the repository owner (actor '$ACTOR', triggered by '$TRIGGERING_ACTOR')."
+            exit 1
+          fi
+          if [[ ! "$ENVIRONMENTS" =~ ^[a-z0-9-]+( [a-z0-9-]+)*$ ]]; then
+            echo "::error::The environments input must be lower-case names separated by single spaces."
+            exit 1
+          fi
+          for env in $ENVIRONMENTS; do
+            if [[ "$env" == *production* || "$env" == "stage" ]]; then
+              echo "::error::Refusing to clean '$env' (production and stage are never listed here)."
+              exit 1
+            fi
+          done
+          if [[ "$INCLUDE_FAILED_STAGE" != "true" && "$INCLUDE_FAILED_STAGE" != "false" ]]; then
+            echo "::error::include_failed_stage must be true or false."
+            exit 1
+          fi
+
+      # GitHub deletes a deployment only when it is inactive, so each one gets an inactive status first.
+      - name: Delete the deployments
+        run: |
+          set -euo pipefail
+          remove() {
+            gh api -X POST "repos/$REPO/deployments/$1/statuses" -f state=inactive >/dev/null
+            gh api -X DELETE "repos/$REPO/deployments/$1" >/dev/null
+          }
+          {
+            echo "### Deleted deployments"
+            echo
+            echo "| Environment | Deleted |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for env in $ENVIRONMENTS; do
+            count=0
+            ids=$(gh api --paginate "repos/$REPO/deployments?environment=$env&per_page=100" --jq '.[].id')
+            for id in $ids; do
+              remove "$id"
+              count=$((count + 1))
+            done
+            echo "$env: deleted $count"
+            echo "| $env | $count |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          if [[ "$INCLUDE_FAILED_STAGE" == "true" ]]; then
+            count=0
+            ids=$(gh api --paginate "repos/$REPO/deployments?environment=stage&per_page=100" --jq '.[].id')
+            for id in $ids; do
+              # Statuses are newest first; only a deployment whose latest status failed is removed.
+              latest=$(gh api "repos/$REPO/deployments/$id/statuses?per_page=1" --jq '.[0].state // ""')
+              if [[ "$latest" == "failure" || "$latest" == "error" ]]; then
+                remove "$id"
+                count=$((count + 1))
+              fi
+            done
+            echo "stage (failed only): deleted $count"
+            echo "| stage (failed or errored only) | $count |" >> "$GITHUB_STEP_SUMMARY"
+          fi
