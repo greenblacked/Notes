@@ -267,6 +267,10 @@ plugins:
   - source: ./local-plugins/sidenotes
     enabled: true
     order: 95
+  # Callouts: kind label and keyboard folding (see custom.scss).
+  - source: ./local-plugins/callouts
+    enabled: true
+    order: 96
   - source: github:quartz-community/spacer
     enabled: false
     options: {}
