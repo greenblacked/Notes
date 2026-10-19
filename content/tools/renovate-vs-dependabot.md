@@ -118,11 +118,11 @@ updates:
       "labels": ["major-update", "needs-review"]
     }
   ],
-  "vulnerabilityAlerts": { "labels": ["security"] }
+  "vulnerabilityAlerts": { "labels": ["security"], "minimumReleaseAge": null }
 }
 ```
 
-The `minimumReleaseAge` of 3 days is a proposed default from [[dependency-update-policy]], so a release that is yanked or found malicious within days is not adopted at once. Automerge is limited to patch updates of the `npm` manager (an example; list the ecosystems where you have a required test gate), and a later rule switches it off for Terraform, Helm, GitLab CI and Dockerfile updates, including base images, which a person reviews. Renovate applies matching `packageRules` in order, so the later `false` wins.
+The `minimumReleaseAge` of 3 days is a proposed default from [[dependency-update-policy]], so a release that is yanked or found malicious within days is not adopted at once; security PRs skip the age (`"minimumReleaseAge": null` under `vulnerabilityAlerts`), as in the standard. Automerge is limited to patch updates of the `npm` manager (an example; list the ecosystems where you have a required test gate), and a later rule switches it off for Terraform, Helm, GitLab CI and Dockerfile updates, including base images, which a person reviews. Renovate applies matching `packageRules` in order, so the later `false` wins.
 
 Preset names and option keys change between releases, so validate the file (below) and read the current preset documentation before adopting any of them. The `Europe/Kyiv` timezone is an example; use yours.
 
@@ -146,7 +146,7 @@ The GitLab runner and token setup is in [[automated-dependency-updates]]. Do not
 
 Automerge is where the risk is. A safe default:
 
-- Automerge only **patch** updates of dependencies at `1.0` and above, and only when required CI checks pass, including tests, `terraform plan` checks and scans.
+- Automerge only **patch** updates of dependencies at `1.0` and above in ecosystems with a required test gate (never Terraform providers or modules, Helm, CI images or base images, see [[dependency-update-policy]]), and only when required CI checks pass.
 - Major updates, and anything for `0.x` versions, stay manual and are reviewed against the changelog.
 - Anything touching base images, CI images or the build toolchain is reviewed, because it changes what runs with your credentials.
 - A stabilisation window (wait a few days after release) reduces exposure to a yanked or compromised release. Renovate supports a minimum release age; check the option name in its docs.
