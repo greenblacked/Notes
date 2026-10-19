@@ -1,11 +1,11 @@
 ---
 title: Learning path
-description: Forty-three lessons from first job to middle level in DevOps, in stages with milestones, a self-assessment and a weekly plan.
+description: Fifty-three lessons from first job to middle level in DevOps, in stages with milestones, a self-assessment and a weekly plan.
 tags:
   - learning
   - meta
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-10-19
 draft: false
 ---
 
@@ -15,7 +15,7 @@ This is a structured path for someone who has started a DevOps or platform job, 
 
 It is for people from their first job to middle level: new engineers, developers moving towards operations, and system administrators who want the cloud-native side. It assumes you can use a computer comfortably and have no prior Linux, Kubernetes or cloud knowledge. Where a lesson needs earlier material, it says so in its opening line.
 
-- **Go in order.** Later lessons build on earlier ones. A plan of about 8 to 10 hours a week finishes in about 14 weeks (see the week-by-week map below).
+- **Go in order.** Later lessons build on earlier ones. A plan of about 8 to 10 hours a week finishes in about 14 weeks (see the week-by-week map below), or about 18 with the "Going deeper" lessons.
 - **Or jump in.** Do the self-assessment below. If you score 3 on every row of a stage, skip that stage's lessons and read only the milestone. At 2, do the exercises as a test. Start at the first stage where you score below 3.
 - **Do the exercises.** Reading is not learning. Every lesson has numbered exercises with expected output and an "If you see something else" line for when it goes wrong.
 - **Keep a notes file** with the commands that worked. It becomes your own runbook.
@@ -45,6 +45,10 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 - `junior-middle` [[learn/text-and-data-tools|Linux 03: Text and data tools]]
 - `junior-middle` [[learn/linux-processes-memory-and-disk|Linux 04: Processes, memory and disk]]
 - `junior-middle` [[learn/linux-services-packages-and-scheduled-jobs|Linux 05: Services, packages and scheduled jobs]]
+
+**Going deeper:**
+
+- `middle` [[learn/linux-performance-triage-with-mpstat-pidstat-sar-and-psi|Linux 06: Performance triage with mpstat, pidstat, sar and PSI]]
 
 **Homelab P1** after this stage: a VM with nginx, a systemd unit and a restore checked by checksum (see [[learn/lab-setup#The homelab ladder|the ladder]]).
 
@@ -86,6 +90,10 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 - `junior-middle` [[learn/building-and-shipping-images|Containers 03: Building and shipping images]]
 - `junior-middle` [[learn/container-storage-networking-and-compose|Containers 04: Storage, networking and Compose]]
 
+**Going deeper:**
+
+- `junior-middle` [[learn/image-build-speed-cache-mounts-and-measurement|Containers 05: Faster image builds with measurement and BuildKit mounts]]
+
 **Homelab P2** after this stage: Compose, a reverse proxy and TLS from a local CA.
 
 ## Stage 6: Kubernetes
@@ -98,6 +106,11 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 - `junior-middle` [[learn/kubernetes-config-secrets-and-namespaces|Kubernetes 04: Config, Secrets and namespaces]]
 - `middle` [[learn/kubernetes-probes-resources-and-debugging|Kubernetes 05: Probes, resources and debugging]]
 - `middle` [[learn/helm-basics-and-capstone|Kubernetes 06: Helm basics and the capstone]]
+
+**Going deeper:**
+
+- `middle` [[learn/rbac-roles-bindings-and-least-privilege|Kubernetes 07: RBAC, least privilege and a first audit]]
+- `middle` [[learn/helm-chart-authoring-schema-dependencies-and-tests|Kubernetes 08: Authoring a reusable Helm chart]]
 
 **Homelab P3** after this stage: a kind or k3s cluster with Helm, ingress and a rollback.
 
@@ -123,6 +136,14 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 - `junior` [[learn/terraform-basics-on-gcp|Delivery 04: Terraform basics with a first GCP project]]
 - `middle` [[learn/terraform-state-modules-and-pipelines|Delivery 05: Terraform state, remote backends, modules and pipelines]]
 
+**Going deeper:**
+
+- `junior-middle` [[learn/gitlab-ci-rules-dag-matrix-and-includes|Delivery 06: GitLab CI rules:changes, the needs DAG, matrix and includes]]
+- `middle` [[learn/jenkins-agents-configuration-as-code-and-shared-libraries|Delivery 07: Jenkins agents, Configuration as Code and a shared library]]
+- `junior-middle` [[learn/artifactory-repositories-access-and-retention|Delivery 08: Artifactory repositories, clients, access and cleanup]]
+- `junior-middle` [[learn/sonarqube-basics-first-scan-and-triage|Delivery 09: SonarQube basics, a first scan and triage]]
+- `middle` [[learn/terraform-for-each-lifecycle-and-tests|Delivery 10: Terraform for_each, lifecycle rules and terraform test]]
+
 **Homelab P4** after this stage: Terraform, CI and GitOps on one repository.
 
 > [!tip] Milestone M3: it goes through CI, with infrastructure as code on GCP
@@ -143,6 +164,10 @@ Level chips: `junior` can be done without prior experience of the topic; `junior
 - `junior-middle` [[learn/first-prometheus-alert|Observability 03: Your first Prometheus alert]]
 - `junior-middle` [[learn/troubleshooting-method|Incidents 01: A troubleshooting method]]
 - `middle` [[learn/on-call-incidents-and-postmortems|Incidents 02: On-call, incidents and postmortems]]
+
+**Going deeper:**
+
+- `middle` [[learn/promql-for-alert-rules-and-recording-rules|Observability 04: PromQL for alert rules and recording rules]]
 
 **Homelab P5** after this stage: Prometheus, Grafana and Loki, plus an alert that fires.
 
@@ -208,7 +233,9 @@ This folds a 14-week plan onto the stages, at about three lessons a week. The ho
 | 13   | 37, 38, 39     | Security, signals, logs                      |                      |
 | 14   | 40, 41, 42, 43 | Alerting, troubleshooting, on-call, career   | M4 check, P5 homelab |
 
-After week 14, do P6 (the recovery drill) and repeat the self-assessment. Lesson numbers count from 01 for the lab setup through 43 for the career lesson, in the stage order above.
+After week 14, do P6 (the recovery drill) and repeat the self-assessment. Lesson numbers count from 01 for the lab setup through 43 for the career lesson, in the stage order above; the "Going deeper" lessons are not numbered in this map.
+
+**Weeks 15 to 18 (optional, going deeper):** week 15, Linux 06, Containers 05 and Kubernetes 07; week 16, Kubernetes 08, Delivery 06 and Delivery 07; week 17, Delivery 08, Delivery 09 and Delivery 10; week 18, Observability 04 and the self-assessment again. Times are estimates, not measured.
 
 ## Using AI while learning
 

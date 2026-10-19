@@ -5,7 +5,7 @@ tags:
   - architecture
   - meta
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-10-19
 draft: false
 ---
 
@@ -23,11 +23,17 @@ These notes are reference designs for a GCP and GKE platform. Each one describes
 - [[private-gke-and-controlled-egress|Private GKE clusters and controlled egress]]: a reference design for GKE clusters with private nodes, a restricted control-plane endpoint, Cloud NAT, Google API access without public egress and an egress allowlist.
 - [[cloud-dns-hybrid-and-multi-project|Cloud DNS design for hybrid and multi-project setups]]: a reference design for Cloud DNS with a central DNS hub, peering zones to spokes, forwarding to on-prem resolvers and split-horizon names per environment.
 - [[zero-trust-access-iap-and-vpc-service-controls|Zero-trust access with IAP and VPC Service Controls]]: a reference design that replaces bastions and broad VPN access with Identity-Aware Proxy, access levels and VPC Service Controls perimeters.
+- [[edge-and-ingress-cloudflare-gclb-gateway-api|Edge and ingress: Cloudflare, Google Cloud Load Balancing and the GKE Gateway API]]: reference design for the path from Cloudflare through a Google Cloud load balancer to GKE Gateway API routes, with origin lock-down and clear layer ownership.
 
 ## Platform and delivery
 
 - [[gke-platform-topology-and-tenancy|GKE platform topology, clusters, node pools, fleets and tenancy]]: how many GKE clusters to run, how to lay out node pools, and how to isolate tenants with namespaces, quotas and policy.
 - [[gitops-repo-topology-and-promotion|GitOps repository topology and environment promotion]]: how to lay out the Argo CD config repository, generate Applications per environment, promote image digests by merge request, and roll back by revert.
+- [[artifact-management-architecture-artifactory-ha|Artifact management architecture: Artifactory HA and replication]]: reference design for highly available Artifactory with a shared database and filestore, local, remote and virtual repositories, and replication between regions.
+- [[ci-platform-gitlab-runners-and-jenkins-agents-on-gke|CI platform architecture: GitLab runners and Jenkins agents on GKE]]: reference design for a shared CI platform on GKE with runner and agent pools, trust zones, caching, capacity, keyless cloud access and failure modes.
+- [[software-supply-chain-end-to-end|Software supply chain end to end: from commit to running pod]]: reference design linking source controls, builds, SBOMs, signing, provenance, registry promotion by digest and admission checks into one verifiable chain.
+- [[golden-path-templates-architecture|Golden path templates: versioned service scaffolds that stay current]]: reference design for versioned golden path templates that create services with CI, Helm and policy already wired, and keep existing services up to date.
+- [[internal-developer-platform-architecture|Internal developer platform architecture: portal, catalog and self-service]]: reference design for an internal developer platform with a service catalog, ownership, self-service scaffolding and infrastructure, and GitOps delivery behind a paved road.
 
 ## Reliability and cost
 
@@ -35,6 +41,13 @@ These notes are reference designs for a GCP and GKE platform. Each one describes
 - [[backup-architecture-gke-cloud-sql-gcs|Backup architecture for GKE, Cloud SQL and Cloud Storage]]: a reference design that separates what GitOps and IaC rebuild from what needs backups, with Backup for GKE, Cloud SQL PITR, bucket retention and restore drills.
 - [[observability-pipeline-opentelemetry|Observability pipeline with OpenTelemetry, collectors, sampling and retention]]: a reference design for metrics, logs and traces through OpenTelemetry Collector agent and gateway tiers, with tail sampling, cardinality controls and retention tiers.
 - [[finops-cost-allocation-and-guardrails|FinOps on GCP: cost allocation, budgets and guardrails]]: a reference design for allocating GCP and GKE cost with labels, billing export and budgets, plus guardrails in code and a monthly review for engineering managers.
+- [[multi-region-gke-active-active|Multi-region GKE in active-active: traffic, state and deploys]]: reference design for two or more GKE regions serving live traffic, with a global load balancer, health-based failover, per-region state and region-aware GitOps.
+
+## Observability and secrets
+
+- [[logging-architecture-gke-and-cloud-logging|Logging architecture for GKE: collection, routing and retention]]: reference design for collecting GKE logs, routing them with Cloud Logging sinks and log buckets across projects, and controlling retention, access and cost.
+- [[multi-tenant-prometheus-architecture|Multi-tenant Prometheus: per-team scraping, central storage and tenant isolation]]: reference design for multi-tenant metrics on GKE with Prometheus, Thanos, Mimir or Managed Service for Prometheus, covering tenant identity, query isolation and limits.
+- [[secrets-architecture-gcp-and-gke|Secrets architecture on GCP and GKE: source of truth, delivery and rotation]]: reference design for where secrets live, how workloads and CI receive them, how they rotate and how access is audited across GCP and GKE.
 
 Decisions that follow from these designs are recorded in the [[adr/index|architecture decisions]].
 
