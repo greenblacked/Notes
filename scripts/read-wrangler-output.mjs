@@ -11,6 +11,7 @@
  *   node scripts/read-wrangler-output.mjs --preview <file>   wrangler preview
  *     workers_dev_url=<the Preview's workers.dev URL, or empty>
  *     custom_url=<the Preview's https://<name>.notes.szolotov.com URL, or empty>
+ *     deployment_id=<id of the deployment this upload created>
  *
  * Shape of the entries (wrangler 4.149.0, node_modules/wrangler/wrangler-dist/cli.js):
  *  - one JSON object per line, each with a `timestamp` added by writeOutput() (line ~64635);
@@ -140,10 +141,14 @@ export function readDeploy(entries) {
 
 /**
  * @param {Record<string, unknown>[]} entries
- * @returns {{ workers_dev_url: string, custom_url: string }}
+ * @returns {{ workers_dev_url: string, custom_url: string, deployment_id: string }}
  */
 export function readPreview(entries) {
   const entry = lastOfType(entries, "preview")
+  const deploymentId = entry.deployment_id
+  if (typeof deploymentId !== "string" || !/^[A-Za-z0-9-]{1,64}$/.test(deploymentId)) {
+    fail('the "preview" entry has no valid deployment_id')
+  }
   // The stable Preview URLs come first, then the per-deployment ones.
   const urls = [
     ...arrayField(entry.preview_urls, "preview_urls"),
@@ -159,7 +164,7 @@ export function readPreview(entries) {
     if (custom === "" && host.endsWith(`.${CUSTOM_DOMAIN}`)) custom = url
     if (host.endsWith(".workers.dev") && workersDev === "") workersDev = url
   }
-  return { workers_dev_url: workersDev, custom_url: custom }
+  return { workers_dev_url: workersDev, custom_url: custom, deployment_id: deploymentId }
 }
 
 /** @param {string[]} argv */
