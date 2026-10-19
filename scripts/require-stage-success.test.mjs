@@ -48,6 +48,7 @@ const mkRun = (o = {}) => ({
   id: 1000 + (o.run_number ?? 1),
   run_number: 1,
   run_attempt: 1,
+  run_started_at: `2026-10-01T10:00:${String(o.run_number ?? 1).padStart(2, "0")}Z`,
   head_sha: SHA,
   head_branch: "main",
   status: "completed",
@@ -134,6 +135,45 @@ test("picks the newest run across pages", () => {
   assert.equal(r2.code, 0, r2.out)
   assert.ok(r2.summary.includes("/actions/runs/1007"))
   assert.ok(r2.log.includes("--paginate"))
+})
+
+test("a re-run of an older run counts as the newest attempt (run_started_at)", () => {
+  const green = mkRun({ run_number: 7, run_started_at: "2026-10-01T10:00:00Z" })
+  const rerun = (o) =>
+    mkRun({ run_number: 5, run_attempt: 2, run_started_at: "2026-10-01T11:00:00Z", ...o })
+  const inProgress = run({ pages: [[green], [rerun({ status: "in_progress", conclusion: null })]] })
+  assert.equal(inProgress.code, 1, inProgress.out)
+  assert.match(inProgress.out, /still/)
+  assert.ok(inProgress.out.includes("/actions/runs/1005"))
+  const failed = run({ pages: [[green], [rerun({ conclusion: "failure" })]] })
+  assert.equal(failed.code, 1, failed.out)
+  assert.match(failed.out, /'failure'/)
+  const ok = run({ pages: [[rerun({})], [green]] })
+  assert.equal(ok.code, 0, ok.out)
+  assert.ok(ok.summary.includes("/actions/runs/1005"))
+  assert.match(ok.summary, /attempt 2/)
+})
+
+test("ties on run_started_at fall back to run_number, then run_attempt", () => {
+  const t = "2026-10-01T10:00:00Z"
+  const a = run({
+    pages: [
+      [
+        mkRun({ run_number: 5, run_started_at: t, conclusion: "failure" }),
+        mkRun({ run_number: 7, run_started_at: t }),
+      ],
+    ],
+  })
+  assert.equal(a.code, 0, a.out)
+  const b = run({
+    pages: [
+      [
+        mkRun({ run_number: 5, run_started_at: t }),
+        mkRun({ run_number: 5, run_attempt: 2, run_started_at: t, conclusion: "failure" }),
+      ],
+    ],
+  })
+  assert.equal(b.code, 1, b.out)
 })
 
 test("refuses when there is no run", () => {

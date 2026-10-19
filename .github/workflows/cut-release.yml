@@ -1,7 +1,7 @@
 name: Cut release
 
 # Run on main with a version whose CHANGELOG section is already on main (Actions -> Cut release
-# -> Run workflow -> X.Y.Z). It requires a green CI push run for the commit and a newest
+# -> Run workflow -> X.Y.Z). It requires a green CI push run for the commit and a most recent
 # Deploy stage run for it that updated stage successfully (otherwise it refuses: wait for
 # Deploy stage or re-run it); the only exception is the very first release, while no vX.Y.Z tag
 # exists yet, because stage needs the custom domain that the first production deploy creates
@@ -117,7 +117,7 @@ jobs:
       - name: Require a successful CI run for this commit
         run: .github/scripts/require-ci-success.sh
 
-      # Stage must serve this exact commit before it can be released: the newest Deploy stage run
+      # Stage must serve this exact commit before it can be released: the most recently executed Deploy stage run
       # for it on main must be green and must have run the upload (not skipped it). Skipped only
       # while no vX.Y.Z tag exists yet (the first release); fails closed if the tag lookup errors.
       - name: Require a successful Deploy stage run for this commit
