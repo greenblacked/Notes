@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
-- 160 new notes across all sections: 50 architecture decision records (0002 to 0051, covering Artifactory, CI/CD, the Kubernetes platform, GCP foundations, infrastructure as code, security and supply chain, observability, and operations and release), 20 tool comparisons and deep dives, 15 patterns, 15 runbooks, 10 standards, 10 reference architectures, 10 compliance notes, 10 management guides, 11 AI notes and 10 learning lessons, with more Artifactory and wider DevOps tooling coverage. Their section indexes list them.
+- 160 new notes across all sections: 50 architecture decision records (0002 to 0051, covering Artifactory, CI/CD, the Kubernetes platform, GCP foundations, infrastructure as code, security and supply chain, observability, and operations and release), 20 tool comparisons and deep dives, 15 patterns, 15 runbooks, 10 standards, 10 reference architectures, 10 compliance notes, 10 management guides, 10 AI notes and 10 learning lessons, with more Artifactory and wider DevOps tooling coverage. Their section indexes list them.
 
 ## [0.6.0] - 2026-10-19
 

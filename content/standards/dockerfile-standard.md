@@ -34,7 +34,7 @@ Every Dockerfile MUST do the following.
 2. **Pin the base image by digest, from the allowlist.** Write `FROM registry.example.com/base/python:3.12-slim@sha256:<digest>`. The tag stays for humans, the digest is what the build resolves. Every `FROM`, including build stages, is covered. The digest is updated by an automated pull request (see [[dependency-update-policy]] and [[automated-dependency-updates]]), never by hand-editing during an unrelated change.
 3. **Run as a non-root user.** Create a user with a fixed numeric UID and set `USER <uid>:<gid>` in the final stage. A numeric ID is required so that Kubernetes `runAsNonRoot` can verify it without a name lookup.
 4. **Ship a `.dockerignore`** next to the Dockerfile that excludes `.git`, local environment files, build output, test fixtures and editor folders. The default is to exclude everything and allow what the build needs.
-5. **Declare `EXPOSE` and `ENTRYPOINT` in exec form** (a JSON array), so signals reach the process and the container stops within the Kubernetes grace period.
+5. **Declare `EXPOSE`, and write `ENTRYPOINT`/`CMD` in exec form** (a JSON array), so signals reach the process and the container stops within the Kubernetes grace period.
 6. **Set `HEALTHCHECK` only where the runtime uses it.** Docker Compose and plain Docker use it. Kubernetes ignores the instruction and relies on liveness, readiness and startup probes defined in the manifest. For an image that only ever runs on Kubernetes, leave `HEALTHCHECK` out and put the probes in the chart; a check baked into the image is a second, unmonitored definition of "healthy" that can drift from the probe.
 7. **Set the OCI labels** described in the labels section below, at build time.
 
@@ -50,10 +50,11 @@ RUN CGO_ENABLED=0 go build -o /out/app ./cmd/app
 FROM registry.example.com/base/static:nonroot@sha256:0000000000000000000000000000000000000000000000000000000000000000
 COPY --from=build /out/app /app
 USER 65532:65532
+EXPOSE 8080
 ENTRYPOINT ["/app"]
 ```
 
-The digests above are placeholders of all zeros so that a copy-paste fails loudly. Resolve the real digest from the registry (`docker buildx imagetools inspect <image:tag>`) and let the update bot maintain it.
+The example omits the OCI `LABEL` block (set at build time, see the labels section below) for brevity. The digests above are placeholders of all zeros so that a copy-paste fails loudly. Resolve the real digest from the registry (`docker buildx imagetools inspect <image:tag>`) and let the update bot maintain it.
 
 ## Forbidden
 

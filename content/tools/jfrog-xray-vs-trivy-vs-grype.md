@@ -113,7 +113,7 @@ stage('Scan image') {
 }
 ```
 
-The `0.0.0` version above is a placeholder: pin the version you have tested. Pipeline structure conventions are in [[gitlab-ci-pipeline-structure]].
+The `X.Y.Z` version and the all-zero digest above are placeholders: pin the version you have tested. Pipeline structure conventions are in [[gitlab-ci-pipeline-structure]].
 
 ## Vulnerability DB caching, offline mirrors and DB age checks
 
