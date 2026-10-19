@@ -22,7 +22,6 @@ writeFileSync(
   gh,
   `#!/usr/bin/env bash
 echo "$*" >>"$FAKE_GH_LOG"
-if [[ "\${FAKE_GH_FAIL:-}" == "1" ]]; then exit 1; fi
 filter=""
 args=("$@")
 for ((i = 0; i < \${#args[@]}; i++)); do
@@ -33,8 +32,11 @@ case "$*" in
     if [[ "\${FAKE_TAGS_FAIL:-}" == "1" ]]; then exit 1; fi
     jq -r "$filter" "$FAKE_TAGS" ;;
   */actions/workflows/deploy-stage.yml/runs*)
+    if [[ "\${FAKE_GH_FAIL:-}" == "1" ]]; then exit 1; fi
     for page in $(ls "$FAKE_RUNS_DIR" | sort); do jq -c "$filter" "$FAKE_RUNS_DIR/$page"; done ;;
-  */actions/runs/*/jobs*) jq -c "$filter" "$FAKE_JOBS" ;;
+  */actions/runs/*/jobs*)
+    if [[ "\${FAKE_GH_FAIL:-}" == "1" ]]; then exit 1; fi
+    jq -c "$filter" "$FAKE_JOBS" ;;
   *) exit 1 ;;
 esac
 `,
@@ -219,7 +221,10 @@ test("passes without a step summary file", () => {
 })
 
 test("fails when the API call fails", () => {
-  assert.notEqual(run({ fail: true }).code, 0)
+  const r = run({ fail: true })
+  assert.notEqual(r.code, 0)
+  assert.doesNotMatch(r.out, /Could not list the release tags/)
+  assert.ok(r.log.includes("deploy-stage.yml"), "the runs lookup was attempted")
 })
 
 test("skips with a notice only when no release tag exists yet (first release)", () => {
