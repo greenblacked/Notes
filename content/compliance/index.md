@@ -5,7 +5,7 @@ tags:
   - compliance
   - meta
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-10-19
 draft: false
 ---
 
@@ -16,26 +16,39 @@ These notes cover how a DevOps platform produces evidence for the controls it is
 - [[change-management-controls-and-pipeline-evidence|Change management controls mapped to pipeline evidence]]: map change-control objectives to evidence that Git, GitLab CI, Argo CD and GKE already produce, so audits read system records instead of hand-written tickets.
 - [[audit-evidence-collection-and-retention|Audit evidence collection and retention for CI/CD and cloud]]: what evidence to keep from Git, CI, Argo CD, GKE and Cloud Audit Logs, how long, how to make it tamper-evident and how to retrieve it for an audit period.
 - [[separation-of-duties-in-deployments|Separation of duties in deployments]]: standard for who may author, review, approve and deploy, and how to enforce it in GitLab, Jenkins and Argo CD, with break-glass and a small-team compensating control.
+- [[change-advisory-in-continuous-delivery|Change advisory in a continuous delivery world]]: replace a weekly change advisory board with risk tiers, pre-approved standard changes and merge-request approvals that produce the same evidence.
 
 ## Access and hardening
 
 - [[access-reviews-gcp-and-gke|Access reviews and least privilege on GCP and GKE]]: run a quarterly access review for GCP IAM, GKE RBAC, CI service accounts and break-glass accounts, and keep evidence of it.
 - [[cis-benchmarks-with-kube-bench|CIS Kubernetes benchmarks with kube-bench]]: run CIS Kubernetes benchmark checks with kube-bench on GKE nodes, read the results, record exceptions and keep versioned evidence.
 - [[gcp-organization-policy-guardrails|GCP organization policy guardrails as code]]: manage a baseline of GCP organization policy constraints in Terraform, with inheritance, custom constraints, dry-run rollout and a recorded exception path.
+- [[privileged-access-just-in-time-gcp-gke|Privileged access with just-in-time elevation on GCP and GKE]]: replace standing Owner and cluster-admin with time-boxed, approved elevation on GCP and GKE, keep break-glass as a logged exception.
 
 ## Policy and exceptions
 
 - [[policy-exception-and-waiver-process|Policy exception and waiver process]]: request, approve, time-box, record and enforce policy exceptions in code, so a waiver expires by default instead of becoming permanent.
+- [[vulnerability-exception-register|Vulnerability exception register and reconciliation]]: keep accepted vulnerabilities in one register in Git, reconcile it with scanner findings on a schedule, and fail builds on expired entries.
 
 ## Supply chain
 
 - [[sbom-generation-and-storage|SBOM generation and storage]]: generate one SBOM per image digest in CI, attest it to the image, store it next to the artifact and query it when a new CVE lands.
 - [[slsa-build-provenance|SLSA build levels and provenance for GitLab CI and Jenkins]]: what SLSA Build levels ask for, what is realistic on GitLab CI and self-hosted Jenkins, and how consumers verify signed provenance.
 - [[open-source-license-compliance|Open-source licence compliance in the pipeline]]: build a licence inventory from SBOMs, classify licences into allow, review and deny lists, gate merges in CI and handle exceptions.
+- [[artifactory-provenance-evidence|Provenance evidence from Artifactory: build info, checksums and promotion records]]: use digests, build info, properties and promotion records in Artifactory as an audit trail from source commit to deployed artifact.
 
 ## Data protection
 
 - [[pci-dss-and-gdpr-for-devops-logs-and-data|PCI DSS and GDPR touch points for DevOps, logs, personal data and retention]]: where DevOps tooling touches cardholder or personal data, and how to keep it out, redact it before storage, scope environments and set retention.
+- [[encryption-at-rest-and-in-transit-evidence-gcp|Encryption at rest and in transit on GCP: what to prove]]: turn encryption claims on GCP into repeatable evidence: default and CMEK coverage per service, TLS enforcement and org policy, by gcloud.
+- [[legal-hold-for-logs-and-artifacts|Legal hold for logs and artifacts without breaking retention]]: place, track and release legal holds on Cloud Storage, log buckets and Artifactory without breaking normal retention and cleanup.
+
+## Frameworks for engineering teams
+
+- [[soc2-for-ci-cd-controls|SOC 2 controls for CI/CD pipelines]]: map SOC 2 Trust Services Criteria for change, access and monitoring to CI/CD evidence, and keep Type II evidence for the whole audit period.
+- [[iso-27001-annex-a-for-platform-teams|ISO 27001 Annex A controls for platform teams]]: which ISO/IEC 27001:2022 Annex A controls a platform team owns, who owns each, and the Git, CI, GKE and Terraform evidence behind them.
+- [[nis2-basics-for-engineering-teams|NIS2 basics for engineering teams]]: what the NIS2 Directive asks of engineering teams: Article 21 risk measures and Article 23 reporting, mapped to evidence a platform already has.
+- [[dora-eu-operational-resilience-for-engineers|DORA (EU regulation) for engineering teams: ICT operational resilience]]: what the EU DORA regulation asks of ICT engineering at financial entities and their ICT providers, kept separate from DORA delivery metrics.
 
 ## Related elsewhere
 

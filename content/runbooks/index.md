@@ -5,7 +5,7 @@ tags:
   - runbooks
   - meta
 created: 2026-10-11
-modified: 2026-10-17
+modified: 2026-10-19
 draft: false
 ---
 
@@ -17,6 +17,7 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 - [[leaked-credential-rotation|Leaked credential rotation]]: contain, revoke and rotate a leaked credential (GCP service account key, GitLab or Artifactory token, Kubernetes secret), audit its use and prevent a repeat.
 - [[tls-certificate-renewal|TLS certificate renewal]]: find certificate expiry, renew with cert-manager, debug Certificate, Order and Challenge objects, handle Google-managed certificates on GKE, and alert before expiry.
 - [[compromised-cloud-cluster-containment|Compromised cloud project or cluster containment]]: contain a suspected compromise of a GCP project, GKE workload, node pool or CI credential while keeping the evidence, then decide between clean-up and rebuild.
+- [[service-account-key-expiry-recovery|Recover from an expired or disabled service account key]]: restore a workload broken by an expired or disabled GCP service account key, then move it to keyless auth and retire the key.
 
 ## Kubernetes and GKE
 
@@ -29,6 +30,13 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 - [[node-resource-pressure-triage|Node resource pressure triage with USE and PSI]]: find out why a GKE or GCE node is slow, evicting pods or overloaded, using the USE method, Linux pressure stall information, cgroups and kubelet eviction signals.
 - [[kubernetes-packet-capture|Packet capture in Kubernetes with ephemeral debug containers]]: capture traffic in a pod network namespace or on a node without restarting the workload, read the pcap with tshark, and handle the file safely.
 - [[game-day-chaos-gke|Game day and chaos experiments on GKE]]: plan, run and review a scoped failure experiment on GKE with a hypothesis, abort rule, Chaos Mesh pod fault and a zonal drill, staging first.
+- [[gke-control-plane-unavailable|GKE control plane unavailable or slow]]: triage a GKE API that times out or returns 5xx: tell GKE-side events from failing webhooks, aggregated APIs and client-side problems.
+- [[gke-node-notready-triage|GKE node NotReady triage]]: decide whether a NotReady GKE node is a kubelet, runtime, network or VM fault, keep the evidence, then let auto-repair or a replacement recover it.
+- [[gke-dns-failures-kube-dns-and-nodelocal|DNS failures in GKE: kube-dns and NodeLocal DNSCache]]: diagnose DNS timeouts and SERVFAIL in GKE: kube-dns capacity, ndots amplification, conntrack, NodeLocal DNSCache and Cloud DNS for GKE.
+- [[gke-image-pull-registry-failures|Image pull failures from Artifact Registry on GKE]]: diagnose registry-side image pull failures on GKE: IAM and node identity, private-cluster egress, rate limits and bad references.
+- [[admission-webhook-certificate-expiry|Expired admission webhook certificates that block every create]]: fix an expired admission webhook certificate that makes the API server reject creates and updates, with a safe temporary bypass and alerts.
+- [[namespace-stuck-terminating|Namespace stuck in Terminating]]: find the leftover resource, broken APIService or finalizer that stops a namespace deleting, and clear it in the right order.
+- [[pvc-stuck-terminating|PersistentVolumeClaim or PersistentVolume stuck in Terminating]]: find which Pod, finalizer or volume attachment holds a PVC or PV in Terminating, check the reclaim policy, and release it without losing data.
 
 ## Infrastructure as code
 
@@ -38,6 +46,19 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 ## Networking
 
 - [[hybrid-connectivity-bgp-troubleshooting|HA VPN, Interconnect and Cloud Router BGP troubleshooting]]: find where a hybrid link between on-prem and GCP is broken, layer by layer, from IKE and IPsec through the BGP session to routes and firewalls.
+
+## CI and artifacts
+
+- [[artifactory-outage-cache-fallback|Artifactory outage and cache fallback]]: keep builds moving when Artifactory is down: triage the outage, route clients to a vetted fallback, then restore and warm caches without a stampede.
+- [[artifactory-storage-full-recovery|Artifactory storage full recovery]]: recover Artifactory when its filestore or database disk fills, reclaim space with cleanup policies and garbage collection, and stop it recurring.
+- [[gitlab-runner-jobs-stuck-pending|GitLab runner jobs stuck pending]]: find why GitLab CI jobs wait forever: tags, runner health, concurrency limits or cluster capacity, and fix the cheapest layer first.
+- [[jenkins-controller-down-and-queue-stuck|Jenkins controller down or build queue stuck]]: triage an unresponsive Jenkins controller or a queue that never drains, tell controller faults from agent faults, and restart without losing builds.
+- [[sonarqube-upgrade-and-db-migration|SonarQube server upgrade and database migration]]: upgrade a self-managed SonarQube server along a supported path, with a tested database backup, a watched migration and a restore-based way back.
+
+## Data and observability
+
+- [[cloud-sql-ha-failover-recovery|Cloud SQL HA failover and connection recovery]]: confirm or run a Cloud SQL HA failover, make applications reconnect cleanly, find stale pools and proxies, and know what failing back means.
+- [[prometheus-high-cardinality-triage|Prometheus high cardinality triage]]: find the metric or label exploding the series count, stop growth with scrape limits and relabeling, and recover Prometheus memory safely.
 
 ## This site
 

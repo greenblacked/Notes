@@ -5,7 +5,7 @@ tags:
   - management
   - leadership
 created: 2026-10-16
-modified: 2026-10-17
+modified: 2026-10-19
 draft: false
 ---
 
@@ -26,6 +26,7 @@ These notes cover the engineering manager's side of a platform or DevOps team. T
 - [[career-ladder-devops|Career ladder for DevOps and platform engineers]]: expectations by level from Engineer to Staff, plus the EM track split, with evidence examples and guidance on using the ladder in promotions.
 - [[performance-feedback|Performance feedback and reviews]]: giving feedback with the SBI model, writing reviews, handling underperformance with an improvement plan, documenting and recognising good work.
 - [[managing-conflict|Managing conflict]]: handling disagreement in technical teams, from tooling wars and design disputes to Dev versus Ops friction, using disagree-and-commit, escalation, ADRs and mediation.
+- [[bus-factor-and-knowledge-transfer|Bus factor and knowledge transfer for platform systems]]: find single points of knowledge in infrastructure from commit and on-call data, then make them survivable with runbooks, pairing and rotations.
 
 ## Planning and delivery
 
@@ -38,6 +39,13 @@ These notes cover the engineering manager's side of a platform or DevOps team. T
 - [[inner-source-platform|Inner-source contribution model for platform code]]: how product teams change platform-owned Helm charts, Terraform modules and pipeline templates through merge requests while the platform team keeps ownership and review standards.
 - [[engineering-budget-planning|Engineering budget planning and forecasting]]: how an engineering manager builds an annual budget, forecasts monthly, explains variance and tracks vendor renewals, with templates and a worked hire example.
 - [[quarterly-engineering-review|Quarterly engineering review and roadmap]]: a one-page quarterly review for engineering managers covering commitments, DORA and incidents, capacity split, risks, a Now/Next/Later roadmap and blameless reporting.
+- [[build-vs-buy-devops-tools|Build vs buy for DevOps tooling]]: a decision framework for DevOps tooling with three-year total cost of ownership, lock-in and exit cost, and a worked CI and artifact repository example.
+- [[devops-vendor-and-licence-management|Vendor and licence management for DevOps tools]]: own, meter and renew Artifactory, SonarQube, GitLab and Jenkins support licences, with usage metering, true-up risk and a tested exit plan.
+- [[end-of-life-tracking-platform-versions|Tracking end-of-life dates for platform software]]: one owned end-of-life calendar for GKE, Kubernetes, Terraform, Jenkins, Chef and other platform tools, with automated checks and an upgrade budget.
+- [[platform-product-discovery|Platform product discovery before building]]: how a platform team validates a developer problem with interviews, assumptions and a paper golden path before committing engineering time.
+- [[platform-roadmap-multi-quarter|Writing a multi-quarter platform roadmap]]: outcome-based platform roadmap themes for 12 to 18 months, with capacity bands, dependencies, confidence by horizon and a published change log.
+- [[jenkins-to-gitlab-migration-programme|Running a Jenkins to GitLab CI migration as a programme]]: sequence, staff, communicate and close out a Jenkins to GitLab CI migration across many teams, with waves, parallel runs and a retirement gate.
+- [[decommissioning-platform-services|Decommissioning and retiring platform tooling]]: decide when a legacy tool or platform service is retired, then run consumer discovery, deprecation, read-only freeze, archive and cost removal.
 
 ## Operations
 
@@ -48,3 +56,5 @@ These notes cover the engineering manager's side of a platform or DevOps team. T
 > Percentages, scores and templates in these guides are starting points. Replace them with your own team's data, and check anything about pay, working time or performance processes against your company policy and local law.
 
 - [[team-reorg-runbook|Splitting, merging and reorganising teams]]: a checklist-driven runbook for the change event of a team reorg, covering readiness, ownership and on-call re-cut, access moves, communication, a week -2 to week 4 timeline and rollback triggers.
+- [[incident-review-programme|Running an incident review programme across many teams]]: schedule, facilitate, track and measure postmortem reviews across teams so action items get done and the process does not become theatre.
+- [[on-call-compensation-and-recovery|On-call compensation, incident fatigue and recovery time]]: design an auditable on-call compensation policy and fatigue rules for long incidents: shift limits, relief handover and recovery time afterwards.
