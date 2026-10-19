@@ -350,8 +350,9 @@ jobs:
           fi
 
       # Fail closed: once the upload was attempted, any failed or cancelled step after it takes the
-      # Preview down, so stage keeps only a build that passed every check it could run; see the Access note on the smoke step. A failed delete counts as "already gone"
-      # only when Wrangler itself reports that the Preview "stage" was not found.
+      # Preview down, so stage keeps only a build that passed every check it could run (see the
+      # Access note on the smoke step). A failed delete counts as "already gone" only when Wrangler
+      # itself reports that the Preview "stage" was not found.
       - name: Take stage down unless it is verified
         if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled())
         env:
