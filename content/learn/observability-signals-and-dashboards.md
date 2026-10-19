@@ -427,6 +427,7 @@ If you see something else: `jq: parse error` means a line is not valid JSON (a s
 4. Optional, not verified here: run Jaeger's all-in-one image locally and send the spans to it with the OTLP exporter (`pip install opentelemetry-exporter-otlp-proto-http`, then replace `ConsoleSpanExporter()` with `OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")` imported from `opentelemetry.exporter.otlp.proto.http.trace_exporter`). The Jaeger UI is usually on port 16686, where you can search for the `demo-checkout` service.
 
    > [!warning] Check before relying on this
+   >
    > Jaeger image names, tags, ports and flags change between releases; read the current Jaeger "Getting started" page and pin an exact image tag. This step was not run for this page.
 
 If you see something else: if the console prints nothing, `provider.shutdown()` did not run (the batch processor exports at shutdown). If `ModuleNotFoundError` appears, the virtual environment is not active.

@@ -2879,7 +2879,7 @@ sup a[data-footnote-ref] {
   }
 
   & > .callout-title + p,
-  & > .callout-content > p:first-child {
+  & > .callout-title + .callout-content > p:first-child {
     margin-top: 0;
   }
 

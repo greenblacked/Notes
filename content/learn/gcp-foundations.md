@@ -432,6 +432,7 @@ BUCKET="${PROJECT_ID}-gcp01"            # Bucket names are global; the project I
 6. **Create the bucket, lock it down, and use it.** This is the first step that creates a paid resource.
 
    > [!warning] Costs money
+   >
    > A small bucket stores data that is billed by size and time, plus operations. Delete it in the last exercise: `gcloud storage rm --recursive --all-versions "gs://${BUCKET}"`. Soft-deleted data can still bill during the retention period, which is why the lab bucket sets `--soft-delete-duration=0`.
 
    ```bash

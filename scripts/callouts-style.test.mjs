@@ -42,7 +42,10 @@ test("the run-in label applies only to callouts that do not fold", () => {
 })
 
 test("the first body paragraph and every folded child lose the paragraph margin", () => {
-  assert.match(section, /& > \.callout-content > p:first-child\s*\{\s*margin-top:\s*0/)
+  assert.match(
+    section,
+    /& > \.callout-title \+ \.callout-content > p:first-child\s*\{\s*margin-top:\s*0/,
+  )
   assert.match(
     section,
     /\.is-collapsed > \.callout-content > \*\s*\{\s*margin-top:\s*0;\s*margin-bottom:\s*0/,
