@@ -89,16 +89,24 @@ test("every kind label is a plain word", () => {
 
 function fixture({ collapsed = true } = {}) {
   const listeners = {}
+  const captureFns = new Set()
   const doc = {
-    addEventListener(type, fn) {
+    addEventListener(type, fn, capture) {
       ;(listeners[type] ??= []).push(fn)
+      if (capture) captureFns.add(fn)
     },
   }
   const classes = new Set(["callout", "is-collapsible", ...(collapsed ? ["is-collapsed"] : [])])
   const title = {
     clicks: 0,
     attrs: {},
-    parentElement: { classList: { contains: (c) => classes.has(c) } },
+    parentElement: {
+      classList: {
+        contains: (c) => classes.has(c),
+        toggle: (c) => (classes.has(c) ? classes.delete(c) : classes.add(c)),
+      },
+      querySelector: () => content,
+    },
     closest(sel) {
       return sel.includes("callout-title") ? title : null
     },
@@ -109,6 +117,7 @@ function fixture({ collapsed = true } = {}) {
       this.attrs[k] = v
     },
   }
+  const content = { style: {} }
   const inner = { closest: () => null }
   const fire = (type, event) => {
     const e = {
@@ -118,11 +127,16 @@ function fixture({ collapsed = true } = {}) {
       },
       ...event,
     }
-    for (const fn of listeners[type] ?? []) fn(e)
+    const fns = listeners[type] ?? []
+    // Capture listeners, then the engine's own title listener (if any), then bubble listeners.
+    for (const fn of fns.filter((x) => captureFns.has(x))) fn(e)
+    if (type === "click" && f.upstream) f.upstream()
+    for (const fn of fns.filter((x) => !captureFns.has(x))) fn(e)
     return e
   }
+  const f = { doc, listeners, title, inner, fire, classes, content, upstream: null }
   installCalloutFold(doc)
-  return { doc, listeners, title, inner, fire, classes }
+  return f
 }
 
 test("fold: Enter clicks once and prevents default; repeat does not click", () => {
@@ -168,17 +182,56 @@ test("fold: modified keys and keys inside the content are ignored", () => {
 
 test("fold: a click syncs aria-expanded from the fold state", () => {
   const f = fixture({ collapsed: true })
-  f.fire("click", { target: f.title })
-  assert.equal(f.title.attrs["aria-expanded"], "false")
-  f.classes.delete("is-collapsed")
+  f.upstream = () => {
+    f.classes.has("is-collapsed") ? f.classes.delete("is-collapsed") : f.classes.add("is-collapsed")
+  }
   f.fire("click", { target: f.title })
   assert.equal(f.title.attrs["aria-expanded"], "true")
+  f.fire("click", { target: f.title })
+  assert.equal(f.title.attrs["aria-expanded"], "false")
+})
+
+test("fold: a callout with no engine listener folds on click and keeps aria in step", () => {
+  const f = fixture({ collapsed: true })
+  f.fire("click", { target: f.title })
+  assert.ok(!f.classes.has("is-collapsed"))
+  assert.equal(f.content.style.gridTemplateRows, "1fr")
+  assert.equal(f.title.attrs["aria-expanded"], "true")
+  f.fire("click", { target: f.title })
+  assert.ok(f.classes.has("is-collapsed"))
+  assert.equal(f.content.style.gridTemplateRows, "0fr")
+  assert.equal(f.title.attrs["aria-expanded"], "false")
+})
+
+test("fold: a callout the engine already toggles is not toggled twice", () => {
+  const f = fixture({ collapsed: true })
+  f.upstream = () => {
+    f.classes.has("is-collapsed") ? f.classes.delete("is-collapsed") : f.classes.add("is-collapsed")
+  }
+  f.fire("click", { target: f.title })
+  assert.ok(!f.classes.has("is-collapsed"))
+  assert.equal(f.title.attrs["aria-expanded"], "true")
+  f.fire("click", { target: f.title })
+  assert.ok(f.classes.has("is-collapsed"))
+  assert.equal(f.title.attrs["aria-expanded"], "false")
+})
+
+test("fold: keyboard on a callout with no engine listener folds once", () => {
+  const f = fixture({ collapsed: true })
+  f.title.click = () => f.fire("click", { target: f.title })
+  f.fire("keydown", { key: "Enter", target: f.title })
+  assert.ok(!f.classes.has("is-collapsed"))
+  f.fire("keydown", { key: " ", target: f.title })
+  f.fire("keyup", { key: " ", target: f.title })
+  assert.ok(f.classes.has("is-collapsed"))
 })
 
 test("fold: installing twice registers the listeners once", () => {
   const f = fixture()
   installCalloutFold(f.doc)
-  for (const type of ["keydown", "keyup", "click"]) assert.equal(f.listeners[type].length, 1)
+  assert.equal(f.listeners.keydown.length, 1)
+  assert.equal(f.listeners.keyup.length, 1)
+  assert.equal(f.listeners.click.length, 2)
 })
 
 test("fold: the inline script parses and has no event-handler attributes", () => {

@@ -49,13 +49,44 @@ export function installCalloutFold(doc) {
     if (title && title === armed) title.click()
   })
 
-  // Bubbling, so this runs after the engine's listener on the title has toggled the class.
+  // The engine's script binds its click toggle only on page navigation, so a callout added later
+  // (a link popover) has no listener and would never fold. Record the state in the capture phase,
+  // before any listener on the title runs; in the bubble phase, if nothing changed it, fold here.
+  // A callout the engine did toggle is left alone, so it never folds twice.
+  var before = null
+
+  doc.addEventListener(
+    "click",
+    function (event) {
+      var title = event.target && event.target.closest && event.target.closest(SELECTOR)
+      before =
+        title && title.parentElement
+          ? { title: title, collapsed: title.parentElement.classList.contains("is-collapsed") }
+          : null
+    },
+    true,
+  )
+
   doc.addEventListener("click", function (event) {
+    var state = before
+    before = null
     var target = event.target
     if (!target || !target.closest) return
     var title = target.closest(SELECTOR)
     if (!title || !title.parentElement) return
-    var collapsed = title.parentElement.classList.contains("is-collapsed")
+    var block = title.parentElement
+    if (
+      state &&
+      state.title === title &&
+      block.classList.contains("is-collapsed") === state.collapsed
+    ) {
+      block.classList.toggle("is-collapsed")
+      var content = block.querySelector(":scope > .callout-content")
+      if (content && content.style) {
+        content.style.gridTemplateRows = state.collapsed ? "1fr" : "0fr"
+      }
+    }
+    var collapsed = block.classList.contains("is-collapsed")
     title.setAttribute("aria-expanded", String(!collapsed))
   })
 }
