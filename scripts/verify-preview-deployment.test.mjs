@@ -6,6 +6,9 @@ import {
   deploymentPath,
   fetchLatest,
   main,
+  MAX_ATTEMPTS,
+  REQUEST_TIMEOUT_MS,
+  RETRY_DELAY_MS,
   parseArgs,
 } from "./verify-preview-deployment.mjs"
 
@@ -216,4 +219,59 @@ test("the script imports only Node built-ins", () => {
   const specs = [...source.matchAll(/^import .* from "(.+)"/gm)].map((m) => m[1])
   assert.ok(specs.length > 0)
   for (const spec of specs) assert.ok(spec.startsWith("node:"), spec)
+})
+
+test("transient errors and stale answers share ONE bounded budget", async () => {
+  const stale = reply(200, good({ id: "old" }))
+  const mixes = [
+    [reply(500, {}), stale, new Error("boom"), stale, reply(429, {}), stale, stale],
+    [new Error("boom")],
+    [reply(503, {}), stale],
+    [stale, reply(502, {})],
+  ]
+  for (const answers of mixes) {
+    const f = fakeFetch(...answers)
+    const sleeps = []
+    await assert.rejects(
+      main(argv, env, {
+        fetchImpl: f,
+        sleep: async (ms) => void sleeps.push(ms),
+      }),
+      new RegExp(`after ${MAX_ATTEMPTS} attempts`),
+    )
+    // Not 25: exactly one request per attempt, and one pause between attempts.
+    assert.equal(f.calls.length, MAX_ATTEMPTS)
+    assert.equal(sleeps.length, MAX_ATTEMPTS - 1)
+  }
+  // Worst case wall time stays far below the upload job's 15-minute timeout.
+  const worstMs = MAX_ATTEMPTS * REQUEST_TIMEOUT_MS + (MAX_ATTEMPTS - 1) * RETRY_DELAY_MS
+  assert.ok(worstMs <= 3 * 60 * 1000, `worst case ${worstMs} ms`)
+})
+
+test("fetchLatest makes a single request and does not retry or sleep", async () => {
+  const f = fakeFetch(reply(503, {}))
+  await assert.rejects(
+    fetchLatest({
+      token: TOKEN,
+      accountId: ACCOUNT,
+      worker: "notes",
+      preview: "stage",
+      fetchImpl: f,
+    }),
+    /HTTP 503/,
+  )
+  assert.equal(f.calls.length, 1)
+})
+
+test("outcomes still map: success after transient errors, hard failure at once", async () => {
+  const stale = reply(200, good({ id: "old" }))
+  const f = fakeFetch(new Error("boom"), stale, reply(500, {}), reply(200, good()))
+  assert.equal(await main(argv, env, deps(f)), "active=true\nactive_deployment_id=d1")
+  assert.equal(f.calls.length, 4)
+  const wrongTag = fakeFetch(
+    reply(500, {}),
+    reply(200, good({}, { "workers/tag": "b".repeat(40) })),
+  )
+  await assert.rejects(main(argv, env, deps(wrongTag)), /workers\/tag/)
+  assert.equal(wrongTag.calls.length, 2)
 })

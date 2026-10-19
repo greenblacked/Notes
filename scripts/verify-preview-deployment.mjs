@@ -149,62 +149,61 @@ export function checkDeployment(body, expected) {
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+/** Total requests main() ever makes, and the pause between them. */
+export const MAX_ATTEMPTS = 5
+export const RETRY_DELAY_MS = 3000
+/** Per-request timeout. Worst case: MAX_ATTEMPTS * 30 s + (MAX_ATTEMPTS - 1) * 3 s = 162 s. */
+export const REQUEST_TIMEOUT_MS = 30000
+
+/** A network error, HTTP 429 or 5xx: worth another attempt from the caller's loop. */
+class TransientError extends Error {}
+
 /**
- * One read of the latest deployment. Network errors, HTTP 429 and 5xx are retried (bounded);
- * any other failure throws at once.
+ * ONE request for the latest deployment, with no retry of its own. Network errors, HTTP 429 and
+ * 5xx throw a TransientError (main() counts it against the same attempt budget as a stale
+ * answer); any other failure throws at once.
  *
  * @param {{ token: string, accountId: string, worker: string, preview: string,
- *   fetchImpl?: typeof fetch, attempts?: number, delayMs?: number,
- *   sleep?: (ms: number) => Promise<void> }} options
+ *   fetchImpl?: typeof fetch }} options
  * @returns {Promise<unknown>} the parsed body
  */
-export async function fetchLatest({
-  token,
-  accountId,
-  worker,
-  preview,
-  fetchImpl = fetch,
-  attempts = 5,
-  delayMs = 3000,
-  sleep = defaultSleep,
-}) {
+export async function fetchLatest({ token, accountId, worker, preview, fetchImpl = fetch }) {
   const path = deploymentPath(accountId, worker, preview)
   const shown = `/accounts/<account>/workers/workers/${worker}/previews/${preview}/deployments/latest`
-  let last = "no attempt was made"
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    if (attempt > 1) await sleep(delayMs)
-    let response
-    try {
-      response = await fetchImpl(API + path, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-        signal: AbortSignal.timeout(30000),
-      })
-    } catch (error) {
-      last = `GET ${shown} failed: ${error instanceof Error ? error.name : "network error"}`
-      continue
-    }
-    if (response.status === 429 || response.status >= 500) {
-      last = `GET ${shown} answered HTTP ${response.status}`
-      continue
-    }
-    let body
-    try {
-      body = await response.json()
-    } catch {
-      body = undefined
-    }
-    if (response.status < 200 || response.status > 299) {
-      const details = isObject(body) ? `: ${describeErrors(body, preview)}` : ""
-      fail(`GET ${shown} answered HTTP ${response.status}${details}`)
-    }
-    if (body === undefined) fail(`GET ${shown} answered with a body that is not JSON`)
-    return body
+  let response
+  try {
+    response = await fetchImpl(API + path, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch (error) {
+    throw new TransientError(
+      `GET ${shown} failed: ${error instanceof Error ? error.name : "network error"}`,
+    )
   }
-  return fail(`${last} (after ${attempts} attempts)`)
+  if (response.status === 429 || response.status >= 500) {
+    throw new TransientError(`GET ${shown} answered HTTP ${response.status}`)
+  }
+  let body
+  try {
+    body = await response.json()
+  } catch {
+    body = undefined
+  }
+  if (response.status < 200 || response.status > 299) {
+    const details = isObject(body) ? `: ${describeErrors(body, preview)}` : ""
+    fail(`GET ${shown} answered HTTP ${response.status}${details}`)
+  }
+  if (body === undefined) fail(`GET ${shown} answered with a body that is not JSON`)
+  return body
 }
 
 /**
+ * One bounded loop: at most `attempts` requests in total (default MAX_ATTEMPTS), one per
+ * iteration, with `delayMs` between them. Transient errors and a stale deployment id both count
+ * against that single budget; any other failure throws at once.
+ *
  * @param {string[]} argv
  * @param {Record<string, string | undefined>} env
  * @param {{ fetchImpl?: typeof fetch, attempts?: number, delayMs?: number,
@@ -215,31 +214,28 @@ export async function main(argv, env, deps = {}) {
   const token = env.CLOUDFLARE_API_TOKEN
   if (!token) fail("CLOUDFLARE_API_TOKEN is not set")
   const accountId = env.CLOUDFLARE_ACCOUNT_ID ?? ""
-  const attempts = deps.attempts ?? 5
-  const delayMs = deps.delayMs ?? 3000
+  const attempts = deps.attempts ?? MAX_ATTEMPTS
+  const delayMs = deps.delayMs ?? RETRY_DELAY_MS
   const sleep = deps.sleep ?? defaultSleep
-  let last
+  let last = "no attempt was made"
   for (let attempt = 1; attempt <= attempts; attempt++) {
     if (attempt > 1) await sleep(delayMs)
-    const body = await fetchLatest({
-      token,
-      accountId,
-      worker: args.worker,
-      preview: args.preview,
-      fetchImpl: deps.fetchImpl,
-      attempts,
-      delayMs,
-      sleep,
-    })
     try {
+      const body = await fetchLatest({
+        token,
+        accountId,
+        worker: args.worker,
+        preview: args.preview,
+        fetchImpl: deps.fetchImpl,
+      })
       const { id } = checkDeployment(body, args)
       return `active=true\nactive_deployment_id=${id}`
     } catch (error) {
-      if (!(error instanceof MismatchError)) throw error
-      last = error
+      if (!(error instanceof MismatchError || error instanceof TransientError)) throw error
+      last = error.message
     }
   }
-  return fail(`${last?.message} (after ${attempts} attempts)`)
+  return fail(`${last} (after ${attempts} attempts)`)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
