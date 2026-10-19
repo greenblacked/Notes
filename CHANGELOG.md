@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Added
+
+- **Cleanup deployments** (`cleanup-deployments.yml`, manual, from `main`, owner only): deletes the old deployment records of `dev`, `staging` and `repo-admin` and the failed ones of `stage`, so the Deployments list shows only `stage` and `production`. It never touches `production`.
+
 ### Fixed
 
 - Deploy stage now also skips (instead of failing) when the Access API answers the app creation with HTTP 403 and Cloudflare code 1010, which is what a token without the Access permission gets.

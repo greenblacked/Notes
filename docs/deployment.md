@@ -205,6 +205,10 @@ Symptom: `/version.txt` and `/robots.txt` pass, but `GET /` (HTML) fails with 40
 
 The smoke test also sends the User-Agent `notes-smoke-test/1 (+https://github.com/greenblacked/Notes)` (override with `SMOKE_USER_AGENT`), which makes its requests easy to find in Security Events.
 
+## One-time cleanup of old deployments
+
+The repository's Deployments list keeps a record for every environment a workflow ever used. Only `stage` and `production` are wanted. The workflow `cleanup-deployments.yml` (Actions, Cleanup deployments, Run workflow, branch `main`, owner only) deletes the old records: for each environment in the input `environments` (default `dev staging repo-admin`) it sets every deployment inactive, which GitHub requires, and deletes it. With `include_failed_stage` (default on) it also deletes the deployments of `stage` whose latest status is `failure` or `error`; successful ones stay. It refuses a list that contains `production` or `stage`, never touches `production`, and holds only `deployments: write`. The job summary shows a count per environment. Run it once after the rename of the environment to `stage`; afterwards the workflow is not needed again. Deleting the environments themselves (Settings, Environments) is separate: `gh api -X DELETE repos/greenblacked/Notes/environments/<name>` with an admin token.
+
 ## Repository settings
 
 The pipeline assumes these settings; no workflow manages them. This is the **expected** state, not a verified one: as of 2026-10-18 the live repository had no rulesets and no branch protection on `main`, and no `v*` tag ruleset. Until both rulesets exist (the owner or an admin token creates them through the API or the settings), a direct push to `main` or a merge with red CI deploys stage, and only the owner-only actor check and the environment limit the damage. After the first push-triggered run, check that `stage` allows the branch `main` only, and remove the leftover environments `dev`, `staging` and `repo-admin` (see [One-time cleanup of old deployments](#one-time-cleanup-of-old-deployments)). Only `stage` and `production` should remain.
