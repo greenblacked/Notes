@@ -7,7 +7,7 @@ name: Deploy stage
 # production traffic.
 #
 # The `guard` job refuses any other ref, event, repository or actor, so the jobs that hold the
-# Cloudflare token only ever run code of `main` (the environment `staging` allows the branch
+# Cloudflare token only ever run code of `main` (the environment `stage` allows the branch
 # `main` only).
 #
 # Two jobs: `build` runs the (third-party plugin) build code with no secrets and no
@@ -156,7 +156,7 @@ jobs:
     permissions:
       contents: read
     environment:
-      name: staging
+      name: stage
       url: https://stage.notes.szolotov.com
     env:
       SHA: ${{ github.sha }}
