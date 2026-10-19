@@ -18,6 +18,11 @@ updates:
       # lockfiles). A root version that differs makes the two hast types incompatible and fails
       # `npm run check` (see #18). Bump it by hand together with the plugins.
       - dependency-name: "@types/hast"
+      # The Quartz packages peer-depend on preact ^10 (@quartz-community/utils), so a preact 11
+      # bump fails `npm ci` with ERESOLVE. Minor and patch updates still come. Move to the next
+      # major by hand together with Quartz.
+      - dependency-name: "preact"
+        update-types: ["version-update:semver-major"]
     labels: [dependencies]
 
   # Wrangler for the deploy jobs (tools/ has its own lockfile; see docs/deployment.md). Keep it
