@@ -4,6 +4,9 @@
 # with success. A run whose commit was no longer the head of main skips that step but still
 # succeeds, so a green run alone does not prove stage serves $SHA. Records the run checked in
 # $GITHUB_STEP_SUMMARY. Used by cut-release.yml before it tags.
+# The one exception is the very first release: while no release tag (vX.Y.Z) exists yet, the check
+# is skipped with a notice, because the stage Preview needs the custom domain, which only exists
+# after the first production deploy. If the tag lookup itself fails, the check fails closed.
 # Requires GH_TOKEN (actions: read), GH_REPO and SHA in the env.
 set -euo pipefail
 
@@ -36,6 +39,17 @@ safe_word() {
 if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
   echo "::error::SHA must be a full 40-character commit id, got '$SHA'."
   exit 1
+fi
+
+# First release only: no release tag yet means stage cannot have been deployed (see above).
+if ! tag_refs="$(gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/v" --jq '.[].ref')"; then
+  fail "Could not list the release tags to decide whether this is the first release."
+fi
+if ! grep -qE '^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' <<<"$tag_refs"; then
+  echo "::notice::No release tag (vX.Y.Z) exists yet: this is the first release, so the Deploy stage run is not required (the custom domain that stage needs exists only after the first production deploy)."
+  summary "### Stage check" "" "- Commit: \`$SHA\`" \
+    "- Skipped: no release tag exists yet (first release); the Deploy stage run is not required"
+  exit 0
 fi
 
 runs="$(gh api "repos/$GH_REPO/actions/workflows/$workflow/runs?head_sha=$SHA&branch=main&per_page=100" \

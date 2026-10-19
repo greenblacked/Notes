@@ -28,7 +28,10 @@ args=("$@")
 for ((i = 0; i < \${#args[@]}; i++)); do
   if [[ "\${args[i]}" == "--jq" ]]; then filter="\${args[i + 1]}"; fi
 done
-case "$2" in
+case "$*" in
+  */git/matching-refs/tags/*)
+    if [[ "\${FAKE_TAGS_FAIL:-}" == "1" ]]; then exit 1; fi
+    jq -r "$filter" "$FAKE_TAGS" ;;
   */actions/workflows/deploy-stage.yml/runs*)
     for page in $(ls "$FAKE_RUNS_DIR" | sort); do jq -c "$filter" "$FAKE_RUNS_DIR/$page"; done ;;
   */actions/runs/*/jobs*) jq -c "$filter" "$FAKE_JOBS" ;;
@@ -67,6 +70,8 @@ function run({
   sha = SHA,
   summary = true,
   fail = false,
+  tags = ["v0.1.0"],
+  tagsFail = false,
 } = {}) {
   const base = join(dir, `case-${counter++}`)
   const runsDir = join(base, "runs")
@@ -76,6 +81,8 @@ function run({
   )
   const jobsFile = join(base, "jobs.json")
   writeFileSync(jobsFile, JSON.stringify({ jobs }))
+  const tagsFile = join(base, "tags.json")
+  writeFileSync(tagsFile, JSON.stringify(tags.map((t) => ({ ref: `refs/tags/${t}` }))))
   const log = join(base, "gh.log")
   const summaryFile = join(base, "summary.md")
   const env = {
@@ -88,6 +95,8 @@ function run({
     FAKE_JOBS: jobsFile,
     FAKE_GH_LOG: log,
     FAKE_GH_FAIL: fail ? "1" : "",
+    FAKE_TAGS: tagsFile,
+    FAKE_TAGS_FAIL: tagsFail ? "1" : "",
   }
   if (summary) env.GITHUB_STEP_SUMMARY = summaryFile
   else delete env.GITHUB_STEP_SUMMARY
@@ -211,4 +220,34 @@ test("passes without a step summary file", () => {
 
 test("fails when the API call fails", () => {
   assert.notEqual(run({ fail: true }).code, 0)
+})
+
+test("skips with a notice only when no release tag exists yet (first release)", () => {
+  for (const tags of [[], ["v1", "v1.2", "v1.2.3-rc1", "vNext", "v0.1.0.1"]]) {
+    const r = run({ tags, pages: [[]] })
+    assert.equal(r.code, 0, r.out)
+    assert.match(r.out, /::notice::No release tag/)
+    assert.match(r.out, /first release/)
+    assert.match(r.summary, /no release tag exists yet/)
+    assert.ok(!r.log.includes("deploy-stage.yml"), "no run lookup when skipping")
+  }
+})
+
+test("enforces the stage requirement once any release tag exists", () => {
+  const ok = run({ tags: ["v0.1.0"] })
+  assert.equal(ok.code, 0, ok.out)
+  assert.ok(!ok.out.includes("first release"))
+  const noRun = run({ tags: ["v0.1.0", "v0.2.0"], pages: [[]] })
+  assert.equal(noRun.code, 1)
+  assert.match(noRun.out, /No Deploy stage run found/)
+  const red = run({ tags: ["v1.0.0"], pages: [[mkRun({ conclusion: "failure" })]] })
+  assert.equal(red.code, 1)
+  assert.match(red.out, /'failure'/)
+})
+
+test("fails closed when the tag lookup errors", () => {
+  const r = run({ tagsFail: true, pages: [[]] })
+  assert.equal(r.code, 1)
+  assert.match(r.out, /Could not list the release tags/)
+  assert.ok(!r.out.includes("::notice::"))
 })
