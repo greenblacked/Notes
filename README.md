@@ -1,6 +1,6 @@
 # Notes
 
-Architecture decision records, platform patterns, tool notes and engineering standards, published as a static site at <https://notes.szolotov.com> and a pre-production site at <https://stage.notes.szolotov.com> (a Preview of the same Worker behind Cloudflare Access, deployed automatically from `main`).
+Architecture decision records, platform patterns, tool notes and engineering standards, published as a static site at <https://notes.szolotov.com> and a pre-production site at <https://stage.notes.szolotov.com> (a Preview of the same Worker, public and not indexed by search engines, deployed automatically from `main`).
 
 The site is built with [Quartz](https://quartz.jzhao.xyz/) and served by a Cloudflare Worker. The Markdown is Obsidian-friendly (wikilinks, frontmatter, callouts), see [docs/obsidian.md](docs/obsidian.md).
 
@@ -91,7 +91,7 @@ flowchart LR
 ```
 
 1. Branch `<type>/<kebab>` from `main` and open a pull request into `main`. CI must pass (`CI OK`); merge with a merge commit.
-2. The merge deploys stage automatically: https://stage.notes.szolotov.com (behind Cloudflare Access; about 15 minutes; `/version.txt` shows `stage+<sha>`) ([Stage Preview](docs/deployment.md#stage-preview)). Run workflow on `main` re-deploys it. Production traffic is untouched.
+2. The merge deploys stage automatically: https://stage.notes.szolotov.com (public, noindex; about 15 minutes; `/version.txt` shows `stage+<sha>`) ([Stage Preview](docs/deployment.md#stage-preview)). Run workflow on `main` re-deploys it. Production traffic is untouched.
 3. To release: update `CHANGELOG.md` (`[Unreleased]` to `[X.Y.Z] - date`) by pull request, then Actions, **Cut release**, **Run workflow** on `main`, enter the version as `X.Y.Z`. The workflow validates it, checks that CI passed for that commit and that the version is higher than the latest tag, creates the tag and GitHub Release from the CHANGELOG section, and dispatches Deploy production on the tag.
 4. Approve the deployment in the `production` environment. A smoke test runs against the Worker's workers.dev URL after the deploy; on failure the previous version is restored automatically.
 
