@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-19
+
 ### Added
 
 - **Cleanup deployments** (`cleanup-deployments.yml`, manual, from `main`, owner only): deletes the old deployment records of `dev`, `staging` and `repo-admin` and the failed ones of `stage`, so the Deployments list shows only `stage` and `production`. It never touches `production`.
@@ -16,7 +18,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - Switching between light and dark is near-instant: the page cross-fades as one snapshot (180ms) on devices with a mouse or trackpad where the browser supports view transitions; phones and tablets, and anyone with reduced motion, get a one-frame flip, instead of fading thousands of elements one by one.
 - The section links row of the top bar slides away while reading down a page and comes back on scrolling up or at the top. It stays while it has keyboard focus, while the Browse drawer or search is open, on short landscape windows and without JavaScript. Nothing on the page moves when it hides.
 - The GitHub environment of Deploy stage is now `stage` (was `staging`); the repository secrets are shared, and a `main`-only branch policy on `stage` is recommended.
-- The stage site is public and not indexed: no Cloudflare Access. The Worker sends `X-Robots-Tag: noindex, nofollow` and a disallow-all `robots.txt` on every host but production on `notes.szolotov.com`. Deploy stage smoke-tests the workers.dev Preview URL for the real site (HTTP 200, the expected version, noindex) and fails on any redirect except the Cloudflare Access login of that workers.dev URL (see Fixed).
+- The stage site is public and not indexed: no Cloudflare Access. The Worker sends `X-Robots-Tag: noindex, nofollow` and a disallow-all `robots.txt` on every host but production on `notes.szolotov.com`. Deploy stage smoke-tests the workers.dev Preview URL for the real site (HTTP 200, the expected version, noindex) and fails on any redirect except the Cloudflare Access login of that workers.dev URL, which it reports as a notice and skips the content checks (`SMOKE_ACCEPT_ACCESS=1`, see Fixed).
 - Deploy stage deletes the old Preview `dev` when it still exists (idempotent).
 - Callouts are redrawn as typeset asides: a thin rule in the type's tone (double for danger, failure and bug), an italic serif kind label run into the text, and no tinted box, icon or capitals. Note, info and example differ by their label. Danger has its own tone (`--danger`, AA in light and dark, checked by `check:contrast`).
 
