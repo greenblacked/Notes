@@ -1,0 +1,252 @@
+#!/usr/bin/env node
+/**
+ * Confirms through the Cloudflare API that the stage Preview's latest deployment is the one a
+ * Deploy stage run just uploaded.
+ *
+ *   node scripts/verify-preview-deployment.mjs --worker notes --preview stage \
+ *     --deployment <id> --tag <40-hex commit sha> --message <text>
+ *
+ * Prints, on success (GITHUB_OUTPUT format):
+ *     active=true
+ *     active_deployment_id=<id>
+ * and exits 1 with `error: <reason>` otherwise.
+ *
+ * "Active" means the Preview's `latest` deployment. A Preview has no gradual rollout: its URLs
+ * serve the latest deployment. The check therefore requires `latest.id` to equal the deployment id
+ * Wrangler reported for this upload, and the annotations the upload set (`workers/tag` = the
+ * commit sha from `--tag`, `workers/message` from `--message`) to match. On GitHub Actions
+ * Wrangler also sets `workers/commit_sha` = GITHUB_SHA; when present it must equal the tag, and
+ * its absence is not an error. No status field is relied on.
+ *
+ * Endpoint (Wrangler 4.149.0 reads it itself, in assemblePreviewDeploymentSettings, during every
+ * upload to an existing Preview, with the same token):
+ *     GET /accounts/{account}/workers/workers/{worker}/previews/{preview}/deployments/latest
+ * The answer is the usual { success, errors, result } envelope. API error 10025 means the Preview
+ * was not found, 10222 that it has no deployment. The response shape is not documented here from
+ * a live answer; on a mismatch the error lists the keys received.
+ *
+ * Reads CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID from the environment. Error messages never
+ * contain the token, the account id or the full URL.
+ *
+ * Node built-ins only (it runs next to the token) and the built-in fetch.
+ */
+import { pathToFileURL } from "node:url"
+
+export const API = "https://api.cloudflare.com/client/v4"
+
+const USAGE =
+  "usage: verify-preview-deployment.mjs --worker <name> --preview <name> --deployment <id> --tag <sha> --message <text>"
+
+/** @param {string} message */
+function fail(message) {
+  throw new Error(message)
+}
+
+/** An id mismatch can be read-after-write lag, so it is retried. */
+class MismatchError extends Error {}
+
+const FLAGS = {
+  "--worker": ["worker", (v) => /^[a-z0-9-]{1,63}$/.test(v)],
+  "--preview": ["preview", (v) => /^[a-z0-9-]{1,63}$/.test(v)],
+  "--deployment": ["deployment", (v) => /^[A-Za-z0-9-]{1,64}$/.test(v)],
+  "--tag": ["tag", (v) => /^[0-9a-f]{40}$/.test(v)],
+  "--message": ["message", (v) => v.length >= 1 && v.length <= 100],
+}
+
+/**
+ * @param {string[]} argv
+ * @returns {{ worker: string, preview: string, deployment: string, tag: string, message: string }}
+ */
+export function parseArgs(argv) {
+  /** @type {Record<string, string>} */
+  const out = {}
+  for (let i = 0; i < argv.length; i += 2) {
+    const flag = argv[i]
+    const value = argv[i + 1]
+    const spec = FLAGS[flag]
+    if (!spec || value === undefined) fail(USAGE)
+    const [key, valid] = spec
+    if (key in out || !valid(value)) fail(`${USAGE} (bad or repeated ${flag})`)
+    out[key] = value
+  }
+  for (const [flag, [key]] of Object.entries(FLAGS)) {
+    if (!(key in out)) fail(`${USAGE} (missing ${flag})`)
+  }
+  return /** @type {any} */ (out)
+}
+
+/**
+ * @param {string} accountId
+ * @param {string} worker
+ * @param {string} preview
+ */
+export function deploymentPath(accountId, worker, preview) {
+  if (!/^[0-9a-f]{32}$/.test(accountId)) {
+    fail("CLOUDFLARE_ACCOUNT_ID is not a 32-character hex id")
+  }
+  return `/accounts/${accountId}/workers/workers/${worker}/previews/${encodeURIComponent(preview)}/deployments/latest`
+}
+
+const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v)
+
+/** @param {unknown} body @param {string} preview */
+function describeErrors(body, preview) {
+  const errors = isObject(body) && Array.isArray(body.errors) ? body.errors : []
+  const parts = errors
+    .filter(isObject)
+    .map((e) => `${e.code ?? "?"}: ${String(e.message ?? "").slice(0, 200)}`)
+  let text = parts.length > 0 ? parts.join("; ") : "no error details"
+  if (errors.some((e) => isObject(e) && e.code === 10025)) {
+    text += ` (the Preview "${preview}" does not exist)`
+  }
+  if (errors.some((e) => isObject(e) && e.code === 10222)) {
+    text += " (the Preview has no deployment)"
+  }
+  return text
+}
+
+/**
+ * @param {unknown} body
+ * @param {{ deployment: string, tag: string, message: string, preview?: string }} expected
+ * @returns {{ id: string }}
+ */
+export function checkDeployment(body, expected) {
+  if (!isObject(body) || body.success !== true) {
+    fail(`the API answered without success: ${describeErrors(body, expected.preview ?? "stage")}`)
+  }
+  const result = body.result
+  if (!isObject(result)) fail("the API answer has no result object")
+  if (result.id !== expected.deployment) {
+    throw new MismatchError(
+      `the latest stage deployment is ${String(result.id)}, not the one this run uploaded (${expected.deployment})`,
+    )
+  }
+  const annotations = result.annotations
+  if (!isObject(annotations)) {
+    fail(
+      `the latest deployment has no annotations object (result keys: ${Object.keys(result).sort().join(", ")})`,
+    )
+  }
+  const keys = Object.keys(annotations).sort().join(", ")
+  if (annotations["workers/tag"] !== expected.tag) {
+    fail(
+      `annotation workers/tag is ${JSON.stringify(annotations["workers/tag"])}, expected ${JSON.stringify(expected.tag)} (annotation keys: ${keys})`,
+    )
+  }
+  if (annotations["workers/message"] !== expected.message) {
+    fail(
+      `annotation workers/message is ${JSON.stringify(annotations["workers/message"])}, expected ${JSON.stringify(expected.message)} (annotation keys: ${keys})`,
+    )
+  }
+  const sha = annotations["workers/commit_sha"]
+  if (sha !== undefined && sha !== expected.tag) {
+    fail(
+      `annotation workers/commit_sha is ${JSON.stringify(sha)}, expected ${JSON.stringify(expected.tag)}`,
+    )
+  }
+  return { id: result.id }
+}
+
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * One read of the latest deployment. Network errors, HTTP 429 and 5xx are retried (bounded);
+ * any other failure throws at once.
+ *
+ * @param {{ token: string, accountId: string, worker: string, preview: string,
+ *   fetchImpl?: typeof fetch, attempts?: number, delayMs?: number,
+ *   sleep?: (ms: number) => Promise<void> }} options
+ * @returns {Promise<unknown>} the parsed body
+ */
+export async function fetchLatest({
+  token,
+  accountId,
+  worker,
+  preview,
+  fetchImpl = fetch,
+  attempts = 5,
+  delayMs = 3000,
+  sleep = defaultSleep,
+}) {
+  const path = deploymentPath(accountId, worker, preview)
+  const shown = `/accounts/<account>/workers/workers/${worker}/previews/${preview}/deployments/latest`
+  let last = "no attempt was made"
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (attempt > 1) await sleep(delayMs)
+    let response
+    try {
+      response = await fetchImpl(API + path, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(30000),
+      })
+    } catch (error) {
+      last = `GET ${shown} failed: ${error instanceof Error ? error.name : "network error"}`
+      continue
+    }
+    if (response.status === 429 || response.status >= 500) {
+      last = `GET ${shown} answered HTTP ${response.status}`
+      continue
+    }
+    let body
+    try {
+      body = await response.json()
+    } catch {
+      body = undefined
+    }
+    if (response.status < 200 || response.status > 299) {
+      const details = isObject(body) ? `: ${describeErrors(body, preview)}` : ""
+      fail(`GET ${shown} answered HTTP ${response.status}${details}`)
+    }
+    if (body === undefined) fail(`GET ${shown} answered with a body that is not JSON`)
+    return body
+  }
+  return fail(`${last} (after ${attempts} attempts)`)
+}
+
+/**
+ * @param {string[]} argv
+ * @param {Record<string, string | undefined>} env
+ * @param {{ fetchImpl?: typeof fetch, attempts?: number, delayMs?: number,
+ *   sleep?: (ms: number) => Promise<void> }} [deps]
+ */
+export async function main(argv, env, deps = {}) {
+  const args = parseArgs(argv)
+  const token = env.CLOUDFLARE_API_TOKEN
+  if (!token) fail("CLOUDFLARE_API_TOKEN is not set")
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID ?? ""
+  const attempts = deps.attempts ?? 5
+  const delayMs = deps.delayMs ?? 3000
+  const sleep = deps.sleep ?? defaultSleep
+  let last
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (attempt > 1) await sleep(delayMs)
+    const body = await fetchLatest({
+      token,
+      accountId,
+      worker: args.worker,
+      preview: args.preview,
+      fetchImpl: deps.fetchImpl,
+      attempts,
+      delayMs,
+      sleep,
+    })
+    try {
+      const { id } = checkDeployment(body, args)
+      return `active=true\nactive_deployment_id=${id}`
+    } catch (error) {
+      if (!(error instanceof MismatchError)) throw error
+      last = error
+    }
+  }
+  return fail(`${last?.message} (after ${attempts} attempts)`)
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    console.log(await main(process.argv.slice(2), process.env))
+  } catch (error) {
+    console.error(`error: ${error instanceof Error ? error.message : error}`)
+    process.exit(1)
+  }
+}
