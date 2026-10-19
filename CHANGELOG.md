@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- Deploy stage ends successfully without uploading anything when no Access application covers stage and the token cannot create one (HTTP 403 from the Access API): a notice and the job summary say "Stage skipped", and the later steps and the teardown are skipped. Any other error, and any unsafe Access application, still fails the run.
 - The note's local graph is now `local-plugins/note-graph`, drawn with Canvas 2D; the graph no longer downloads the full content index. Tags no longer count as depth hops, as in Obsidian.
 - The pre-production site is **stage** again, at https://stage.notes.szolotov.com (the Worker Preview `stage`, behind Cloudflare Access). **Deploy stage** (`deploy-stage.yml`) runs on every merge to `main` and on Run workflow from `main`, only for the owner, in the environment `staging`. There is no `dev` branch: pull requests go into `main`, CI and Dependabot run for `main` only, and dev.notes.szolotov.com is retired automatically after a verified stage deploy.
 - Deploy stage refuses to upload unless the Cloudflare API shows an Access application covering stage and no Custom Domain or DNS record for the host. After the upload, the workers.dev Preview URL must redirect to Access, otherwise the Preview is deleted; the stage Preview is also deleted after any failed or cancelled step once the upload was attempted (`SMOKE_REQUIRE_ACCESS` in `scripts/smoke-test.sh`, `scripts/cloudflare-stage.mjs`). `DEV_SMOKE_TEST` is gone.
