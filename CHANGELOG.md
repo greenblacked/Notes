@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Added
+
+- **Browser smoke tests** (`npm run test:browser`, Playwright in Chromium and WebKit at desktop and phone sizes) against the built site served through the Worker. They cover the home page (no console errors, no sideways scroll), the search shortcut, the Browse drawer, the theme toggle, section navigation and Back, the tucking section row, keyboard folding of callouts and the graph dialog.
+
 ### Changed
 
 - The status of a note is no longer shown on the site: the Status column of the home page index, the Status chip in the spec sheet under the title and the Status column of the ADR records table are gone. The `status` frontmatter field is unchanged. The index has four columns on wide screens, and the phone card shows the type and number on its first line.
