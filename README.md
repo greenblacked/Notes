@@ -28,7 +28,7 @@ npm run build    # production build into public/ (also writes public/version.txt
 npm run preview  # serve public/ through the Worker locally (wrangler dev, port 8787)
 ```
 
-`npm run preview:stage` previews the stage variant (`ENVIRONMENT=preview`: noindex headers, `Disallow: /`). `wrangler dev` presents requests with the route's host (`notes.szolotov.com`), so `npm run preview` shows the indexable production behaviour; add `--local-upstream localhost:8787` to see the non-canonical (noindex) behaviour. Only production on `notes.szolotov.com` is indexable.
+`npm run preview:stage` previews the stage variant (`ENVIRONMENT=preview`: noindex headers, a crawlable `robots.txt` without a sitemap). `wrangler dev` presents requests with the route's host (`notes.szolotov.com`), so `npm run preview` shows the indexable production behaviour; add `--local-upstream localhost:8787` to see the non-canonical (noindex) behaviour. Only production on `notes.szolotov.com` is indexable.
 
 Checks (the same ones CI runs):
 
