@@ -15,7 +15,8 @@ const CENTRE_CURRENT =
 /**
  * The second row of the top bar: a link to every section that has an index page, the one the page
  * belongs to marked with aria-current (the styles highlight it). When the links do not fit the
- * row scrolls sideways. quartz/styles/custom.scss places the row under the main bar.
+ * row scrolls sideways. quartz/styles/custom.scss places the row under the main bar, and the
+ * top-bar script tucks it away on scroll.
  */
 export default (() => {
   const SectionRow: QuartzComponent = ({

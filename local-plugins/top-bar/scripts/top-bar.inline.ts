@@ -6,7 +6,10 @@
 // load; the parts that touch the page re-run on every SPA navigation ("nav") and clean up after
 // themselves. It also drives the motion that CSS cannot start by itself: the fade-in of the new page
 // after a navigation and the cross-fade of the theme (see "Motion" below). No inline script is
-// involved: this file is bundled into postscript.js.
+// involved: this file is bundled into postscript.js. Reading down a page the section row tucks
+// away under the first row, and scrolling up brings it back (scroll-tuck.mjs decides, the CSS moves it).
+
+import { initialTuck, nextTuck } from "./scroll-tuck.mjs"
 
 const drawerParts = () => {
   const explorer = document.querySelector<HTMLElement>(".explorer")
@@ -203,6 +206,104 @@ function setupTocSpy() {
   })
 }
 
+// Reading down the page the section row tucks away; scrolling up, or being near the top, brings it
+// back (the CSS slides it, scroll-tuck.mjs decides). The state is an attribute of the root, which
+// the page morph leaves alone. The row stays while it has keyboard focus, while the drawer or the
+// search is open, during a navigation and on short windows, where the bar is not sticky.
+function setupHideOnScroll() {
+  root.removeAttribute(TUCKED)
+  const bar = document.querySelector<HTMLElement>(".page > #quartz-body > .sidebar.left")
+  const row = bar?.querySelector<HTMLElement>(".section-row")
+  if (!bar || !row) return
+
+  let sticky = true
+  const measure = () => {
+    const position = getComputedStyle(bar).position
+    sticky = position === "sticky" || position === "-webkit-sticky"
+  }
+  // Only keyboard focus holds the row: a tapped or clicked link is focused too, and would keep it.
+  // Where :focus-visible is unsupported, the last input device decides instead.
+  let pointerLast = false
+  const onPointer = () => {
+    pointerLast = true
+  }
+  const onKey = () => {
+    pointerLast = false
+  }
+  const keyboardIn = () => {
+    const active = document.activeElement
+    if (!active || !row.contains(active)) return false
+    try {
+      return active.matches(":focus-visible")
+    } catch {
+      return !pointerLast
+    }
+  }
+  const hold = () => {
+    const parts = drawerParts()
+    return (
+      !sticky ||
+      root.hasAttribute("data-navigating") ||
+      root.classList.contains("mobile-no-scroll") ||
+      (!!parts && isOpen(parts)) ||
+      searchActive() ||
+      keyboardIn()
+    )
+  }
+
+  let state = initialTuck(window.scrollY)
+  const apply = () => {
+    if (root.hasAttribute(TUCKED) !== state.tucked) root.toggleAttribute(TUCKED, state.tucked)
+    // Focus must not have scrolled the clipped row up or down.
+    if (!state.tucked && row.scrollTop !== 0) row.scrollTop = 0
+  }
+  let frame = 0
+  const update = () => {
+    frame = 0
+    state = nextTuck(state, {
+      y: window.scrollY,
+      maxY: root.scrollHeight - window.innerHeight,
+      topZone: bar.offsetHeight,
+      hold: hold(),
+    })
+    apply()
+  }
+  const schedule = () => {
+    if (!frame) frame = requestAnimationFrame(update)
+  }
+  const onResize = () => {
+    measure()
+    schedule()
+  }
+  const onFocus = (e: FocusEvent) => {
+    if (!(e.target instanceof Node) || !row.contains(e.target) || !keyboardIn()) return
+    state = initialTuck(window.scrollY)
+    apply()
+  }
+
+  const observer = new MutationObserver(schedule)
+  for (const selector of [".explorer", ".mobile-explorer", ".search-container"]) {
+    const el = document.querySelector(selector)
+    if (el) observer.observe(el, { attributes: true, attributeFilter: ["class"] })
+  }
+  measure()
+  window.addEventListener("scroll", schedule, { passive: true })
+  window.addEventListener("resize", onResize, { passive: true })
+  document.addEventListener("focus", onFocus, true)
+  document.addEventListener("pointerdown", onPointer, { passive: true, capture: true })
+  document.addEventListener("keydown", onKey, true)
+  window.addCleanup(() => {
+    window.removeEventListener("scroll", schedule)
+    window.removeEventListener("resize", onResize)
+    document.removeEventListener("focus", onFocus, true)
+    document.removeEventListener("pointerdown", onPointer, true)
+    document.removeEventListener("keydown", onKey, true)
+    observer.disconnect()
+    if (frame) cancelAnimationFrame(frame)
+    root.removeAttribute(TUCKED)
+  })
+}
+
 // The centre column is the page's main landmark, the top bar its banner, and "Skip to content" lands on the title: the
 // target (#content) is rendered by the content-start component; the 404 page has none, so its
 // article stands in. Following the link also moves the keyboard (the SPA router only scrolls to an
@@ -248,6 +349,7 @@ async function settleHash() {
 // ---- Motion ------------------------------------------------------------------------------
 // Reduced motion: the CSS switches every animation and transition off; nothing here starts one.
 const root = document.documentElement
+const TUCKED = "data-bar-tucked"
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
 // Transitions are enabled once the page has painted: nothing fades on the first paint, in
@@ -277,6 +379,7 @@ let enterTimer = 0
 document.addEventListener("prenav", () => {
   navigating = true
   root.dataset.navigating = ""
+  root.removeAttribute(TUCKED)
 })
 
 function playEnter() {
@@ -310,6 +413,7 @@ const onNav = () => {
   setupDrawer()
   setupSearchFocus()
   setupTocSpy()
+  setupHideOnScroll()
   setupLandmarks()
   void settleHash()
   revealCurrentSection(navigating)

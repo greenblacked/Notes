@@ -87,3 +87,69 @@ test("top bar: focus rings are not clipped, the wordmark has a 44 x 32 hit area"
   assert.ok(!/^\s*overflow-clip-margin\s*:/m.test(scss), "overflow-clip-margin is not in Safari")
   assert.match(scss, /\.top-bar-brand\s*\{[^}]*padding-block:\s*0\.375rem/)
 })
+
+test("section row tuck: layout-neutral, only a descendant moves", () => {
+  const start = scss.indexOf(":root[data-bar-tucked]")
+  assert.ok(start > 0, "tuck block missing")
+  const end = scss.indexOf("\n}\n", start)
+  const block = scss.slice(start, end)
+  assert.match(block, /\.section-row-links\s*\{[^}]*translate3d\(0,\s*-100%,\s*0\)/)
+  for (const bad of ["height", "--sticky-h", "--header-h", "grid-template", "margin", "padding"]) {
+    assert.ok(!block.includes(bad), `tuck block must not touch ${bad}`)
+  }
+  assert.ok(!/\btop\s*:/.test(block), "tuck block must not move top")
+  assert.match(
+    block,
+    /&::before\s*\{[^}]*pointer-events:\s*auto/,
+    "the band must keep catching taps over row 1 while tucked",
+  )
+  assert.ok(!block.includes(":has("), "no :has() in the tuck block (old Safari)")
+  assert.match(scss, /--sticky-h:\s*var\(--header-h\)/)
+  assert.match(scss, /height:\s*var\(--header-h\)/)
+})
+
+test("section row tuck: shows without JavaScript, state lives on the root only", () => {
+  const base = scss.match(/\n\.section-row-links\s*\{([^}]*)\}/)
+  assert.ok(base, "base .section-row-links block not found")
+  assert.ok(!base[1].includes("transform:"), "the resting links have no transform")
+  for (const f of [
+    "local-plugins/top-bar/TopBar.tsx",
+    "local-plugins/section-row/SectionRow.tsx",
+    "local-plugins/top-bar/scripts/top-bar.early.inline.ts",
+  ]) {
+    assert.ok(!read(f).includes("data-bar-tucked"), `${f} must not set the tuck state`)
+  }
+})
+
+test("section row tuck: reduced motion switches it off, transitions animate bottom or transform", () => {
+  assert.match(
+    scss,
+    /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*transition:\s*none !important/,
+  )
+  const props = [
+    ...scss.matchAll(/transition:\s*(bottom|transform) var\(--dur\) var\(--ease-out\);/g),
+  ]
+  assert.ok(props.length >= 3, "bottom on ::before and ::after, transform on the links")
+})
+
+test("section row tuck: the deferred script", () => {
+  const main = read("local-plugins/top-bar/scripts/top-bar.inline.ts")
+  const start = main.indexOf("function setupHideOnScroll")
+  assert.ok(start > 0)
+  const fn = main.slice(start, main.indexOf("\nfunction setupLandmarks", start))
+  assert.match(fn, /addEventListener\("scroll",\s*schedule,\s*\{\s*passive:\s*true\s*\}\)/)
+  assert.ok(fn.includes("requestAnimationFrame"))
+  assert.match(fn, /addCleanup\([\s\S]*removeAttribute\(TUCKED\)/)
+  assert.match(fn, /try\s*\{[^}]*:focus-visible/)
+  // Without :focus-visible a clicked link must not hold the row: the last input device decides.
+  assert.match(fn, /catch\s*\{\s*return !pointerLast/)
+  assert.match(fn, /addEventListener\("pointerdown",\s*onPointer,\s*\{[^}]*passive:\s*true/)
+  assert.match(fn, /addEventListener\("keydown",\s*onKey/)
+  assert.match(fn, /removeEventListener\("pointerdown",\s*onPointer/)
+  assert.match(fn, /removeEventListener\("keydown",\s*onKey/)
+  assert.match(main, /setupTocSpy\(\)\n\s*setupHideOnScroll\(\)/)
+  assert.match(main, /"prenav"[\s\S]*?removeAttribute\(TUCKED\)/)
+  assert.ok(!main.includes("focusin"), "focusin belongs to the early script")
+  // The bundler strips the first "export" of every *.inline.ts, even inside a comment.
+  assert.ok(!/export/.test(main), "no 'export' in the inline script")
+})
