@@ -214,13 +214,6 @@ Use the value the backup shows (it may not be `Fail`), and restore `namespaceSel
 - [[gke-control-plane-unavailable]] when the API server itself is slow or failing.
 - [[incident-response]] for roles and communication.
 
-## Sources
-
-- [Kubernetes: dynamic admission control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)
-- [cert-manager: CA injector](https://cert-manager.io/docs/concepts/ca-injector/)
-- [Kubernetes: manage TLS certificates in a cluster](https://kubernetes.io/docs/tasks/tls/managing-tls-in-a-cluster/)
-- [Gatekeeper repository](https://github.com/open-policy-agent/gatekeeper): `website/docs/emergency.md` and `website/docs/failing-closed.md`
-
 ## Evidence
 
 Source-reviewed on 2026-10-20. Only the certificate helper steps were run, in a disposable lab on localhost; no cluster was touched. Read this section before using the note.
@@ -308,3 +301,10 @@ s_client, -verify_hostname webhook-svc.webhook-system.svc: 0 (ok); other.ns.svc:
 ```
 
 Without `-verify_return_error` the same error and code were printed and the handshake was allowed to continue. A `caBundle` that holds both the old and the new CA (the "CAs both in file" case) verified a certificate from either, which is why a rotation can overlap the two.
+
+## Sources
+
+- [Kubernetes: dynamic admission control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)
+- [cert-manager: CA injector](https://cert-manager.io/docs/concepts/ca-injector/)
+- [Kubernetes: manage TLS certificates in a cluster](https://kubernetes.io/docs/tasks/tls/managing-tls-in-a-cluster/)
+- [Gatekeeper repository](https://github.com/open-policy-agent/gatekeeper): `website/docs/emergency.md` and `website/docs/failing-closed.md`
