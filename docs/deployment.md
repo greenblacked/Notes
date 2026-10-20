@@ -291,7 +291,7 @@ What the pipeline already does: PR runs of `ci.yml` cancel when a newer commit a
 
 ### CI job graph
 
-Every check runs on every pull request and every push to `main`; none is optional, path-filtered or deferred. `CI OK` waits for all jobs. The durations in the graph are estimated: the 8-shard graph has never run in CI, and private repositories use 2-core runners, which have not been measured either. The only measured figures are from public 4-core runner runs on 2026-10-20 (the single browser job and the cold plugin restore).
+Every check runs on every pull request and every push to `main`; none is optional, path-filtered or deferred. `CI OK` waits for all jobs. The durations in the graph are estimated: the 8-shard graph has never run in CI, and private repositories use 2-core runners, which have not been measured either. The only CI-measured figures are from public 4-core runner runs on 2026-10-20 (the single browser job and the cold plugin restore).
 
 ```
 workflow-lint            attribution, actionlint, shellcheck, zizmor            about 15 s
@@ -329,7 +329,7 @@ The browser matrix uses `fail-fast: false`: when one shard fails the others fini
 
 Eight shards cost about two more billed minutes per run than six because of the rounding, but each shard sits near a minute boundary, so the figure is sensitive. Switching to four jobs is a matrix change (`shard: 1/1` and one entry per project). GitHub Free allows about 20 concurrent jobs (check the docs); one run uses up to 10 of them, so a third concurrent run queues.
 
-Cold runs are slower: a plugin-cache miss (only when `quartz.lock.json` changes) adds about 7 to 10 minutes to the build job, and a Playwright cache miss adds about 30 to 50 seconds per shard (estimated). The 7 to 10 minutes for a plugin-cache miss was measured on 4-core runners on 2026-10-20 (7 to 8 minutes) and is slower on 2-core. PR runs read the caches written by `main` and write only their own scope; no cache or artifact written by a PR run is read by a deploy.
+Cold runs are slower: a plugin-cache miss (only when `quartz.lock.json` changes) adds about 7 to 8 minutes measured on 4-core runners (2026-10-20), more on 2-core; a Playwright cache miss adds about 30 to 50 s per shard (estimated). PR runs read the caches written by `main` and write only their own scope; no cache or artifact written by a PR run is read by a deploy.
 
 Savings from the private-repository change, estimated from the run durations of 2026-10-10 to 2026-10-20 (about 550 CI runs and 125 Deploy stage runs a month at that burst cadence):
 
