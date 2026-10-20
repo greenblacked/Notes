@@ -17,7 +17,8 @@ type Sample = {
 type Sampled = { samples: Sample[]; fadePath: boolean; motion: boolean }
 
 // Clicks the theme toggle like a user (mouse on desktop, a tap on phones) and samples the top bar,
-// its section row, the scroll position and the theme icon on every animation frame and every 16ms timer tick for 900ms.
+// its section row, the scroll position and the theme icon on every animation frame and
+// every 16ms timer tick for 900ms.
 async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> {
   const btn = page.locator(".darkmode").first()
   const box = await btn.boundingBox() // does not scroll, unlike locator.click()
@@ -108,7 +109,7 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
 function expectStillGeometry(samples: Sample[]) {
   const first = samples[0]
   // Frames get sparse while the snapshot is captured (and headless WebKit gives few), so check
-  // the span and a floor that only a working timer-driven sampler reaches.
+  // the span and a floor that the 16ms timer reaches even when frames are sparse.
   expect(samples.at(-1)!.t).toBeGreaterThanOrEqual(900)
   expect(samples.length).toBeGreaterThanOrEqual(20)
   for (const s of samples) {
