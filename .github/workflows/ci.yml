@@ -132,8 +132,27 @@ jobs:
         run: npm run check:browser
 
       # The browser versions come from the Playwright version in package-lock.json.
+      - name: Read the Playwright version
+        id: playwright
+        run: echo "version=$(node -p 'require("./node_modules/playwright-core/package.json").version')" >>"$GITHUB_OUTPUT"
+
+      # PR runs write PR-scoped caches only; main runs read main-scoped ones. No restore-keys: a
+      # new Playwright version never reuses old browsers.
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-webkit
+
       - name: Install browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
         run: ./node_modules/.bin/playwright install --with-deps chromium webkit
+
+      # The browsers come from the cache; the system packages they need are not cached.
+      - name: Install browser system dependencies
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: ./node_modules/.bin/playwright install-deps chromium webkit
 
       - name: Run the browser smoke tests
         run: npm run test:browser

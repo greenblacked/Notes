@@ -309,3 +309,27 @@ test("the production guard requires the owner or an owner's Cut release", () => 
   assert.ok([w.jobs.deploy.needs].flat().includes("guard"))
   assert.deepEqual(w.jobs.guard.permissions, { contents: "read", actions: "read" })
 })
+
+test("the browser job caches Playwright browsers keyed on the Playwright version", () => {
+  const steps = wf["ci.yml"].jobs.browser.steps
+  const at = (pred) => steps.findIndex(pred)
+  const cache = at((s) => (s.uses ?? "").startsWith("actions/cache@"))
+  const version = at((s) => s.id === "playwright")
+  const install = at((s) => s.name === "Install browsers")
+  const deps = at((s) => s.name === "Install browser system dependencies")
+  const deps_ = at((s) => s.name === "Install dependencies")
+  assert.ok(cache >= 0 && version >= 0 && install >= 0 && deps >= 0)
+  assert.ok(deps_ < version && version < cache && cache < install && cache < deps)
+  assert.equal(steps[cache].id, "pw-cache")
+  assert.equal(steps[cache].with.path, "~/.cache/ms-playwright")
+  assert.equal(
+    steps[cache].with.key,
+    "playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-webkit",
+  )
+  assert.equal(steps[cache].with["restore-keys"], undefined)
+  assert.ok(steps[version].run.includes("node_modules/playwright-core/package.json"))
+  assert.equal(steps[install].if, "steps.pw-cache.outputs.cache-hit != 'true'")
+  assert.match(steps[install].run, /install --with-deps chromium webkit$/)
+  assert.equal(steps[deps].if, "steps.pw-cache.outputs.cache-hit == 'true'")
+  assert.match(steps[deps].run, /^\.\/node_modules\/\.bin\/playwright install-deps chromium webkit/)
+})
