@@ -17,21 +17,31 @@ const BOT = "github-actions[bot]"
 const dir = mkdtempSync(join(tmpdir(), "require-actor-"))
 after(() => rmSync(dir, { recursive: true, force: true }))
 
-// A fake `gh` that answers the Cut release lookup with FAKE_COUNT and records the endpoint.
+// A fake `gh` that records the endpoint and applies the real --jq filter to the fixture in
+// FAKE_RUNS, so the filter in the script is what the tests exercise.
 const gh = join(dir, "gh")
 writeFileSync(
   gh,
   `#!/usr/bin/env bash
 echo "$2" >>"$FAKE_GH_LOG"
 case "$2" in
-  */actions/workflows/cut-release.yml/runs*) echo "$FAKE_COUNT" ;;
+  */actions/workflows/cut-release.yml/runs*) printf '%s' "$FAKE_RUNS" | jq -r "$4" ;;
   *) exit 1 ;;
 esac
 `,
 )
 chmodSync(gh, 0o755)
 
-function run({ actor, triggering, count = "1", sha = SHA }) {
+const goodRun = {
+  head_branch: "main",
+  actor: { login: OWNER },
+  triggering_actor: { login: OWNER },
+  status: "completed",
+  conclusion: "success",
+}
+const runs = (...items) => ({ workflow_runs: items })
+
+function run({ actor, triggering, fixture = runs(goodRun), sha = SHA }) {
   const log = join(dir, `log-${Math.random()}`)
   writeFileSync(log, "")
   const result = spawnSync("bash", [script], {
@@ -43,7 +53,7 @@ function run({ actor, triggering, count = "1", sha = SHA }) {
       SHA: sha,
       ACTOR: actor,
       TRIGGERING_ACTOR: triggering,
-      FAKE_COUNT: count,
+      FAKE_RUNS: JSON.stringify(fixture),
       FAKE_GH_LOG: log,
     },
   })
@@ -73,9 +83,30 @@ test("an owner re-run of a Cut release dispatch passes", () => {
 })
 
 test("the bot without a Cut release run of the owner fails", () => {
-  const { code, out } = run({ actor: BOT, triggering: BOT, count: "0" })
+  const { code, out } = run({ actor: BOT, triggering: BOT, fixture: runs() })
   assert.equal(code, 1)
   assert.match(out, /No Cut release run/)
+})
+
+test("an in-progress Cut release run of the owner passes", () => {
+  const fixture = runs({ ...goodRun, status: "in_progress", conclusion: null })
+  assert.equal(run({ actor: BOT, triggering: BOT, fixture }).code, 0)
+})
+
+test("Cut release runs that do not match the filter fail", () => {
+  const cases = {
+    "wrong branch": { ...goodRun, head_branch: "dev" },
+    "non-owner actor": { ...goodRun, actor: { login: "other" } },
+    "non-owner triggering actor": { ...goodRun, triggering_actor: { login: "other" } },
+    "failed run": { ...goodRun, conclusion: "failure" },
+    "cancelled run": { ...goodRun, conclusion: "cancelled" },
+    "queued run": { ...goodRun, status: "queued", conclusion: null },
+  }
+  for (const [name, item] of Object.entries(cases)) {
+    const { code, out } = run({ actor: BOT, triggering: BOT, fixture: runs(item) })
+    assert.equal(code, 1, name)
+    assert.match(out, /No Cut release run/, name)
+  }
 })
 
 test("anyone else fails", () => {
