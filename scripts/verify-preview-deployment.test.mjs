@@ -1,0 +1,412 @@
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import { test } from "node:test"
+import { fileURLToPath } from "node:url"
+import {
+  checkDeployment,
+  deploymentPath,
+  fetchLatest,
+  main,
+  MAX_ATTEMPTS,
+  REQUEST_TIMEOUT_MS,
+  RETRY_DELAY_MS,
+  parseArgs,
+} from "./verify-preview-deployment.mjs"
+
+const SHA = "a".repeat(40)
+const ACCOUNT = "0123456789abcdef0123456789abcdef"
+const TOKEN = "tok-SECRET"
+const MESSAGE = "stage aaaaaaa"
+const argv = [
+  "--worker",
+  "notes",
+  "--preview",
+  "stage",
+  "--deployment",
+  "d1",
+  "--tag",
+  SHA,
+  "--message",
+  MESSAGE,
+]
+const env = { CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: ACCOUNT }
+const good = (over = {}, annotations = {}) => ({
+  success: true,
+  errors: [],
+  result: {
+    id: "d1",
+    annotations: {
+      "workers/tag": SHA,
+      "workers/message": MESSAGE,
+      "workers/commit_sha": SHA,
+      ...annotations,
+    },
+    ...over,
+  },
+})
+const reply = (status, body) => ({ status, json: async () => body })
+
+/** A fake fetch that answers from a list, repeating the last answer. */
+function fakeFetch(...answers) {
+  const calls = []
+  const fn = async (url, init) => {
+    calls.push({ url, init })
+    const answer = answers[Math.min(calls.length - 1, answers.length - 1)]
+    if (answer instanceof Error) throw answer
+    return answer
+  }
+  fn.calls = calls
+  return fn
+}
+const deps = (fetchImpl, attempts = 5) => ({
+  fetchImpl,
+  attempts,
+  delayMs: 0,
+  sleep: async () => {},
+})
+
+test("a matching latest deployment is active", async () => {
+  const fetchImpl = fakeFetch(reply(200, good()))
+  const out = await main(argv, env, deps(fetchImpl))
+  assert.equal(out, "active=true\nactive_deployment_id=d1")
+  assert.equal(fetchImpl.calls.length, 1)
+})
+
+test("a missing commit_sha annotation is not an error", async () => {
+  const body = good()
+  delete body.result.annotations["workers/commit_sha"]
+  assert.equal(
+    await main(argv, env, deps(fakeFetch(reply(200, body)))),
+    "active=true\nactive_deployment_id=d1",
+  )
+})
+
+test("a wrong tag, message, commit_sha or shape fails and names the field", () => {
+  const expected = { deployment: "d1", tag: SHA, message: MESSAGE }
+  assert.throws(
+    () => checkDeployment(good({}, { "workers/tag": "b".repeat(40) }), expected),
+    /workers\/tag/,
+  )
+  assert.throws(
+    () => checkDeployment(good({}, { "workers/message": "other" }), expected),
+    /workers\/message/,
+  )
+  assert.throws(
+    () => checkDeployment(good({}, { "workers/commit_sha": "c".repeat(40) }), expected),
+    /commit_sha/,
+  )
+  assert.throws(
+    () => checkDeployment(good({ annotations: undefined, other: 1 }), expected),
+    /annotations.*result keys: annotations, id, other/,
+  )
+  assert.throws(() => checkDeployment({ success: true }, expected), /no result/)
+  assert.throws(() => checkDeployment(null, expected), /without success/)
+})
+
+test("an id mismatch is retried, then fails after exactly the attempts", async () => {
+  const stale = reply(200, good({ id: "old" }))
+  const never = fakeFetch(stale)
+  await assert.rejects(
+    main(argv, env, deps(never, 3)),
+    /latest stage deployment is old.*3 attempts/,
+  )
+  assert.equal(never.calls.length, 3)
+  const lag = fakeFetch(stale, reply(200, good()))
+  assert.equal(await main(argv, env, deps(lag)), "active=true\nactive_deployment_id=d1")
+  assert.equal(lag.calls.length, 2)
+})
+
+test("HTTP 5xx and network errors are retried; 403 and 404 fail at once", async () => {
+  const flaky = fakeFetch(reply(500, {}), new Error("boom"), reply(429, {}), reply(200, good()))
+  assert.equal(await main(argv, env, deps(flaky)), "active=true\nactive_deployment_id=d1")
+  assert.equal(flaky.calls.length, 4)
+  const down = fakeFetch(reply(503, {}))
+  await assert.rejects(main(argv, env, deps(down, 2)), /HTTP 503.*2 attempts/)
+  for (const status of [403, 404]) {
+    const f = fakeFetch(reply(status, {}))
+    await assert.rejects(main(argv, env, deps(f)), new RegExp(`HTTP ${status}`))
+    assert.equal(f.calls.length, 1)
+  }
+})
+
+test("API error codes 10025 and 10222 give a specific message", async () => {
+  for (const [code, text] of [
+    [10025, /Preview "stage" does not exist/],
+    [10222, /Preview has no deployment/],
+  ]) {
+    for (const status of [200, 404]) {
+      const f = fakeFetch(reply(status, { success: false, errors: [{ code, message: "x" }] }))
+      await assert.rejects(main(argv, env, deps(f, 3)), text)
+      // Read-after-write lag: bounded retries, not a hard failure at once.
+      assert.equal(f.calls.length, 3)
+    }
+  }
+})
+
+test("arguments and environment are validated", async () => {
+  const set = (flag, value) => {
+    const copy = [...argv]
+    copy[copy.indexOf(flag) + 1] = value
+    return copy
+  }
+  for (const [flag, value] of [
+    ["--worker", "No/pe"],
+    ["--preview", "a/b"],
+    ["--preview", "../x"],
+    ["--deployment", "a b"],
+    ["--tag", "abc"],
+    ["--message", ""],
+    ["--message", "x".repeat(101)],
+  ]) {
+    assert.throws(() => parseArgs(set(flag, value)), /usage/, `${flag} ${value}`)
+  }
+  assert.throws(() => parseArgs(argv.slice(0, -2)), /missing --message/)
+  assert.throws(() => parseArgs([...argv, "--worker", "x"]), /usage/)
+  assert.throws(() => parseArgs([...argv, "--other", "x"]), /usage/)
+  assert.throws(() => parseArgs([...argv, "constructor", "x"]), /usage/)
+  assert.throws(() => parseArgs([...argv, "__proto__", "x"]), /usage/)
+  assert.throws(() => parseArgs([...argv, "--worker"]), /usage/)
+  await assert.rejects(
+    main(argv, { ...env, CLOUDFLARE_API_TOKEN: "" }, deps(fakeFetch())),
+    /API_TOKEN is not set/,
+  )
+  const bad = "not-hex-account-ID-value"
+  await assert.rejects(
+    main(argv, { ...env, CLOUDFLARE_ACCOUNT_ID: bad }, deps(fakeFetch())),
+    (error) => /32-character hex/.test(error.message) && !error.message.includes(bad),
+  )
+})
+
+test("the request is exactly the latest path and secrets never reach an error", async () => {
+  assert.equal(
+    deploymentPath(ACCOUNT, "notes", "stage"),
+    `/accounts/${ACCOUNT}/workers/workers/notes/previews/stage/deployments/latest`,
+  )
+  const ok = fakeFetch(reply(200, good()))
+  await main(argv, env, deps(ok))
+  assert.equal(
+    ok.calls[0].url,
+    `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/workers/workers/notes/previews/stage/deployments/latest`,
+  )
+  assert.equal(ok.calls[0].init.headers.Authorization, `Bearer ${TOKEN}`)
+  const failures = [
+    fakeFetch(reply(500, {})),
+    fakeFetch(new Error(`connect failed ${TOKEN} ${ACCOUNT}`)),
+    fakeFetch(reply(403, { success: false, errors: [{ code: 1, message: "denied" }] })),
+    fakeFetch(reply(200, good({ id: "old" }))),
+    fakeFetch(reply(200, good({}, { "workers/tag": "zzz" }))),
+  ]
+  for (const f of failures) {
+    await assert.rejects(main(argv, env, deps(f, 2)), (error) => {
+      for (const secret of [TOKEN, ACCOUNT, "api.cloudflare.com"]) {
+        assert.ok(!error.message.includes(secret), `message leaks ${secret}: ${error.message}`)
+      }
+      return true
+    })
+  }
+})
+
+test("fetchLatest returns the parsed body", async () => {
+  const body = good()
+  const out = await fetchLatest({
+    token: TOKEN,
+    accountId: ACCOUNT,
+    worker: "notes",
+    preview: "stage",
+    ...deps(fakeFetch(reply(200, body))),
+  })
+  assert.deepEqual(out, body)
+})
+
+test("the script imports only Node built-ins", () => {
+  const source = readFileSync(new URL("./verify-preview-deployment.mjs", import.meta.url), "utf8")
+  const specs = [...source.matchAll(/^import .* from "(.+)"/gm)].map((m) => m[1])
+  assert.ok(specs.length > 0)
+  for (const spec of specs) assert.ok(spec.startsWith("node:"), spec)
+})
+
+test("transient errors and stale answers share ONE bounded budget", async () => {
+  const stale = reply(200, good({ id: "old" }))
+  const mixes = [
+    [reply(500, {}), stale, new Error("boom"), stale, reply(429, {}), stale, stale],
+    [new Error("boom")],
+    [reply(503, {}), stale],
+    [stale, reply(502, {})],
+  ]
+  for (const answers of mixes) {
+    const f = fakeFetch(...answers)
+    const sleeps = []
+    await assert.rejects(
+      main(argv, env, {
+        fetchImpl: f,
+        sleep: async (ms) => void sleeps.push(ms),
+      }),
+      new RegExp(`after ${MAX_ATTEMPTS} attempts`),
+    )
+    // Not 25: exactly one request per attempt, and one pause between attempts.
+    assert.equal(f.calls.length, MAX_ATTEMPTS)
+    assert.equal(sleeps.length, MAX_ATTEMPTS - 1)
+  }
+  // Worst case wall time stays far below the upload job's 15-minute timeout.
+  const worstMs = MAX_ATTEMPTS * REQUEST_TIMEOUT_MS + (MAX_ATTEMPTS - 1) * RETRY_DELAY_MS
+  assert.ok(worstMs <= 3 * 60 * 1000, `worst case ${worstMs} ms`)
+})
+
+test("fetchLatest makes a single request and does not retry or sleep", async () => {
+  const f = fakeFetch(reply(503, {}))
+  await assert.rejects(
+    fetchLatest({
+      token: TOKEN,
+      accountId: ACCOUNT,
+      worker: "notes",
+      preview: "stage",
+      fetchImpl: f,
+    }),
+    /HTTP 503/,
+  )
+  assert.equal(f.calls.length, 1)
+})
+
+test("outcomes still map: success after transient errors, hard failure at once", async () => {
+  const stale = reply(200, good({ id: "old" }))
+  const f = fakeFetch(new Error("boom"), stale, reply(500, {}), reply(200, good()))
+  assert.equal(await main(argv, env, deps(f)), "active=true\nactive_deployment_id=d1")
+  assert.equal(f.calls.length, 4)
+  const wrongTag = fakeFetch(
+    reply(500, {}),
+    reply(200, good({}, { "workers/tag": "b".repeat(40) })),
+  )
+  await assert.rejects(main(argv, env, deps(wrongTag)), /workers\/tag/)
+  assert.equal(wrongTag.calls.length, 2)
+})
+
+test("a foreign deployment id after the whole budget is an ordinary failure (no ordering evidence)", async () => {
+  const newer = reply(200, good({ id: "d2" }))
+  // A brief lag is still retried first: ours appears on the 3rd attempt.
+  const lag = fakeFetch(newer, newer, reply(200, good()))
+  assert.equal(await main(argv, env, deps(lag)), "active=true\nactive_deployment_id=d1")
+  const cases = [
+    // (a) a stale pre-read, then a lagging deployment older than ours
+    [[reply(200, good({ id: "d0" })), reply(200, good({ id: "d1x" }))], 3],
+    // (b) a constant foreign id
+    [[newer], 4],
+    // (c) an unconfirmed created_on field must not change the outcome
+    [[reply(200, good({ id: "d2", created_on: "2099-01-01T00:00:00Z" }))], 3],
+    // (d) malformed or annotation-less foreign answers
+    [[reply(200, good({ id: "d2", annotations: null }))], 2],
+    [[reply(200, good({ id: "bad id!" }))], 2],
+  ]
+  for (const [answers, n] of cases) {
+    const f = fakeFetch(...answers)
+    await assert.rejects(main(argv, env, deps(f, n)), (error) => {
+      assert.equal(error.constructor, Error)
+      assert.equal(error.deploymentId, undefined)
+      assert.match(error.message, new RegExp(`after ${n} attempts`))
+      return true
+    })
+    assert.equal(f.calls.length, n)
+  }
+})
+
+test("a transient last attempt, a malformed answer or our own mismatch fails", async () => {
+  const newer = reply(200, good({ id: "d2" }))
+  // The last attempt was a transient error: unknown state, ordinary failure.
+  const transient = fakeFetch(newer, reply(502, {}))
+  await assert.rejects(main(argv, env, deps(transient, 2)), (error) => {
+    return /after 2 attempts/.test(error.message)
+  })
+  // A malformed id or no annotations object is not a valid other deployment.
+  for (const body of [
+    good({ id: undefined }),
+    good({ id: "bad id!" }),
+    good({ id: "d2", annotations: null }),
+  ]) {
+    await assert.rejects(main(argv, env, deps(fakeFetch(reply(200, body)), 2)), (error) => {
+      return /after 2 attempts/.test(error.message)
+    })
+  }
+  // Our deployment with a wrong tag, message or commit_sha fails at once.
+  for (const ann of [
+    { "workers/tag": "b".repeat(40) },
+    { "workers/message": "x" },
+    { "workers/commit_sha": "c".repeat(40) },
+  ]) {
+    const f = fakeFetch(reply(200, good({}, ann)))
+    await assert.rejects(main(argv, env, deps(f)), /annotation workers\//)
+    assert.equal(f.calls.length, 1)
+  }
+})
+
+test("the CLI exits 1 on any failure and has no read or superseded modes", async () => {
+  const src = readFileSync(new URL("./verify-preview-deployment.mjs", import.meta.url), "utf8")
+  for (const gone of ["superseded", "EXIT_SUPERSEDED", "--read-latest", "--read-previous"]) {
+    assert.ok(!src.includes(gone), gone)
+  }
+  assert.ok(src.includes("process.exit(1)"))
+  const { spawnSync } = await import("node:child_process")
+  const r = spawnSync(
+    process.execPath,
+    [
+      fileURLToPath(new URL("./verify-preview-deployment.mjs", import.meta.url)),
+      "--read-latest",
+      "--worker",
+      "notes",
+      "--preview",
+      "stage",
+    ],
+    { encoding: "utf8", env: { PATH: process.env.PATH } },
+  )
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /^error: usage/)
+})
+
+test("missing-preview answers right after the upload are retried, then succeed", async () => {
+  const miss = (status, code) => reply(status, { success: false, errors: [{ code, message: "x" }] })
+  const f = fakeFetch(
+    miss(404, 10025),
+    miss(200, 10222),
+    reply(200, good({ annotations: null })),
+    reply(200, good()),
+  )
+  assert.equal(await main(argv, env, deps(f)), "active=true\nactive_deployment_id=d1")
+  assert.equal(f.calls.length, 4)
+})
+
+test("missing-preview through every attempt is an ordinary failure", async () => {
+  const miss = reply(404, { success: false, errors: [{ code: 10025, message: "x" }] })
+  const f = fakeFetch(miss)
+  const sleeps = []
+  await assert.rejects(
+    main(argv, env, { fetchImpl: f, sleep: async (ms) => void sleeps.push(ms) }),
+    (error) =>
+      /does not exist/.test(error.message) &&
+      new RegExp(`after ${MAX_ATTEMPTS} attempts`).test(error.message),
+  )
+  assert.equal(f.calls.length, MAX_ATTEMPTS)
+  assert.equal(sleeps.length, MAX_ATTEMPTS - 1)
+  // A foreign id seen earlier does not change a final missing-preview answer.
+  const g = fakeFetch(reply(200, good({ id: "d2" })), miss)
+  await assert.rejects(main(argv, env, deps(g, 2)), /does not exist/)
+})
+
+test("mixed missing-preview, transient and stale answers share the one budget", async () => {
+  const miss = reply(404, { success: false, errors: [{ code: 10222, message: "x" }] })
+  const stale = reply(200, good({ id: "old" }))
+  const f = fakeFetch(miss, reply(503, {}), stale, miss, new Error("boom"), stale, miss)
+  const sleeps = []
+  await assert.rejects(
+    main(argv, env, { fetchImpl: f, sleep: async (ms) => void sleeps.push(ms) }),
+    new RegExp(`after ${MAX_ATTEMPTS} attempts`),
+  )
+  assert.equal(f.calls.length, MAX_ATTEMPTS)
+  assert.equal(sleeps.length, MAX_ATTEMPTS - 1)
+})
+
+test("unrelated API errors and a non-object annotations value still fail at once", async () => {
+  const f = fakeFetch(reply(200, { success: false, errors: [{ code: 9999, message: "x" }] }))
+  await assert.rejects(main(argv, env, deps(f)), /9999/)
+  assert.equal(f.calls.length, 1)
+  const g = fakeFetch(reply(200, good({ annotations: "nope" })))
+  await assert.rejects(main(argv, env, deps(g)), /no annotations object/)
+  assert.equal(g.calls.length, 1)
+})

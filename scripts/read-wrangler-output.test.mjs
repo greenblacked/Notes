@@ -69,6 +69,7 @@ test("preview: workers.dev and custom domain URLs", () => {
   assert.deepEqual(readPreview([session, preview]), {
     workers_dev_url: "https://stage-notes.example-sub.workers.dev",
     custom_url: "https://stage.notes.szolotov.com",
+    deployment_id: "d1",
   })
 })
 
@@ -77,12 +78,23 @@ test("preview: custom_url is empty when the custom domain Preview is not active"
   assert.deepEqual(readPreview([entry]), {
     workers_dev_url: "https://stage-notes.example-sub.workers.dev",
     custom_url: "",
+    deployment_id: "d1",
   })
 })
 
 test("preview: no URLs at all gives empty values", () => {
   const entry = { ...preview, preview_urls: [], deployment_urls: undefined }
-  assert.deepEqual(readPreview([entry]), { workers_dev_url: "", custom_url: "" })
+  assert.deepEqual(readPreview([entry]), {
+    workers_dev_url: "",
+    custom_url: "",
+    deployment_id: "d1",
+  })
+})
+
+test("preview: a missing or malformed deployment_id is an error", () => {
+  for (const bad of [undefined, "", "a b", "x".repeat(65), 42]) {
+    assert.throws(() => readPreview([{ ...preview, deployment_id: bad }]), /deployment_id/)
+  }
 })
 
 test("validUrl accepts only plain https URLs on allowed hosts", () => {
@@ -117,7 +129,7 @@ test("main prints key=value lines and rejects bad usage or missing files", () =>
   writeFileSync(file, ndjson(session, preview))
   assert.equal(
     main(["--preview", file]),
-    "workers_dev_url=https://stage-notes.example-sub.workers.dev\ncustom_url=https://stage.notes.szolotov.com",
+    "workers_dev_url=https://stage-notes.example-sub.workers.dev\ncustom_url=https://stage.notes.szolotov.com\ndeployment_id=d1",
   )
   assert.throws(() => main(["--preview", join(dir, "missing.json")]), /cannot read/)
   assert.throws(() => main(["--other", file]), /usage/)

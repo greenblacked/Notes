@@ -15,6 +15,17 @@ name: Deploy stage
 # lifecycle scripts) and receives only public/ from the build as an artifact; the Worker
 # code is never taken from it.
 #
+# Result: the `result` job's output `stage_result` (the `upload` job's, with a skipped upload
+# mapped to `skipped`; the `result` job writes the authoritative `Stage result` notice and
+# `stage_result=<level>` summary line for every outcome, and the upload job also writes them
+# with detail when it runs) is one of:
+#   verified         the workers.dev smoke test read this build, and the Cloudflare API confirms
+#                    this upload is the active stage deployment.
+#   uploaded-active  the API confirms it, but Cloudflare Access kept the smoke test from the
+#                    served content.
+#   failure          the Preview was taken down, or nothing was uploaded.
+#   skipped          main moved on; the newer run deploys.
+#
 # Gating: instead of a workflow_run trigger (a dangerous trigger in zizmor), the
 # checks run inline here against the exact commit being deployed.
 on:
@@ -155,6 +166,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    outputs:
+      stage_result: ${{ steps.result.outputs.stage_result || steps.skip.outputs.stage_result || 'failure' }}
     environment:
       name: stage
       url: https://stage.notes.szolotov.com
@@ -209,8 +222,11 @@ jobs:
         run: .github/scripts/is-branch-head.sh
 
       - name: Skip when main moved on
+        id: skip
         if: steps.fresh.outputs.current != 'true'
-        run: echo "::notice::main moved on; the newer run deploys it."
+        run: |
+          echo "::notice::main moved on; the newer run deploys it."
+          echo "stage_result=skipped" >>"$GITHUB_OUTPUT"
 
       # The token never lives at job level: each step that needs it sets it. Only wrangler and the
       # Node built-ins run next to it.
@@ -264,6 +280,22 @@ jobs:
           echo "$out"
           echo "$out" >>"$GITHUB_OUTPUT"
 
+      # The Preview serves its latest deployment. Confirm through the API that it is the one this
+      # run uploaded, tagged with this commit (Node built-ins only, next to the token).
+      - name: Confirm the uploaded version is active
+        id: active
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEPLOYMENT_ID: ${{ steps.parse.outputs.deployment_id }}
+        run: |
+          rc=0
+          out="$(node scripts/verify-preview-deployment.mjs --worker notes --preview stage --deployment "$DEPLOYMENT_ID" --tag "$SHA" --message "stage ${SHA::7}")" || rc=$?
+          echo "$out"
+          echo "$out" >>"$GITHUB_OUTPUT"
+          exit "$rc"
+
       - name: Require the custom domain Preview URL
         if: steps.fresh.outputs.current == 'true'
         env:
@@ -273,7 +305,7 @@ jobs:
             echo "::error::The stage Preview is not served at https://stage.notes.szolotov.com (Wrangler reported '$STAGE_URL'). notes.szolotov.com must be enabled for Production and Preview. See docs/deployment.md#stage-preview."
             exit 1
           fi
-          echo "::notice::Stage preview: https://stage.notes.szolotov.com"
+          echo "::notice::Stage preview URL: https://stage.notes.szolotov.com"
           {
             echo "### Stage preview"
             echo
@@ -284,8 +316,10 @@ jobs:
       # smoke test runs on the Preview's workers.dev URL. The Cloudflare account protects
       # workers.dev Preview URLs with Cloudflare Access (an account setting this repository does
       # not manage): SMOKE_ACCEPT_ACCESS=1 accepts a redirect to the Access login for this exact
-      # host as a notice, with the content checks skipped. Any other redirect or failure fails; a
-      # reachable Preview must pass every check (HTTP 200, this build, headers, noindex, crawlable robots.txt).
+      # host as a notice and ends the test with the result `access`. The content is then not
+      # checked from CI, and the run's result is at best `uploaded-active`. Any other redirect or
+      # failure fails; a reachable Preview must pass every check (HTTP 200, this build, headers,
+      # noindex, crawlable robots.txt).
       - name: Smoke-test the workers.dev Preview URL
         id: smoke
         if: steps.fresh.outputs.current == 'true'
@@ -311,9 +345,10 @@ jobs:
 
       # The custom domain usually answers runners with 403 (Bot Fight Mode); the workers.dev smoke
       # test above is the real check. A 200 here must still carry noindex. When the workers.dev URL
-      # is behind Access, nothing checks the build from CI (this probe only reads the headers of /):
-      # the run still passes, whatever this probe gets, and says so in a notice and the run summary.
+      # is behind Access nothing checks the served build from CI (this probe only reads the headers
+      # of /); the Summary step reports `uploaded-active`.
       - name: Probe the custom domain
+        id: probe
         if: steps.fresh.outputs.current == 'true'
         env:
           SMOKE_RESULT: ${{ steps.smoke.outputs.result }}
@@ -323,6 +358,7 @@ jobs:
           code="$(curl --proto '=https' --tlsv1.2 -s -D "$probe" -o /dev/null -w '%{http_code}' --max-time 30 \
             --user-agent 'notes-smoke-test/1 (+https://github.com/greenblacked/Notes)' \
             https://stage.notes.szolotov.com/ || true)"
+          echo "code=$code" >>"$GITHUB_OUTPUT"
           if [[ "$code" == "200" ]]; then
             if grep -qiE '^x-robots-tag:.*noindex' "$probe"; then
               echo "::notice::https://stage.notes.szolotov.com answered 200 with noindex."
@@ -332,7 +368,7 @@ jobs:
             fi
           elif [[ "$code" == "403" ]]; then
             if [[ "$SMOKE_RESULT" == "verified" ]]; then
-              echo "::notice::https://stage.notes.szolotov.com answered 403 to this runner (Bot Fight Mode); verification used workers.dev."
+              echo "::notice::https://stage.notes.szolotov.com answered 403 to this runner (Bot Fight Mode); the content was checked on workers.dev."
             else
               echo "::notice::https://stage.notes.szolotov.com answered 403 to this runner (Bot Fight Mode)."
             fi
@@ -341,19 +377,39 @@ jobs:
           else
             echo "::notice::https://stage.notes.szolotov.com answered HTTP $code."
           fi
-          if [[ "$SMOKE_RESULT" != "verified" ]]; then
-            echo "::notice::Stage content was not verified from CI: the workers.dev Preview URL is behind Cloudflare Access and the custom domain probe only checked the response headers (HTTP $code), not the build. The Preview was uploaded and kept; open https://stage.notes.szolotov.com/version.txt and expect stage+$SHA."
-            {
-              echo
-              echo "Not verified from CI: workers.dev is behind Cloudflare Access and the custom domain probe (HTTP $code) did not check the build. Check https://stage.notes.szolotov.com/version.txt in a browser."
-            } >>"$GITHUB_STEP_SUMMARY"
-          fi
 
-      # Fail closed: once the upload was attempted, any failed or cancelled step after it takes the
-      # Preview down, so stage keeps only a build that passed every check it could run (see the
-      # Access note on the smoke step). A failed delete counts as "already gone" only when Wrangler
-      # itself reports that the Preview "stage" was not found.
-      - name: Take stage down unless it is verified
+      # verified: the API confirms the upload is active AND the smoke test checked the served
+      # content. uploaded-active: the API confirms it, but Access kept the smoke test from the
+      # content. Anything else fails here, which takes stage down.
+      - name: Decide the stage result
+        id: level
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          ACTIVE: ${{ steps.active.outputs.active }}
+          SMOKE_RESULT: ${{ steps.smoke.outputs.result }}
+        run: |
+          if [[ "$ACTIVE" != "true" ]]; then
+            echo "::error::The API did not confirm the uploaded version is active."
+            exit 1
+          fi
+          case "$SMOKE_RESULT" in
+            verified) level=verified ;;
+            access) level=uploaded-active ;;
+            *)
+              echo "::error::Unexpected smoke result '$SMOKE_RESULT'."
+              exit 1
+              ;;
+          esac
+          echo "level=$level" >>"$GITHUB_OUTPUT"
+
+      # Fail closed: once the upload was attempted, any failed or cancelled step after it deletes the
+      # Preview, so stage keeps only an upload whose checks all passed (see `Decide the stage
+      # result`). The API gives no ordering evidence between deployments, so a different latest
+      # deployment is never assumed to be newer than this run's and is deleted too; the next Deploy
+      # stage run restores stage. A failed delete counts as "already gone" only when Wrangler itself
+      # reports that the Preview "stage" was not found.
+      - name: Take stage down after a failed check
+        id: teardown
         if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled())
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -372,13 +428,78 @@ jobs:
               echo "::notice::The stage Preview does not exist; nothing to delete."
             else
               echo "$chk"
-              echo "::error::Deleting the unverified stage Preview failed; delete it by hand."
+              echo "::error::Deleting the stage Preview failed; delete it by hand."
               exit 1
             fi
           fi
-          echo "::error::stage was not fully verified; the Preview was deleted (or was absent). See the first failed step above."
+          echo "::error::A stage check failed; the Preview was deleted (or was absent). See the first failed step above."
           exit 1
 
       - name: Summary
-        if: steps.fresh.outputs.current == 'true'
-        run: echo "stage serves ${SHA::7}" >>"$GITHUB_STEP_SUMMARY"
+        id: result
+        if: always() && steps.fresh.outputs.current == 'true'
+        env:
+          LEVEL: ${{ steps.level.outputs.level }}
+          DEPLOYMENT_ID: ${{ steps.active.outputs.active_deployment_id || steps.parse.outputs.deployment_id }}
+          PROBE_CODE: ${{ steps.probe.outputs.code }}
+          PREVIEW_OUTCOME: ${{ steps.preview.outcome }}
+          TEARDOWN_OUTCOME: ${{ steps.teardown.outcome }}
+        run: |
+          level="${LEVEL:-failure}"
+          # The teardown ran (a failed or cancelled run): the Preview is gone, whatever LEVEL says.
+          if [[ -n "$TEARDOWN_OUTCOME" && "$TEARDOWN_OUTCOME" != "skipped" ]]; then
+            level=failure
+          fi
+          echo "stage_result=$level" >>"$GITHUB_OUTPUT"
+          echo "::notice title=Stage result::$level"
+          if [[ "$level" == "uploaded-active" ]]; then
+            echo "::notice::Stage content was not checked from CI: the workers.dev Preview URL is behind Cloudflare Access and the custom domain probe only checked the response headers (HTTP ${PROBE_CODE:-none}), not the build. Open https://stage.notes.szolotov.com/version.txt and expect stage+$SHA."
+          fi
+          {
+            echo
+            echo "### Stage result"
+            echo
+            echo "stage_result=$level"
+            echo
+            case "$level" in
+              verified) echo "Checked from CI: the workers.dev smoke test read \`stage+$SHA\` from \`/version.txt\` with the expected headers and noindex, and the Cloudflare API confirms deployment \`$DEPLOYMENT_ID\` (tag \`${SHA::7}\`) is the active stage deployment." ;;
+              uploaded-active) echo "Uploaded and active, content not checked from CI: the Cloudflare API confirms deployment \`$DEPLOYMENT_ID\` (tag \`${SHA::7}\`) is the active stage deployment, but workers.dev is behind Cloudflare Access and the custom domain answered HTTP ${PROBE_CODE:-none}. Open https://stage.notes.szolotov.com/version.txt and expect \`stage+$SHA\`." ;;
+              *)
+                if [[ -z "$PREVIEW_OUTCOME" || "$PREVIEW_OUTCOME" == "skipped" ]]; then
+                  echo "Failed before the upload; nothing was uploaded."
+                else
+                  echo "A check failed after the upload; the stage Preview was taken down. See the first failed step."
+                fi
+                ;;
+            esac
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  # The four-value contract in one place. A job that is skipped by its job-level `if:` (the build
+  # job found that main moved on) has no outputs at all, so `needs.upload.outputs.stage_result` is
+  # empty there. This job runs even when build fails or is cancelled and decides `skipped` from the
+  # build outputs (build succeeded and main moved on), never from the upload job's status; a failed
+  # or cancelled build, or an upload that failed, was cancelled or produced no result, is `failure`. Read `needs.result.outputs.stage_result`.
+  result:
+    name: Stage result
+    needs: [build, upload]
+    if: ${{ always() && github.repository == 'greenblacked/Notes' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      stage_result: ${{ needs.build.result == 'success' && needs.build.outputs.current != 'true' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}
+    steps:
+      - name: Report the stage result
+        env:
+          STAGE_RESULT: ${{ needs.build.result == 'success' && needs.build.outputs.current != 'true' && 'skipped' || needs.upload.outputs.stage_result || 'failure' }}
+        run: |
+          # Authoritative final value: also covers a skipped upload (main moved) and a build that
+          # failed before the upload job, where the upload job reports nothing.
+          level="${STAGE_RESULT:-failure}"
+          echo "::notice title=Stage result::$level"
+          {
+            echo
+            echo "### Stage result"
+            echo
+            echo "stage_result=$level"
+          } >>"$GITHUB_STEP_SUMMARY"
