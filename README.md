@@ -103,7 +103,7 @@ flowchart LR
 ```
 
 1. Branch `<type>/<kebab>` from `main` and open a pull request into `main`. CI must pass (`CI OK`); merge with a merge commit.
-2. The merge deploys stage automatically: https://stage.notes.szolotov.com (public, noindex; about 7 to 8 minutes measured on 4-core runners (2026-10-20), slower on 2-core; `/version.txt` shows `stage+<sha>`) ([Stage Preview](docs/deployment.md#stage-preview)). Run workflow on `main` re-deploys it. Production traffic is untouched.
+2. The merge deploys stage automatically: https://stage.notes.szolotov.com (public, noindex; about 8 to 9 minutes with the cold build, measured on 4-core runners (2026-10-20), slower on 2-core; `/version.txt` shows `stage+<sha>`) ([Stage Preview](docs/deployment.md#stage-preview)). Run workflow on `main` re-deploys it. Production traffic is untouched.
 3. To release: update `CHANGELOG.md` (`[Unreleased]` to `[X.Y.Z] - date`) by pull request, then Actions, **Cut release**, **Run workflow** on `main`, enter the version as `X.Y.Z`. The workflow validates it, checks that CI passed and Deploy stage updated stage for that commit (the stage requirement is skipped only for the first release, while no vX.Y.Z tag exists), and that the version is higher than the latest tag, creates the tag and GitHub Release from the CHANGELOG section, and dispatches Deploy production on the tag.
 4. Deploy production runs straight after Cut release. Its guard checks the tag, CI on main and that the owner (or the owner's Cut release run) started it. A smoke test runs against the Worker's workers.dev URL after the deploy; on failure the previous version is restored automatically.
 
