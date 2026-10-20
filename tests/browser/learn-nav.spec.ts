@@ -105,7 +105,7 @@ for (const scheme of ["light", "dark"] as const) {
   })
 }
 
-test("the navigation is a named landmark and its links are reachable with Tab", async ({
+test("the navigation is a named landmark and its links are focusable with a visible focus ring", async ({
   page,
 }) => {
   await page.goto("/learn/gke-for-beginners")
@@ -114,14 +114,14 @@ test("the navigation is a named landmark and its links are reachable with Tab", 
   const links = n.locator("a")
   const count = await links.count()
   expect(count).toBe(3)
-  await links.first().focus()
   for (let i = 0; i < count; i++) {
+    // focus() instead of Tab: WebKit skips links on Tab by default (Alt+Tab)
+    await links.nth(i).focus()
     await expect(links.nth(i)).toBeFocused()
     const outline = await links.nth(i).evaluate((el) => {
       const s = getComputedStyle(el)
       return s.outlineStyle !== "none" || s.boxShadow !== "none"
     })
     expect(outline, "focus is visible").toBe(true)
-    await page.keyboard.press("Tab")
   }
 })
