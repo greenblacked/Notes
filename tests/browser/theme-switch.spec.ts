@@ -14,7 +14,7 @@ type Sample = {
   vt: boolean
 }
 
-type Sampled = { samples: Sample[]; fadePath: boolean; motion: boolean }
+type Sampled = { samples: Sample[]; clicked: boolean; fadePath: boolean; motion: boolean }
 
 // Clicks the theme toggle like a user (mouse on desktop, a tap on phones) and samples the top bar,
 // its section row, the scroll position and the theme icon on every animation frame and
@@ -24,7 +24,12 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
   const box = await btn.boundingBox() // does not scroll, unlike locator.click()
   expect(box).not.toBeNull()
   await page.evaluate(() => {
-    const w = window as unknown as { __s: Sample[]; __tc: number; __done: Promise<void> }
+    const w = window as unknown as {
+      __s: Sample[]
+      __tc: number
+      __t0: number
+      __done: Promise<void>
+    }
     const bar = document.querySelector(".page > #quartz-body > .sidebar.left")!
     const row = bar.querySelector(".section-row")!
     const icons = [...document.querySelectorAll<SVGElement>(".darkmode > svg")]
@@ -34,6 +39,7 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
     }
     w.__s = []
     w.__tc = NaN
+    w.__t0 = performance.now()
     // The switch starts on the click event (top-bar's capture listener on document), so take the
     // click time in the capture phase on window, which runs first. "once" skips the click that
     // top-bar replays inside startViewTransition.
@@ -44,7 +50,7 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
     w.__done = new Promise<void>((res) => {
       let finished = false
       let last = -1
-      const started = performance.now()
+      const started = w.__t0
       const tick = () => {
         if (finished) return
         const t = performance.now() // absolute for now; made relative to the click on return
@@ -105,26 +111,30 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
   if (isMobile) await page.touchscreen.tap(x, y)
   else await page.mouse.click(x, y)
   await page.evaluate(() => (window as unknown as { __done: Promise<void> }).__done)
-  return page.evaluate(() => ({
-    // t in ms from the click: negative before it.
-    samples: (window as unknown as { __s: Sample[]; __tc: number }).__s.map((s) => ({
-      ...s,
-      t: s.t - (window as unknown as { __tc: number }).__tc,
-    })),
-    fadePath:
-      typeof (document as unknown as { startViewTransition?: unknown }).startViewTransition ===
-        "function" &&
-      matchMedia("(hover: hover) and (pointer: fine)").matches &&
-      !matchMedia("(prefers-reduced-motion: reduce)").matches,
-    motion: !matchMedia("(prefers-reduced-motion: reduce)").matches,
-  }))
+  return page.evaluate(() => {
+    const w = window as unknown as { __s: Sample[]; __tc: number; __t0: number }
+    // t in ms from the click (negative before it). If the guard ended the sampling without a click
+    // event, __tc is NaN, so count from the start of sampling instead to keep the times readable.
+    const clicked = !Number.isNaN(w.__tc)
+    const origin = clicked ? w.__tc : w.__t0
+    return {
+      samples: w.__s.map((s) => ({ ...s, t: s.t - origin })),
+      clicked,
+      fadePath:
+        typeof (document as unknown as { startViewTransition?: unknown }).startViewTransition ===
+          "function" &&
+        matchMedia("(hover: hover) and (pointer: fine)").matches &&
+        !matchMedia("(prefers-reduced-motion: reduce)").matches,
+      motion: !matchMedia("(prefers-reduced-motion: reduce)").matches,
+    }
+  })
 }
 
 // The switch itself lasts under 400ms (cross-fade 180ms after a 70-200ms snapshot, icon turn
 // 380ms). How many samples land in it depends on the engine, since WebKit's main thread is busy
 // during the switch, so assert that the samples cover the switch instead of counting them.
 // Sample times count from the click event.
-function expectStillGeometry(samples: Sample[], testInfo: TestInfo) {
+function expectStillGeometry(samples: Sample[], clicked: boolean, testInfo: TestInfo) {
   const first = samples[0]
   const times = samples.map((s) => Math.round(s.t))
   testInfo.annotations.push({
@@ -133,10 +143,11 @@ function expectStillGeometry(samples: Sample[], testInfo: TestInfo) {
   })
   const inWindow = samples.filter((s) => s.t >= 30 && s.t <= 400).length
   const after = samples.filter((s) => s.t >= 600).length
-  const covered = samples.at(-1)!.t >= 900 && samples.length >= 5 && inWindow >= 1 && after >= 1
+  const covered =
+    clicked && samples.at(-1)!.t >= 900 && samples.length >= 5 && inWindow >= 1 && after >= 1
   expect(
     covered,
-    `samples, timed from the click, must span 900ms with at least one in 30-400ms and one from 600ms on (got ${samples.length} samples, ${inWindow} in the window, ${after} after it): ${times.join(" ")}`,
+    `${clicked ? "" : "no click event was seen, so the times below count from the start of sampling: "}samples, timed from the click, must span 900ms with at least one in 30-400ms and one from 600ms on (got ${samples.length} samples, ${inWindow} in the window, ${after} after it): ${times.join(" ")}`,
   ).toBe(true)
   for (const s of samples) {
     s.bar.forEach((v, i) => expect(Math.abs(v - first.bar[i])).toBeLessThanOrEqual(0.5))
@@ -166,10 +177,10 @@ for (const motion of [true, false]) {
           await expect(page.locator("html")).toHaveAttribute("data-bar-tucked", /.*/)
         }
         const before = await page.locator("html").getAttribute("saved-theme")
-        const { samples, fadePath } = await switchAndSample(page, isMobile)
+        const { samples, clicked, fadePath } = await switchAndSample(page, isMobile)
         await expect(page.locator("html")).not.toHaveAttribute("saved-theme", before ?? "")
 
-        expectStillGeometry(samples, testInfo)
+        expectStillGeometry(samples, clicked, testInfo)
         if (!motion) {
           expect(samples.every((s) => s.iconTurning === 0)).toBe(true)
           return
