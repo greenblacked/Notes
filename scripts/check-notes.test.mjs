@@ -165,7 +165,41 @@ test("lab-tested without Lab run, or with Lab run but no fence, fails", () => {
   const fm = { evidence: "lab-tested" }
   assert.ok(has(problems(note({ fm, sections: RUNBOOK })), /`### Lab run` is missing/))
   const text = note({ fm, sections: LAB }).replace(/```[\s\S]*?```/g, "no code here")
-  assert.ok(has(problems(text), /Lab run` has no fenced code block/))
+  assert.ok(has(problems(text), /Lab run` needs two fenced/))
+})
+
+test("Lab run needs both a command block and an output block", () => {
+  const oneFence = `Host: Linux.\n\n${FENCE}bash\ntool --version\n${FENCE}`
+  const twoFences = SECTION_TEXT["Lab run"]
+  const withLab = (text, lab) => text.replace(twoFences, lab)
+  for (const evidence of ["lab-tested", "operationally-verified"]) {
+    const sections = evidence === "lab-tested" ? LAB : [...LAB, "Operational check"]
+    const fm = { evidence, verified: "2026-10-20" }
+    const text = note({ fm, sections })
+    assert.deepEqual(problems(text), [], evidence)
+    assert.ok(has(problems(withLab(text, oneFence)), /Lab run` needs two fenced/), evidence)
+  }
+})
+
+test("an optional Lab run on source-reviewed follows the same two-block rule", () => {
+  const text = note({ sections: ["Sources checked", "Not verified", "Lab run"] })
+  assert.deepEqual(problems(text), [])
+  const one = text.replace(SECTION_TEXT["Lab run"], "Host: Linux.\n\n```bash\ntool\n```")
+  assert.ok(has(problems(one), /Lab run` needs two fenced/))
+  assert.deepEqual(problems(note()), [], "no Lab run at all stays valid")
+})
+
+test("frontmatter that is opened but never closed is a parse error", () => {
+  const text = "---\ntitle: X\ntype: guide\nevidence: source-reviewed\n\nBody.\n"
+  assert.ok(has(problems(text), /frontmatter does not parse: it is not closed/))
+  const dir = tree({ "a.md": text })
+  const r = run(dir)
+  assert.equal(r.status, 1)
+  assert.match(r.stdout, /::error file=.*a\.md::frontmatter does not parse: it is not closed/)
+})
+
+test("a note with no frontmatter at all is not a parse error", () => {
+  assert.equal(parseNote("x.md", "Just a body.\n").parseError, undefined)
 })
 
 test("destructive without a warning or danger callout fails", () => {
@@ -262,11 +296,11 @@ test("CRLF frontmatter parses", () => {
 
 test("frontmatter that does not parse fails", () => {
   const text = "---\ntitle: [unclosed\ntype: guide\n---\n\nBody.\n"
-  assert.ok(has(problems(text), /frontmatter YAML does not parse/))
+  assert.ok(has(problems(text), /frontmatter does not parse/))
   const dir = tree({ "a.md": text })
   const r = run(dir)
   assert.equal(r.status, 1)
-  assert.match(r.stdout, /::error file=.*a\.md::frontmatter YAML does not parse/)
+  assert.match(r.stdout, /::error file=.*a\.md::frontmatter does not parse/)
 })
 
 test("an overdue note is listed in the queue and the CLI exits 0", () => {

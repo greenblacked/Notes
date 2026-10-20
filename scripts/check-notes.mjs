@@ -73,7 +73,11 @@ export function parseNote(path, text) {
   const m =
     /^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/.exec(src) ??
     /^---[ \t]*\n---[ \t]*(?:\n|$)/.exec(src)
-  if (!m) return { path, frontmatter: null, body: src, parseError: undefined }
+  if (!m) {
+    const opened = /^---[ \t]*(?:\n|$)/.test(src)
+    const parseError = opened ? "it is not closed (no closing ---)" : undefined
+    return { path, frontmatter: null, body: src, parseError }
+  }
   const body = src.slice(m[0].length)
   try {
     const data = YAML.parse(m[1] ?? "")
@@ -123,7 +127,7 @@ function outline(body) {
   return { lines, headings, fenced, fenceOpeners }
 }
 
-/** The sections with this heading text, each as `{ lines, start, end, hasFence }`. */
+/** The sections with this heading text, each as `{ lines, start, end, fences }`. */
 function sectionsNamed(ol, level, name, parent) {
   const found = []
   const from = parent ? parent.start : 0
@@ -134,9 +138,9 @@ function sectionsNamed(ol, level, name, parent) {
     const end = Math.min(next ? next.line : ol.lines.length, to)
     const start = h.line + 1
     const body = ol.lines.slice(start, end)
-    let hasFence = false
-    for (let i = start; i < end; i++) if (ol.fenceOpeners.has(i)) hasFence = true
-    found.push({ lines: body, text: body.join("\n"), start, end, hasFence })
+    let fences = 0
+    for (let i = start; i < end; i++) if (ol.fenceOpeners.has(i)) fences++
+    found.push({ lines: body, text: body.join("\n"), start, end, fences })
   })
   return found
 }
@@ -147,7 +151,7 @@ const META_FIELDS = ["evidence", "reviewed", "review-due", "destructive"]
 
 /** Problems with one parsed note, as plain strings. `today` is `YYYY-MM-DD`. */
 export function checkNote(note, { today }) {
-  if (note.parseError) return [`frontmatter YAML does not parse: ${note.parseError}`]
+  if (note.parseError) return [`frontmatter does not parse: ${note.parseError}`]
   const fm = note.frontmatter ?? {}
   const has = (key) => Object.hasOwn(fm, key) && fm[key] !== null && fm[key] !== undefined
   const problems = []
@@ -227,7 +231,11 @@ export function checkNote(note, { today }) {
   const labRequired = level === "lab-tested" || level === "operationally-verified"
   if (lab || labRequired) {
     if (isEmpty(lab)) problems.push("`### Lab run` is missing or empty")
-    else if (!lab.hasFence) problems.push("`### Lab run` has no fenced code block")
+    else if (lab.fences < 2) {
+      problems.push(
+        "`### Lab run` needs two fenced code blocks: the commands and the observed output",
+      )
+    }
   }
   if (level === "operationally-verified" && isEmpty(sub("Operational check"))) {
     problems.push("`### Operational check` is missing or empty")
