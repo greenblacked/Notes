@@ -348,14 +348,14 @@ test("the browser job caches Playwright browsers keyed on the Playwright version
   assert.equal(steps[cache].with.path, "~/.cache/ms-playwright")
   assert.equal(
     steps[cache].with.key,
-    "playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-webkit",
+    "playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ matrix.browser }}",
   )
   assert.equal(steps[cache].with["restore-keys"], undefined)
   assert.ok(steps[version].run.includes("node_modules/playwright-core/package.json"))
   assert.equal(steps[install].if, "steps.pw-cache.outputs.cache-hit != 'true'")
-  assert.match(steps[install].run, /install --with-deps chromium webkit$/)
+  assert.match(steps[install].run, /install --with-deps "\$BROWSER"$/)
   assert.equal(steps[deps].if, "steps.pw-cache.outputs.cache-hit == 'true'")
-  assert.match(steps[deps].run, /^\.\/node_modules\/\.bin\/playwright install-deps chromium webkit/)
+  assert.match(steps[deps].run, /^\.\/node_modules\/\.bin\/playwright install-deps "\$BROWSER"/)
 })
 
 test("dependabot version updates run monthly", () => {
@@ -372,4 +372,139 @@ test("the deploy probes name the site, not the private repository, in the user a
     assert.ok(raw[f].includes("notes-smoke-test/1 (+https://notes.szolotov.com)"), f)
     assert.ok(!raw[f].includes("github.com/greenblacked"), f)
   }
+})
+
+// Guard for the CI redesign: restructuring jobs must never drop, weaken, skip or defer a check.
+const ciSteps = Object.entries(wf["ci.yml"].jobs).flatMap(([job, j]) =>
+  (j.steps ?? []).map((step, index) => ({ job, index, step })),
+)
+
+test("every CI check still runs in ci.yml, unconditionally and without continue-on-error", () => {
+  const required = [
+    /\bnpm run check(\s|$)/,
+    /\bnpm run check:browser(\s|$)/,
+    /\bnpm run check:notes(\s|$)/,
+    /\bnpm run build(\s|$)/,
+    /\bnpm run check:links(\s|$)/,
+    /check-artifact\.mjs --public public/,
+    /\bnpm run test:scripts(\s|$)/,
+    /\bnpm run format:check(\s|$)/,
+    /\bnpm run check:contrast(\s|$)/,
+    /\bnpm run deploy:dry-run(\s|$)/,
+    /check-artifact\.mjs --root/,
+    /build-csp\.mjs/,
+    /\bnpm run test:browser(\s|$)/,
+    /check-attribution\.mjs/,
+    /actionlint\/actionlint/,
+    /shellcheck scripts\/smoke-test\.sh \.github\/scripts\/\*\.sh/,
+    /zizmor" --format=github \.github/,
+  ]
+  for (const re of required) {
+    const hits = ciSteps.filter(({ step }) => re.test(step.run ?? ""))
+    assert.ok(hits.length > 0, `${re} runs in ci.yml`)
+    for (const { job, step } of hits) {
+      assert.equal(step["continue-on-error"], undefined, `${re}: ${job}/${step.name}`)
+      if (/format:check/.test(step.run)) {
+        assert.ok([undefined, "matrix.format"].includes(step.if), `${job}/${step.name}`)
+      } else {
+        assert.equal(step.if, undefined, `${re}: ${job}/${step.name}`)
+      }
+      assert.equal(wf["ci.yml"].jobs[job]["continue-on-error"], undefined, job)
+    }
+  }
+})
+
+test("test:scripts, contrast and the deploy dry run stay in the build job after the build", () => {
+  const steps = wf["ci.yml"].jobs["build-and-check"].steps
+  const at = (re) => steps.findIndex((s) => re.test(s.run ?? ""))
+  const build = at(/\bnpm run build(\s|$)/)
+  assert.ok(build >= 0)
+  for (const re of [
+    /\bnpm run test:scripts(\s|$)/,
+    /\bnpm run check:contrast(\s|$)/,
+    /\bnpm run deploy:dry-run(\s|$)/,
+  ]) {
+    assert.ok(at(re) > build, `${re} runs after the build, in the build job`)
+  }
+})
+
+test("ci triggers have no path or branch filters that could skip a check", () => {
+  for (const trigger of Object.values(wf["ci.yml"].on)) {
+    for (const key of ["paths", "paths-ignore", "branches-ignore", "tags", "tags-ignore"]) {
+      assert.equal(trigger[key], undefined, key)
+    }
+  }
+})
+
+test("CI OK waits for every other job and always runs", () => {
+  const jobs = wf["ci.yml"].jobs
+  assert.equal(jobs["ci-ok"].if, "always()")
+  assert.deepEqual(
+    [...jobs["ci-ok"].needs].sort(),
+    Object.keys(jobs)
+      .filter((id) => id !== "ci-ok")
+      .sort(),
+  )
+})
+
+// The browser suite is split over a (project, shard) matrix so that wall-clock time is the
+// slowest shard, not the sum of four projects.
+const browserJob = wf["ci.yml"].jobs.browser
+const matrixEntries = browserJob.strategy?.matrix?.include ?? []
+const configProjects = [
+  ...readFileSync(join(root, "playwright.config.ts"), "utf8").matchAll(
+    /name:\s*"([^"]+)",\s*use:\s*\{\s*browserName:\s*"(\w+)"/g,
+  ),
+].map((m) => ({ project: m[1], browser: m[2] }))
+
+test("the browser matrix covers every Playwright project and browser", () => {
+  assert.equal(configProjects.length, 4)
+  const seen = new Set(matrixEntries.map((e) => `${e.project}/${e.browser}`))
+  assert.deepEqual([...seen].sort(), configProjects.map((p) => `${p.project}/${p.browser}`).sort())
+})
+
+test("each project's shards are exactly 1/N to N/N and the ids are unique", () => {
+  const ids = matrixEntries.map((e) => e.id)
+  assert.equal(new Set(ids).size, ids.length)
+  for (const { project } of configProjects) {
+    const mine = matrixEntries.filter((e) => e.project === project)
+    const total = Number(mine[0].shard.split("/")[1])
+    assert.ok(total >= 1 && total <= 9)
+    assert.deepEqual(
+      mine.map((e) => e.shard).sort(),
+      Array.from({ length: total }, (_, k) => `${k + 1}/${total}`),
+    )
+    for (const e of mine) assert.equal(e.id, `${project}-${e.shard.split("/")[0]}`)
+  }
+})
+
+test("the browser matrix runs every shard and passes its values through env, not expressions", () => {
+  assert.equal(browserJob.strategy["fail-fast"], false)
+  assert.equal(browserJob.name, "Browser ${{ matrix.id }}")
+  assert.equal(browserJob.env.PROJECT, "${{ matrix.project }}")
+  assert.equal(browserJob.env.BROWSER, "${{ matrix.browser }}")
+  assert.equal(browserJob.env.SHARD, "${{ matrix.shard }}")
+  const run = browserJob.steps.find((s) => (s.run ?? "").includes("npm run test:browser")).run
+  assert.ok(run.includes('--project="$PROJECT"') && run.includes('--shard="$SHARD"'))
+  assert.match(run, /\^\[a-z\]\+-\[a-z\]\+\$.*\^\[1-9\]\/\[1-9\]\$.*exit 1/s)
+})
+
+test("a failed browser shard uploads its own report", () => {
+  const report = browserJob.steps.find((s) => (s.uses ?? "").startsWith("actions/upload-artifact"))
+  assert.equal(report.with.name, "playwright-report-${{ matrix.id }}")
+  assert.equal(report.if, "failure()")
+})
+
+test("the format check runs once, in one browser shard, off the build critical path", () => {
+  const build = wf["ci.yml"].jobs["build-and-check"].steps
+  assert.ok(!build.some((s) => (s.run ?? "").includes("format:check")))
+  assert.deepEqual(
+    matrixEntries.filter((e) => e.format === true).map((e) => e.id),
+    ["chromium-desktop-1"],
+  )
+  const steps = browserJob.steps
+  const format = steps.findIndex((s) => (s.run ?? "").includes("npm run format:check"))
+  const types = steps.findIndex((s) => (s.run ?? "").includes("npm run check:browser"))
+  assert.ok(types >= 0 && format > types)
+  assert.equal(steps[format].if, "matrix.format")
 })

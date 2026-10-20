@@ -94,7 +94,7 @@ jobs:
     name: Build
     needs: guard
     runs-on: ubuntu-24.04
-    # A cold `quartz plugin restore` (no cache here on purpose) takes about 15 minutes.
+    # A cold `quartz plugin restore` (no cache here on purpose) takes about 7 to 8 minutes measured on 4-core runners (2026-10-20), slower on 2-core.
     timeout-minutes: 45
     # Third-party plugin code runs here: no environment, no secrets.
     permissions:

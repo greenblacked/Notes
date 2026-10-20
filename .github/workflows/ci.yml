@@ -16,7 +16,7 @@ jobs:
   build-and-check:
     name: Build and check
     runs-on: ubuntu-24.04
-    # A cold `quartz plugin restore` takes about 15 minutes.
+    # A cold `quartz plugin restore` takes about 7 to 8 minutes measured on 4-core runners (2026-10-20), slower on 2-core.
     timeout-minutes: 45
     permissions:
       contents: read
@@ -79,24 +79,49 @@ jobs:
       - name: Test scripts and Worker policy
         run: npm run test:scripts
 
-      - name: Check formatting
-        run: npm run format:check
-
       - name: Check colour contrast (WCAG AA)
         run: npm run check:contrast
 
       - name: Deploy dry run (no credentials)
         run: npm run deploy:dry-run
 
+  # One job per (Playwright project, shard) so that the wall-clock time is the slowest shard,
+  # not the sum of four projects. Every job bills at least one whole minute (and each is
+  # rounded up on its own), so the shard count trades wall-clock against billed minutes: see
+  # "CI minutes" in docs/deployment.md. The shard count is this list; each project's shards
+  # must be exactly 1/N to N/N (checked by scripts/workflows.test.mjs).
   browser:
-    name: Browser smoke tests
+    name: Browser ${{ matrix.id }}
     needs: build-and-check
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
+    strategy:
+      # Every shard runs even if one fails, so a flaky shard can be re-run alone (Re-run failed
+      # jobs would otherwise re-run all cancelled shards too). CI OK still needs every shard.
+      fail-fast: false
+      matrix:
+        include:
+          - {
+              id: chromium-desktop-1,
+              project: chromium-desktop,
+              browser: chromium,
+              shard: 1/2,
+              format: true,
+            }
+          - { id: chromium-desktop-2, project: chromium-desktop, browser: chromium, shard: 2/2 }
+          - { id: chromium-phone-1, project: chromium-phone, browser: chromium, shard: 1/2 }
+          - { id: chromium-phone-2, project: chromium-phone, browser: chromium, shard: 2/2 }
+          - { id: webkit-desktop-1, project: webkit-desktop, browser: webkit, shard: 1/2 }
+          - { id: webkit-desktop-2, project: webkit-desktop, browser: webkit, shard: 2/2 }
+          - { id: webkit-phone-1, project: webkit-phone, browser: webkit, shard: 1/2 }
+          - { id: webkit-phone-2, project: webkit-phone, browser: webkit, shard: 2/2 }
     env:
       NPM_CONFIG_IGNORE_SCRIPTS: "true"
+      PROJECT: ${{ matrix.project }}
+      BROWSER: ${{ matrix.browser }}
+      SHARD: ${{ matrix.shard }}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -131,37 +156,45 @@ jobs:
       - name: Type check the browser tests
         run: npm run check:browser
 
+      # Runs in one shard only; .prettierignore excludes the build output, so it does not need it.
+      - name: Check formatting
+        if: matrix.format
+        run: npm run format:check
+
       # The browser versions come from the Playwright version in package-lock.json.
       - name: Read the Playwright version
         id: playwright
         run: echo "version=$(node -p 'require("./node_modules/playwright-core/package.json").version')" >>"$GITHUB_OUTPUT"
 
       # PR runs write PR-scoped caches only; main runs read main-scoped ones. No restore-keys: a
-      # new Playwright version never reuses old browsers.
+      # new Playwright version never reuses old browsers. One cache per browser, so a job
+      # downloads only the browser it uses (two shards racing to save only get a warning).
       - name: Cache Playwright browsers
         id: pw-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-webkit
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ matrix.browser }}
 
       - name: Install browsers
         if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: ./node_modules/.bin/playwright install --with-deps chromium webkit
+        run: ./node_modules/.bin/playwright install --with-deps "$BROWSER"
 
       # The browsers come from the cache; the system packages they need are not cached.
       - name: Install browser system dependencies
         if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: ./node_modules/.bin/playwright install-deps chromium webkit
+        run: ./node_modules/.bin/playwright install-deps "$BROWSER"
 
       - name: Run the browser smoke tests
-        run: npm run test:browser
+        run: |
+          [[ "$PROJECT" =~ ^[a-z]+-[a-z]+$ && "$SHARD" =~ ^[1-9]/[1-9]$ ]] || exit 1
+          npm run test:browser -- --project="$PROJECT" --shard="$SHARD"
 
       - name: Upload test report
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.id }}
           path: |
             playwright-report
             test-results
