@@ -6,17 +6,17 @@ The site is built with [Quartz](https://quartz.jzhao.xyz/) and served by a Cloud
 
 ## Repository layout
 
-| Path                           | Contents                                                                                                                |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `content/`                     | The notes: `adr/`, `patterns/`, `tools/`, `standards/`, `index.md`                                                      |
-| `quartz/`                      | Vendored Quartz engine (do not edit; see "Quartz" below)                                                                |
-| `quartz.config.*`, `quartz.ts` | Site configuration and layout (our customisations)                                                                      |
-| `local-plugins/`               | Local Quartz plugins: top bar, section row, metadata sheet, note index, linked-from, content-start, sidenotes, callouts |
-| `worker/`, `wrangler.jsonc`    | Cloudflare Worker (headers, robots) and its configuration                                                               |
-| `scripts/`                     | Build helpers, `smoke-test.sh`, `update-quartz.sh`                                                                      |
-| `.github/`                     | Workflows, Dependabot, CODEOWNERS                                                                                       |
-| `docs/`                        | [deployment.md](docs/deployment.md), [obsidian.md](docs/obsidian.md)                                                    |
-| `docs/screenshots/`            | Screenshots shown in this README                                                                                        |
+| Path                           | Contents                                                                                                                            |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `content/`                     | The notes: `adr/`, `patterns/`, `tools/`, `standards/`, `index.md`                                                                  |
+| `quartz/`                      | Vendored Quartz engine (do not edit; see "Quartz" below)                                                                            |
+| `quartz.config.*`, `quartz.ts` | Site configuration and layout (our customisations)                                                                                  |
+| `local-plugins/`               | Local Quartz plugins: top bar, section row, metadata sheet, note index, start here, linked-from, content-start, sidenotes, callouts |
+| `worker/`, `wrangler.jsonc`    | Cloudflare Worker (headers, robots) and its configuration                                                                           |
+| `scripts/`                     | Build helpers, `smoke-test.sh`, `update-quartz.sh`                                                                                  |
+| `.github/`                     | Workflows, Dependabot, CODEOWNERS                                                                                                   |
+| `docs/`                        | [deployment.md](docs/deployment.md), [obsidian.md](docs/obsidian.md)                                                                |
+| `docs/screenshots/`            | Screenshots shown in this README                                                                                                    |
 
 ## Local development
 
@@ -73,7 +73,7 @@ Source Serif 4 sets the reading text and headings (400, 600 and italic; old-styl
 The structure:
 
 - A sticky top bar in two rows: the wordmark, Browse, search and the theme toggle, and under them links to the ten sections (the current one highlighted), which scroll sideways when they do not fit, with the current one scrolled into view. On short landscape screens the bar scrolls away. Its background turns into a translucent, blurred band as the page scrolls and a thin line under it shows the reading progress, both CSS scroll-driven animations (older browsers just keep the band and no line). The **Browse** button opens the full tree (Quartz's Explorer) as a drawer from the right edge at every width; Escape, a click outside or a link closes it. The bar is the page frame's left sidebar, and `local-plugins/top-bar` supplies the wordmark and a small script for the drawer's focus handling (a closed drawer is inert; opening the search closes it), the current heading in the table of contents, the `main` landmark and a second scroll to a `#hash` once the layout has settled; `local-plugins/section-row` supplies the second row. "Skip to content" targets the page title (`local-plugins/content-start`) and works without JavaScript.
-- The home page has a short intro, a card per section (description, note count, last update), then a table of every note grouped by section (number, title and file name, type, verified or modified date), which becomes a stack of cards on a phone. It is built from the notes' frontmatter by `local-plugins/note-index`, so a new note appears there without any edit to the home page.
+- The home page has a short intro, **Start here** (four reader goals, each with a link to its section and a few notes that declare an evidence level; `local-plugins/start-here`, goals in `goals.json`), a card per section (description, note count, last update) and a link to **All notes**. The All notes page (`/all-notes`) is a table of every note grouped by section (number, title and file name, type, verified or modified date), which becomes a stack of cards on a phone. It is built from the notes' frontmatter by `local-plugins/note-index`, so a new note appears there without any edit to the home page. The old home anchors `#note-index-title` and `#note-index-<section>` still land on the All notes block and the section cards.
 - Notes show a spec sheet under the title (`type`, evidence level, `decided`, `verified`, `reviewed` date, modified date, reading time; `local-plugins/note-meta`), tags as light chips, numbered `##` sections (01, 02, ...) that the sticky table of contents beside the sheet repeats, and sidenotes in the margin of the sheet from 1280px up. A note ends with "Linked from" (`local-plugins/linked-from`) and its local graph (`local-plugins/note-graph`, drawn with Canvas 2D), whose depth runs live from 1 to 5 or All and which has a Tags toggle.
 - The full graph of all notes opens from the toolbar button or with Ctrl/Cmd+G on every page (`local-plugins/graph-launcher`): search, depth, tags and orphans toggles, and a legend of section colours that hides sections. Settings are remembered in this browser, and a list view is the text alternative.
 - Printing gives plain paper: no bar, drawer, graph, graph dialog or "Linked from" list, external links with their address, sidenotes as footnotes.

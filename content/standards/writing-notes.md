@@ -58,11 +58,11 @@ draft: false
 
 `reference` is for architecture reference designs: a target design and its trade-offs.
 
-Home, section index and tags pages are not notes in this sense: they take no `type`.
+Home, section index, tags and All notes pages are not notes in this sense: they take no `type`.
 
 ## Metadata sheet
 
-`type`, `verified` and `decided` are shown in a small spec sheet under the title, next to the modified date and the reading time: `type` as a chip, then `decided`, `verified` and the modified date as full dates. The sheet also shows the evidence level as plain text (Evidence) and the `reviewed` date (Reviewed); `review-due` is not shown, and the index is unchanged. `status` is not displayed. A page with none of `type`, `decided`, `verified`, `evidence` and `reviewed` shows no sheet, and a missing field is simply left out. The home page lists every note in an index, grouped by folder, with its type and `verified` date (the modified date when there is none). Section indexes, the tags pages and files named `template.md` are left out of it.
+`type`, `verified` and `decided` are shown in a small spec sheet under the title, next to the modified date and the reading time: `type` as a chip, then `decided`, `verified` and the modified date as full dates. The sheet also shows the evidence level as plain text (Evidence) and the `reviewed` date (Reviewed); `review-due` is not shown, and the index is unchanged. `status` is not displayed. A page with none of `type`, `decided`, `verified`, `evidence` and `reviewed` shows no sheet, and a missing field is simply left out. The All notes page lists every note in an index, grouped by folder, with its type and `verified` date (the modified date when there is none); the home page shows Start here (four reader goals) and the section cards, and links to All notes. Section indexes, the tags pages, the All notes page itself and files named `template.md` are left out of the index.
 
 - `verified` is a promise. Set it only to the day you actually compared the note with the system, document or command output it describes, and move it forward only after repeating that check. Leave it out when you have not checked; an old honest date is better than a fresh guess. It is not the same as `modified`, which records the last edit.
 - Write dates unquoted (`2026-10-11`). YAML reads them as dates, and the sheet handles quoted strings as well.

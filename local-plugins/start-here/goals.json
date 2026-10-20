@@ -1,0 +1,49 @@
+[
+  {
+    "id": "ops",
+    "title": "Resolve an operational problem",
+    "blurb": "Step-by-step runbooks for incidents and recurring operational work.",
+    "browse": [{ "slug": "runbooks/index", "label": "Runbooks" }],
+    "featured": [
+      "runbooks/tls-certificate-renewal",
+      "runbooks/leaked-credential-rotation",
+      "runbooks/terraform-state-recovery"
+    ],
+    "more": [
+      "runbooks/kubernetes-pod-troubleshooting",
+      "runbooks/network-troubleshooting-dns-mtu-tls-load-balancers"
+    ]
+  },
+  {
+    "id": "design",
+    "title": "Design or improve a platform",
+    "blurb": "Reference architectures, patterns and recorded decisions for platform design.",
+    "browse": [
+      { "slug": "architecture/index", "label": "Architecture" },
+      { "slug": "patterns/index", "label": "Patterns" },
+      { "slug": "adr/index", "label": "Decisions (ADRs)" }
+    ],
+    "featured": [
+      "patterns/secret-rotation-without-downtime",
+      "patterns/artifactory-access-tokens-and-oidc-for-ci",
+      "ai/securing-ai-agents-in-ci-and-cloud"
+    ],
+    "more": []
+  },
+  {
+    "id": "skills",
+    "title": "Develop engineering skills",
+    "blurb": "A staged learning path from first job to middle level in DevOps, with milestones and a weekly plan.",
+    "browse": [{ "slug": "learn/index", "label": "Learning path" }],
+    "featured": [],
+    "more": ["learn/lab-setup"]
+  },
+  {
+    "id": "lead",
+    "title": "Lead a platform team",
+    "blurb": "Guides to running a platform or DevOps team: people, hiring, planning, delivery and on-call health.",
+    "browse": [{ "slug": "management/index", "label": "Management" }],
+    "featured": [],
+    "more": ["management/platform-team-operating-model", "management/first-90-days-as-em"]
+  }
+]

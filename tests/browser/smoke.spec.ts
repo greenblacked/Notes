@@ -6,7 +6,7 @@ test("home page loads cleanly and does not scroll sideways", async ({ page }) =>
   const response = await page.goto("/")
   expect(response?.status()).toBe(200)
   await expect(page.locator(".center").first()).toBeVisible()
-  await expect(page.locator(".note-index").first()).toBeAttached()
+  await expect(page.locator(".start-here").first()).toBeAttached()
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   )
