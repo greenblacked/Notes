@@ -33,6 +33,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- Browser tests that fail on a page error now name the error type, the script location, the page and, for a value that is not an Error, its shape, so an intermittent WebKit failure shows where it came from instead of `[object Object]`.
 - Changing the theme no longer makes the top bar's theme icon jump: inside the desktop cross-fade the icons are swapped by the fade itself (no second turn that outlasts it), and on phones the icon turns without overshooting.
 
 ## [0.6.0] - 2026-10-19
