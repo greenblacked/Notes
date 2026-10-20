@@ -350,7 +350,7 @@ jobs:
           probe="$RUNNER_TEMP/stage-probe.h"
           : >"$probe"
           code="$(curl --proto '=https' --tlsv1.2 -s -D "$probe" -o /dev/null -w '%{http_code}' --max-time 30 \
-            --user-agent 'notes-smoke-test/1 (+https://github.com/greenblacked/Notes)' \
+            --user-agent 'notes-smoke-test/1 (+https://notes.szolotov.com)' \
             https://stage.notes.szolotov.com/ || true)"
           echo "code=$code" >>"$GITHUB_OUTPUT"
           if [[ "$code" == "200" ]]; then

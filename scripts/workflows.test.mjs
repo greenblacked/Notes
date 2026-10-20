@@ -342,3 +342,10 @@ test("dependabot version updates run monthly", () => {
     assert.equal(u.schedule.day, undefined, u.directory)
   }
 })
+
+test("the deploy probes name the site, not the private repository, in the user agent", () => {
+  for (const f of ["deploy-stage.yml", "deploy-production.yml"]) {
+    assert.ok(raw[f].includes("notes-smoke-test/1 (+https://notes.szolotov.com)"), f)
+    assert.ok(!raw[f].includes("github.com/greenblacked"), f)
+  }
+})

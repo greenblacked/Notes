@@ -289,7 +289,7 @@ jobs:
       - name: Probe the custom domain
         run: |
           code="$(curl --proto '=https' --tlsv1.2 -s -D "$RUNNER_TEMP/probe.h" -o /dev/null -w '%{http_code}' --max-time 30 \
-            --user-agent 'notes-smoke-test/1 (+https://github.com/greenblacked/Notes)' \
+            --user-agent 'notes-smoke-test/1 (+https://notes.szolotov.com)' \
             https://notes.szolotov.com/ || true)"
           if [[ "$code" == "403" ]]; then
             echo "::notice::https://notes.szolotov.com answered 403 to this runner (Cloudflare Bot Fight Mode); expected, verification used workers.dev."
