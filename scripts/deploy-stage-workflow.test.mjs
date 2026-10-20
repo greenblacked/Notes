@@ -409,9 +409,9 @@ test("the active step passes the checker's status through and has no previous or
       PATH: `${dir}:${process.env.PATH}`,
     })
   }
-  const three = run(3, "'superseded=true' 'superseded_by=d2'")
-  assert.equal(three.status, 3)
-  assert.doesNotMatch(three.stdout, /left in place/)
+  const failed = run(2, "'x'")
+  assert.equal(failed.status, 2)
+  assert.doesNotMatch(failed.stdout, /left in place/)
   const plain = run(1, "'x'")
   assert.equal(plain.status, 1)
   const ok = run(0, "'active=true' 'active_deployment_id=d1'")

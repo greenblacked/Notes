@@ -84,7 +84,7 @@ export function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i]
     const value = argv[i + 1]
-    const spec = FLAGS[flag]
+    const spec = Object.hasOwn(FLAGS, flag) ? FLAGS[flag] : undefined
     if (!spec || value === undefined) fail(USAGE)
     const [key, valid] = spec
     if (key in out || !valid(value)) fail(`${USAGE} (bad or repeated ${flag})`)

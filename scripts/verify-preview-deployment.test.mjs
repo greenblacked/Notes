@@ -163,6 +163,8 @@ test("arguments and environment are validated", async () => {
   assert.throws(() => parseArgs(argv.slice(0, -2)), /missing --message/)
   assert.throws(() => parseArgs([...argv, "--worker", "x"]), /usage/)
   assert.throws(() => parseArgs([...argv, "--other", "x"]), /usage/)
+  assert.throws(() => parseArgs([...argv, "constructor", "x"]), /usage/)
+  assert.throws(() => parseArgs([...argv, "__proto__", "x"]), /usage/)
   assert.throws(() => parseArgs([...argv, "--worker"]), /usage/)
   await assert.rejects(
     main(argv, { ...env, CLOUDFLARE_API_TOKEN: "" }, deps(fakeFetch())),
