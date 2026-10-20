@@ -6,7 +6,7 @@ tags:
   - standards
   - meta
 created: 2026-10-10
-modified: 2026-10-17
+modified: 2026-10-20
 verified: 2026-10-11
 draft: false
 ---
@@ -38,19 +38,23 @@ draft: false
 ---
 ```
 
-| Field         | Required | Notes                                                                                                       |
-| ------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `title`       | yes      | Sentence case. Becomes the page heading, so do not repeat it as an `# H1`.                                  |
-| `description` | yes      | One sentence, under about 160 characters.                                                                   |
-| `tags`        | yes      | At least one tag from the taxonomy below.                                                                   |
-| `created`     | yes      | ISO date `YYYY-MM-DD`.                                                                                      |
-| `modified`    | yes      | ISO date. Update it when the meaning changes, not for typo fixes.                                           |
-| `draft`       | yes      | `true` keeps a note out of the published site.                                                              |
-| `type`        | yes      | What kind of note this is: `adr`, `pattern`, `tool`, `standard`, `runbook`, `guide`, `reference` or `note`. |
-| `aliases`     | no       | Alternative names that wikilinks can use.                                                                   |
-| `status`      | ADRs     | One of the ADR statuses below, in lowercase.                                                                |
-| `verified`    | no       | ISO date `YYYY-MM-DD` on which the content was last checked against its sources.                            |
-| `decided`     | ADRs     | ISO date `YYYY-MM-DD` on which the decision was accepted.                                                   |
+| Field         | Required        | Notes                                                                                                       |
+| ------------- | --------------- | ----------------------------------------------------------------------------------------------------------- |
+| `title`       | yes             | Sentence case. Becomes the page heading, so do not repeat it as an `# H1`.                                  |
+| `description` | yes             | One sentence, under about 160 characters.                                                                   |
+| `tags`        | yes             | At least one tag from the taxonomy below.                                                                   |
+| `created`     | yes             | ISO date `YYYY-MM-DD`.                                                                                      |
+| `modified`    | yes             | ISO date. Update it when the meaning changes, not for typo fixes.                                           |
+| `draft`       | yes             | `true` keeps a note out of the published site.                                                              |
+| `type`        | yes             | What kind of note this is: `adr`, `pattern`, `tool`, `standard`, `runbook`, `guide`, `reference` or `note`. |
+| `aliases`     | no              | Alternative names that wikilinks can use.                                                                   |
+| `status`      | ADRs            | One of the ADR statuses below, in lowercase.                                                                |
+| `verified`    | no              | ISO date `YYYY-MM-DD` on which the content was last checked against its sources.                            |
+| `decided`     | ADRs            | ISO date `YYYY-MM-DD` on which the decision was accepted.                                                   |
+| `evidence`    | no              | One of `source-reviewed`, `lab-tested` or `operationally-verified`. See Evidence levels below.              |
+| `reviewed`    | with `evidence` | ISO date of the review behind `evidence`.                                                                   |
+| `review-due`  | with `evidence` | ISO date of the next review, after `reviewed` and within a year.                                            |
+| `destructive` | no              | `true` when the note tells readers to delete, revoke, disable, overwrite, force or bypass something.        |
 
 `reference` is for architecture reference designs: a target design and its trade-offs.
 
@@ -58,11 +62,101 @@ Home, section index and tags pages are not notes in this sense: they take no `ty
 
 ## Metadata sheet
 
-`type`, `verified` and `decided` are shown in a small spec sheet under the title, next to the modified date and the reading time: `type` as a chip, then `decided`, `verified` and the modified date as full dates. `status` is not displayed. A page with none of the three fields shows no sheet, and a missing field is simply left out. The home page lists every note in an index, grouped by folder, with its type and `verified` date (the modified date when there is none). Section indexes, the tags pages and files named `template.md` are left out of it.
+`type`, `verified` and `decided` are shown in a small spec sheet under the title, next to the modified date and the reading time: `type` as a chip, then `decided`, `verified` and the modified date as full dates. The sheet also shows the evidence level as plain text (Evidence) and the `reviewed` date (Reviewed); `review-due` is not shown, and the index is unchanged. `status` is not displayed. A page with none of `type`, `decided`, `verified`, `evidence` and `reviewed` shows no sheet, and a missing field is simply left out. The home page lists every note in an index, grouped by folder, with its type and `verified` date (the modified date when there is none). Section indexes, the tags pages and files named `template.md` are left out of it.
 
 - `verified` is a promise. Set it only to the day you actually compared the note with the system, document or command output it describes, and move it forward only after repeating that check. Leave it out when you have not checked; an old honest date is better than a fresh guess. It is not the same as `modified`, which records the last edit.
 - Write dates unquoted (`2026-10-11`). YAML reads them as dates, and the sheet handles quoted strings as well.
 - `status` is lowercase, as listed in [[adr/index#Lifecycle|the ADR lifecycle]]. It records the ADR's lifecycle in the source and is not shown on the site.
+
+## Evidence levels
+
+A note can say how far its content has been checked. The level is declared in the frontmatter and backed by an `## Evidence` section in the body. It is optional: a note without `evidence` is simply unrated, and no level is implied.
+
+```yaml
+evidence: source-reviewed
+reviewed: 2026-10-20
+review-due: 2027-04-20
+destructive: true # optional
+```
+
+`reviewed` is the day of the review behind `evidence`, and `review-due` the day of the next one: after `reviewed` and at most 366 days later. Both are required once `evidence` is set, and neither may be set without it. `reviewed` may not be in the future or before `created`. `verified` keeps its own meaning (compared with the real system or command output) and is not reused for the review date.
+
+| Level                    | What it means                                                                                                                                                                                                                                                                                                            | What the note must record                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `source-reviewed`        | Every technical claim (commands, flags, API fields, limits, names, defaults, version statements) was checked against current official documentation on the `reviewed` date. A claim that could not be confirmed was corrected, hedged ("check the current docs") or removed. Nothing was run, or only helper steps were. | The sources checked, with the claims each backs and the date, and what was not verified.                                     |
+| `lab-tested`             | Everything `source-reviewed` requires, and the note's main procedure (not only a helper) was run in a disposable lab.                                                                                                                                                                                                    | The exact commands, tool versions and observed output in a Lab run, and every step that was not run under Not verified.      |
+| `operationally-verified` | Everything `lab-tested` requires, and the procedure was carried out against a real target environment of the kind the note describes.                                                                                                                                                                                    | Which system (described generically), who checked it and when, and what was observed, plus a `verified` date in frontmatter. |
+
+### The Evidence section
+
+A note with `evidence` has one `## Evidence` section, placed immediately before `## Sources` if the note has one, otherwise before `## Related`, otherwise at the end. Its `###` subsections are:
+
+- `### Sources checked` (every level): at least one `https://` link. Each bullet gives the page, the claims it backs and "checked" with the `reviewed` date. The Evidence section must contain the `reviewed` date as written in the frontmatter.
+- `### Not verified` (every level, never empty): each claim or step that no source or run confirmed. Write "Nothing beyond the items above" only when that is true.
+- Executable subsections, required when the `type` is `runbook`, when `destructive` is `true`, or when the level is `lab-tested` or `operationally-verified`: `### Environment` (platform and tool versions the steps assume or were run on), `### Prerequisites`, `### Expected results`, `### Failure conditions` and `### Cleanup and rollback`. Each must say something. It may point to an existing section of the note by name, plus anything that section is missing.
+- `### Lab run`: required for `lab-tested` and `operationally-verified`, optional for `source-reviewed` (to record helper checks). It gives the host OS, the exact tool versions as printed (for example the output of `openssl version`), the exact commands in a fenced block, the observed output in a fenced block, and the date.
+- `### Operational check`: required for `operationally-verified` only.
+
+Heading names are matched without regard to case or surrounding spaces, and headings inside code fences do not count.
+
+### Destructive notes
+
+Set `destructive: true` when the note tells readers to delete, revoke, disable, overwrite, force or bypass something. The note then needs at least one `> [!danger]` or `> [!warning]` callout in the body and the `### Cleanup and rollback` subsection.
+
+### Example
+
+```markdown
+---
+title: Example runbook
+description: One sentence.
+type: runbook
+tags:
+  - runbooks
+created: 2026-10-10
+modified: 2026-10-20
+evidence: source-reviewed
+reviewed: 2026-10-20
+review-due: 2027-04-20
+---
+
+## Evidence
+
+### Sources checked
+
+- [Tool documentation](https://example.com/docs): the flags and defaults used above, checked 2026-10-20.
+
+### Not verified
+
+- Nothing was run; the commands are as documented, not as observed.
+
+### Environment
+
+The steps assume the tool version named in the documentation page above.
+
+### Prerequisites
+
+Access to the target system, with a backup taken first.
+
+### Expected results
+
+The command exits 0 and prints the new state.
+
+### Failure conditions
+
+A non-zero exit, or output that does not match the expected state.
+
+### Cleanup and rollback
+
+Restore from the backup taken in the prerequisites.
+```
+
+### Who may set which level
+
+`operationally-verified` needs evidence from a real environment that only the owner can supply, so agents and contributors without that access never set it. If a lab or review is not actually done, the level is not claimed; unrated is better than overstated.
+
+### Review queue
+
+`npm run check:notes` enforces these rules and CI runs it, so a note cannot ship with a broken claim. It also prints a review queue and, in CI, puts it in the run summary: reviews overdue, reviews due within 30 days, notes modified after their review, and the notes that declare no level. The queue only informs; it never fails the build and never edits a note. `node scripts/check-notes.mjs --queue` prints just the queue.
 
 ## Reading aids
 
@@ -127,7 +221,7 @@ Notes in `learn/` are lessons: `type: guide`, tag `learning` plus the platform a
 7. `## Next steps`: the next lesson and the senior notes for going deeper.
 8. `## Sources`: official documentation first, with the version checked.
 
-Add `verified` only when the commands were actually run, and give the distro and tool versions. Paid cloud steps get a `> [!warning] Costs money` callout with the cleanup command next to them. Use example domains and the documentation address ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24), never real addresses.
+Add `verified` only when the commands were actually run, and give the distro and tool versions. Lessons keep using `verified`; they may also declare `evidence` (see Evidence levels). Paid cloud steps get a `> [!warning] Costs money` callout with the cleanup command next to them. Use example domains and the documentation address ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24), never real addresses.
 
 ## ADR lifecycle
 
