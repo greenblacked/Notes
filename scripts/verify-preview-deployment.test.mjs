@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { test } from "node:test"
+import { fileURLToPath } from "node:url"
 import {
   checkDeployment,
   deploymentPath,
@@ -366,4 +367,34 @@ test("the CLI prints superseded outputs and exits 3, other failures exit 1", asy
   assert.ok(src.includes("superseded=true"))
   assert.ok(src.includes("process.exit(EXIT_SUPERSEDED)"))
   assert.ok(src.includes("process.exit(1)"))
+})
+
+test("the CLI has a --read-latest mode that prints latest_deployment_id and exits 0", async () => {
+  const src = readFileSync(new URL("./verify-preview-deployment.mjs", import.meta.url), "utf8")
+  assert.ok(src.includes('"--read-latest": "latest"'))
+  assert.ok(src.includes("`${readMode}_deployment_id=${previous}`"))
+  const { spawnSync } = await import("node:child_process")
+  const run = (args, env) =>
+    spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL("./verify-preview-deployment.mjs", import.meta.url)), ...args],
+      {
+        encoding: "utf8",
+        env: { PATH: process.env.PATH, ...env },
+      },
+    )
+  // No token or a bad account id: the read never reaches the network and reports unknown.
+  for (const [mode, key] of [
+    ["--read-latest", "latest_deployment_id"],
+    ["--read-previous", "previous_deployment_id"],
+  ]) {
+    const r = run([mode, "--worker", "notes", "--preview", "stage"], {})
+    assert.equal(r.status, 0, mode)
+    assert.equal(r.stdout, `${key}=unknown\n`, mode)
+    const bad = run([mode, "--worker", "notes", "--preview", "stage"], {
+      CLOUDFLARE_API_TOKEN: "x",
+      CLOUDFLARE_ACCOUNT_ID: "nope",
+    })
+    assert.equal(bad.stdout, `${key}=unknown\n`, mode)
+  }
 })

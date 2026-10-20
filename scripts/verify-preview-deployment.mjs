@@ -24,6 +24,10 @@
  * prints `previous_deployment_id=<id>`, `none` (the Preview or its deployment does not exist yet)
  * or `unknown` (the read failed), and always exits 0.
  *
+ *   node scripts/verify-preview-deployment.mjs --read-latest --worker notes --preview stage
+ * is the same single read, printed as `latest_deployment_id=<id|none|unknown>`. The teardown uses
+ * it right before deleting the Preview, to leave a deployment from another upload alone.
+ *
  * "Active" means the Preview's `latest` deployment. A Preview has no gradual rollout: its URLs
  * serve the latest deployment. The check therefore requires `latest.id` to equal the deployment id
  * Wrangler reported for this upload, and the annotations the upload set (`workers/tag` = the
@@ -316,7 +320,8 @@ export async function main(argv, env, deps = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  if (process.argv[2] === "--read-previous") {
+  const readMode = { "--read-previous": "previous", "--read-latest": "latest" }[process.argv[2]]
+  if (readMode) {
     const argv = process.argv.slice(3)
     let previous = "unknown"
     if (
@@ -335,7 +340,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         preview: argv[3],
       })
     }
-    console.log(`previous_deployment_id=${previous}`)
+    console.log(`${readMode}_deployment_id=${previous}`)
     process.exit(0)
   }
   try {

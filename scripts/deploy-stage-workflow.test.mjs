@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { test } from "node:test"
@@ -245,7 +245,7 @@ const bash = (() => {
   const dir = mkdtempSync(join(tmpdir(), "stage-step-"))
   let n = 0
   /** Runs a step's script like GitHub does (`bash -e`) and returns what it wrote. */
-  return (step, env) => {
+  return (step, env, cwd) => {
     const script = join(dir, `step${n}.sh`)
     const out = join(dir, `output${n}`)
     const summary = join(dir, `summary${n}`)
@@ -255,6 +255,7 @@ const bash = (() => {
     writeFileSync(summary, "")
     const r = spawnSync("/bin/bash", ["-e", script], {
       encoding: "utf8",
+      cwd,
       env: {
         PATH: process.env.PATH,
         SHA: "a".repeat(40),
@@ -445,4 +446,93 @@ test("a superseded stage is left in place: no teardown, but the run still fails"
   assert.ok(r.summary.includes("d2"))
   assert.ok(!r.summary.includes("taken down"))
   assert.ok(!/\bverified\b/.test(r.summary))
+})
+
+test("the teardown re-reads the latest deployment right before deleting", () => {
+  const step = upload.steps.find((s) => s.id === "teardown")
+  assert.equal(step.env.DEPLOYMENT_ID, "${{ steps.parse.outputs.deployment_id }}")
+  assert.ok(step.env.CLOUDFLARE_API_TOKEN && step.env.CLOUDFLARE_ACCOUNT_ID)
+  assert.ok(!step.run.includes("${{"))
+  assert.ok(step.run.includes("--read-latest --worker notes --preview stage"))
+  assert.ok(step.run.indexOf("--read-latest") < step.run.indexOf("preview delete"))
+  // The token is scoped to the steps that need it.
+  assert.equal(workflow.env?.CLOUDFLARE_API_TOKEN, undefined)
+  assert.equal(upload.env?.CLOUDFLARE_API_TOKEN, undefined)
+
+  const run = (latestLine, deploymentId) => {
+    const dir = mkdtempSync(join(tmpdir(), "stage-teardown-"))
+    const log = join(dir, "calls.log")
+    mkdirSync(join(dir, "bin"))
+    mkdirSync(join(dir, "tools/node_modules/.bin"), { recursive: true })
+    writeFileSync(
+      join(dir, "bin", "node"),
+      `#!/bin/bash\n${latestLine === null ? "exit 1" : `printf '%s\\n' '${latestLine}'`}\n`,
+      { mode: 0o755 },
+    )
+    writeFileSync(
+      join(dir, "tools/node_modules/.bin/wrangler"),
+      `#!/bin/bash\necho "wrangler $*" >>'${log}'\necho deleted\n`,
+      { mode: 0o755 },
+    )
+    const r = bash(
+      step,
+      { DEPLOYMENT_ID: deploymentId, PATH: `${join(dir, "bin")}:${process.env.PATH}` },
+      dir,
+    )
+    let calls = ""
+    try {
+      calls = readFileSync(log, "utf8")
+    } catch {}
+    return { ...r, deleted: /preview delete --name stage/.test(calls) }
+  }
+
+  const ours = run("latest_deployment_id=d1", "d1")
+  assert.equal(ours.deleted, true)
+  assert.equal(ours.status, 1)
+  assert.doesNotMatch(ours.output, /left_in_place/)
+  assert.match(ours.stdout, /::notice::Deleted the stage Preview/)
+
+  const other = run("latest_deployment_id=d2", "d1")
+  assert.equal(other.deleted, false)
+  assert.equal(other.status, 1)
+  assert.match(other.output, /^left_in_place=true$/m)
+  assert.match(other.output, /^left_in_place_id=d2$/m)
+  assert.match(other.stdout, /::warning::Stage now serves deployment d2 from another upload/)
+  assert.match(other.stdout, /::error::/)
+
+  const none = run("latest_deployment_id=none", "d1")
+  assert.equal(none.deleted, false)
+  assert.equal(none.status, 1)
+  assert.doesNotMatch(none.output, /left_in_place/)
+  assert.match(none.stdout, /nothing to delete/)
+
+  for (const [line, id] of [
+    ["latest_deployment_id=unknown", "d1"],
+    ["garbage", "d1"],
+    [null, "d1"],
+    ["latest_deployment_id=bad id!", "d1"],
+    ["latest_deployment_id=d2", ""],
+  ]) {
+    const r = run(line, id)
+    assert.equal(r.deleted, true, `${line}/${id}`)
+    assert.equal(r.status, 1, `${line}/${id}`)
+    assert.doesNotMatch(r.output, /left_in_place/, `${line}/${id}`)
+  }
+  assert.match(run("latest_deployment_id=unknown", "d1").stdout, /::warning::Could not read/)
+
+  // Summary: a run that left another upload in place says so, and is still a failure.
+  const result = upload.steps.find((s) => s.id === "result")
+  assert.equal(result.env.LEFT_IN_PLACE, "${{ steps.teardown.outputs.left_in_place }}")
+  assert.equal(result.env.LEFT_IN_PLACE_ID, "${{ steps.teardown.outputs.left_in_place_id }}")
+  const r = bash(result, {
+    LEVEL: "verified",
+    DEPLOYMENT_ID: "d1",
+    PREVIEW_OUTCOME: "success",
+    TEARDOWN_OUTCOME: "failure",
+    LEFT_IN_PLACE: "true",
+    LEFT_IN_PLACE_ID: "d2",
+  })
+  assert.match(r.output, /^stage_result=failure$/m)
+  assert.ok(r.summary.includes("left in place") && r.summary.includes("d2"))
+  assert.ok(!r.summary.includes("taken down"))
 })
