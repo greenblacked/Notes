@@ -24,9 +24,11 @@ test("the home page offers four reader goals, each leading to a note with eviden
   const featured = await area
     .locator(".start-here-featured a")
     .evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).href))
-  expect(featured.length).toBeGreaterThanOrEqual(6)
+  // at least one featured note per goal that features notes; the exact count is data
+  expect(featured.length).toBeGreaterThanOrEqual(2)
   for (const href of featured) {
-    await page.goto(href)
+    const response = await page.goto(href)
+    expect(response?.status(), href).toBe(200)
     await expect(page.locator(".note-meta").first()).toContainText("Evidence")
   }
 })
@@ -35,6 +37,8 @@ test("the All notes link is in the first viewport and opens the full catalogue",
   page,
 }) => {
   await page.goto("/")
+  // Guards the intro link in content/index.md: if the intro is reworded so that this
+  // link falls below the first screen, a returning visitor no longer reaches the catalogue at once.
   const link = page.locator('.center a[href$="all-notes"]').first()
   await expect(link).toBeVisible()
   const box = (await link.boundingBox())!
@@ -75,4 +79,14 @@ test("the home page shows no status chips", async ({ page }) => {
   await page.goto("/")
   await expect(page.locator(".start-here")).toBeVisible()
   await expect(page.locator(".chip-status, [data-status]")).toHaveCount(0)
+})
+
+test("the home page has no backlinks block and All notes has a single All notes h1", async ({
+  page,
+}) => {
+  await page.goto("/")
+  await expect(page.locator(".backlinks")).toHaveCount(0)
+  await page.goto("/all-notes")
+  await expect(page.getByRole("heading", { name: "All notes", exact: true })).toHaveCount(1)
+  await expect(page.locator('[id="note-index-title"]')).toHaveCount(1)
 })
