@@ -413,3 +413,16 @@ test("writing-notes.md documents every level and field", () => {
     assert.match(doc, new RegExp(`^\\| \`${field}\``, "m"), field)
   }
 })
+
+test("destructive is optional once evidence is set", () => {
+  assert.deepEqual(problems(note()), [])
+  assert.deepEqual(problems(note({ fm: { destructive: "false" } })), [])
+})
+
+test("writing-notes.md marks destructive as optional and does not overstate the check", () => {
+  const doc = readFileSync(join(root, "content/standards/writing-notes.md"), "utf8")
+  const row = doc.split("\n").find((l) => l.startsWith("| `destructive`"))
+  assert.match(row, /^\| `destructive`\s+\| no \(only with `evidence`\)/)
+  assert.doesNotMatch(doc, /so a note cannot ship with a broken claim/)
+  assert.match(doc, /left to review/)
+})

@@ -38,23 +38,23 @@ draft: false
 ---
 ```
 
-| Field         | Required        | Notes                                                                                                       |
-| ------------- | --------------- | ----------------------------------------------------------------------------------------------------------- |
-| `title`       | yes             | Sentence case. Becomes the page heading, so do not repeat it as an `# H1`.                                  |
-| `description` | yes             | One sentence, under about 160 characters.                                                                   |
-| `tags`        | yes             | At least one tag from the taxonomy below.                                                                   |
-| `created`     | yes             | ISO date `YYYY-MM-DD`.                                                                                      |
-| `modified`    | yes             | ISO date. Update it when the meaning changes, not for typo fixes.                                           |
-| `draft`       | yes             | `true` keeps a note out of the published site.                                                              |
-| `type`        | yes             | What kind of note this is: `adr`, `pattern`, `tool`, `standard`, `runbook`, `guide`, `reference` or `note`. |
-| `aliases`     | no              | Alternative names that wikilinks can use.                                                                   |
-| `status`      | ADRs            | One of the ADR statuses below, in lowercase.                                                                |
-| `verified`    | no              | ISO date `YYYY-MM-DD` on which the content was last checked against its sources.                            |
-| `decided`     | ADRs            | ISO date `YYYY-MM-DD` on which the decision was accepted.                                                   |
-| `evidence`    | no              | One of `source-reviewed`, `lab-tested` or `operationally-verified`. See Evidence levels below.              |
-| `reviewed`    | with `evidence` | ISO date of the review behind `evidence`.                                                                   |
-| `review-due`  | with `evidence` | ISO date of the next review, after `reviewed` and within a year.                                            |
-| `destructive` | with `evidence` | `true` when the note tells readers to delete, revoke, disable, overwrite, force or bypass something.        |
+| Field         | Required                  | Notes                                                                                                       |
+| ------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `title`       | yes                       | Sentence case. Becomes the page heading, so do not repeat it as an `# H1`.                                  |
+| `description` | yes                       | One sentence, under about 160 characters.                                                                   |
+| `tags`        | yes                       | At least one tag from the taxonomy below.                                                                   |
+| `created`     | yes                       | ISO date `YYYY-MM-DD`.                                                                                      |
+| `modified`    | yes                       | ISO date. Update it when the meaning changes, not for typo fixes.                                           |
+| `draft`       | yes                       | `true` keeps a note out of the published site.                                                              |
+| `type`        | yes                       | What kind of note this is: `adr`, `pattern`, `tool`, `standard`, `runbook`, `guide`, `reference` or `note`. |
+| `aliases`     | no                        | Alternative names that wikilinks can use.                                                                   |
+| `status`      | ADRs                      | One of the ADR statuses below, in lowercase.                                                                |
+| `verified`    | no                        | ISO date `YYYY-MM-DD` on which the content was last checked against its sources.                            |
+| `decided`     | ADRs                      | ISO date `YYYY-MM-DD` on which the decision was accepted.                                                   |
+| `evidence`    | no                        | One of `source-reviewed`, `lab-tested` or `operationally-verified`. See Evidence levels below.              |
+| `reviewed`    | with `evidence`           | ISO date of the review behind `evidence`.                                                                   |
+| `review-due`  | with `evidence`           | ISO date of the next review, after `reviewed` and within a year.                                            |
+| `destructive` | no (only with `evidence`) | `true` when the note tells readers to delete, revoke, disable, overwrite, force or bypass something.        |
 
 `reference` is for architecture reference designs: a target design and its trade-offs.
 
@@ -156,7 +156,7 @@ Restore from the backup taken in the prerequisites.
 
 ### Review queue
 
-`npm run check:notes` enforces these rules and CI runs it, so a note cannot ship with a broken claim. It also prints a review queue and, in CI, puts it in the run summary: reviews overdue, reviews due within 30 days, notes modified after their review, and the notes that declare no level. The queue only informs; it never fails the build and never edits a note. `node scripts/check-notes.mjs --queue` prints just the queue.
+`npm run check:notes` enforces the machine-checkable parts and CI runs it: the fields and dates, the required subsections and that they are not empty, the https link, the reviewed date, the Lab run fences and the destructive callout. The content of each Sources bullet, the host OS, versions and date in a Lab run, the position of the Evidence section and whether a claim is true are left to review. It also prints a review queue and, in CI, puts it in the run summary: reviews overdue, reviews due within 30 days, notes modified after their review, and the notes that declare no level. The queue only informs; it never fails the build and never edits a note. `node scripts/check-notes.mjs --queue` prints just the queue.
 
 ## Reading aids
 
