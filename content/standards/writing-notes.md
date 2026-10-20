@@ -89,7 +89,7 @@ destructive: true # optional
 
 ### The Evidence section
 
-A note with `evidence` has one `## Evidence` section, placed immediately before `## Sources` if the note has one, otherwise before `## Related`, otherwise at the end. Its `###` subsections are:
+A note with `evidence` has one `## Evidence` section. Place it immediately before `## Sources` if the note has one, otherwise before `## Related`, otherwise at the end; the check requires exactly one section but does not enforce its position. Its `###` subsections are:
 
 - `### Sources checked` (every level): at least one `https://` link. Each bullet gives the page, the claims it backs and "checked" with the `reviewed` date. The Evidence section must contain the `reviewed` date as written in the frontmatter.
 - `### Not verified` (every level, never empty): each claim or step that no source or run confirmed. Write "Nothing beyond the items above" only when that is true.

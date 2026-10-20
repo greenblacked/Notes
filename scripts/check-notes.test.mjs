@@ -198,6 +198,15 @@ test("frontmatter that is opened but never closed is a parse error", () => {
   assert.match(r.stdout, /::error file=.*a\.md::frontmatter does not parse: it is not closed/)
 })
 
+test("the position of the Evidence section is not enforced, the count is", () => {
+  const text = note()
+  const moved = text.replace(/\n## Evidence[\s\S]*$/, (ev) => `${ev}\n## Sources\n\n- x\n`)
+  assert.deepEqual(problems(moved), [])
+  assert.ok(has(problems(`${text}\n## Evidence\n\nAgain.\n`), /more than one `## Evidence`/))
+  const doc = readFileSync(join(root, "content/standards/writing-notes.md"), "utf8")
+  assert.match(doc, /does not enforce its position/)
+})
+
 test("a note with no frontmatter at all is not a parse error", () => {
   assert.equal(parseNote("x.md", "Just a body.\n").parseError, undefined)
 })
