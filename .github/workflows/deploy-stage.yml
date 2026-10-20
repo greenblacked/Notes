@@ -223,6 +223,18 @@ jobs:
           echo "::notice::main moved on; the newer run deploys it."
           echo "stage_result=skipped" >>"$GITHUB_OUTPUT"
 
+      # Fail before anything is uploaded or deleted: a missing setting must never tear stage down.
+      - name: Require Cloudflare credentials
+        if: steps.fresh.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "::error::Repository secret CLOUDFLARE_API_TOKEN and repository variable or secret CLOUDFLARE_ACCOUNT_ID must be set (Settings, Secrets and variables, Actions). Environment secrets are not available on a private repository on GitHub Free."
+            exit 1
+          fi
+
       # The token never lives at job level: each step that needs it sets it. Only wrangler and the
       # Node built-ins run next to it.
       # The old Preview `dev` (dev.notes.szolotov.com) is retired: delete it. Idempotent: a missing
@@ -234,7 +246,7 @@ jobs:
         if: steps.fresh.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           wrangler=tools/node_modules/.bin/wrangler
           if out="$("$wrangler" preview delete --name dev --skip-confirmation 2>&1)"; then
@@ -259,7 +271,7 @@ jobs:
         if: steps.fresh.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
         run: tools/node_modules/.bin/wrangler preview --name stage --message "stage ${SHA::7}" --tag "$SHA"
 
@@ -282,7 +294,7 @@ jobs:
         if: steps.fresh.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           DEPLOYMENT_ID: ${{ steps.parse.outputs.deployment_id }}
         run: |
           rc=0
@@ -408,7 +420,7 @@ jobs:
         if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled())
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           wrangler=tools/node_modules/.bin/wrangler
           if out="$("$wrangler" preview delete --name stage --skip-confirmation 2>&1)"; then

@@ -274,16 +274,19 @@ test("scripts run in the deploy jobs import only Node built-ins", () => {
   }
 })
 
-test("Cloudflare credentials come from the repository secret and variable", () => {
+test("Cloudflare credentials come from the repository secret and a variable or secret account id", () => {
   let tokens = 0
   let accounts = 0
   for (const f of files) {
-    assert.ok(!raw[f].includes("secrets.CLOUDFLARE_ACCOUNT_ID"), `${f} reads an account id secret`)
     for (const job of Object.values(wf[f].jobs)) {
       for (const env of [job.env, ...(job.steps ?? []).map((s) => s.env)]) {
         if (env?.CLOUDFLARE_ACCOUNT_ID !== undefined) {
           accounts++
-          assert.equal(env.CLOUDFLARE_ACCOUNT_ID, "${{ vars.CLOUDFLARE_ACCOUNT_ID }}", f)
+          assert.equal(
+            env.CLOUDFLARE_ACCOUNT_ID,
+            "${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}",
+            f,
+          )
         }
         if (env?.CLOUDFLARE_API_TOKEN !== undefined) {
           tokens++
@@ -293,6 +296,27 @@ test("Cloudflare credentials come from the repository secret and variable", () =
     }
   }
   assert.ok(tokens > 0 && accounts > 0)
+})
+
+test("Deploy stage fails on missing Cloudflare credentials before anything is uploaded", () => {
+  const steps = wf["deploy-stage.yml"].jobs.upload.steps
+  const names = steps.map((s) => s.name)
+  const check = names.indexOf("Require Cloudflare credentials")
+  assert.ok(check >= 0, "the credential check step exists")
+  assert.ok(
+    check < names.indexOf("Delete the old dev Preview"),
+    "it runs before the old Preview is deleted",
+  )
+  assert.ok(check < names.indexOf("Update the stage Preview"), "it runs before the upload")
+  const step = steps[check]
+  assert.equal(step.env.CLOUDFLARE_API_TOKEN, "${{ secrets.CLOUDFLARE_API_TOKEN }}")
+  assert.equal(
+    step.env.CLOUDFLARE_ACCOUNT_ID,
+    "${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}",
+  )
+  assert.match(step.run, /-z "\$CLOUDFLARE_API_TOKEN"/)
+  assert.match(step.run, /-z "\$CLOUDFLARE_ACCOUNT_ID"/)
+  assert.match(step.run, /exit 1/)
 })
 
 test("the production guard requires the owner or an owner's Cut release", () => {
