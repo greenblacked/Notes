@@ -470,3 +470,17 @@ test("a failed browser shard uploads its own report", () => {
   assert.equal(report.with.name, "playwright-report-${{ matrix.id }}")
   assert.equal(report.if, "failure()")
 })
+
+test("the format check runs once, in one browser shard, off the build critical path", () => {
+  const build = wf["ci.yml"].jobs["build-and-check"].steps
+  assert.ok(!build.some((s) => (s.run ?? "").includes("format:check")))
+  assert.deepEqual(
+    matrixEntries.filter((e) => e.format === true).map((e) => e.id),
+    ["chromium-desktop-1"],
+  )
+  const steps = browserJob.steps
+  const format = steps.findIndex((s) => (s.run ?? "").includes("npm run format:check"))
+  const types = steps.findIndex((s) => (s.run ?? "").includes("npm run check:browser"))
+  assert.ok(types >= 0 && format > types)
+  assert.equal(steps[format].if, "matrix.format")
+})

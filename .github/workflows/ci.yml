@@ -79,9 +79,6 @@ jobs:
       - name: Test scripts and Worker policy
         run: npm run test:scripts
 
-      - name: Check formatting
-        run: npm run format:check
-
       - name: Check colour contrast (WCAG AA)
         run: npm run check:contrast
 
@@ -104,7 +101,13 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - { id: chromium-desktop-1, project: chromium-desktop, browser: chromium, shard: 1/2 }
+          - {
+              id: chromium-desktop-1,
+              project: chromium-desktop,
+              browser: chromium,
+              shard: 1/2,
+              format: true,
+            }
           - { id: chromium-desktop-2, project: chromium-desktop, browser: chromium, shard: 2/2 }
           - { id: chromium-phone-1, project: chromium-phone, browser: chromium, shard: 1/2 }
           - { id: chromium-phone-2, project: chromium-phone, browser: chromium, shard: 2/2 }
@@ -150,6 +153,11 @@ jobs:
 
       - name: Type check the browser tests
         run: npm run check:browser
+
+      # Runs in one shard only; .prettierignore excludes the build output, so it does not need it.
+      - name: Check formatting
+        if: matrix.format
+        run: npm run format:check
 
       # The browser versions come from the Playwright version in package-lock.json.
       - name: Read the Playwright version

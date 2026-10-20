@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
+- **CI checks formatting in the first Chromium desktop browser job** instead of the build job. It needs no build output, and the build job is the start of the critical path, so the check no longer delays the browser jobs.
 - **CI browser tests run as a matrix of eight jobs** (each of the four Playwright projects in two shards) instead of one job that runs all four in sequence, so the wall-clock time is the slowest shard. Every test still runs on Chromium and WebKit at desktop and phone sizes; `fail-fast` stops the rest when one shard fails, and each shard installs and caches only its own browser. Each job bills at least one minute, so this uses more Actions minutes per run.
 - The smoke test User-Agent names the site (`notes-smoke-test/1 (+https://notes.szolotov.com)`) instead of the source repository, which is private.
 - Ten high-risk notes were reviewed against official sources and now declare an evidence level and an `## Evidence` section: the leaked credential rotation, TLS certificate renewal, admission webhook certificate expiry, Terraform state recovery and compromised cluster containment runbooks, the secret rotation and Artifactory token patterns, and the three AI agent notes. Several steps were corrected (for example the Terraform state push rollback, fork pipelines for CI agents, and Artifactory token revocation), and destructive steps gained warnings and rollback notes.
