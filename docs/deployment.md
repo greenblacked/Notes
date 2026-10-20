@@ -211,7 +211,7 @@ Symptom: `/version.txt` and `/robots.txt` pass, but `GET /` (HTML) fails with 40
 
    Then add the same random value as the GitHub secret `SMOKE_TEST_TOKEN` (repository level, or in both `stage` and `production`), for example from `openssl rand -hex 32`. The deploy workflows pass it to `scripts/smoke-test.sh`, which sends it as the `X-Notes-Smoke-Test` request header; without the secret the header is not sent. Rotate it by updating the rule and the secret together.
 
-The smoke test also sends the User-Agent `notes-smoke-test/1 (+https://github.com/greenblacked/Notes)` (override with `SMOKE_USER_AGENT`), which makes its requests easy to find in Security Events.
+The smoke test also sends the User-Agent `notes-smoke-test/1 (+https://notes.szolotov.com)` (override with `SMOKE_USER_AGENT`), which makes its requests easy to find in Security Events.
 
 ## One-time cleanup of old deployments
 

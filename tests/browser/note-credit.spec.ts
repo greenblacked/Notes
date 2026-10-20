@@ -14,7 +14,7 @@ const candidates = [
 ]
 
 test.describe("note credit", () => {
-  test("names the author and links the catalogue, source and issue report", async ({ page }) => {
+  test("names the author and links only the catalogue", async ({ page }) => {
     await page.goto(note)
     const credit = page.locator(".note-credit")
     await expect(credit).toHaveCount(1)
@@ -23,19 +23,12 @@ test.describe("note credit", () => {
       "href",
       "https://ai.szolotov.com",
     )
-    await expect(credit.getByRole("link", { name: "Source on GitHub" })).toHaveAttribute(
-      "href",
-      "https://github.com/greenblacked/Notes/blob/main/content/runbooks/tls-certificate-renewal.md",
+    await expect(credit.locator("a")).toHaveCount(1)
+    await expect(credit.getByRole("link", { name: "Source on GitHub" })).toHaveCount(0)
+    await expect(credit.getByRole("link", { name: "Report an issue with this note" })).toHaveCount(
+      0,
     )
-    const report = credit.getByRole("link", { name: "Report an issue with this note" })
-    const url = new URL((await report.getAttribute("href"))!)
-    expect(url.origin).toBe("https://github.com")
-    expect(url.pathname).toBe("/greenblacked/Notes/issues/new")
-    expect(url.searchParams.get("body")).toContain(
-      "https://notes.szolotov.com/runbooks/tls-certificate-renewal",
-    )
-    const h1 = (await page.locator("h1").first().innerText()).trim()
-    expect(url.searchParams.get("title")).toContain(h1)
+    await expect(credit.locator('a[href*="github.com"]')).toHaveCount(0)
     await expect(credit.locator("form")).toHaveCount(0)
     for (const a of await credit.locator("a").all()) {
       await expect(a).toHaveAttribute("rel", /noopener/)
@@ -74,14 +67,12 @@ test.describe("note credit", () => {
     await expect(page.locator(".note-credit")).toHaveCount(1)
   })
 
-  test("the home page reports the site root, with nothing after the slash", async ({ page }) => {
+  test("the home page credit links only the catalogue", async ({ page }) => {
     await page.goto("/")
-    const href = await page
-      .locator(".note-credit")
-      .getByRole("link", { name: "Report an issue with this note" })
-      .getAttribute("href")
-    const body = new URL(href!).searchParams.get("body")!
-    expect(body).toContain("Page: https://notes.szolotov.com/\n")
+    await expect(page.locator(".note-credit a")).toHaveCount(1)
+    await expect(
+      page.locator(".note-credit").getByRole("link", { name: "AI skills catalogue" }),
+    ).toHaveAttribute("href", "https://ai.szolotov.com")
   })
 
   test("section indexes (folder pages) and the 404 page have no credit", async ({ page }) => {
@@ -113,7 +104,7 @@ test.describe("note credit", () => {
   test("links are reachable by Tab and show the site focus outline", async ({ page }) => {
     await page.goto(note)
     const links = page.locator(".note-credit a")
-    await expect(links).toHaveCount(3)
+    await expect(links).toHaveCount(1)
     // Start from the focusable element just before the credit, then Tab in.
     await page.evaluate(() => {
       const credit = document.querySelector(".note-credit")!
@@ -127,7 +118,7 @@ test.describe("note credit", () => {
       )
       before[before.length - 1].focus()
     })
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 1; i++) {
       await page.keyboard.press("Tab")
       const focused = await page.evaluate(() => {
         const a = document.activeElement as HTMLElement
@@ -164,7 +155,7 @@ test.describe("note credit", () => {
   test("each separator stays on one line with its link", async ({ page }) => {
     await page.goto(note)
     const items = page.locator(".note-credit .note-credit-item")
-    await expect(items).toHaveCount(3)
+    await expect(items).toHaveCount(1)
     for (const item of await items.all()) {
       await expect(item).toHaveCSS("white-space", "nowrap")
       await expect(item.locator("a")).toHaveCount(1)
