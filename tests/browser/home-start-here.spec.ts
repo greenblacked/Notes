@@ -30,6 +30,18 @@ test("the home page offers four reader goals, each leading to a note with eviden
     const response = await page.goto(href)
     expect(response?.status(), href).toBe(200)
     await expect(page.locator(".note-meta").first()).toContainText("Evidence")
+    // Let the page finish its lazy resources before leaving it. A note with Mermaid diagrams
+    // imports the Mermaid module after load; navigating away mid-import makes WebKit abort the
+    // module load, and Mermaid rejects with an object that surfaces as an unhandled rejection.
+    await page.waitForLoadState("networkidle")
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll("code.mermaid, pre.mermaid")].every(
+          (el) => el.hasAttribute("data-processed") || el.querySelector("svg") !== null,
+        ),
+      undefined,
+      { timeout: 15_000 },
+    )
   }
 })
 

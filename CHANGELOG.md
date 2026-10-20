@@ -33,6 +33,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
+- The home page browser test no longer leaves a featured note before it has finished loading. It waits for the network to go idle and for every Mermaid diagram to be drawn, so WebKit no longer aborts the Mermaid module import mid-navigation and reports it as an unhandled promise rejection.
 - **Deploy stage and Deploy production read the Cloudflare account id from a repository variable or secret** (variable first). After the private-repository change they read the variable only, so with the id stored as a secret the stage version check had no account id, failed, and the teardown took stage down. Deploy stage now also fails on a missing token or account id before anything is uploaded or deleted.
 - Browser tests that fail on a page error now name the error type, the script location, the page and, for a value that is not an Error, its shape, so an intermittent WebKit failure shows where it came from instead of `[object Object]`.
 - Changing the theme no longer makes the top bar's theme icon jump: inside the desktop cross-fade the icons are swapped by the fade itself (no second turn that outlasts it), and on phones the icon turns without overshooting.
