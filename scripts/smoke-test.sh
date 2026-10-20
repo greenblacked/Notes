@@ -55,7 +55,7 @@ HOST="${HOST%%/*}"
 HOST="${HOST%%:*}"
 # Identifiable User-Agent, so a Cloudflare WAF rule can recognise these requests
 # (see docs/deployment.md, Troubleshooting).
-USER_AGENT="${SMOKE_USER_AGENT:-notes-smoke-test/1 (+https://github.com/greenblacked/Notes)}"
+USER_AGENT="${SMOKE_USER_AGENT:-notes-smoke-test/1 (+https://notes.szolotov.com)}"
 # Optional shared secret sent as X-Notes-Smoke-Test, for a WAF skip rule that a
 # spoofed User-Agent cannot satisfy. Unset means the header is not sent.
 SMOKE_TEST_TOKEN="${SMOKE_TEST_TOKEN:-}"

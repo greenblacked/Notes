@@ -1,21 +1,12 @@
 import type { QuartzPluginData } from "../../quartz/plugins/vfile"
-import { AUTHOR, CATALOGUE_URL, reportUrl, sourceUrl } from "./credit"
+import { AUTHOR, CATALOGUE_URL } from "./credit"
 
 /**
- * The credit line at the end of a note: who writes the notes, where the source is, and a prefilled
- * issue link. Plain links, no form (the CSP has form-action 'self'), no script, no image.
+ * The credit line at the end of a note: who writes the notes and a link to the AI skills
+ * catalogue. Plain links, no form (the CSP has form-action 'self'), no script, no image.
  */
-export function NoteCredit({ fileData }: { fileData: QuartzPluginData }) {
-  const slug = fileData.slug!
-  const title = String(fileData.frontmatter?.title ?? slug)
-  const links = [
-    { href: CATALOGUE_URL, text: "AI skills catalogue" },
-    {
-      href: fileData.relativePath ? sourceUrl(fileData.relativePath) : "",
-      text: "Source on GitHub",
-    },
-    { href: reportUrl(slug, title), text: "Report an issue with this note" },
-  ].filter((l) => l.href)
+export function NoteCredit(_props: { fileData: QuartzPluginData }) {
+  const links = [{ href: CATALOGUE_URL, text: "AI skills catalogue" }]
   return (
     <aside class="note-credit" aria-label="About this note">
       <p>
