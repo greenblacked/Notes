@@ -47,7 +47,11 @@ function run({ actor, triggering, count = "1", sha = SHA }) {
       FAKE_GH_LOG: log,
     },
   })
-  return { code: result.status, out: result.stdout + result.stderr, asked: readFileSync(log, "utf8") }
+  return {
+    code: result.status,
+    out: result.stdout + result.stderr,
+    asked: readFileSync(log, "utf8"),
+  }
 }
 
 test("the owner passes without an API call", () => {
