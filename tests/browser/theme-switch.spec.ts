@@ -139,7 +139,7 @@ function expectStillGeometry(samples: Sample[], clicked: boolean, testInfo: Test
   const times = samples.map((s) => Math.round(s.t))
   testInfo.annotations.push({
     type: "sample times (ms)",
-    description: `${samples.length} samples: ${times.join(" ")}`,
+    description: `${samples.length} samples, timed from ${clicked ? "the click" : "the start of sampling (no click event seen)"}: ${times.join(" ")}`,
   })
   const inWindow = samples.filter((s) => s.t >= 30 && s.t <= 400).length
   const after = samples.filter((s) => s.t >= 600).length
@@ -147,7 +147,7 @@ function expectStillGeometry(samples: Sample[], clicked: boolean, testInfo: Test
     clicked && samples.at(-1)!.t >= 900 && samples.length >= 5 && inWindow >= 1 && after >= 1
   expect(
     covered,
-    `${clicked ? "" : "no click event was seen, so the times below count from the start of sampling: "}samples, timed from the click, must span 900ms with at least one in 30-400ms and one from 600ms on (got ${samples.length} samples, ${inWindow} in the window, ${after} after it): ${times.join(" ")}`,
+    `${clicked ? "" : "no click event was seen; "}samples, timed from ${clicked ? "the click" : "the start of sampling"}, must span 900ms with at least one in 30-400ms and one from 600ms on (got ${samples.length} samples, ${inWindow} in the window, ${after} after it): ${times.join(" ")}`,
   ).toBe(true)
   for (const s of samples) {
     s.bar.forEach((v, i) => expect(Math.abs(v - first.bar[i])).toBeLessThanOrEqual(0.5))
@@ -178,9 +178,10 @@ for (const motion of [true, false]) {
         }
         const before = await page.locator("html").getAttribute("saved-theme")
         const { samples, clicked, fadePath } = await switchAndSample(page, isMobile)
-        await expect(page.locator("html")).not.toHaveAttribute("saved-theme", before ?? "")
-
+        // Geometry first: when no click event arrives the theme never changes, and the
+        // theme assertion below would then hide the readable "no click event" message.
         expectStillGeometry(samples, clicked, testInfo)
+        await expect(page.locator("html")).not.toHaveAttribute("saved-theme", before ?? "")
         if (!motion) {
           expect(samples.every((s) => s.iconTurning === 0)).toBe(true)
           return
