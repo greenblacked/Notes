@@ -193,7 +193,10 @@ function baseProblems(fm) {
     if (typeof fm.status !== "string" || !ADR_STATUSES.includes(fm.status)) {
       problems.push(`\`status\` must be one of ${ADR_STATUSES.join(", ")} (lowercase)`)
     }
-    if (!isoDay(fm.decided)) {
+    // Every status but `proposed` has a decision date; a proposed ADR may omit `decided`
+    // (content/adr/template.md), but a value that is set must still be a valid day.
+    const optional = fm.status === "proposed" && !Object.hasOwn(fm, "decided")
+    if (!optional && !isoDay(fm.decided)) {
       problems.push("`decided` is missing or not a valid ISO date (YYYY-MM-DD)")
     }
   }

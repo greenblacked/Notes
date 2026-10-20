@@ -38,23 +38,23 @@ draft: false
 ---
 ```
 
-| Field         | Required                  | Notes                                                                                                       |
-| ------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `title`       | yes                       | Sentence case. Becomes the page heading, so do not repeat it as an `# H1`.                                  |
-| `description` | yes                       | One sentence, under about 160 characters.                                                                   |
-| `tags`        | yes                       | At least one tag from the taxonomy below.                                                                   |
-| `created`     | yes                       | ISO date `YYYY-MM-DD`.                                                                                      |
-| `modified`    | yes                       | ISO date. Update it when the meaning changes, not for typo fixes.                                           |
-| `draft`       | yes                       | `true` keeps a note out of the published site.                                                              |
-| `type`        | yes                       | What kind of note this is: `adr`, `pattern`, `tool`, `standard`, `runbook`, `guide`, `reference` or `note`. |
-| `aliases`     | no                        | Alternative names that wikilinks can use.                                                                   |
-| `status`      | ADRs                      | One of the ADR statuses below, in lowercase.                                                                |
-| `verified`    | no                        | ISO date `YYYY-MM-DD` on which the content was last checked against its sources.                            |
-| `decided`     | ADRs                      | ISO date `YYYY-MM-DD` on which the decision was accepted.                                                   |
-| `evidence`    | no                        | One of `source-reviewed`, `lab-tested` or `operationally-verified`. See Evidence levels below.              |
-| `reviewed`    | with `evidence`           | ISO date of the review behind `evidence`.                                                                   |
-| `review-due`  | with `evidence`           | ISO date of the next review, after `reviewed` and within a year.                                            |
-| `destructive` | no (only with `evidence`) | `true` when the note tells readers to delete, revoke, disable, overwrite, force or bypass something.        |
+| Field         | Required                  | Notes                                                                                                            |
+| ------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `title`       | yes                       | Sentence case. Becomes the page heading, so do not repeat it as an `# H1`.                                       |
+| `description` | yes                       | One sentence, under about 160 characters.                                                                        |
+| `tags`        | yes                       | At least one tag from the taxonomy below.                                                                        |
+| `created`     | yes                       | ISO date `YYYY-MM-DD`.                                                                                           |
+| `modified`    | yes                       | ISO date. Update it when the meaning changes, not for typo fixes.                                                |
+| `draft`       | yes                       | `true` keeps a note out of the published site.                                                                   |
+| `type`        | yes                       | What kind of note this is: `adr`, `pattern`, `tool`, `standard`, `runbook`, `guide`, `reference` or `note`.      |
+| `aliases`     | no                        | Alternative names that wikilinks can use.                                                                        |
+| `status`      | ADRs                      | One of the ADR statuses below, in lowercase.                                                                     |
+| `verified`    | no                        | ISO date `YYYY-MM-DD` on which the content was last checked against its sources.                                 |
+| `decided`     | ADRs, except `proposed`   | ISO date `YYYY-MM-DD` of the decision. Required for every status but `proposed`; if set there, it must be valid. |
+| `evidence`    | no                        | One of `source-reviewed`, `lab-tested` or `operationally-verified`. See Evidence levels below.                   |
+| `reviewed`    | with `evidence`           | ISO date of the review behind `evidence`.                                                                        |
+| `review-due`  | with `evidence`           | ISO date of the next review, after `reviewed` and within a year.                                                 |
+| `destructive` | no (only with `evidence`) | `true` when the note tells readers to delete, revoke, disable, overwrite, force or bypass something.             |
 
 `reference` is for architecture reference designs: a target design and its trade-offs.
 

@@ -522,6 +522,21 @@ test("an ADR that declares evidence needs a valid status and decided date", () =
   assert.ok(!has(problems(note()), /`status`|`decided`/))
 })
 
+test("decided is required for every ADR status except proposed", () => {
+  const adr = (fm) => problems(note({ fm: { type: "adr", ...fm } }))
+  const missing = /`decided` is missing or not a valid ISO date/
+  assert.deepEqual(adr({ status: "proposed" }), [])
+  assert.deepEqual(adr({ status: "proposed", decided: "2026-10-01" }), [])
+  for (const bad of ["soon", "2026-02-30"]) {
+    const list = adr({ status: "proposed", decided: bad })
+    assert.ok(has(list, missing), `${bad}: ${list.join("|")}`)
+  }
+  for (const status of ["accepted", "rejected", "deprecated", "superseded"]) {
+    assert.ok(has(adr({ status }), missing), status)
+    assert.deepEqual(adr({ status, decided: "2026-10-01" }), [], status)
+  }
+})
+
 test("verified must be a valid date that is not in the future", () => {
   for (const level of ["source-reviewed", "lab-tested"]) {
     const base = { evidence: level }
