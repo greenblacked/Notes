@@ -279,3 +279,18 @@ test("Cloudflare credentials come from the repository secret and variable", () =
   }
   assert.ok(tokens > 0 && accounts > 0)
 })
+
+test("the production guard requires the owner or an owner's Cut release", () => {
+  const w = wf["deploy-production.yml"]
+  const steps = w.jobs.guard.steps
+  const actor = steps.findIndex((s) => s.run === ".github/scripts/require-release-actor.sh")
+  const tag = steps.findIndex((s) => (s.run ?? "").includes("refs/tags/"))
+  const ci = steps.findIndex((s) => s.run === ".github/scripts/require-ci-success.sh")
+  assert.ok(tag >= 0 && actor > tag && ci > actor)
+  assert.equal(steps[actor].env.ACTOR, "${{ github.actor }}")
+  assert.equal(steps[actor].env.TRIGGERING_ACTOR, "${{ github.triggering_actor }}")
+  assert.equal(steps[actor].if, undefined)
+  assert.equal(steps[actor]["continue-on-error"], undefined)
+  assert.ok([w.jobs.deploy.needs].flat().includes("guard"))
+  assert.deepEqual(w.jobs.guard.permissions, { contents: "read", actions: "read" })
+})

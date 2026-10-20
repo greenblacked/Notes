@@ -2,8 +2,9 @@ name: Deploy production
 
 # Production starts only by workflow_dispatch on a vX.Y.Z tag ref: from Cut release
 # (cut-release.yml), or Run workflow on a tag to redeploy or roll forward. Pushing a tag
-# deploys nothing. Tag-only is enforced here (the `guard` job) independently of any
-# environment rules.
+# deploys nothing. Tag-only and the actor rule (the owner, or a Cut release run by the owner)
+# are enforced here (the `guard` job): a private repository on GitHub Free has no environment
+# rules, reviewers or rulesets.
 on:
   workflow_dispatch:
 
@@ -68,6 +69,17 @@ jobs:
           echo "Tag $tag resolves to $SHA."
           echo "tag=$tag" >>"$GITHUB_OUTPUT"
           echo "version=${tag#v}" >>"$GITHUB_OUTPUT"
+
+      # No environment reviewers on a private Free repo: the owner deploys directly, or Cut
+      # release (run by the owner) dispatches as github-actions[bot].
+      - name: Require the owner or a Cut release by the owner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: .github/scripts/require-release-actor.sh
 
       # Whatever started the run (Cut release or a manual dispatch on a tag), the commit must have passed
       # CI on main and be on main: a tag on an unreviewed or failing commit is not deployed.
