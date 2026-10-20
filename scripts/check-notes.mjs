@@ -34,8 +34,9 @@ const EXECUTABLE_SECTIONS = [
 ]
 
 /**
- * Copied from local-plugins/note-meta/format.ts (isoDay), so the check reads dates exactly as
- * the site does. The `yaml` package gives a string for an unquoted `2026-10-20`, while the
+ * A stricter variant of local-plugins/note-meta/format.ts (isoDay): the site's parser accepts
+ * trailing text such as a time part, this one requires exactly `YYYY-MM-DD`. A created or
+ * modified value with a time part therefore counts as missing here. The `yaml` package gives a string for an unquoted `2026-10-20`, while the
  * site's own frontmatter path gives a Date; both are accepted. Returns `YYYY-MM-DD`, or
  * undefined for anything else, including impossible dates such as 2026-02-30.
  */
