@@ -56,10 +56,26 @@ test("it runs on pushes to main and on dispatch from main, with no inputs", () =
   assert.ok(!dispatch || !dispatch.inputs, "dispatch has no inputs")
 })
 
-test("the guard accepts main only", () => {
-  const run = workflow.jobs.guard.steps.map((s) => s.run ?? "").join("\n")
-  assert.ok(run.includes("refs/heads/main"))
-  assert.ok(!run.includes("refs/heads/dev"))
+test("the first build step accepts main and the owner only", () => {
+  assert.equal(workflow.jobs.guard, undefined)
+  const g = workflow.jobs.build.steps[0]
+  assert.equal(g.name, "Require the main branch and the owner")
+  assert.equal(g.uses, undefined)
+  assert.equal(g.if, undefined)
+  for (const part of [
+    "refs/heads/main",
+    '"$ACTOR" != "greenblacked"',
+    '"$TRIGGERING_ACTOR" != "greenblacked"',
+  ]) {
+    assert.ok(g.run.includes(part), part)
+  }
+  assert.ok(!g.run.includes("refs/heads/dev"))
+  assert.equal(g.env.ACTOR, "${{ github.actor }}")
+  assert.equal(g.env.TRIGGERING_ACTOR, "${{ github.triggering_actor }}")
+  assert.equal(g.env.EVENT, "${{ github.event_name }}")
+  assert.equal(g.env.REF, "${{ github.ref }}")
+  assert.equal(workflow.jobs.build.needs, undefined)
+  assert.equal(workflow.jobs.build.if, "github.repository == 'greenblacked/Notes'")
 })
 
 test("the upload job uses the stage environment", () => {
