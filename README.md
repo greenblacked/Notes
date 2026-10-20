@@ -99,19 +99,19 @@ flowchart LR
     B -->|CI OK required, merge commit| C[Merge to main]
     C --> D[Deploy stage: automatic]
     D --> F[Cut release: tag vX.Y.Z]
-    F -->|approval| G[Deploy production]
+    F -->|guard| G[Deploy production]
 ```
 
 1. Branch `<type>/<kebab>` from `main` and open a pull request into `main`. CI must pass (`CI OK`); merge with a merge commit.
 2. The merge deploys stage automatically: https://stage.notes.szolotov.com (public, noindex; about 15 minutes; `/version.txt` shows `stage+<sha>`) ([Stage Preview](docs/deployment.md#stage-preview)). Run workflow on `main` re-deploys it. Production traffic is untouched.
 3. To release: update `CHANGELOG.md` (`[Unreleased]` to `[X.Y.Z] - date`) by pull request, then Actions, **Cut release**, **Run workflow** on `main`, enter the version as `X.Y.Z`. The workflow validates it, checks that CI passed and Deploy stage updated stage for that commit (the stage requirement is skipped only for the first release, while no vX.Y.Z tag exists), and that the version is higher than the latest tag, creates the tag and GitHub Release from the CHANGELOG section, and dispatches Deploy production on the tag.
-4. Approve the deployment in the `production` environment. A smoke test runs against the Worker's workers.dev URL after the deploy; on failure the previous version is restored automatically.
+4. Deploy production runs straight after Cut release. Its guard checks the tag, CI on main and that the owner (or the owner's Cut release run) started it. A smoke test runs against the Worker's workers.dev URL after the deploy; on failure the previous version is restored automatically.
 
-Production only ever deploys from a `vX.Y.Z` tag. Deploy workflows build in a job without secrets and deploy from a second job, because `npm run build` fetches and builds third-party Quartz plugins (pinned in `quartz.lock.json`, whose changes deserve review). Deploy builds are cold and take about 15 minutes; CI caches the plugins. Builds need access to github.com and npm. Details: [docs/deployment.md](docs/deployment.md#build-and-deploy-are-separate-jobs). Setup (Cloudflare token, GitHub environments) is in [docs/deployment.md](docs/deployment.md); the expected repository settings are in [docs/deployment.md](docs/deployment.md#repository-settings).
+Production only ever deploys from a `vX.Y.Z` tag. Deploy workflows build in a job without secrets and deploy from a second job, because `npm run build` fetches and builds third-party Quartz plugins (pinned in `quartz.lock.json`, whose changes deserve review). Deploy builds are cold and take about 15 minutes; CI caches the plugins. Builds need access to github.com and npm. Details: [docs/deployment.md](docs/deployment.md#build-and-deploy-are-separate-jobs). Setup (repository secret `CLOUDFLARE_API_TOKEN` and repository variable `CLOUDFLARE_ACCOUNT_ID`) is in [docs/deployment.md](docs/deployment.md); the expected repository settings are in [docs/deployment.md](docs/deployment.md#repository-settings). The repository is private on GitHub Free, so Actions minutes are metered; see [CI minutes](docs/deployment.md#ci-minutes).
 
 ## Rolling back
 
-- Re-deploy an older release: Actions, **Deploy production**, Run workflow with an older **tag** selected as the ref, then approve. This rebuilds and deploys that tag.
+- Re-deploy an older release: Actions, **Deploy production**, Run workflow with an older **tag** selected as the ref. This rebuilds and deploys that tag.
 - Fast path: `npx wrangler rollback <version-id> --message "reason"` (list ids with `npx wrangler deployments list`). Production only: stage is a Preview and has no rollback, so merge a fix into `main` (stage redeploys). See [docs/deployment.md](docs/deployment.md#rollback).
 
 ## Quartz

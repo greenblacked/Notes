@@ -169,9 +169,10 @@ jobs:
       SHA: ${{ github.sha }}
       WRANGLER_SEND_METRICS: "false"
     steps:
-      # The first step of the build job ensures github.sha is a commit of main. Intended: main receives only PR merges
-      # that passed CI OK (the `main` ruleset in docs/deployment.md#repository-settings; until it
-      # exists, only the owner-only actor check limits who deploys).
+      # The first step of the build job ensures github.sha is a commit of main. Intended: main
+      # receives only PR merges that passed CI OK; rulesets do not apply on a private Free
+      # repository, so only the owner-only actor check limits who deploys
+      # (docs/deployment.md#repository-settings).
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

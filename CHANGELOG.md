@@ -27,6 +27,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - The Preview deployment check (`scripts/verify-preview-deployment.mjs`) makes at most 5 requests in total, one loop where network errors, HTTP 429/5xx, a stale deployment id, a missing-preview answer (API 10025/10222) and missing annotations on this run's deployment share the same budget (before: up to 25 requests with nested retries). Worst case is about 160 seconds, well under the upload job's 15-minute timeout.
 - The status of a note is no longer shown on the site: the Status column of the home page index, the Status chip in the spec sheet under the title and the Status column of the ADR records table are gone. The `status` frontmatter field is unchanged. The index has four columns on wide screens, and the phone card shows the type and number on its first line.
 
+- **Private repository.** Deploy workflows read the repository secret `CLOUDFLARE_API_TOKEN` and the repository variable `CLOUDFLARE_ACCOUNT_ID` (no fallback to an account-id secret). Deploy production no longer waits for environment approval; its guard accepts only the owner or a Cut release run of the owner for the same commit.
+- CI uses fewer Actions minutes: the attribution check runs in the workflow lint job, the Deploy stage guard is the first build step, Playwright browsers are cached and Dependabot version updates are monthly. Every gate CI OK requires still runs, with Chromium and WebKit.
+- The deploy probes send the User-Agent `notes-smoke-test/1 (+https://notes.szolotov.com)`.
+
 ### Fixed
 
 - Changing the theme no longer makes the top bar's theme icon jump: inside the desktop cross-fade the icons are swapped by the fade itself (no second turn that outlasts it), and on phones the icon turns without overshooting.
