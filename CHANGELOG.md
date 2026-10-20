@@ -22,6 +22,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 - The Preview deployment check (`scripts/verify-preview-deployment.mjs`) makes at most 5 requests in total, one loop where network errors, HTTP 429/5xx, a stale deployment id, a missing-preview answer (API 10025/10222) and missing annotations on this run's deployment share the same budget (before: up to 25 requests with nested retries). Worst case is about 160 seconds, well under the upload job's 15-minute timeout.
 - The status of a note is no longer shown on the site: the Status column of the home page index, the Status chip in the spec sheet under the title and the Status column of the ADR records table are gone. The `status` frontmatter field is unchanged. The index has four columns on wide screens, and the phone card shows the type and number on its first line.
 
+### Fixed
+
+- Changing the theme no longer makes the top bar's theme icon jump: inside the desktop cross-fade the icons are swapped by the fade itself (no second turn that outlasts it), and on phones the icon turns without overshooting.
+
 ## [0.6.0] - 2026-10-19
 
 ### Added
