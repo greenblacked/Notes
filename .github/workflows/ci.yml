@@ -174,7 +174,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read # read the PR's current title and body
+      # Read the PR's current title and body. Accepted trade-off of merging the two checks:
+      # the token zizmor gets has this scope too (it adds only PR text to contents: read).
+      pull-requests: read
     env:
       # actionlint: release binary, verified against the sha256 published in the
       # release's checksums file (rhysd/actionlint v1.7.12, linux_amd64).
