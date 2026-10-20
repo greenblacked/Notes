@@ -324,14 +324,14 @@ test("the browser job caches Playwright browsers keyed on the Playwright version
   assert.equal(steps[cache].with.path, "~/.cache/ms-playwright")
   assert.equal(
     steps[cache].with.key,
-    "playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-webkit",
+    "playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ matrix.browser }}",
   )
   assert.equal(steps[cache].with["restore-keys"], undefined)
   assert.ok(steps[version].run.includes("node_modules/playwright-core/package.json"))
   assert.equal(steps[install].if, "steps.pw-cache.outputs.cache-hit != 'true'")
-  assert.match(steps[install].run, /install --with-deps chromium webkit$/)
+  assert.match(steps[install].run, /install --with-deps "\$BROWSER"$/)
   assert.equal(steps[deps].if, "steps.pw-cache.outputs.cache-hit == 'true'")
-  assert.match(steps[deps].run, /^\.\/node_modules\/\.bin\/playwright install-deps chromium webkit/)
+  assert.match(steps[deps].run, /^\.\/node_modules\/\.bin\/playwright install-deps "\$BROWSER"/)
 })
 
 test("dependabot version updates run monthly", () => {
@@ -421,4 +421,52 @@ test("CI OK waits for every other job and always runs", () => {
       .filter((id) => id !== "ci-ok")
       .sort(),
   )
+})
+
+// The browser suite is split over a (project, shard) matrix so that wall-clock time is the
+// slowest shard, not the sum of four projects.
+const browserJob = wf["ci.yml"].jobs.browser
+const matrixEntries = browserJob.strategy?.matrix?.include ?? []
+const configProjects = [
+  ...readFileSync(join(root, "playwright.config.ts"), "utf8").matchAll(
+    /name:\s*"([^"]+)",\s*use:\s*\{\s*browserName:\s*"(\w+)"/g,
+  ),
+].map((m) => ({ project: m[1], browser: m[2] }))
+
+test("the browser matrix covers every Playwright project and browser", () => {
+  assert.equal(configProjects.length, 4)
+  const seen = new Set(matrixEntries.map((e) => `${e.project}/${e.browser}`))
+  assert.deepEqual([...seen].sort(), configProjects.map((p) => `${p.project}/${p.browser}`).sort())
+})
+
+test("each project's shards are exactly 1/N to N/N and the ids are unique", () => {
+  const ids = matrixEntries.map((e) => e.id)
+  assert.equal(new Set(ids).size, ids.length)
+  for (const { project } of configProjects) {
+    const mine = matrixEntries.filter((e) => e.project === project)
+    const total = Number(mine[0].shard.split("/")[1])
+    assert.ok(total >= 1 && total <= 9)
+    assert.deepEqual(
+      mine.map((e) => e.shard).sort(),
+      Array.from({ length: total }, (_, k) => `${k + 1}/${total}`),
+    )
+    for (const e of mine) assert.equal(e.id, `${project}-${e.shard.split("/")[0]}`)
+  }
+})
+
+test("the browser matrix fails fast and passes its values through env, not expressions", () => {
+  assert.equal(browserJob.strategy["fail-fast"], true)
+  assert.equal(browserJob.name, "Browser ${{ matrix.id }}")
+  assert.equal(browserJob.env.PROJECT, "${{ matrix.project }}")
+  assert.equal(browserJob.env.BROWSER, "${{ matrix.browser }}")
+  assert.equal(browserJob.env.SHARD, "${{ matrix.shard }}")
+  const run = browserJob.steps.find((s) => (s.run ?? "").includes("npm run test:browser")).run
+  assert.ok(run.includes('--project="$PROJECT"') && run.includes('--shard="$SHARD"'))
+  assert.match(run, /\^\[a-z\]\+-\[a-z\]\+\$.*\^\[1-9\]\/\[1-9\]\$.*exit 1/s)
+})
+
+test("a failed browser shard uploads its own report", () => {
+  const report = browserJob.steps.find((s) => (s.uses ?? "").startsWith("actions/upload-artifact"))
+  assert.equal(report.with.name, "playwright-report-${{ matrix.id }}")
+  assert.equal(report.if, "failure()")
 })
