@@ -459,7 +459,8 @@ test("the teardown re-reads the latest deployment right before deleting", () => 
   assert.equal(workflow.env?.CLOUDFLARE_API_TOKEN, undefined)
   assert.equal(upload.env?.CLOUDFLARE_API_TOKEN, undefined)
 
-  const run = (latestLine, deploymentId) => {
+  assert.equal(step.env.PREVIOUS_ID, "${{ steps.before.outputs.previous_deployment_id }}")
+  const run = (latestLine, deploymentId, previousId = "") => {
     const dir = mkdtempSync(join(tmpdir(), "stage-teardown-"))
     const log = join(dir, "calls.log")
     mkdirSync(join(dir, "bin"))
@@ -476,7 +477,11 @@ test("the teardown re-reads the latest deployment right before deleting", () => 
     )
     const r = bash(
       step,
-      { DEPLOYMENT_ID: deploymentId, PATH: `${join(dir, "bin")}:${process.env.PATH}` },
+      {
+        DEPLOYMENT_ID: deploymentId,
+        PREVIOUS_ID: previousId,
+        PATH: `${join(dir, "bin")}:${process.env.PATH}`,
+      },
       dir,
     )
     let calls = ""
@@ -501,10 +506,20 @@ test("the teardown re-reads the latest deployment right before deleting", () => 
   assert.match(other.stdout, /::error::/)
 
   const none = run("latest_deployment_id=none", "d1")
-  assert.equal(none.deleted, false)
+  assert.equal(none.deleted, true)
   assert.equal(none.status, 1)
   assert.doesNotMatch(none.output, /left_in_place/)
-  assert.match(none.stdout, /nothing to delete/)
+
+  // A stale re-read that returns the deployment from before the upload is not "another upload".
+  const stale = run("latest_deployment_id=p0", "d1", "p0")
+  assert.equal(stale.deleted, true)
+  assert.equal(stale.status, 1)
+  assert.doesNotMatch(stale.output, /left_in_place/)
+  assert.match(stale.stdout, /stale read/)
+  // A different well-formed id is still left in place when a previous id is known.
+  const other2 = run("latest_deployment_id=d2", "d1", "p0")
+  assert.equal(other2.deleted, false)
+  assert.match(other2.output, /^left_in_place=true$/m)
 
   for (const [line, id] of [
     ["latest_deployment_id=unknown", "d1"],
