@@ -349,3 +349,76 @@ test("the deploy probes name the site, not the private repository, in the user a
     assert.ok(!raw[f].includes("github.com/greenblacked"), f)
   }
 })
+
+// Guard for the CI redesign: restructuring jobs must never drop, weaken, skip or defer a check.
+const ciSteps = Object.entries(wf["ci.yml"].jobs).flatMap(([job, j]) =>
+  (j.steps ?? []).map((step, index) => ({ job, index, step })),
+)
+
+test("every CI check still runs in ci.yml, unconditionally and without continue-on-error", () => {
+  const required = [
+    /\bnpm run check(\s|$)/,
+    /\bnpm run check:browser(\s|$)/,
+    /\bnpm run check:notes(\s|$)/,
+    /\bnpm run build(\s|$)/,
+    /\bnpm run check:links(\s|$)/,
+    /check-artifact\.mjs --public public/,
+    /\bnpm run test:scripts(\s|$)/,
+    /\bnpm run format:check(\s|$)/,
+    /\bnpm run check:contrast(\s|$)/,
+    /\bnpm run deploy:dry-run(\s|$)/,
+    /check-artifact\.mjs --root/,
+    /build-csp\.mjs/,
+    /\bnpm run test:browser(\s|$)/,
+    /check-attribution\.mjs/,
+    /actionlint\/actionlint/,
+    /shellcheck scripts\/smoke-test\.sh \.github\/scripts\/\*\.sh/,
+    /zizmor" --format=github \.github/,
+  ]
+  for (const re of required) {
+    const hits = ciSteps.filter(({ step }) => re.test(step.run ?? ""))
+    assert.ok(hits.length > 0, `${re} runs in ci.yml`)
+    for (const { job, step } of hits) {
+      assert.equal(step["continue-on-error"], undefined, `${re}: ${job}/${step.name}`)
+      if (/format:check/.test(step.run)) {
+        assert.ok([undefined, "matrix.format"].includes(step.if), `${job}/${step.name}`)
+      } else {
+        assert.equal(step.if, undefined, `${re}: ${job}/${step.name}`)
+      }
+      assert.equal(wf["ci.yml"].jobs[job]["continue-on-error"], undefined, job)
+    }
+  }
+})
+
+test("test:scripts, contrast and the deploy dry run stay in the build job after the build", () => {
+  const steps = wf["ci.yml"].jobs["build-and-check"].steps
+  const at = (re) => steps.findIndex((s) => re.test(s.run ?? ""))
+  const build = at(/\bnpm run build(\s|$)/)
+  assert.ok(build >= 0)
+  for (const re of [
+    /\bnpm run test:scripts(\s|$)/,
+    /\bnpm run check:contrast(\s|$)/,
+    /\bnpm run deploy:dry-run(\s|$)/,
+  ]) {
+    assert.ok(at(re) > build, `${re} runs after the build, in the build job`)
+  }
+})
+
+test("ci triggers have no path or branch filters that could skip a check", () => {
+  for (const trigger of Object.values(wf["ci.yml"].on)) {
+    for (const key of ["paths", "paths-ignore", "branches-ignore", "tags", "tags-ignore"]) {
+      assert.equal(trigger[key], undefined, key)
+    }
+  }
+})
+
+test("CI OK waits for every other job and always runs", () => {
+  const jobs = wf["ci.yml"].jobs
+  assert.equal(jobs["ci-ok"].if, "always()")
+  assert.deepEqual(
+    [...jobs["ci-ok"].needs].sort(),
+    Object.keys(jobs)
+      .filter((id) => id !== "ci-ok")
+      .sort(),
+  )
+})
