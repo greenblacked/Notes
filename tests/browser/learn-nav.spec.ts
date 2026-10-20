@@ -67,6 +67,19 @@ test("other pages have no lesson navigation", async ({ page }) => {
   }
 })
 
+test("the learning path lists the twelve stages as jump links to existing headings", async ({
+  page,
+}) => {
+  await page.goto("/learn/")
+  const links = page.locator("article h2#stages + p + ul a")
+  await expect(links).toHaveCount(12)
+  const hrefs = await links.evaluateAll((els) => els.map((a) => a.getAttribute("href") ?? ""))
+  for (const href of hrefs) {
+    expect(href).toMatch(/^#stage-/)
+    await expect(page.locator(href)).toBeAttached()
+  }
+})
+
 for (const scheme of ["light", "dark"] as const) {
   test(`the navigation does not scroll sideways (${scheme})`, async ({ page }) => {
     // The longest titles: first and last of a stage with long neighbours.

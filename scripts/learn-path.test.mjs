@@ -84,6 +84,15 @@ test("the hand-written next and previous links of core lessons equal the generat
   })
 })
 
+test("the stage list on the index links to every stage heading", () => {
+  const list = index.match(/^- \[Stage [^\n]*$/gm) ?? []
+  assert.equal(list.length, path.stages.length)
+  const slugger = new GithubSlugger()
+  path.stages.forEach((s, i) => {
+    assert.equal(list[i], `- [${s.title}](#${slugger.slug(s.title)})`, s.title)
+  })
+})
+
 test("the navigation styles use tokens only and are hidden in print", () => {
   assert.doesNotMatch(nav, /#[0-9a-fA-F]{3,8}\b|rgba?\(/)
   assert.match(nav, /@media print/)
