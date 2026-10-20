@@ -25,7 +25,7 @@ for (const [name, trigger, kind] of [
     await expect.poll(() => rec.details.length).toBe(1)
     expect(rec.problems[0]).toMatch(/^page error: /)
     expect(rec.problems[0]).toContain(`page ${baseURL}/`)
-    expect(rec.details[0]).toContain(kind)
+    expect(rec.details[0].startsWith(`${kind}: `)).toBe(true)
     expect(rec.details[0]).toContain("constructor=Object")
     expect(rec.details[0]).toContain(
       name.includes("thrown") ? '"probe":"thrown"' : '"probe":"plain-object"',

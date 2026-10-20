@@ -29,8 +29,8 @@ function installDetailReporter(prefix: string) {
     return `${Object.prototype.toString.call(value)} constructor=${ctor} keys=[${keys}] json=${json}${ev}`
   }
   const report = (kind: string, value: unknown) => {
-    if (value instanceof Error) return
     try {
+      if (value instanceof Error) return
       console.debug(
         `${prefix}${kind}: ${describe(value)} (document ${location.href}, ${document.readyState}${hidden ? ", after pagehide" : ""})`,
       )
@@ -59,6 +59,8 @@ export async function recordProblems(page: Page, baseURL: string | undefined) {
       .split("\n")
       .filter((l) => l.startsWith("    at "))
       .slice(0, 10)
+    // page.url() is the page open now; for an error from a page being left it is the next one.
+    // The detail line's "document ... after pagehide" names the real source (non-Error values only).
     const head = `page error: ${error.name ? `${error.name}: ` : ""}${error.message} (script ${where}; page ${page.url()})`
     problems.push([head, ...frames].join("\n"))
   })
