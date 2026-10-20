@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
-- **Documented the measured CI timings and the Actions minute budget.** `docs/deployment.md` now describes the CI job graph, why CI cannot finish in 2 minutes with every check kept, the shard count and its minute cost, and replaces the "about 15 minutes" for a cold build with the measured 7 to 8 minutes on 4-core runners.
+- **Documented the measured CI timings and the Actions minute budget.** `docs/deployment.md` now describes the CI job graph, why CI cannot finish in 2 minutes with every check kept, the shard count and its minute cost, and replaces the "about 15 minutes" for a cold build with the measured 8 to 9 minutes (a cold build and deploy) on 4-core runners.
 - **CI checks formatting in the first Chromium desktop browser job** instead of the build job. It needs no build output, and the build job is the start of the critical path, so the check no longer delays the browser jobs.
 - **CI browser tests run as a matrix of eight jobs** (each of the four Playwright projects in two shards) instead of one job that runs all four in sequence, so the wall-clock time is the slowest shard. Every test still runs on Chromium and WebKit at desktop and phone sizes; a failed shard does not cancel the others (`fail-fast: false`), so re-running one flaky shard costs about 3 billed minutes instead of a full browser run, and each shard installs and caches only its own browser. Each job bills at least one minute, so this uses more Actions minutes per run.
 - The smoke test User-Agent names the site (`notes-smoke-test/1 (+https://notes.szolotov.com)`) instead of the source repository, which is private.
