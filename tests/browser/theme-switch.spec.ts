@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import type { Page, TestInfo } from "@playwright/test"
 import { expect, test } from "./fixtures"
 
 const longPage = "/learn/gke-for-beginners"
@@ -106,12 +106,23 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
   }))
 }
 
-function expectStillGeometry(samples: Sample[]) {
+// The switch itself lasts under 400ms (cross-fade 180ms, icon turn 260ms). How many samples land
+// in it depends on the engine, since WebKit's main thread is busy during the switch, so assert
+// that the samples cover the switch instead of counting them.
+function expectStillGeometry(samples: Sample[], testInfo: TestInfo) {
   const first = samples[0]
-  // Frames get sparse while the snapshot is captured (and headless WebKit gives few), so check
-  // the span and a floor that the 16ms timer reaches even when frames are sparse.
-  expect(samples.at(-1)!.t).toBeGreaterThanOrEqual(900)
-  expect(samples.length).toBeGreaterThanOrEqual(20)
+  const times = samples.map((s) => Math.round(s.t))
+  testInfo.annotations.push({
+    type: "sample times (ms)",
+    description: `${samples.length} samples: ${times.join(" ")}`,
+  })
+  const inWindow = samples.filter((s) => s.t >= 30 && s.t <= 400).length
+  const after = samples.filter((s) => s.t >= 600).length
+  const covered = samples.at(-1)!.t >= 900 && samples.length >= 5 && inWindow >= 1 && after >= 1
+  expect(
+    covered,
+    `samples must span 900ms with at least one in 30-400ms and one from 600ms on (got ${samples.length} samples, ${inWindow} in the window, ${after} after it): ${times.join(" ")}`,
+  ).toBe(true)
   for (const s of samples) {
     s.bar.forEach((v, i) => expect(Math.abs(v - first.bar[i])).toBeLessThanOrEqual(0.5))
     s.row.forEach((v, i) => expect(Math.abs(v - first.row[i])).toBeLessThanOrEqual(0.5))
@@ -143,7 +154,7 @@ for (const motion of [true, false]) {
         const { samples, fadePath } = await switchAndSample(page, isMobile)
         await expect(page.locator("html")).not.toHaveAttribute("saved-theme", before ?? "")
 
-        expectStillGeometry(samples)
+        expectStillGeometry(samples, testInfo)
         if (!motion) {
           expect(samples.every((s) => s.iconTurning === 0)).toBe(true)
           return
