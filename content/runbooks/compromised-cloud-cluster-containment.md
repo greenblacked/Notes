@@ -9,14 +9,21 @@ tags:
   - gcp
   - gke
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-10-20
+evidence: source-reviewed
+reviewed: 2026-10-20
+review-due: 2027-04-20
+destructive: true
 draft: false
 ---
 
 Something in a GCP project, a GKE cluster or a CI system is probably controlled by someone who should not control it. This runbook isolates it without destroying the evidence. The order is fixed: **preserve, contain, investigate, and only then clean up or rebuild**. Deleting the pod, rebooting the node or wiping the service account feels like progress, but it removes the facts you need to know how far the attacker got.
 
 > [!info] Scope and what was not checked
-> The commands below use `gcloud` and `kubectl` as known; no vendor page was re-fetched and nothing was run, so the note is not marked `verified`. Check current `gcloud` flags with `--help` before an incident, not during it. General guidance only: legal, regulatory and customer notification duties are decided by your security lead and counsel.
+> The commands below were checked against Google Cloud and Kubernetes documentation on 2026-10-20 (through search excerpts, see Evidence), but never run against a cluster or a cloud project, so the note is not marked `verified`. Check current `gcloud` flags with `--help` before an incident, not during it. General guidance only: legal, regulatory and customer notification duties are decided by your security lead and counsel. Several steps are a judgement, not a vendor procedure; Evidence says which.
+
+> [!danger] Most containment steps destroy evidence if done in the wrong order
+> Deleting a pod or node, draining, scaling to zero, deleting a key or snapshot, and rebuilding all remove facts you cannot get back (memory, container filesystems, `emptyDir` data, local logs). Each of those steps below says what is lost and what to copy or snapshot first. Preserve first; disable, label and cordon instead of deleting.
 
 ## Triggers
 
@@ -37,7 +44,7 @@ Settle these before an incident. Each one saves minutes while the clock is runni
 - A forensic bucket in a **separate** project, with a retention policy, write access for responders and no access for the workloads under investigation. Evidence stored in the compromised project can be altered by the attacker.
 - Responders with the roles to disable keys and service accounts, label pods, create NetworkPolicies, cordon nodes and create disk snapshots. Use break-glass accounts that are audited, not shared admin accounts.
 - A cluster that enforces NetworkPolicy (GKE Dataplane V2 or Calico enforcement). Without it the quarantine policy below does nothing, see [[kubernetes-network-policies]].
-- Audit logs on and retained long enough: Admin Activity logs are on by default; Data Access logs and Kubernetes audit data need to be enabled and exported, see [[gcp-audit-logs-siem]].
+- Audit logs on and retained long enough: Admin Activity audit logs are always written and cannot be disabled; Data Access audit logs are off by default (BigQuery is the exception) and must be enabled before an incident, and the GKE Data Access logs behind `secrets.get`-style reads are among those. Export what you need to long-term storage: the `_Default` log bucket keeps 30 days unless you change it, and Admin Activity sits in the `_Required` bucket for 400 days, which cannot be changed. See [[gcp-audit-logs-siem]].
 - A written list of what lives in the project, so you can judge the blast radius quickly.
 
 ## Roles and comms
@@ -89,14 +96,21 @@ Capture the cloud-side view of the identities involved, then upload with checksu
 gcloud projects get-iam-policy "$PROJECT" --format=json > iam-policy.json
 gcloud iam service-accounts list --project "$PROJECT" --format=json > service-accounts.json
 
-sha256sum ./* > SHA256SUMS
-gcloud storage cp ./* "$FORENSIC_BUCKET/$INCIDENT/"
+# Rerun-safe manifest: skips SHA256SUMS itself and includes files in subdirectories
+find . -type f ! -name SHA256SUMS -exec sha256sum {} + | sort -k2 > SHA256SUMS
+gcloud storage cp --recursive ./* "$FORENSIC_BUCKET/$INCIDENT/"
+
+# Prove the uploaded copy: download to a fresh directory and check it
+mkdir ../verify && gcloud storage cp --recursive "$FORENSIC_BUCKET/$INCIDENT/*" ../verify/
+(cd ../verify && sha256sum -c SHA256SUMS)   # every line OK; exit code 0
 ```
+
+`sha256sum ./*` also works for a flat first run, but it hashes `SHA256SUMS` itself on a rerun (so the check then fails) and stops with an error on a subdirectory; the `find` form avoids both. A tampered or truncated file shows `FAILED` and a non-zero exit code. Treat the hash list as proof of integrity from the moment it was made, not of authenticity: store it in the log too, because anyone with write access to the bucket could replace both files.
 
 Rules of evidence:
 
 - Record who collected each item, when (UTC) and with which command. Keep the originals unmodified and work on copies.
-- Do not restart, delete or exec into the suspect pod to "have a look" yet. A process list and network connections from inside the container are valuable, but each action changes state. If you must look, use an ephemeral debug container and write down every command, and use an image pinned by digest from your own registry (for example `DEBUG_IMAGE=registry.example.com/tools/debug@sha256:<digest>`, as in [[node-resource-pressure-triage]]): `kubectl debug -it "$POD" -n "$NS" --image="$DEBUG_IMAGE" --target=<container>`. Whether the target container shares its process namespace for your image and runtime is not verified; test it in a lab first.
+- Do not restart, delete or exec into the suspect pod to "have a look" yet. A process list and network connections from inside the container are valuable, but each action changes state. If you must look, use an ephemeral debug container and write down every command, and use an image pinned by digest from your own registry (for example `DEBUG_IMAGE=registry.example.com/tools/debug@sha256:<digest>`, as in [[node-resource-pressure-triage]]): `kubectl debug -it "$POD" -n "$NS" --image="$DEBUG_IMAGE" --target=<container>`. Kubernetes documents that `--target` depends on the container runtime: if the runtime does not support it, the ephemeral container may not start or may get its own process namespace, so `ps` would not show the target's processes. Test it in a lab on your runtime first.
 - Memory contents and running processes disappear on reboot. A disk snapshot (next sections) does not capture them. Decide with the security lead whether live memory capture is worth it for this incident; it needs tooling prepared in advance.
 
 A time-stamped containment log lets you reconstruct what was done and by whom, and it is the first thing the postmortem needs. Keep it append-only (a shared document with edit history, or a file in the forensic bucket):
@@ -139,14 +153,17 @@ gcloud iam service-accounts keys disable "$KEY_ID" --iam-account "$SA"
 gcloud iam service-accounts disable "$SA"
 ```
 
-Short-lived access tokens that were already issued may keep working until they expire. How long this takes for your token type is not verified; assume up to an hour and keep watching the audit log after disabling.
+Short-lived access tokens that were already issued keep working until they expire: Google documents up to 60 minutes by default and up to 12 hours if an extended lifetime is configured, and they cannot be revoked like user tokens. Disabling a key does not revoke tokens issued from it; disabling or deleting the service account is what cuts them off. Wait at least 60 minutes (longer if your organisation allows longer lifetimes) and keep watching the audit log after disabling.
+
+> [!danger] Deleting a key or service account is not reversible here
+> Disable first. A deleted key cannot be brought back, and deleting a service account breaks every workload and binding that still uses it. Delete only after the evidence is saved (`service-accounts.json`, `iam-policy.json` and the key list above) and the security lead agrees.
 
 **3. Review the attacker's persistence in IAM.** Compare the IAM policy you saved with the last known good one (from Terraform state or version control). Look for bindings you did not create, new service accounts, new keys and changes to `iam.serviceAccountTokenCreator` or `iam.serviceAccountUser` on powerful accounts. Revert only after the evidence is saved. Reverting through Terraform is fine; leave the unauthorised resources in place (disabled) until they are documented.
 
 **4. Cut CI trust paths.** If a CI credential is suspected:
 
 - Revoke GitLab and Artifactory tokens as described in [[leaked-credential-rotation]], and rotate the runner registration token.
-- If the runner authenticated to GCP through Workload Identity Federation, disable the pool provider so no new tokens can be exchanged. The flag below is not verified, check `--help`:
+- If the runner authenticated to GCP through Workload Identity Federation, disable the pool provider so no new tokens can be exchanged. A disabled provider cannot be used to exchange tokens, but tokens already issued still grant access until they expire; the `--disabled` flag is on `update-oidc` (the matching flag to enable it again was not confirmed, check `--help`):
 
 ```bash
 POOL=gitlab-ci
@@ -198,13 +215,26 @@ kubectl label pod "$POD" -n "$NS" app- tier-
 
 Points that matter:
 
-- **Replacement pods.** Removing the labels in the quarantine step (`app` and `tier` are examples; remove every label a policy or Service selects) changes the label the ReplicaSet selects on, so the pod is orphaned but keeps running, and the ReplicaSet starts a replacement. Before you relabel, scale or pause the Deployment if the replacement could run the same compromised image or credentials.
+- **Replacement pods.** Kubernetes documents that you can remove a pod from a ReplicaSet by changing its labels, for debugging or data recovery, and that the pod is then replaced automatically. Removing the labels in the quarantine step (`app` and `tier` are examples; remove every label a policy or Service selects) changes the label the ReplicaSet selects on, so the pod is orphaned but keeps running, and the ReplicaSet starts a replacement. Before you relabel, scale or pause the Deployment if the replacement could run the same compromised image or credentials.
 - **Service traffic.** The quarantined pod is cut off by the policy; also remove it from Service endpoints (removing the selected labels above does that) so users stop hitting it.
-- **Existing connections.** Whether a policy terminates connections that are already established depends on the dataplane; this is not verified. Test it in a lab. If it matters, assume an established session may survive and rely on cutting the credentials in the previous section.
+- **Existing connections.** The Kubernetes documentation says that whether a policy change takes effect for an existing connection is implementation defined. Test it in a lab on your dataplane. If it matters, assume an established session may survive and rely on cutting the credentials in the previous section.
 - **Policy enforcement (mandatory).** Confirm the quarantine works in both directions: exec into a different pod in the namespace and check that the quarantined pod's IP is unreachable (ingress), and test egress from the pod with a debug container. Do not treat the pod as contained until both probes fail to connect. Record the result in the log.
-- **Scale to zero is not containment.** `kubectl scale --replicas=0` deletes the pods and their state. Do it only after evidence is saved.
+- **Scale to zero is not containment.** `kubectl scale --replicas=0` deletes the pods and their state. Data in an `emptyDir` volume is deleted permanently when a pod is removed from a node for any reason, and an identical replacement gets a new volume.
+
+> [!danger] Deleting or scaling away a pod destroys its evidence
+> Lost on delete: the container filesystem, `emptyDir` contents, memory and running processes, and the pod's `--previous` logs once the container is gone. Before any delete, run the Kubernetes captures above, copy needed files out of the container, and snapshot the node's disk if the node is also suspect.
+
 - **Namespace-wide compromise.** Apply a deny-all policy to the whole namespace and keep only the allows you need for the response, see [[kubernetes-network-policies]]. Also review the namespace for pods that run privileged or with host access, see [[pod-security-admission]].
-- Workload Identity bindings: remove the binding that lets the Kubernetes service account impersonate the Google service account, see [[gke-workload-identity]]. This cuts cloud access even if the pod keeps running.
+- Workload Identity bindings: remove the binding that lets the Kubernetes service account impersonate the Google service account, see [[gke-workload-identity]]. This cuts cloud access even if the pod keeps running. Save the current policy first (`gcloud iam service-accounts get-iam-policy "$SA" --format=json > sa-policy.json`), then:
+
+```bash
+KSA=payments-api   # Kubernetes service account used by the pod
+gcloud iam service-accounts remove-iam-policy-binding "$SA" \
+  --member "serviceAccount:${PROJECT}.svc.id.goog[${NS}/${KSA}]" \
+  --role roles/iam.workloadIdentityUser
+```
+
+Google's own examples show this form with a single slash between namespace and service account name. Tokens already issued still work until they expire.
 
 ## Contain nodes
 
@@ -218,16 +248,20 @@ NODE=gke-platform-1-default-pool-5b6c7d8e-xyz1
 kubectl cordon "$NODE"
 ```
 
-`cordon` marks the node unschedulable, so no new pods land on it, and leaves everything running. `drain` evicts the pods, which kills processes, loses memory contents, `emptyDir` data and container filesystems, and moves the workload (and possibly the attacker's foothold) to healthy nodes. Evict only after evidence is captured and the decision to rebuild is made.
+`cordon` marks the node unschedulable, so no new pods land on it, and leaves everything running. `drain` cordons the node and evicts the pods through the eviction API (it respects PodDisruptionBudgets and needs `--delete-emptydir-data` for pods with `emptyDir`, because that data is deleted), which kills processes, loses memory contents, `emptyDir` data and container filesystems, and moves the workload (and possibly the attacker's foothold) to healthy nodes.
+
+> [!danger] Do not drain a suspect node before the snapshot
+> Draining ends the processes you want to examine and moves the workload elsewhere. Evict only after evidence is captured and the decision to rebuild is made.
 
 Stop the platform from "helping" by removing the node:
 
 ```bash
-# Prevent the cluster autoscaler from removing the node when it looks underused.
+# Prevent the cluster autoscaler from removing the node when it looks underused
+# (annotation from the open-source Cluster Autoscaler; GKE docs were not checked for it).
 kubectl annotate node "$NODE" cluster-autoscaler.kubernetes.io/scale-down-disabled=true
 ```
 
-Node auto-repair and auto-upgrade can also recreate a node and delete its disk. Check the node pool settings and, with the security lead's agreement, turn them off for the pool while the investigation runs (flag names are not verified, check `--help`):
+Node auto-repair and auto-upgrade can also recreate a node, and changes made directly on a node's boot disk do not survive re-creation, according to the GKE docs. Check the node pool settings and, with the security lead's agreement, turn auto-repair off for the pool while the investigation runs (`--no-enable-autorepair` is the documented form; check auto-upgrade options with `--help`):
 
 ```bash
 POOL_NAME=default-pool
@@ -258,6 +292,9 @@ gcloud compute snapshots describe "$SNAP" --project "$PROJECT" \
   --format="value(status)"   # wait for READY
 ```
 
+> [!danger] Deleting the node, VM or node pool removes its disks
+> Deleting an instance or node pool, and auto-repair or upgrades that recreate a node, replace it with a fresh one. Whether the boot disk of a GKE node is deleted with it by default was not confirmed here; assume it is, and snapshot first. Persistent disks used by `PersistentVolumes` follow their reclaim policy, which you should read before deleting any PV or PVC.
+
 Repeat for every persistent disk attached to workloads you are investigating (`kubectl get pv` shows the disk names). Snapshots live in the same project as the source disk, so the attacker can delete them if they still have project access: finish the identity containment first, then limit who can delete snapshots, or copy the data into the forensic project.
 
 > [!warning] Snapshots capture disk, not memory
@@ -267,7 +304,7 @@ Repeat for every persistent disk attached to workloads you are investigating (`k
 
 ## Logs to pull
 
-Pull logs for every identity and workload in scope, for the last 7 days at minimum, longer if the first sign was older. Export to the forensic bucket; do not rely on the 30-day default retention of the `_Default` log bucket if the attack is older (retention is configurable, check yours).
+Pull logs for every identity and workload in scope, for the last 7 days at minimum, longer if the first sign was older. Export to the forensic bucket; do not rely on the 30-day default retention of the `_Default` log bucket if the attack is older (retention there is configurable from 1 to 3650 days, check yours). Admin Activity and System Event audit logs are kept 400 days in `_Required`, not configurable. Kubernetes audit logs from GKE use the `k8s_cluster` resource type and the `k8s.io` service name; `kubectl exec` shows as an Admin Activity event whose method name starts with `io.k8s.core.v1.pods.exec`.
 
 Everything an identity did over 7 days, oldest first:
 
@@ -306,7 +343,7 @@ gcloud logging read \
   --project "$PROJECT" --freshness=7d --order=asc --format=json > k8s-audit.json
 ```
 
-Method names such as `pods.exec` and the availability of `secrets.get` events depend on which audit log types are enabled and on your cluster version; this is not verified. If a log type was off, say so in the findings: absence of entries is then not evidence of absence.
+The `pods.exec` match is documented. Reads such as `secrets.get` are Data Access events, and the other method names (`rolebindings.create`, `clusterrolebindings.create`) were not checked against the full method list; read them as prefixes of the form `io.k8s.<group>.<version>.<resource>.<verb>` and confirm against a real entry from your cluster. If a log type was off, say so in the findings: absence of entries is then not evidence of absence.
 
 Also collect:
 
@@ -333,7 +370,12 @@ Decide explicitly, in writing, with the security lead. The default for anything 
 | Did they touch CI, runners or image build and promotion?                | Yes: treat all recent artifacts as tainted | No                                           |
 | Cost of downtime versus cost of a missed backdoor                       | Backdoor risk dominates for sensitive data | Downtime would be severe and risk is low     |
 
+The table is a judgement built from the credential-response and GKE incident guidance, not a Google procedure, and the default of rebuilding for code execution with real credentials is a conservative choice; the security lead decides.
+
 If you rebuild:
+
+> [!danger] Retiring the old environment is the last step, not the first
+> Deleting the old node pool, cluster or project removes the disks, the local logs and, for a project, resources and audit data scoped to it. Do it only after snapshots and log exports are verified (`sha256sum -c`, objects readable in the forensic bucket), the retention policy is in place and the security lead has signed off in the log.
 
 - Build a new node pool or cluster from code, from known-good images rebuilt from source, not from the compromised registry. Rotate **all** secrets the old environment could read, including database passwords, API keys and signing keys. Rotation is covered in [[leaked-credential-rotation]].
 - Move traffic over, then retire the old environment after the evidence is safe in the forensic bucket and the security lead agrees.
@@ -351,7 +393,7 @@ Whichever you choose, keep the decision, the reason and who approved it in the l
 - **Evidence.** The forensic bucket keeps its retention policy. Record where each item lives and who may access it. Keep it as long as your policy and counsel require; the period is not stated here.
 - **Notification.** The security lead, with counsel, decides on notifying customers, partners and regulators. Some regimes set deadlines; ask your security or legal contact, this note does not state them.
 - **Postmortem.** Hold a [[blameless-postmortems|blameless postmortem]] that asks which control was missing: long-lived keys, no deny-all policy, missing audit logs, too-broad roles. Turn each answer into a tracked action. Feed the findings into the threat register in [[platform-threat-modelling]].
-- **Process review.** Compare what you did against a published incident handling guide such as NIST SP 800-61. Its current revision and date are not verified here; check the NIST site for the latest.
+- **Process review.** Compare what you did against a published incident handling guide such as NIST SP 800-61, and against Google's GKE "Mitigate security incidents" page. Its current revision and date are not verified here; check the NIST site for the latest.
 - **Prevention.** Replace service account keys with [[gke-workload-identity|Workload Identity]] and federation, block key creation with an organisation policy, alert on key creation and IAM policy changes, and apply default-deny network policies.
 
 ## Validation
@@ -364,15 +406,107 @@ gcloud iam service-accounts keys list --iam-account "$SA" --managed-by=user \
 gcloud iam service-accounts describe "$SA" --format="value(disabled)"   # True if the account is disabled
 kubectl get pod "$POD" -n "$NS" --show-labels                       # quarantine=true present
 kubectl get node "$NODE"                                            # SchedulingDisabled
+# GNU date; on macOS use: date -u -v-15M +%FT%TZ
 gcloud logging read "protoPayload.authenticationInfo.principalEmail=\"$SA\" AND timestamp>=\"$(date -u -d '-15 min' +%FT%TZ)\"" \
   --project "$PROJECT" --limit=10                                   # no new activity
 ```
 
-Success looks like: no new audit entries for the contained identities after the token lifetime has passed, no outbound traffic from the quarantined pod, and every snapshot in `READY` state.
+Success looks like: no new audit entries for the contained identities after the token lifetime has passed (at least 60 minutes by Google's guidance), no outbound traffic from the quarantined pod, and every snapshot in `READY` state.
 
 ## Rollback and reversibility
 
 - Disabled keys and disabled service accounts can be re-enabled (`keys enable`, `service-accounts enable`). Do that only on the security lead's instruction, never to "see if it fixes the outage".
 - Removing the quarantine label (`kubectl label pod "$POD" -n "$NS" quarantine-`) restores the pod's network access. Do it only after the pod is deleted or cleared.
-- `kubectl uncordon "$NODE"` returns the node to scheduling. Re-enable node auto-repair afterwards.
+- `kubectl uncordon "$NODE"` returns the node to scheduling. Re-enable node auto-repair afterwards with `gcloud container node-pools update "$POOL_NAME" --cluster "$CLUSTER" --location "$LOCATION" --enable-autorepair`, and remove the autoscaler annotation with `kubectl annotate node "$NODE" cluster-autoscaler.kubernetes.io/scale-down-disabled-`.
+- Re-enable a service account key or account with `gcloud iam service-accounts keys enable "$KEY_ID" --iam-account "$SA"` and `gcloud iam service-accounts enable "$SA"`, and restore a removed Workload Identity binding with `add-iam-policy-binding` and the policy saved in `sa-policy.json`. Re-enabling the federation provider needs its own flag, see `--help`.
+- Delete the quarantine policy (`kubectl delete -f quarantine-deny-all.yaml`) only when no pod carries the label any more.
 - Deleted keys, deleted snapshots and drained pods cannot be recovered, which is why this runbook disables, labels and cordons instead.
+
+## Evidence
+
+### Sources checked
+
+- [Respond to compromised Google Cloud credentials](https://docs.cloud.google.com/docs/security/compromised-credentials): replace a compromised service account key, review every API call in the incident window, check for new keys and service accounts, service account access tokens last up to 60 minutes (up to 12 hours with an extended lifetime) and cannot be revoked, wait at least 60 minutes after disabling, checked 2026-10-20 (search excerpt, the page could not be fetched).
+- [Disable and enable service account keys](https://docs.cloud.google.com/iam/docs/keys-disable-enable) and [Disable and enable service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-disable-enable): `gcloud iam service-accounts keys disable KEY_ID --iam-account`, `gcloud iam service-accounts disable`, disabling is reversible, a disabled key does not revoke issued tokens, checked 2026-10-20 (search excerpts).
+- [`update-oidc` reference](https://docs.cloud.google.com/sdk/gcloud/reference/iam/workload-identity-pools/providers/update-oidc) and [Manage workload identity pools and providers](https://docs.cloud.google.com/iam/docs/manage-workload-identity-pools-providers): the `--disabled` flag, a disabled provider cannot exchange tokens, existing tokens still grant access, checked 2026-10-20 (search excerpts).
+- [Mitigate security incidents (GKE)](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/security-mitigations): that GKE has incident guidance and that Kubernetes audit logs support investigation, checked 2026-10-20 (search excerpt only; its steps were not read in full).
+- [GKE audit logging information](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/audit-logging): `k8s_cluster` resource type, `k8s.io` service name, `io.k8s.core.v1.pods.exec` method name, Admin Activity cannot be disabled, checked 2026-10-20 (search excerpt).
+- [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit) and [Configure log buckets](https://docs.cloud.google.com/logging/docs/buckets): Data Access logs off by default except BigQuery, Admin Activity always written, `_Required` 400 days not configurable, `_Default` 30 days configurable 1 to 3650 days, checked 2026-10-20 (search excerpts).
+- [gcloud compute disks snapshot](https://cloud.google.com/sdk/gcloud/reference/compute/disks/snapshot): `--snapshot-names`, `--storage-location`, `--description`, checked 2026-10-20 (search excerpt). The 63-character name limit was not confirmed.
+- [Auto-repair nodes](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/node-auto-repair): `gcloud container node-pools update ... --no-enable-autorepair` and `--enable-autorepair`, changes on a node's boot disk do not survive re-creation, checked 2026-10-20 (search excerpt).
+- [GKE Dataplane V2](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2) and [network policy](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/network-policy): NetworkPolicy enforcement is always on with Dataplane V2 (Cilium based) and optional Calico on Standard clusters, checked 2026-10-20 (search excerpts).
+- [Safely Drain a Node](https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/) and [Nodes](https://kubernetes.io/docs/concepts/architecture/nodes/): cordon only blocks new pods, drain evicts through the eviction API, respects PodDisruptionBudgets, `--delete-emptydir-data`, checked 2026-10-20 (search excerpts).
+- [ReplicaSet](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/) and [Volumes](https://kubernetes.io/docs/concepts/storage/volumes/): relabelling removes a pod from its ReplicaSet and a replacement is created, `emptyDir` data is deleted when the pod leaves the node, checked 2026-10-20 (search excerpts).
+- [Network Policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/): policies are additive and allow-only, an empty `podSelector` selects every pod, effect on existing connections is implementation defined, checked 2026-10-20 (search excerpt).
+- [Debug Running Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/) and [Ephemeral Containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers/): `kubectl debug --target` depends on runtime support, checked 2026-10-20 (search excerpt).
+
+Corrections made on 2026-10-20: the manifest command was replaced by a rerun-safe `find` form that also verifies the uploaded copy, because the original `sha256sum ./*` hashed `SHA256SUMS` itself on a rerun and failed on a subdirectory (both seen in the lab run); Admin Activity audit logs are now described as always on and Data Access logs as off by default except BigQuery, with the 30-day and 400-day retention figures; token lifetime is stated (60 minutes default, 12 hours with an extended lifetime) instead of "not verified"; the federation provider `--disabled` flag is confirmed and its limits stated; autorepair flag names are confirmed; the debug container `--target` caveat and the existing-connection behaviour now cite the Kubernetes docs; `pods.exec` is confirmed while the other Kubernetes method names are hedged; a Workload Identity binding removal command and a rollback list were added; the macOS form of the `date` command was added; the stale "not verified" markers were removed where the docs answered them and kept where they did not; danger callouts were added at key and account deletion, pod delete and scale to zero, drain, node and pool deletion and rebuild retirement.
+
+### Not verified
+
+- Whether the boot disk of a GKE node is deleted with the node by default (assumed yes, snapshot first).
+- Whether a deny-priority policy (Calico `GlobalNetworkPolicy` or Cilium deny) is available on GKE Dataplane V2 for your cluster.
+- The `cluster-autoscaler.kubernetes.io/scale-down-disabled` annotation against GKE documentation (only third-party and other-provider pages were found).
+- The flag to re-enable a disabled federation provider, `gcloud storage cp --recursive`, `service-accounts get-iam-policy`, the `--managed-by=user` filter, `--freshness` and `--order` on `gcloud logging read`, and auto-upgrade options; check `--help`.
+- The 63-character snapshot name limit, and whether a snapshot of a Container-Optimized OS node disk holds the evidence you need.
+- Kubernetes audit method names other than `pods.exec`, and which GKE Data Access logs exist for `secrets.get`.
+- The full steps of the GKE "Mitigate security incidents" page, the current revision of NIST SP 800-61, and notification deadlines, which are not stated in this note.
+- That snapshots capture disk but not memory, and the rebuild-versus-clean criteria, which are judgement and not vendor statements.
+- The `date -u -v-15M` form on macOS was not run.
+- Everything was reached through search excerpts only, because the lab could not fetch the vendor pages; no cluster, project, key or snapshot was touched.
+
+### Environment
+
+`gcloud` with the `iam`, `compute`, `container`, `logging` and `storage` groups, `kubectl` with cluster-admin or a break-glass role, a GKE cluster with NetworkPolicy enforcement (Dataplane V2 or Calico), `sha256sum` (GNU coreutils; macOS has `shasum -a 256`), GNU `date` for the validation query, and a forensic bucket in a separate project. The helper checks ran on Linux 6.18.44 with GNU bash 5.2.21, sha256sum (GNU coreutils) 9.4, OpenSSL 3.0.13, GNU tar 1.35, gzip 1.12 and Python 3.13.16.
+
+### Prerequisites
+
+The items under Preconditions: a separate forensic bucket with retention, responders with the roles to disable keys, label pods, create NetworkPolicies, cordon nodes and snapshot disks, enforced NetworkPolicy, audit logs on and exported, and an incident commander and scribe named before the first command.
+
+### Expected results
+
+The evidence directory and its `SHA256SUMS` are in the forensic bucket and a download passes `sha256sum -c`. Keys show `disabled`, the quarantined pod carries `quarantine=true` and fails both connectivity probes, the node shows `SchedulingDisabled`, snapshots reach `READY`, and no new audit entries appear for the contained identities after the token lifetime has passed.
+
+### Failure conditions
+
+`sha256sum -c` prints `FAILED` or exits non-zero (stop, re-collect, do not use that copy); the quarantine probe still connects (another policy allows it, or enforcement is off); a replacement pod starts with the same image; the audit log shows new activity after an hour (another credential or route exists); a snapshot never reaches `READY` or is missing; a log type was off, so absence of entries proves nothing.
+
+### Cleanup and rollback
+
+See the Rollback and reversibility section, which now lists the re-enable commands for keys, accounts, auto-repair, the autoscaler annotation and the Workload Identity binding. After the incident, remove the quarantine policy and labels, uncordon nodes the security lead clears, keep the forensic bucket and its retention, and delete temporary working directories that hold copies of evidence. Deleted keys, snapshots and drained or deleted pods cannot be restored.
+
+### Lab run
+
+A helper check only; it does not raise the evidence level. No cluster, cloud project or network was touched. Host: Linux 6.18.44. `openssl version` printed `OpenSSL 3.0.13 30 Jan 2024 (Library: OpenSSL 3.0.13 30 Jan 2024)`; `sha256sum` is GNU coreutils 9.4; `tar` is GNU tar 1.35; `gzip` is 1.12. Run 2026-10-20 in a fresh temporary directory, deleted afterwards, with three fake files (`pod.yaml`, `pod-logs.txt`, `iam-policy.json`).
+
+```bash
+sha256sum ./* > SHA256SUMS
+cp -a incident incident-copy && cd incident-copy
+sha256sum -c SHA256SUMS ; echo "exit=$?"
+printf 'X' >> pod-logs.txt
+sha256sum -c SHA256SUMS ; echo "exit=$?"
+# rerun of the original command, and with a subdirectory
+sha256sum ./* > SHA256SUMS2
+mkdir sub && sha256sum ./*
+# replacement form, run twice, with a nested file
+find . -type f ! -name SHA256SUMS -exec sha256sum {} + | sort -k2 > SHA256SUMS
+tar -cf - incident | gzip -n > incident.tar.gz && tar -xzf incident.tar.gz -C x
+```
+
+```text
+./iam-policy.json: OK
+./pod-logs.txt: OK
+./pod.yaml: OK
+exit=0
+./iam-policy.json: OK
+./pod-logs.txt: FAILED
+./pod.yaml: OK
+sha256sum: WARNING: 1 computed checksum did NOT match
+exit=1
+(original command rerun) the list now contains ./SHA256SUMS itself
+(with a subdirectory) sha256sum: ./sub: Is a directory   exit=1
+(find form, rerun, nested file) every line OK, exit=0
+(tar and gzip round trip) extracted SHA256SUMS: all OK, incident.tar.gz: OK
+```
+
+This shows the manifest and check logic, including that one appended byte is detected. It does not show that the Google Cloud or Kubernetes steps work. `openssl dgst -sha256 pod.yaml` gave the same hash as `sha256sum` for that file (`7390dceb...84cf2`).

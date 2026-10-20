@@ -8,17 +8,20 @@ tags:
   - ci-cd
   - gitlab-ci
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-10-20
+evidence: source-reviewed
+reviewed: 2026-10-20
+review-due: 2027-04-20
 draft: false
 ---
 
 This note sets the rules for running AI coding and operations agents inside CI jobs or with cloud credentials. It is written for senior DevOps engineers who own the pipelines and the service accounts the agents will use. It does not cover how to review the code an agent writes ([[ai/ai-generated-code-policy-and-provenance]]) or how to run an advisory review bot ([[ai/ai-code-review-bots]]); it covers what the agent is allowed to touch.
 
 > [!info] Scope and sources
-> Written for GitLab CI and GitHub Actions pipelines running on GKE or hosted runners, and for agents that read repositories, issues, logs or cloud APIs. It is based on the general threat guidance in the OWASP Top 10 for LLM Applications, the GitLab CI/CD documentation at https://docs.gitlab.com/ee/ci/ and the GitHub Actions security documentation. No product is named as the agent; the rules apply to any tool that turns text into actions.
+> Written for GitLab CI and GitHub Actions pipelines running on GKE or hosted runners, and for agents that read repositories, issues, logs or cloud APIs. It is based on the general threat guidance in the OWASP Top 10 for LLM Applications, the GitLab CI/CD documentation at https://docs.gitlab.com/ci/ and the GitHub Actions security documentation. No product is named as the agent; the rules apply to any tool that turns text into actions.
 
-> [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the item numbering and names of the current OWASP Top 10 for LLM Applications edition, the exact behaviour of GitLab predefined variables for merge request pipelines, and which variables a given runner exposes to pipelines from forks. Check them before relying on them.
+> [!note] What was checked
+> The OWASP names, the GitLab merge request, fork and variable behaviour and the job token statements were checked against the documentation on 2026-10-20, and the trigger matrix was corrected where it disagreed. The GitHub Actions workflow, the GKE statements and the runtime behaviour of the YAML were not checked. See Evidence for the list.
 
 ## Threat model
 
@@ -28,9 +31,9 @@ An agent is a program that reads text and decides what to run. Anything it reads
 - **Excessive agency.** The agent holds more permissions than the task needs, for example a write token to review a change, or a cloud admin role to read logs. A successful injection then inherits all of it.
 - **Credential theft.** Anything in the job environment (tokens, cloud credentials, SSH keys) can be read by the agent and sent out through a command, a URL, a commit or a comment.
 - **Data leakage.** Code, logs and customer data are sent to a model provider that the organisation has not approved for that data class.
-- **Cost and loop abuse.** An agent that retries or fans out without a budget turns a bad input into a large bill.
+- **Cost and loop abuse.** An agent that retries or fans out without a budget turns a bad input into a large bill (OWASP calls this Unbounded Consumption).
 
-OWASP's list for LLM applications names prompt injection, insecure output handling, excessive agency and sensitive information disclosure among its main risks. Use it as a vocabulary for discussions with security teams, and check the current edition for numbering.
+In the 2025 edition of the OWASP Top 10 for LLM Applications, these map to LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure, LLM05 Improper Output Handling (called Insecure Output Handling in the 2023 list), LLM06 Excessive Agency and LLM10 Unbounded Consumption. Use the list as a vocabulary for discussions with security teams; the numbering changed between editions, so check the current edition before citing an ID.
 
 ## Rules
 
@@ -56,7 +59,7 @@ Decide per trigger what the agent may read and what it may hold. Treat the matri
 | Trigger                                 | Content trust               | Allowed token scope                                        | Allowed actions                                                          |
 | --------------------------------------- | --------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------ |
 | MR from a branch in the same project    | Medium (team member's code) | Read-only project token, no protected variables            | Read diff, write findings to an artifact; a separate poster job comments |
-| MR from a fork                          | Untrusted                   | None                                                       | Nothing automatic; a maintainer triggers a manual run                    |
+| MR from a fork                          | Untrusted                   | None                                                       | Nothing automatic. Never run an agent job in the parent project for it   |
 | Issue or comment text                   | Untrusted                   | None, or read-only to the same project                     | Summarise to a human; no tool calls with side effects                    |
 | Push to a protected branch              | High (reviewed code)        | Read-only; write only through a separate approval step     | Analyse, open an MR as a draft                                           |
 | Scheduled job on logs or alerts         | Untrusted (logs hold input) | Read-only cloud role, short-lived, one project             | Summarise and propose; a human runs the fix                              |
@@ -64,13 +67,15 @@ Decide per trigger what the agent may read and what it may hold. Treat the matri
 
 The common point: the more untrusted the text, the fewer credentials the job may hold.
 
+On GitLab, a merge request from a fork normally gets a pipeline that is created and runs in the fork, with the fork's own configuration and variables, not the parent project's. A member of the parent project can start a pipeline for that merge request in the parent project; that pipeline uses the fork branch's `.gitlab-ci.yml` but the parent project's variables and runners, and GitLab warns that the fork's code could try to steal them. So "a maintainer triggers a run" is not a safe default for an agent job: it hands the parent's variables to untrusted code. Review the change first, and keep agent jobs out of that pipeline (the rule in the next section does this). Admins can disable parent-project pipelines for forks per project through the `ci_allow_fork_pipelines_to_run_in_parent_project` setting; check the current API reference.
+
 ## Isolating the job
 
 Run agent jobs on an ephemeral runner that is thrown away after each job. On GKE this means a pod per job with no persistent volume, no host mounts, a dedicated namespace and a dedicated Kubernetes service account that has no workload identity binding by default (see [[patterns/gke-workload-identity]]). Apply the usual hardening from [[patterns/pod-security-admission]] and [[patterns/kubernetes-network-policies]].
 
 ### GitLab: same-project merge requests only
 
-The job runs only for merge request pipelines whose source project is the target project. By default a fork merge request pipeline runs in the fork's own project, where the source project ID equals that project's ID, so the rule mainly blocks the dangerous case: a pipeline in this (parent) project for a fork merge request.
+The job runs only for merge request pipelines whose source project is the target project. By default a fork merge request pipeline runs in the fork's own project, where the source project ID equals that project's ID, so the rule mainly blocks the dangerous case: a pipeline in this (parent) project for a fork merge request, which a parent member can start by hand.
 
 ```yaml title=".gitlab-ci.yml"
 ai-agent-review:
@@ -120,7 +125,7 @@ ai-agent-post:
         --data @- "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
 ```
 
-Pitfalls to check against your GitLab version: protected variables are only exposed to pipelines on protected branches and tags, so merge request pipelines from unprotected branches never receive them and deploy secrets stay out of reach. The agent token is an unprotected, masked variable that any pipeline in the project can read, which is acceptable only because it is read-only. Keep the poster token out of the agent job: scope `POSTER_TOKEN` to the `ai-comment-poster` environment only, so the agent job does not receive it. Environment scoping is not a hard boundary, because a branch author in the same project can still change `.gitlab-ci.yml`, so the token must stay limited to commenting (Reporter role, `api` scope). Confirm that `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` is set in merge request pipelines on your instance and test with a real fork.
+Pitfalls to check against your GitLab version: protected variables are only exposed to pipelines on protected branches and tags. Merge request pipelines were treated differently across versions: the 17.9 documentation says they do not get protected variables, while the current documentation says they can when both the source and target branches are protected, and never for pipelines from forks. Do not rely on one behaviour; keep deploy secrets out of any project where an agent job runs, and check the page for your version. Masking only hides a value in job logs and is not a guarantee against a malicious job reading it; hidden variables cannot be revealed in the UI after saving but can still be used by jobs. Neither replaces keeping the secret away from the job. The agent token is an unprotected, masked variable that any pipeline in the project can read, which is acceptable only because it is read-only. Keep the poster token out of the agent job: scope `POSTER_TOKEN` to the `ai-comment-poster` environment only, so the agent job does not receive it. Environment scoping is not a hard boundary, because a branch author in the same project can still change `.gitlab-ci.yml`, so the token must stay limited to commenting (Reporter role, `api` scope). `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` is a documented predefined variable for merge request pipelines; still test the rule with a real fork on your instance. The job token (`CI_JOB_TOKEN`) is a separate credential: by default a project's job token allowlist contains only the project itself, and adding a project or group to the allowlist lets that project's jobs reach yours, so keep the allowlist short and do not disable it.
 
 ### GitHub Actions: read-only, `pull_request` trigger
 
@@ -236,6 +241,46 @@ Route model traffic through an internal gateway where you can log requests, enfo
 [ ] Run logs are stored outside the agent's reach and sampled monthly
 [ ] Rotation runbook exists and has been tried once
 ```
+
+## Evidence
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): 2025 IDs and names LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure, LLM05 Improper Output Handling, LLM06 Excessive Agency, LLM10 Unbounded Consumption, checked 2026-10-20 (IDs from search results, including the OWASP pages for LLM05 and LLM10; the list page itself could not be fetched).
+- [Merge request pipelines](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/): fork merge request pipelines run in the fork by default; a parent member can run one in the parent with the parent's variables; the security warning; the `ci_allow_fork_pipelines_to_run_in_parent_project` setting; `merge_request_event` as the pipeline source, checked 2026-10-20 (search excerpts).
+- [Predefined variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_MERGE_REQUEST_SOURCE_PROJECT_ID`, `CI_MERGE_REQUEST_IID` and the `CI_PIPELINE_SOURCE` values, checked 2026-10-20 (search excerpt).
+- [CI/CD variables](https://docs.gitlab.com/ci/variables/): protected variables only on protected branches and tags, the version difference for merge request pipelines, masking limits and hidden variables, checked 2026-10-20 (search excerpt; the 17.9 and current pages disagree, as stated in the note).
+- [CI/CD job token](https://docs.gitlab.com/ci/jobs/ci_job_token/): the default allowlist contains only the project itself, checked 2026-10-20 (search excerpt).
+
+Corrections made on 2026-10-20: OWASP names and IDs updated to the 2025 edition; the fork row of the trigger matrix no longer says a maintainer triggers a manual run, because that run exposes the parent's variables; the protected-variable statement was corrected to say the behaviour differs between GitLab versions; the masking limits and the job token allowlist were added; the GitLab documentation link now uses the current `/ci/` path.
+
+### Not verified
+
+- The GitHub Actions workflow (triggers, per-job permissions, `gh pr comment --body-file`, the runner label) was not checked.
+- The GKE statements (ephemeral pod per job, no workload identity binding by default) and the Kubernetes hardening links were not checked against Kubernetes or GKE documentation.
+- The project access token roles and scopes used in the YAML (Reporter with `read_api` or `api`) and the `environment: action: access` setting were not checked; the note already tells readers to check them for their version.
+- The YAML was never run in GitLab. The documentation pages were reached through search excerpts only, because the lab's network policy blocked fetching them.
+- The Model Context Protocol is not cited in this note.
+- Nothing was verified against a real environment.
+
+### Lab run
+
+A helper check, not part of the evidence level. Host: Ubuntu 24.04.5 LTS, `python3 --version` printed `Python 3.13.16`, run 2026-10-20 with `python3 -I`. It models the egress allowlist decision as exact `host:port` matching against the list above.
+
+```bash
+python3 -I egress_check.py
+```
+
+```text
+llm-gateway.example.com:443                        ALLOW
+llm-gateway.example.com:80                         DENY
+api.example.com:443                                DENY
+llm-gateway.example.com.attacker.example:443       DENY
+attacker.example:443                               DENY
+LLM-GATEWAY.EXAMPLE.COM:443                        ALLOW
+```
+
+This shows only that exact matching rejects a subdomain trick and an unlisted host. A real firewall or proxy was not tested, and it must also do case-insensitive matching and DNS handling that the model leaves out.
 
 ## Related
 
