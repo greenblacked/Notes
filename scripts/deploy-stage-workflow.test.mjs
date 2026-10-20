@@ -516,10 +516,7 @@ test("the teardown re-reads the latest deployment right before deleting", () => 
   assert.equal(stale.status, 1)
   assert.doesNotMatch(stale.output, /left_in_place/)
   assert.match(stale.stdout, /stale read/)
-  // A foreign id is left in place only when the previous id is a real id.
-  const other2 = run("latest_deployment_id=d2", "d1", "p0")
-  assert.equal(other2.deleted, false)
-  assert.match(other2.output, /^left_in_place=true$/m)
+  // A foreign id is left in place only when the previous id is a real id (case "other" above).
   for (const prev of ["none", "unknown", ""]) {
     const r2 = run("latest_deployment_id=d2", "d1", prev)
     assert.equal(r2.deleted, true, `previous=${prev}`)
