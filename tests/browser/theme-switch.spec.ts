@@ -17,7 +17,7 @@ type Sample = {
 type Sampled = { samples: Sample[]; fadePath: boolean; motion: boolean }
 
 // Clicks the theme toggle like a user (mouse on desktop, a tap on phones) and samples the top bar,
-// its section row, the scroll position and the theme icon on every frame for 900ms.
+// its section row, the scroll position and the theme icon on every animation frame and every 16ms timer tick for 900ms.
 async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> {
   const btn = page.locator(".darkmode").first()
   const box = await btn.boundingBox() // does not scroll, unlike locator.click()
@@ -34,8 +34,13 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
     w.__s = []
     const t0 = performance.now()
     w.__done = new Promise<void>((res) => {
+      let finished = false
+      let last = -1
       const tick = () => {
+        if (finished) return
         const t = performance.now() - t0
+        if (t === last) return // a frame and a timer can fire at the same instant
+        last = t
         w.__s.push({
           t,
           bar: r(bar),
@@ -64,10 +69,24 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
               ),
             ),
         })
-        if (t < 900) requestAnimationFrame(tick)
-        else res()
+        if (t >= 900) {
+          finished = true
+          res()
+        }
       }
-      requestAnimationFrame(tick)
+      // Headless WebKit hands out very few animation frames, so sample on a timer as well.
+      const loop = () => {
+        tick()
+        if (!finished) {
+          requestAnimationFrame(loop)
+        }
+      }
+      const timer = () => {
+        tick()
+        if (!finished) setTimeout(timer, 16)
+      }
+      requestAnimationFrame(loop)
+      setTimeout(timer, 0)
     })
   })
   const x = box!.x + box!.width / 2
@@ -88,9 +107,10 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
 
 function expectStillGeometry(samples: Sample[]) {
   const first = samples[0]
-  // Frames get sparse while the snapshot is captured, so check the span, not a frame count.
+  // Frames get sparse while the snapshot is captured (and headless WebKit gives few), so check
+  // the span and a floor that only a working timer-driven sampler reaches.
   expect(samples.at(-1)!.t).toBeGreaterThanOrEqual(900)
-  expect(samples.length).toBeGreaterThan(3)
+  expect(samples.length).toBeGreaterThanOrEqual(20)
   for (const s of samples) {
     s.bar.forEach((v, i) => expect(Math.abs(v - first.bar[i])).toBeLessThanOrEqual(0.5))
     s.row.forEach((v, i) => expect(Math.abs(v - first.row[i])).toBeLessThanOrEqual(0.5))
