@@ -42,9 +42,12 @@ function note({
 } = {}) {
   const base = {
     title: "Example",
+    description: "An example note.",
     type: "guide",
+    tags: "[patterns]",
     created: "2025-12-01",
     modified: "2026-10-20",
+    draft: false,
     evidence: "source-reviewed",
     reviewed: "2026-10-20",
     "review-due": "2027-04-20",
@@ -76,6 +79,7 @@ const RUNBOOK = [
   "Cleanup and rollback",
 ]
 const LAB = [...RUNBOOK, "Lab run"]
+const NOTE_TYPES = ["adr", "pattern", "tool", "standard", "runbook", "guide", "reference", "note"]
 
 function tree(files) {
   const dir = mkdtempSync(join(tmpdir(), "check-notes-"))
@@ -425,4 +429,77 @@ test("writing-notes.md marks destructive as optional and does not overstate the 
   assert.match(row, /^\| `destructive`\s+\| no \(only with `evidence`\)/)
   assert.doesNotMatch(doc, /so a note cannot ship with a broken claim/)
   assert.match(doc, /left to review/)
+})
+
+test("a missing or malformed created fails on a note that declares evidence", () => {
+  for (const bad of [undefined, '"soon"', '"2026-02-30"', '"2025-12-01T10:00"', "[]"]) {
+    const list = problems(note({ fm: { created: bad, reviewed: "2025-11-01" } }))
+    assert.ok(
+      has(list, /`created` is missing or not a valid ISO date/),
+      `${bad}: ${list.join("|")}`,
+    )
+  }
+})
+
+test("a missing or malformed modified fails on a note that declares evidence", () => {
+  for (const bad of [undefined, '"yesterday"', '"2026-13-01"']) {
+    const list = problems(note({ fm: { modified: bad } }))
+    assert.ok(
+      has(list, /`modified` is missing or not a valid ISO date/),
+      `${bad}: ${list.join("|")}`,
+    )
+  }
+})
+
+test("an unknown, missing or non-string type fails on a note that declares evidence", () => {
+  for (const bad of ["runbok", "Runbook", "[runbook]", '""', undefined]) {
+    const list = problems(note({ fm: { type: bad } }))
+    assert.ok(has(list, /`type` is missing or not one of/), `${bad}: ${list.join("|")}`)
+  }
+  for (const ok of NOTE_TYPES) {
+    const list = problems(note({ fm: { type: ok } }))
+    assert.ok(!has(list, /`type`/), `${ok}: ${list.join("|")}`)
+  }
+})
+
+test("a note with only reviewed (no evidence) is still base-checked", () => {
+  const list = problems(note({ fm: { evidence: undefined, type: "runbok" } }))
+  assert.ok(has(list, /`type` is missing or not one of/), list.join("|"))
+  assert.ok(has(list, /`reviewed` is set without `evidence`/), list.join("|"))
+})
+
+test("a missing or empty title, description or tags fails", () => {
+  for (const [key, re] of [
+    ["title", /`title` is missing or empty/],
+    ["description", /`description` is missing or empty/],
+    ["tags", /`tags` must be a list with at least one tag/],
+  ]) {
+    for (const bad of [undefined, '""', "[]"]) {
+      if (key !== "tags" && bad === "[]") continue
+      const list = problems(note({ fm: { [key]: bad } }))
+      assert.ok(has(list, re), `${key} ${bad}: ${list.join("|")}`)
+    }
+  }
+  const list = problems(note({ fm: { tags: "patterns" } }))
+  assert.ok(has(list, /`tags` must be a list/), list.join("|"))
+  const blank = problems(note({ fm: { tags: '["", patterns]' } }))
+  assert.ok(has(blank, /`tags` must be a list/), blank.join("|"))
+})
+
+test("a missing or non-boolean draft fails", () => {
+  for (const bad of [undefined, '"false"', "yes-please", "0"]) {
+    const list = problems(note({ fm: { draft: bad } }))
+    assert.ok(has(list, /`draft` must be true or false/), `${bad}: ${list.join("|")}`)
+  }
+  assert.deepEqual(problems(note({ fm: { draft: true } })), [])
+})
+
+test("an undeclared note with a bad type or missing base fields still passes", () => {
+  const undeclared = "---\ntitle: Old\ntype: runbok\n---\n\nBody.\n"
+  assert.deepEqual(problems(undeclared), [])
+  const dir = tree({ "a.md": undeclared })
+  const r = run(dir)
+  assert.equal(r.status, 0, r.stdout)
+  const bad = tree({ "b.md": note({ fm: { type: "runbok" } }) })
+  assert.equal(run(bad).status, 1)
 })

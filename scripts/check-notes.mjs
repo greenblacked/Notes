@@ -4,7 +4,9 @@
 // A note may declare an evidence level in its frontmatter (`evidence`, `reviewed`, `review-due`,
 // `destructive`). When it does, the body must carry a matching `## Evidence` section. The rules
 // are written down in content/standards/writing-notes.md ("Evidence levels"); this script
-// enforces them. Notes that declare no `evidence` are only checked for stray evidence fields.
+// enforces them. A note that declares any evidence field also gets its base frontmatter checked
+// (title, description, type, tags, created, modified, draft). Notes that declare no `evidence`
+// are only checked for stray evidence fields.
 //
 // The review queue is information only: overdue reviews, reviews due within 30 days, notes
 // modified after their review, and notes that declare no level. It never changes the exit code.
@@ -147,7 +149,45 @@ function sectionsNamed(ol, level, name, parent) {
 
 const isEmpty = (section) => !section || section.text.trim() === ""
 
+// The `type` values of the field table in content/standards/writing-notes.md.
+export const NOTE_TYPES = [
+  "adr",
+  "pattern",
+  "tool",
+  "standard",
+  "runbook",
+  "guide",
+  "reference",
+  "note",
+]
+
 const META_FIELDS = ["evidence", "reviewed", "review-due", "destructive"]
+
+/**
+ * The required base fields of the field table in content/standards/writing-notes.md. The
+ * evidence rules read `type`, `created` and `modified`, so a note that declares evidence metadata
+ * must have them right. Not enforced: the description length ("about 160") and tag membership in
+ * the taxonomy, which are left to review.
+ */
+function baseProblems(fm) {
+  const problems = []
+  const text = (v) => typeof v === "string" && v.trim() !== ""
+  if (!text(fm.title)) problems.push("`title` is missing or empty")
+  if (!text(fm.description)) problems.push("`description` is missing or empty")
+  if (!Array.isArray(fm.tags) || fm.tags.length === 0 || !fm.tags.every(text)) {
+    problems.push("`tags` must be a list with at least one tag, each a non-empty string")
+  }
+  if (!isoDay(fm.created))
+    problems.push("`created` is missing or not a valid ISO date (YYYY-MM-DD)")
+  if (!isoDay(fm.modified)) {
+    problems.push("`modified` is missing or not a valid ISO date (YYYY-MM-DD)")
+  }
+  if (typeof fm.draft !== "boolean") problems.push("`draft` must be true or false")
+  if (typeof fm.type !== "string" || !NOTE_TYPES.includes(fm.type)) {
+    problems.push(`\`type\` is missing or not one of ${NOTE_TYPES.join(", ")} (lowercase)`)
+  }
+  return problems
+}
 
 /** Problems with one parsed note, as plain strings. `today` is `YYYY-MM-DD`. */
 export function checkNote(note, { today }) {
@@ -155,9 +195,7 @@ export function checkNote(note, { today }) {
   const fm = note.frontmatter ?? {}
   const has = (key) => Object.hasOwn(fm, key) && fm[key] !== null && fm[key] !== undefined
   const problems = []
-  if (!fm.type && META_FIELDS.some((key) => Object.hasOwn(fm, key))) {
-    problems.push("`type` is missing or empty, but the note declares evidence metadata")
-  }
+  if (META_FIELDS.some((key) => Object.hasOwn(fm, key))) problems.push(...baseProblems(fm))
 
   if (!Object.hasOwn(fm, "evidence")) {
     for (const key of ["reviewed", "review-due", "destructive"]) {
