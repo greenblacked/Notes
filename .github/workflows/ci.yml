@@ -16,7 +16,7 @@ jobs:
   build-and-check:
     name: Build and check
     runs-on: ubuntu-24.04
-    # A cold `quartz plugin restore` takes about 15 minutes.
+    # A cold `quartz plugin restore` takes about 7 to 8 minutes measured on 4-core runners (2026-10-20), slower on 2-core.
     timeout-minutes: 45
     permissions:
       contents: read
