@@ -388,20 +388,12 @@ test("the result job reports skipped only when main moved on, and failure otherw
   assert.equal(JSON.stringify(result).includes("secrets."), false)
 })
 
-test("a superseded stage is left in place: no teardown, but the run still fails", () => {
-  const teardown = upload.steps.find((s) => s.id === "teardown")
-  assert.ok(teardown.if.includes("steps.active.outputs.superseded != 'true'"))
-  for (const needle of ["failure()", "cancelled()", "steps.preview.outcome"]) {
-    assert.ok(teardown.if.includes(needle), needle)
-  }
+test("the active step passes the checker's status through and has no previous or superseded path", () => {
   const active = upload.steps.find((s) => s.id === "active")
   assert.equal(active["continue-on-error"], undefined)
-  // Env only: the superseded id reaches the shell through the environment.
   assert.ok(!active.run.includes("${{"))
-  const env = {
-    DEPLOYMENT_ID: "d1",
-    SHA: "a".repeat(40),
-  }
+  assert.equal(active.env.PREVIOUS_ID, undefined)
+  assert.ok(!active.run.includes("--previous"))
   const fake = (code, lines) => {
     const dir = mkdtempSync(join(tmpdir(), "stage-node-"))
     writeFileSync(join(dir, "node"), `#!/bin/bash\nprintf '%s\\n' ${lines}\nexit ${code}\n`, {
@@ -411,79 +403,56 @@ test("a superseded stage is left in place: no teardown, but the run still fails"
   }
   const run = (code, lines) => {
     const dir = fake(code, lines)
-    return bash(active, { ...env, PATH: `${dir}:${process.env.PATH}` })
+    return bash(active, {
+      DEPLOYMENT_ID: "d1",
+      SHA: "a".repeat(40),
+      PATH: `${dir}:${process.env.PATH}`,
+    })
   }
-  const superseded = run(3, "'superseded=true' 'superseded_by=d2'")
-  assert.equal(superseded.status, 3)
-  assert.match(superseded.output, /^superseded=true$/m)
-  assert.match(superseded.output, /^superseded_by=d2$/m)
-  assert.match(
-    superseded.stdout,
-    /::error::Stage was superseded by deployment d2 and was left in place/,
-  )
+  const three = run(3, "'superseded=true' 'superseded_by=d2'")
+  assert.equal(three.status, 3)
+  assert.doesNotMatch(three.stdout, /left in place/)
   const plain = run(1, "'x'")
   assert.equal(plain.status, 1)
-  assert.doesNotMatch(plain.output, /superseded/)
-  assert.doesNotMatch(plain.stdout, /superseded/)
   const ok = run(0, "'active=true' 'active_deployment_id=d1'")
   assert.equal(ok.status, 0)
   assert.match(ok.output, /^active=true$/m)
-
-  // Summary: a superseded run is a failure that did not take stage down.
-  const result = upload.steps.find((s) => s.id === "result")
-  assert.equal(result.env.SUPERSEDED, "${{ steps.active.outputs.superseded }}")
-  assert.equal(result.env.SUPERSEDED_BY, "${{ steps.active.outputs.superseded_by }}")
-  const r = bash(result, {
-    LEVEL: "",
-    DEPLOYMENT_ID: "d1",
-    PREVIEW_OUTCOME: "success",
-    TEARDOWN_OUTCOME: "skipped",
-    SUPERSEDED: "true",
-    SUPERSEDED_BY: "d2",
-  })
-  assert.match(r.output, /^stage_result=failure$/m)
-  assert.ok(r.summary.includes("Superseded"))
-  assert.ok(r.summary.includes("d2"))
-  assert.ok(!r.summary.includes("taken down"))
-  assert.ok(!/\bverified\b/.test(r.summary))
 })
 
-test("the teardown re-reads the latest deployment right before deleting", () => {
+test("the teardown always deletes after an attempted upload, with no superseded or left-in-place path", () => {
   const step = upload.steps.find((s) => s.id === "teardown")
-  assert.equal(step.env.DEPLOYMENT_ID, "${{ steps.parse.outputs.deployment_id }}")
+  assert.ok(step)
+  assert.ok(!step.if.includes("superseded"))
+  assert.equal(step.env.PREVIOUS_ID, undefined)
+  assert.equal(step.env.DEPLOYMENT_ID, undefined)
   assert.ok(step.env.CLOUDFLARE_API_TOKEN && step.env.CLOUDFLARE_ACCOUNT_ID)
   assert.ok(!step.run.includes("${{"))
-  assert.ok(step.run.includes("--read-latest --worker notes --preview stage"))
-  assert.ok(step.run.indexOf("--read-latest") < step.run.indexOf("preview delete"))
+  assert.ok(!step.run.includes("--read-latest"))
+  assert.ok(!step.run.includes("left_in_place"))
+  assert.ok(step.run.includes("preview delete --name stage --skip-confirmation"))
+  assert.ok(!upload.steps.some((s) => s.id === "before"))
+  assert.ok(!upload.steps.some((s) => (s.run ?? "").includes("--read-previous")))
   // The token is scoped to the steps that need it.
   assert.equal(workflow.env?.CLOUDFLARE_API_TOKEN, undefined)
   assert.equal(upload.env?.CLOUDFLARE_API_TOKEN, undefined)
 
-  assert.equal(step.env.PREVIOUS_ID, "${{ steps.before.outputs.previous_deployment_id }}")
-  const run = (latestLine, deploymentId, previousId = "") => {
+  const run = (deleteOk, listText) => {
     const dir = mkdtempSync(join(tmpdir(), "stage-teardown-"))
     const log = join(dir, "calls.log")
-    mkdirSync(join(dir, "bin"))
     mkdirSync(join(dir, "tools/node_modules/.bin"), { recursive: true })
     writeFileSync(
-      join(dir, "bin", "node"),
-      `#!/bin/bash\n${latestLine === null ? "exit 1" : `printf '%s\\n' '${latestLine}'`}\n`,
-      { mode: 0o755 },
-    )
-    writeFileSync(
       join(dir, "tools/node_modules/.bin/wrangler"),
-      `#!/bin/bash\necho "wrangler $*" >>'${log}'\necho deleted\n`,
+      `#!/bin/bash
+echo "wrangler $*" >>'${log}'
+if [[ "$2" == "delete" ]]; then
+  ${deleteOk ? "echo deleted" : "echo delete-failed; exit 1"}
+else
+  echo '${listText}'
+fi
+`,
       { mode: 0o755 },
     )
-    const r = bash(
-      step,
-      {
-        DEPLOYMENT_ID: deploymentId,
-        PREVIOUS_ID: previousId,
-        PATH: `${join(dir, "bin")}:${process.env.PATH}`,
-      },
-      dir,
-    )
+    const r = bash(step, {}, dir)
     let calls = ""
     try {
       calls = readFileSync(log, "utf8")
@@ -491,67 +460,32 @@ test("the teardown re-reads the latest deployment right before deleting", () => 
     return { ...r, deleted: /preview delete --name stage/.test(calls) }
   }
 
-  const ours = run("latest_deployment_id=d1", "d1")
-  assert.equal(ours.deleted, true)
-  assert.equal(ours.status, 1)
-  assert.doesNotMatch(ours.output, /left_in_place/)
-  assert.match(ours.stdout, /::notice::Deleted the stage Preview/)
+  const ok = run(true, "")
+  assert.equal(ok.deleted, true)
+  assert.equal(ok.status, 1)
+  assert.match(ok.stdout, /::notice::Deleted the stage Preview/)
+  assert.doesNotMatch(ok.output, /left_in_place/)
 
-  const other = run("latest_deployment_id=d2", "d1", "p0")
-  assert.equal(other.deleted, false)
-  assert.equal(other.status, 1)
-  assert.match(other.output, /^left_in_place=true$/m)
-  assert.match(other.output, /^left_in_place_id=d2$/m)
-  assert.match(other.stdout, /::warning::Stage now serves deployment d2 from another upload/)
-  assert.match(other.stdout, /::error::/)
+  const gone = run(false, 'The Preview "stage" was not found.')
+  assert.equal(gone.status, 1)
+  assert.match(gone.stdout, /nothing to delete/)
 
-  const none = run("latest_deployment_id=none", "d1")
-  assert.equal(none.deleted, true)
-  assert.equal(none.status, 1)
-  assert.doesNotMatch(none.output, /left_in_place/)
+  const broken = run(false, "boom")
+  assert.equal(broken.status, 1)
+  assert.match(broken.stdout, /::error::Deleting the stage Preview failed/)
 
-  // A stale re-read that returns the deployment from before the upload is not "another upload".
-  const stale = run("latest_deployment_id=p0", "d1", "p0")
-  assert.equal(stale.deleted, true)
-  assert.equal(stale.status, 1)
-  assert.doesNotMatch(stale.output, /left_in_place/)
-  assert.match(stale.stdout, /stale read/)
-  // A foreign id is left in place only when the previous id is a real id (case "other" above).
-  for (const prev of ["none", "unknown", ""]) {
-    const r2 = run("latest_deployment_id=d2", "d1", prev)
-    assert.equal(r2.deleted, true, `previous=${prev}`)
-    assert.equal(r2.status, 1, `previous=${prev}`)
-    assert.doesNotMatch(r2.output, /left_in_place/, `previous=${prev}`)
-    assert.match(r2.stdout, /::warning::The re-read returned deployment d2/, `previous=${prev}`)
-  }
-
-  for (const [line, id] of [
-    ["latest_deployment_id=unknown", "d1"],
-    ["garbage", "d1"],
-    [null, "d1"],
-    ["latest_deployment_id=bad id!", "d1"],
-    ["latest_deployment_id=d2", ""],
-  ]) {
-    const r = run(line, id)
-    assert.equal(r.deleted, true, `${line}/${id}`)
-    assert.equal(r.status, 1, `${line}/${id}`)
-    assert.doesNotMatch(r.output, /left_in_place/, `${line}/${id}`)
-  }
-  assert.match(run("latest_deployment_id=unknown", "d1").stdout, /::warning::Could not read/)
-
-  // Summary: a run that left another upload in place says so, and is still a failure.
+  // Summary: a failed check after the upload always says the Preview was taken down.
   const result = upload.steps.find((s) => s.id === "result")
-  assert.equal(result.env.LEFT_IN_PLACE, "${{ steps.teardown.outputs.left_in_place }}")
-  assert.equal(result.env.LEFT_IN_PLACE_ID, "${{ steps.teardown.outputs.left_in_place_id }}")
+  assert.equal(result.env.SUPERSEDED, undefined)
+  assert.equal(result.env.LEFT_IN_PLACE, undefined)
   const r = bash(result, {
-    LEVEL: "verified",
+    LEVEL: "",
     DEPLOYMENT_ID: "d1",
     PREVIEW_OUTCOME: "success",
-    TEARDOWN_OUTCOME: "failure",
-    LEFT_IN_PLACE: "true",
-    LEFT_IN_PLACE_ID: "d2",
+    TEARDOWN_OUTCOME: "success",
   })
   assert.match(r.output, /^stage_result=failure$/m)
-  assert.ok(r.summary.includes("left in place") && r.summary.includes("d2"))
-  assert.ok(!r.summary.includes("taken down"))
+  assert.ok(r.summary.includes("taken down"))
+  assert.ok(!r.summary.includes("left in place"))
+  assert.ok(!r.summary.includes("Superseded"))
 })

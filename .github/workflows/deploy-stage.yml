@@ -256,19 +256,6 @@ jobs:
             fi
           fi
 
-      # The Preview's latest deployment before this upload. The active check uses it to tell a
-      # stale read of the replaced deployment from a newer upload by someone else. Never fails.
-      - name: Record the previous stage deployment
-        id: before
-        if: steps.fresh.outputs.current == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          out="$(node scripts/verify-preview-deployment.mjs --read-previous --worker notes --preview stage)" || out="previous_deployment_id=unknown"
-          echo "$out"
-          echo "$out" >>"$GITHUB_OUTPUT"
-
       # `wrangler preview` creates or updates the Preview `stage`; its ENVIRONMENT var comes from
       # `previews.vars` in wrangler.jsonc (not production, so noindex). It does not touch
       # production or the routes.
@@ -302,25 +289,11 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           DEPLOYMENT_ID: ${{ steps.parse.outputs.deployment_id }}
-          PREVIOUS_ID: ${{ steps.before.outputs.previous_deployment_id }}
         run: |
-          # Exit 3 means superseded: a newer valid deployment replaced ours (someone else uploaded
-          # to the Preview). The run still fails, but the teardown skips it so that deployment
-          # is not deleted.
           rc=0
-          previous=()
-          if [[ "$PREVIOUS_ID" =~ ^[A-Za-z0-9-]{1,64}$ && "$PREVIOUS_ID" != "unknown" ]]; then
-            previous=(--previous "$PREVIOUS_ID")
-          fi
-          out="$(node scripts/verify-preview-deployment.mjs --worker notes --preview stage \
-            --deployment "$DEPLOYMENT_ID" --tag "$SHA" --message "stage ${SHA::7}" \
-            "${previous[@]}")" || rc=$?
+          out="$(node scripts/verify-preview-deployment.mjs --worker notes --preview stage --deployment "$DEPLOYMENT_ID" --tag "$SHA" --message "stage ${SHA::7}")" || rc=$?
           echo "$out"
           echo "$out" >>"$GITHUB_OUTPUT"
-          if [[ "$rc" == "3" ]]; then
-            by="$(sed -n 's/^superseded_by=//p' <<<"$out")"
-            echo "::error::Stage was superseded by deployment $by and was left in place; this run's upload ($DEPLOYMENT_ID) is no longer active. Run Deploy stage again."
-          fi
           exit "$rc"
 
       - name: Require the custom domain Preview URL
@@ -429,57 +402,20 @@ jobs:
           esac
           echo "level=$level" >>"$GITHUB_OUTPUT"
 
-      # Fail closed: once the upload was attempted, any failed or cancelled step after it takes the
-      # Preview down, so stage keeps only an upload whose checks all passed (see `Decide the stage
-      # result`). Nothing is deleted when the active check already found the Preview superseded.
-      # Otherwise the Preview's latest deployment is read again right before the delete, because
-      # another uploader may have replaced ours since the earlier read: ours -> delete. A foreign
-      # id is left in place only when the id live before the upload is a real well-formed id (not
-      # `none`, `unknown` or empty) and the re-read differs from both ours and that id (the run
-      # still fails). Otherwise it may be a stale or lagging read and the Preview is deleted
-      # (fail closed, as in verify-preview-deployment.mjs): the previous id, `none` (Preview
-      # absent or lagging; deleting is idempotent), `unknown` (API error), no known id of ours,
-      # or any foreign id while the previous id is `none`/`unknown`/empty. A failed delete counts
-      # as "already gone" only when Wrangler itself reports that the Preview "stage" was not found.
+      # Fail closed: once the upload was attempted, any failed or cancelled step after it deletes the
+      # Preview, so stage keeps only an upload whose checks all passed (see `Decide the stage
+      # result`). The API gives no ordering evidence between deployments, so a different latest
+      # deployment is never assumed to be newer than this run's and is deleted too; the next Deploy
+      # stage run restores stage. A failed delete counts as "already gone" only when Wrangler itself
+      # reports that the Preview "stage" was not found.
       - name: Take stage down after a failed check
         id: teardown
-        if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && steps.active.outputs.superseded != 'true' && (failure() || cancelled())
+        if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled())
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-          DEPLOYMENT_ID: ${{ steps.parse.outputs.deployment_id }}
-          PREVIOUS_ID: ${{ steps.before.outputs.previous_deployment_id }}
         run: |
           wrangler=tools/node_modules/.bin/wrangler
-          id_re='^[A-Za-z0-9-]{1,64}$'
-          latest="$(node scripts/verify-preview-deployment.mjs --read-latest --worker notes --preview stage | sed -n 's/^latest_deployment_id=//p' | head -n 1)" || latest=""
-          if ! [[ "$latest" =~ $id_re ]]; then
-            latest=unknown
-          fi
-          ours="$DEPLOYMENT_ID"
-          if ! [[ "$ours" =~ $id_re ]]; then
-            ours=""
-            echo "::warning::This run's deployment id is unknown; the Preview is deleted without comparing."
-          fi
-          prev_ok=false
-          if [[ "${PREVIOUS_ID:-}" =~ $id_re && "${PREVIOUS_ID:-}" != "none" && "${PREVIOUS_ID:-}" != "unknown" ]]; then
-            prev_ok=true
-          fi
-          if [[ "$latest" == "none" ]]; then
-            echo "::notice::The stage Preview reads as having no deployment (absent, or a stale read); deleting is idempotent, so the delete still runs."
-          elif [[ "$latest" == "unknown" ]]; then
-            echo "::warning::Could not read the stage Preview's latest deployment; deleting it so an unverified upload does not stay live."
-          elif [[ "$latest" == "${PREVIOUS_ID:-}" ]]; then
-            echo "::warning::The re-read returned the deployment that was live before the upload (a stale read); deleting so an unverified upload does not stay live."
-          elif [[ -n "$ours" && "$latest" != "$ours" && "$prev_ok" != "true" ]]; then
-            echo "::warning::The re-read returned deployment $latest, but the id live before the upload is not known (none, unknown or empty), so it may be a stale read; deleting so an unverified upload does not stay live."
-          elif [[ -n "$ours" && "$latest" != "$ours" ]]; then
-            echo "left_in_place=true" >>"$GITHUB_OUTPUT"
-            echo "left_in_place_id=$latest" >>"$GITHUB_OUTPUT"
-            echo "::warning::Stage now serves deployment $latest from another upload (this run uploaded $ours); it was left in place, not deleted."
-            echo "::error::A stage check failed, and the stage Preview was left in place because another upload replaced this run's. Run Deploy stage again."
-            exit 1
-          fi
           if out="$("$wrangler" preview delete --name stage --skip-confirmation 2>&1)"; then
             echo "$out"
             echo "::notice::Deleted the stage Preview."
@@ -508,10 +444,6 @@ jobs:
           PROBE_CODE: ${{ steps.probe.outputs.code }}
           PREVIEW_OUTCOME: ${{ steps.preview.outcome }}
           TEARDOWN_OUTCOME: ${{ steps.teardown.outcome }}
-          SUPERSEDED: ${{ steps.active.outputs.superseded }}
-          SUPERSEDED_BY: ${{ steps.active.outputs.superseded_by }}
-          LEFT_IN_PLACE: ${{ steps.teardown.outputs.left_in_place }}
-          LEFT_IN_PLACE_ID: ${{ steps.teardown.outputs.left_in_place_id }}
         run: |
           level="${LEVEL:-failure}"
           # The teardown ran (a failed or cancelled run): the Preview is gone, whatever LEVEL says.
@@ -535,10 +467,6 @@ jobs:
               *)
                 if [[ -z "$PREVIEW_OUTCOME" || "$PREVIEW_OUTCOME" == "skipped" ]]; then
                   echo "Failed before the upload; nothing was uploaded."
-                elif [[ "$LEFT_IN_PLACE" == "true" ]]; then
-                  echo "Another upload replaced this run's \`$DEPLOYMENT_ID\`: the stage Preview's latest deployment is \`${LEFT_IN_PLACE_ID}\`. It was left in place and this run failed. Run Deploy stage again."
-                elif [[ "$SUPERSEDED" == "true" ]]; then
-                  echo "Superseded: the stage Preview's latest deployment is \`${SUPERSEDED_BY}\`, not this run's \`$DEPLOYMENT_ID\`. It was left in place and this run failed. Run Deploy stage again."
                 else
                   echo "A check failed after the upload; the stage Preview was taken down. See the first failed step."
                 fi

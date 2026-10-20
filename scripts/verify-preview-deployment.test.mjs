@@ -10,10 +10,7 @@ import {
   MAX_ATTEMPTS,
   REQUEST_TIMEOUT_MS,
   RETRY_DELAY_MS,
-  EXIT_SUPERSEDED,
-  SupersededError,
   parseArgs,
-  readPrevious,
 } from "./verify-preview-deployment.mjs"
 
 const SHA = "a".repeat(40)
@@ -32,7 +29,6 @@ const argv = [
   "--message",
   MESSAGE,
 ]
-const argvPrev = [...argv, "--previous", "d0"]
 const env = { CLOUDFLARE_API_TOKEN: TOKEN, CLOUDFLARE_ACCOUNT_ID: ACCOUNT }
 const good = (over = {}, annotations = {}) => ({
   success: true,
@@ -282,65 +278,40 @@ test("outcomes still map: success after transient errors, hard failure at once",
   assert.equal(wrongTag.calls.length, 2)
 })
 
-test("superseded: a different valid deployment after the whole budget", async () => {
+test("a foreign deployment id after the whole budget is an ordinary failure (no ordering evidence)", async () => {
   const newer = reply(200, good({ id: "d2" }))
-  // A brief lag is still retried first: ours appears on the 3rd attempt, so not superseded.
+  // A brief lag is still retried first: ours appears on the 3rd attempt.
   const lag = fakeFetch(newer, newer, reply(200, good()))
-  assert.equal(await main(argvPrev, env, deps(lag)), "active=true\nactive_deployment_id=d1")
-  const f = fakeFetch(newer)
-  await assert.rejects(main(argvPrev, env, deps(f, 4)), (error) => {
-    assert.ok(error instanceof SupersededError)
-    assert.equal(error.deploymentId, "d2")
-    assert.match(error.message, /d2.*after 4 attempts/)
-    return true
-  })
-  assert.equal(f.calls.length, 4)
-  // Transient errors earlier in the budget do not hide a superseded final answer.
-  const mixed = fakeFetch(reply(500, {}), newer)
-  await assert.rejects(main(argvPrev, env, deps(mixed, 3)), SupersededError)
-  assert.equal(EXIT_SUPERSEDED, 3)
+  assert.equal(await main(argv, env, deps(lag)), "active=true\nactive_deployment_id=d1")
+  const cases = [
+    // (a) a stale pre-read, then a lagging deployment older than ours
+    [[reply(200, good({ id: "d0" })), reply(200, good({ id: "d1x" }))], 3],
+    // (b) a constant foreign id
+    [[newer], 4],
+    // (c) an unconfirmed created_on field must not change the outcome
+    [[reply(200, good({ id: "d2", created_on: "2099-01-01T00:00:00Z" }))], 3],
+    // (d) malformed or annotation-less foreign answers
+    [[reply(200, good({ id: "d2", annotations: null }))], 2],
+    [[reply(200, good({ id: "bad id!" }))], 2],
+  ]
+  for (const [answers, n] of cases) {
+    const f = fakeFetch(...answers)
+    await assert.rejects(main(argv, env, deps(f, n)), (error) => {
+      assert.equal(error.constructor, Error)
+      assert.equal(error.deploymentId, undefined)
+      assert.match(error.message, new RegExp(`after ${n} attempts`))
+      return true
+    })
+    assert.equal(f.calls.length, n)
+  }
 })
 
-test("not superseded: a stale answer equal to the previous id, or no usable previous id", async () => {
-  const stale = reply(200, good({ id: "d0" }))
-  // Lag keeps returning the deployment this upload replaced: an ordinary failure, teardown runs.
-  const f = fakeFetch(stale)
-  await assert.rejects(main(argvPrev, env, deps(f, 3)), (error) => {
-    return !(error instanceof SupersededError) && /d0.*after 3 attempts/.test(error.message)
-  })
-  assert.equal(f.calls.length, 3)
-  // No --previous (pre-read failed or unknown): never superseded.
-  const other = reply(200, good({ id: "d2" }))
-  await assert.rejects(main(argv, env, deps(fakeFetch(other), 2)), (error) => {
-    return !(error instanceof SupersededError) && /after 2 attempts/.test(error.message)
-  })
-  // The Preview did not exist before (`none`): a foreign id may be a lagging replica's last
-  // deployment of a deleted Preview, so it is an ordinary failure (teardown runs).
-  await assert.rejects(
-    main([...argv, "--previous", "none"], env, deps(fakeFetch(other), 2)),
-    (error) => !(error instanceof SupersededError) && /after 2 attempts/.test(error.message),
-  )
-})
-
-test("readPrevious: id, none for a missing Preview, unknown otherwise", async () => {
-  const opts = { token: TOKEN, accountId: ACCOUNT, worker: "notes", preview: "stage" }
-  const read = (f) => readPrevious({ ...opts, fetchImpl: f })
-  assert.equal(await read(fakeFetch(reply(200, good({ id: "d0" })))), "d0")
-  const err = (code) => reply(404, { success: false, errors: [{ code, message: "x" }] })
-  assert.equal(await read(fakeFetch(err(10025))), "none")
-  assert.equal(await read(fakeFetch(err(10222))), "none")
-  assert.equal(await read(fakeFetch(reply(500, {}))), "unknown")
-  assert.equal(await read(fakeFetch(new Error("boom"))), "unknown")
-  assert.equal(await read(fakeFetch(reply(200, good({ id: "bad id!" })))), "unknown")
-  assert.equal(await readPrevious({ ...opts, accountId: "nope" }), "unknown")
-})
-
-test("not superseded: transient last attempt, malformed answer, or our own mismatch", async () => {
+test("a transient last attempt, a malformed answer or our own mismatch fails", async () => {
   const newer = reply(200, good({ id: "d2" }))
   // The last attempt was a transient error: unknown state, ordinary failure.
   const transient = fakeFetch(newer, reply(502, {}))
   await assert.rejects(main(argv, env, deps(transient, 2)), (error) => {
-    return !(error instanceof SupersededError) && /after 2 attempts/.test(error.message)
+    return /after 2 attempts/.test(error.message)
   })
   // A malformed id or no annotations object is not a valid other deployment.
   for (const body of [
@@ -349,56 +320,42 @@ test("not superseded: transient last attempt, malformed answer, or our own misma
     good({ id: "d2", annotations: null }),
   ]) {
     await assert.rejects(main(argv, env, deps(fakeFetch(reply(200, body)), 2)), (error) => {
-      return !(error instanceof SupersededError) && /after 2 attempts/.test(error.message)
+      return /after 2 attempts/.test(error.message)
     })
   }
-  // Our deployment with a wrong tag, message or commit_sha fails at once, never superseded.
+  // Our deployment with a wrong tag, message or commit_sha fails at once.
   for (const ann of [
     { "workers/tag": "b".repeat(40) },
     { "workers/message": "x" },
     { "workers/commit_sha": "c".repeat(40) },
   ]) {
     const f = fakeFetch(reply(200, good({}, ann)))
-    await assert.rejects(main(argv, env, deps(f)), (error) => !(error instanceof SupersededError))
+    await assert.rejects(main(argv, env, deps(f)), /annotation workers\//)
     assert.equal(f.calls.length, 1)
   }
 })
 
-test("the CLI prints superseded outputs and exits 3, other failures exit 1", async () => {
+test("the CLI exits 1 on any failure and has no read or superseded modes", async () => {
   const src = readFileSync(new URL("./verify-preview-deployment.mjs", import.meta.url), "utf8")
-  assert.ok(src.includes("superseded=true"))
-  assert.ok(src.includes("process.exit(EXIT_SUPERSEDED)"))
-  assert.ok(src.includes("process.exit(1)"))
-})
-
-test("the CLI has a --read-latest mode that prints latest_deployment_id and exits 0", async () => {
-  const src = readFileSync(new URL("./verify-preview-deployment.mjs", import.meta.url), "utf8")
-  assert.ok(src.includes('"--read-latest": "latest"'))
-  assert.ok(src.includes("`${readMode}_deployment_id=${previous}`"))
-  const { spawnSync } = await import("node:child_process")
-  const run = (args, env) =>
-    spawnSync(
-      process.execPath,
-      [fileURLToPath(new URL("./verify-preview-deployment.mjs", import.meta.url)), ...args],
-      {
-        encoding: "utf8",
-        env: { PATH: process.env.PATH, ...env },
-      },
-    )
-  // No token or a bad account id: the read never reaches the network and reports unknown.
-  for (const [mode, key] of [
-    ["--read-latest", "latest_deployment_id"],
-    ["--read-previous", "previous_deployment_id"],
-  ]) {
-    const r = run([mode, "--worker", "notes", "--preview", "stage"], {})
-    assert.equal(r.status, 0, mode)
-    assert.equal(r.stdout, `${key}=unknown\n`, mode)
-    const bad = run([mode, "--worker", "notes", "--preview", "stage"], {
-      CLOUDFLARE_API_TOKEN: "x",
-      CLOUDFLARE_ACCOUNT_ID: "nope",
-    })
-    assert.equal(bad.stdout, `${key}=unknown\n`, mode)
+  for (const gone of ["superseded", "EXIT_SUPERSEDED", "--read-latest", "--read-previous"]) {
+    assert.ok(!src.includes(gone), gone)
   }
+  assert.ok(src.includes("process.exit(1)"))
+  const { spawnSync } = await import("node:child_process")
+  const r = spawnSync(
+    process.execPath,
+    [
+      fileURLToPath(new URL("./verify-preview-deployment.mjs", import.meta.url)),
+      "--read-latest",
+      "--worker",
+      "notes",
+      "--preview",
+      "stage",
+    ],
+    { encoding: "utf8", env: { PATH: process.env.PATH } },
+  )
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /^error: usage/)
 })
 
 test("missing-preview answers right after the upload are retried, then succeed", async () => {
@@ -413,25 +370,21 @@ test("missing-preview answers right after the upload are retried, then succeed",
   assert.equal(f.calls.length, 4)
 })
 
-test("missing-preview through every attempt is an ordinary failure, not superseded", async () => {
+test("missing-preview through every attempt is an ordinary failure", async () => {
   const miss = reply(404, { success: false, errors: [{ code: 10025, message: "x" }] })
   const f = fakeFetch(miss)
   const sleeps = []
   await assert.rejects(
     main(argv, env, { fetchImpl: f, sleep: async (ms) => void sleeps.push(ms) }),
     (error) =>
-      !(error instanceof SupersededError) &&
       /does not exist/.test(error.message) &&
       new RegExp(`after ${MAX_ATTEMPTS} attempts`).test(error.message),
   )
   assert.equal(f.calls.length, MAX_ATTEMPTS)
   assert.equal(sleeps.length, MAX_ATTEMPTS - 1)
-  // A stale newer-looking id seen earlier does not make a final missing-preview answer superseded.
+  // A foreign id seen earlier does not change a final missing-preview answer.
   const g = fakeFetch(reply(200, good({ id: "d2" })), miss)
-  await assert.rejects(
-    main(argvPrev, env, deps(g, 2)),
-    (error) => !(error instanceof SupersededError),
-  )
+  await assert.rejects(main(argv, env, deps(g, 2)), /does not exist/)
 })
 
 test("mixed missing-preview, transient and stale answers share the one budget", async () => {
