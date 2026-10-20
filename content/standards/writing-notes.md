@@ -54,7 +54,7 @@ draft: false
 | `evidence`    | no              | One of `source-reviewed`, `lab-tested` or `operationally-verified`. See Evidence levels below.              |
 | `reviewed`    | with `evidence` | ISO date of the review behind `evidence`.                                                                   |
 | `review-due`  | with `evidence` | ISO date of the next review, after `reviewed` and within a year.                                            |
-| `destructive` | no              | `true` when the note tells readers to delete, revoke, disable, overwrite, force or bypass something.        |
+| `destructive` | with `evidence` | `true` when the note tells readers to delete, revoke, disable, overwrite, force or bypass something.        |
 
 `reference` is for architecture reference designs: a target design and its trade-offs.
 
@@ -101,7 +101,7 @@ Heading names are matched without regard to case or surrounding spaces, and head
 
 ### Destructive notes
 
-Set `destructive: true` when the note tells readers to delete, revoke, disable, overwrite, force or bypass something. The note then needs at least one `> [!danger]` or `> [!warning]` callout in the body and the `### Cleanup and rollback` subsection.
+Set `destructive: true` when the note tells readers to delete, revoke, disable, overwrite, force or bypass something. The note then needs at least one `> [!danger]` or `> [!warning]` callout in the body and the `### Cleanup and rollback` subsection. It is only allowed on a note that declares `evidence`.
 
 ### Example
 

@@ -105,7 +105,7 @@ mkdir ../verify && gcloud storage cp --recursive "$FORENSIC_BUCKET/$INCIDENT/*" 
 (cd ../verify && sha256sum -c SHA256SUMS)   # every line OK; exit code 0
 ```
 
-`sha256sum ./*` also works for a flat first run, but it hashes `SHA256SUMS` itself on a rerun (so the check then fails) and stops with an error on a subdirectory; the `find` form avoids both. A tampered or truncated file shows `FAILED` and a non-zero exit code. Treat the hash list as proof of integrity from the moment it was made, not of authenticity: store it in the log too, because anyone with write access to the bucket could replace both files.
+`sha256sum ./*` also works for a flat first run, but it hashes `SHA256SUMS` itself on a rerun (so the check then fails) and reports an error for a subdirectory (it skips the directory's contents and exits 1); the `find` form avoids both. A tampered or truncated file shows `FAILED` and a non-zero exit code. Treat the hash list as proof of integrity from the moment it was made, not of authenticity: store it in the log too, because anyone with write access to the bucket could replace both files.
 
 Rules of evidence:
 
@@ -343,7 +343,7 @@ gcloud logging read \
   --project "$PROJECT" --freshness=7d --order=asc --format=json > k8s-audit.json
 ```
 
-The `pods.exec` match is documented. Reads such as `secrets.get` are Data Access events, and the other method names (`rolebindings.create`, `clusterrolebindings.create`) were not checked against the full method list; read them as prefixes of the form `io.k8s.<group>.<version>.<resource>.<verb>` and confirm against a real entry from your cluster. If a log type was off, say so in the findings: absence of entries is then not evidence of absence.
+The `pods.exec` match is documented. Reads such as `secrets.get` are Data Access events (the GKE audit policy page maps get, list and updateStatus to Data Access and create, update and delete to Admin Activity, and Data Access logs must be enabled explicitly), and the other method names (`rolebindings.create`, `clusterrolebindings.create`) were not checked against the full method list; read them as prefixes of the form `io.k8s.<group>.<version>.<resource>.<verb>` and confirm against a real entry from your cluster. If a log type was off, say so in the findings: absence of entries is then not evidence of absence.
 
 Also collect:
 
@@ -430,6 +430,7 @@ Success looks like: no new audit entries for the contained identities after the 
 - [Disable and enable service account keys](https://docs.cloud.google.com/iam/docs/keys-disable-enable) and [Disable and enable service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-disable-enable): `gcloud iam service-accounts keys disable KEY_ID --iam-account`, `gcloud iam service-accounts disable`, disabling is reversible, a disabled key does not revoke issued tokens, checked 2026-10-20 (search excerpts).
 - [`update-oidc` reference](https://docs.cloud.google.com/sdk/gcloud/reference/iam/workload-identity-pools/providers/update-oidc) and [Manage workload identity pools and providers](https://docs.cloud.google.com/iam/docs/manage-workload-identity-pools-providers): the `--disabled` flag, a disabled provider cannot exchange tokens, existing tokens still grant access, checked 2026-10-20 (search excerpts).
 - [Mitigate security incidents (GKE)](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/security-mitigations): that GKE has incident guidance and that Kubernetes audit logs support investigation, checked 2026-10-20 (search excerpt only; its steps were not read in full).
+- [GKE audit policy](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/audit-policy): get, list and updateStatus requests are Data Access events, create, update and delete are Admin Activity, Data Access logs must be enabled explicitly, checked 2026-10-20 (search excerpt).
 - [GKE audit logging information](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/audit-logging): `k8s_cluster` resource type, `k8s.io` service name, `io.k8s.core.v1.pods.exec` method name, Admin Activity cannot be disabled, checked 2026-10-20 (search excerpt).
 - [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit) and [Configure log buckets](https://docs.cloud.google.com/logging/docs/buckets): Data Access logs off by default except BigQuery, Admin Activity always written, `_Required` 400 days not configurable, `_Default` 30 days configurable 1 to 3650 days, checked 2026-10-20 (search excerpts).
 - [gcloud compute disks snapshot](https://cloud.google.com/sdk/gcloud/reference/compute/disks/snapshot): `--snapshot-names`, `--storage-location`, `--description`, checked 2026-10-20 (search excerpt). The 63-character name limit was not confirmed.
@@ -447,9 +448,9 @@ Corrections made on 2026-10-20: the manifest command was replaced by a rerun-saf
 - Whether the boot disk of a GKE node is deleted with the node by default (assumed yes, snapshot first).
 - Whether a deny-priority policy (Calico `GlobalNetworkPolicy` or Cilium deny) is available on GKE Dataplane V2 for your cluster.
 - The `cluster-autoscaler.kubernetes.io/scale-down-disabled` annotation against GKE documentation (only third-party and other-provider pages were found).
-- The flag to re-enable a disabled federation provider, `gcloud storage cp --recursive`, `service-accounts get-iam-policy`, the `--managed-by=user` filter, `--freshness` and `--order` on `gcloud logging read`, and auto-upgrade options; check `--help`.
+- The flag to re-enable a disabled federation provider and auto-upgrade options; check `--help`. `gcloud storage cp --recursive`, `service-accounts get-iam-policy`, `service-accounts keys list --managed-by` and `--freshness` and `--order` on `gcloud logging read` were found in the installed `gcloud` 570.0.0 help on 2026-10-20 (help text only, none of them was run).
 - The 63-character snapshot name limit, and whether a snapshot of a Container-Optimized OS node disk holds the evidence you need.
-- Kubernetes audit method names other than `pods.exec`, and which GKE Data Access logs exist for `secrets.get`.
+- Kubernetes audit method names other than `pods.exec`.
 - The full steps of the GKE "Mitigate security incidents" page, the current revision of NIST SP 800-61, and notification deadlines, which are not stated in this note.
 - That snapshots capture disk but not memory, and the rebuild-versus-clean criteria, which are judgement and not vendor statements.
 - The `date -u -v-15M` form on macOS was not run.
@@ -457,7 +458,7 @@ Corrections made on 2026-10-20: the manifest command was replaced by a rerun-saf
 
 ### Environment
 
-`gcloud` with the `iam`, `compute`, `container`, `logging` and `storage` groups, `kubectl` with cluster-admin or a break-glass role, a GKE cluster with NetworkPolicy enforcement (Dataplane V2 or Calico), `sha256sum` (GNU coreutils; macOS has `shasum -a 256`), GNU `date` for the validation query, and a forensic bucket in a separate project. The helper checks ran on Linux 6.18.44 with GNU bash 5.2.21, sha256sum (GNU coreutils) 9.4, OpenSSL 3.0.13, GNU tar 1.35, gzip 1.12 and Python 3.13.16.
+`gcloud` with the `iam`, `compute`, `container`, `logging` and `storage` groups, `kubectl` with cluster-admin or a break-glass role, a GKE cluster with NetworkPolicy enforcement (Dataplane V2 or Calico), `sha256sum` (GNU coreutils; macOS has `shasum -a 256`), GNU `date` for the validation query, and a forensic bucket in a separate project. The helper checks ran on Linux 6.18.44 with GNU bash 5.2.21, sha256sum (GNU coreutils) 9.4 only.
 
 ### Prerequisites
 
@@ -477,36 +478,79 @@ See the Rollback and reversibility section, which now lists the re-enable comman
 
 ### Lab run
 
-A helper check only; it does not raise the evidence level. No cluster, cloud project or network was touched. Host: Linux 6.18.44. `openssl version` printed `OpenSSL 3.0.13 30 Jan 2024 (Library: OpenSSL 3.0.13 30 Jan 2024)`; `sha256sum` is GNU coreutils 9.4; `tar` is GNU tar 1.35; `gzip` is 1.12. Run 2026-10-20 in a fresh temporary directory, deleted afterwards, with three fake files (`pod.yaml`, `pod-logs.txt`, `iam-policy.json`).
+A helper check only; it does not raise the evidence level. No cluster, cloud project or network was touched. Host: Linux 6.18.44. `bash --version | head -1` printed `GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)`; `sha256sum --version | head -1` printed `sha256sum (GNU coreutils) 9.4`. Run 2026-10-20 in a fresh directory with three fake files (`pod.yaml`, `pod-logs.txt`, `iam-policy.json`); the commands and their output are shown in full. The earlier tar and gzip round trip and the `openssl dgst` comparison were dropped because nothing in the note depends on them.
 
-```bash
+```bash title="run.sh"
+set -u
+mkdir incident && cd incident
+printf 'kind: Pod\n' > pod.yaml
+printf 'line one\nline two\n' > pod-logs.txt
+printf '{"bindings":[]}\n' > iam-policy.json
+
+echo "== 1. first run of the original command, then check"
 sha256sum ./* > SHA256SUMS
-cp -a incident incident-copy && cd incident-copy
 sha256sum -c SHA256SUMS ; echo "exit=$?"
+
+echo "== 2. one appended byte"
 printf 'X' >> pod-logs.txt
 sha256sum -c SHA256SUMS ; echo "exit=$?"
-# rerun of the original command, and with a subdirectory
-sha256sum ./* > SHA256SUMS2
-mkdir sub && sha256sum ./*
-# replacement form, run twice, with a nested file
+
+echo "== 3. rerun of the original command overwriting SHA256SUMS, then check"
+sha256sum ./* > SHA256SUMS
+cat SHA256SUMS
+sha256sum -c SHA256SUMS ; echo "exit=$?"
+
+echo "== 4. original command with a subdirectory present"
+mkdir sub && printf 'nested\n' > sub/n.txt
+sha256sum ./* ; echo "exit=$?"
+
+echo "== 5. find form, run twice, with the nested file"
 find . -type f ! -name SHA256SUMS -exec sha256sum {} + | sort -k2 > SHA256SUMS
-tar -cf - incident | gzip -n > incident.tar.gz && tar -xzf incident.tar.gz -C x
+find . -type f ! -name SHA256SUMS -exec sha256sum {} + | sort -k2 > SHA256SUMS
+cat SHA256SUMS
+sha256sum -c SHA256SUMS ; echo "exit=$?"
 ```
 
 ```text
+== 1. first run of the original command, then check
 ./iam-policy.json: OK
 ./pod-logs.txt: OK
 ./pod.yaml: OK
 exit=0
+== 2. one appended byte
 ./iam-policy.json: OK
 ./pod-logs.txt: FAILED
 ./pod.yaml: OK
 sha256sum: WARNING: 1 computed checksum did NOT match
 exit=1
-(original command rerun) the list now contains ./SHA256SUMS itself
-(with a subdirectory) sha256sum: ./sub: Is a directory   exit=1
-(find form, rerun, nested file) every line OK, exit=0
-(tar and gzip round trip) extracted SHA256SUMS: all OK, incident.tar.gz: OK
+== 3. rerun of the original command overwriting SHA256SUMS, then check
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  ./SHA256SUMS
+1f51e4788006399226c3845bd451e18e3fd5df0cc0893a1530581ee1059b674f  ./iam-policy.json
+6968229afbe7188f7258a3760e52bf3328549d86e6ad0caea691567e4a3fd7a8  ./pod-logs.txt
+af0e5d10555f1d22187ec68b0d9945d404e48ef4fd0ab333f0d6e7cd4c0db89b  ./pod.yaml
+./SHA256SUMS: FAILED
+./iam-policy.json: OK
+./pod-logs.txt: OK
+./pod.yaml: OK
+sha256sum: WARNING: 1 computed checksum did NOT match
+exit=1
+== 4. original command with a subdirectory present
+8addb9397028d552ed498b2140288360f9319b6ccb62eb050bbf32b7a4abd356  ./SHA256SUMS
+1f51e4788006399226c3845bd451e18e3fd5df0cc0893a1530581ee1059b674f  ./iam-policy.json
+6968229afbe7188f7258a3760e52bf3328549d86e6ad0caea691567e4a3fd7a8  ./pod-logs.txt
+af0e5d10555f1d22187ec68b0d9945d404e48ef4fd0ab333f0d6e7cd4c0db89b  ./pod.yaml
+sha256sum: ./sub: Is a directory
+exit=1
+== 5. find form, run twice, with the nested file
+1f51e4788006399226c3845bd451e18e3fd5df0cc0893a1530581ee1059b674f  ./iam-policy.json
+6968229afbe7188f7258a3760e52bf3328549d86e6ad0caea691567e4a3fd7a8  ./pod-logs.txt
+af0e5d10555f1d22187ec68b0d9945d404e48ef4fd0ab333f0d6e7cd4c0db89b  ./pod.yaml
+370a8c04b8a65bb4494275eec227f1b694db04c76da6b0b8ae88ed1ab19790a3  ./sub/n.txt
+./iam-policy.json: OK
+./pod-logs.txt: OK
+./pod.yaml: OK
+./sub/n.txt: OK
+exit=0
 ```
 
-This shows the manifest and check logic, including that one appended byte is detected. It does not show that the Google Cloud or Kubernetes steps work. `openssl dgst -sha256 pod.yaml` gave the same hash as `sha256sum` for that file (`7390dceb...84cf2`).
+This shows the manifest and check logic: one appended byte is detected (step 2); the original command, rerun over an existing `SHA256SUMS`, hashes the freshly truncated, empty file and the check then fails on `./SHA256SUMS` (step 3); with a subdirectory it prints an error, still hashes the other files and exits 1 (step 4); the `find` form is rerun-safe and includes nested files (step 5). It does not show that the Google Cloud or Kubernetes steps work.

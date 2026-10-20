@@ -174,7 +174,7 @@ gcloud secrets update payments-db-password --project=example-prod \
 The flags `--add-topics`, `--next-rotation-time` and `--rotation-period` appear in `gcloud secrets update --help` for Google Cloud SDK 570.0.0. Alternatively, Cloud Scheduler can trigger a rotation job directly. Whichever you use:
 
 - Make the job idempotent: running it twice must not create two new passwords and lose one.
-- Give it its own service account with `secretmanager.secretVersionAdder` on the one secret (it carries `secretmanager.versions.add` and `secretmanager.secrets.rotate`, not read access) and only the rights it needs on the target.
+- Give it its own service account with `secretmanager.secretVersionAdder` on the one secret (it carries `secretmanager.versions.add` only, not read access; a job that must read the previous version also needs `secretmanager.versions.access`) and only the rights it needs on the target.
 - Alert when the rotation job fails or when a secret is older than its rotation period.
 
 ## Database users
@@ -280,7 +280,7 @@ After the disable, watch error rates and the readiness of every consumer for at 
 
 - **Before disabling.** Nothing to roll back; both credentials work. Stop the rollout and fix the consumer.
 - **After disabling.** `gcloud secrets versions enable OLD`, force a sync on the ExternalSecret, restart consumers. This works only if the old credential still exists in the target. Therefore **disable the Secret Manager version first, wait, revoke at the target later, destroy the version last**.
-- **After destroying.** No rollback. Destroy is irreversible, so keep the destroy step separate and late. Secret Manager can add the delay for you: set `--version-destroy-ttl` on the secret (the docs give 1 to 1000 days, and only a Secret Manager Admin can set it). Destroying a version then disables it and schedules the destruction, and enabling or disabling the version during the delay cancels it. The delay does not apply if the whole secret is deleted or expires.
+- **After destroying.** No rollback. Destroy is irreversible, so keep the destroy step separate and late. Secret Manager can add the delay for you: set `--version-destroy-ttl` on the secret (check the docs for the allowed range and the role needed to set it). Destroying a version then disables it and schedules the destruction, and enabling or disabling the version during the delay cancels it. The delay does not apply if the whole secret is deleted or expires.
 
 - **Bad new credential.** Re-pin the ExternalSecret to the previous version number in Git and let GitOps apply it.
 
@@ -316,7 +316,7 @@ Source-reviewed on 2026-10-20. Only helper steps were run, in a disposable lab. 
 Each bullet gives the page, the claims it backs and the check date.
 
 - [Secret Manager best practices](https://docs.cloud.google.com/secret-manager/docs/best-practices): reference versions by number rather than `latest`; enable Data Access logs to capture `AccessSecretVersion`. Checked 2026-10-20.
-- [Delay destruction of secret versions](https://docs.cloud.google.com/secret-manager/docs/delay-destruction-of-secret-versions): destroy is immediate and permanent by default; delay of 1 to 1000 days set by a Secret Manager Admin; destroy then disables and schedules destruction; enabling or disabling cancels it; not applied on secret deletion or expiry. Checked 2026-10-20.
+- [Delay destruction of secret versions](https://docs.cloud.google.com/secret-manager/docs/delay-destruction-of-secret-versions): destroy is immediate and permanent by default; the delay is set with `--version-destroy-ttl` (the allowed range and the role needed to set it were not confirmed); destroy then disables and schedules destruction; enabling or disabling cancels it; not applied on secret deletion or expiry. Checked 2026-10-20.
 - [Disable a secret version](https://cloud.google.com/secret-manager/docs/disable-secret-version) and [Destroy a secret version](https://cloud.google.com/secret-manager/docs/destroy-secret-version): disabled versions cannot be accessed but can be enabled again; destroyed versions cannot. Checked 2026-10-20. The `gcloud secrets versions add|access|disable|enable|destroy|list` and `gcloud secrets update` synopses, `--data-file=-` and `--version-destroy-ttl` were also read from the installed `gcloud` 570.0.0 help.
 - [Create rotation schedules](https://docs.cloud.google.com/secret-manager/docs/secret-rotation) and [About rotation schedules](https://docs.cloud.google.com/secret-manager/docs/rotation-recommendations): `SECRET_ROTATE` notification to Pub/Sub, subscriber required, one-hour minimum period, five-minute minimum lead, retries for seven days. Checked 2026-10-20.
 - [Secret Manager roles and permissions](https://docs.cloud.google.com/iam/docs/roles-permissions/secretmanager): `secretmanager.secretVersionAdder` permissions. Checked 2026-10-20.
@@ -328,6 +328,8 @@ Each bullet gives the page, the claims it backs and the check date.
 
 ### Not verified
 
+- The allowed range of `--version-destroy-ttl` and which role may set it: the pages reached and the installed gcloud help do not give them.
+- The exact permission list of `roles/secretmanager.secretVersionAdder`: it was read through search excerpts of the IAM roles page, which show `secretmanager.versions.add` as its Secret Manager permission.
 - Direct page fetches of `docs.cloud.google.com` were blocked in the review environment. The claims above were checked against search results that summarise the official pages, plus the installed `gcloud` help. Re-read the linked pages before relying on exact wording.
 - Whether the External Secrets Google provider honours `remoteRef.version` and `property` as the example assumes; their Google provider page shows only `key`. The example is kept but flagged in the text.
 - How `latest` behaves when the latest version is disabled or destroyed; the docs reached say only that it names the newest version.

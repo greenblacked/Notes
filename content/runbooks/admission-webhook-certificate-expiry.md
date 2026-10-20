@@ -35,7 +35,7 @@ Ordinary ingress or load balancer certificates belong in [[tls-certificate-renew
 
 ## Preconditions
 
-- Cluster-admin or an equivalent role, with a working kubeconfig. Admission webhooks act on requests that create, update or delete objects, not on reads, so you can still list and read objects. Editing the webhook configuration objects should normally work, but do not assume it: a webhook whose rules match `validatingwebhookconfigurations` or `mutatingwebhookconfigurations` can block those edits too. The Kubernetes page checked does not state a guarantee either way.
+- Cluster-admin or an equivalent role, with a working kubeconfig. Admission webhooks act on requests that create, update or delete objects, not on reads, so you can still list and read objects. Editing the webhook configuration objects is not blocked by a webhook: the `rules` field documentation of the `admissionregistration.k8s.io/v1` API says admission webhooks are never called on requests for `ValidatingWebhookConfiguration` and `MutatingWebhookConfiguration` objects. RBAC still applies, so you need permission to edit them.
 - Knowing whether the certificate is managed by cert-manager, by the webhook's own operator (many policy engines and operators generate their own), or by hand.
 - Awareness that this may be a security control. Bypassing it, even briefly, has a security impact that must be recorded.
 
@@ -53,7 +53,7 @@ WEBHOOK_CFG=example-validating-webhook  # name of the ValidatingWebhookConfigura
 kubectl get validatingwebhookconfigurations,mutatingwebhookconfigurations
 ```
 
-If the API server returns the same error for all writes, you will not be able to create new objects, but you can still read the webhook configurations, and usually edit them.
+If the API server returns the same error for all writes, you will not be able to create new objects, but you can still read the webhook configurations and edit them.
 
 ### 2. Find the failing webhook
 
@@ -153,7 +153,7 @@ Repeat for every webhook entry that is failing (the index changes).
    Policy engines may rewrite their own webhook configurations (a controller reconciles `failurePolicy` back). Check the engine's documentation and [[gatekeeper-vs-kyverno]] for which behaviours apply, and use the engine's own supported switch where one exists. Gatekeeper's documentation says its validating webhook defaults to `failurePolicy: Ignore` (so an unreachable Gatekeeper normally does not block writes), and its emergency recovery is to delete the validating webhook configuration, by default named `gatekeeper-validating-webhook-configuration`; redeploying that configuration re-enables Gatekeeper. That removes all Gatekeeper admission checks, so it is the same break-glass with the same time limit. For Kyverno and other engines, find the documented procedure for your version; this note did not confirm one.
 
 > [!warning] A bypass disables a security control
-> While the webhook is ignored or deleted, requests that it would have rejected are admitted: policy violations, unsigned images, privileged Pods. Keep the window short, increase monitoring on the admission audit logs, and review what was created in that period after the fix. Restore from the backup (Rollback) as soon as the certificate is repaired, and do not leave the change in place overnight.
+> While the webhook is ignored or deleted, requests that it would have rejected are admitted: policy violations, unsigned images, privileged Pods. Keep the window short, increase monitoring on the admission audit logs, and review what was created in that period after the fix. Restore the bypassed fields from the backup (Rollback) as soon as the certificate is repaired, and do not leave the change in place overnight.
 
 ### 6. Prevent a recurrence
 
@@ -179,13 +179,16 @@ kubectl get validatingwebhookconfiguration "$WEBHOOK_CFG" \
 
 ## Rollback
 
-- **Restore the webhook configuration** (undo `failurePolicy: Ignore`, a changed `namespaceSelector` or a deleted configuration) from the backup file, within the time limit set in step 5:
+- **Restore the bypassed fields** (undo `failurePolicy: Ignore` or a changed `namespaceSelector`) within the time limit set in step 5. Do not re-apply the whole backup file after the certificate was fixed: it was taken during the incident, so its `clientConfig.caBundle` is the stale or expired CA, and applying it would overwrite the new bundle and make a `failurePolicy: Fail` webhook reject writes again. Read the original values from the backup and patch only those fields back (index `0` is the first webhook entry; repeat for each entry you changed):
 
 ```bash
-kubectl apply -f "webhook-$WEBHOOK_CFG-backup.yaml"
+kubectl get validatingwebhookconfiguration "$WEBHOOK_CFG" -o jsonpath='{.webhooks[0].failurePolicy}{"\n"}'   # current value
+grep -n -E 'failurePolicy|namespaceSelector' "webhook-$WEBHOOK_CFG-backup.yaml"                             # original values
+kubectl patch validatingwebhookconfiguration "$WEBHOOK_CFG" --type=json \
+  -p='[{"op":"replace","path":"/webhooks/0/failurePolicy","value":"Fail"}]'
 ```
 
-Remove server-populated fields such as `resourceVersion` from the file if the apply complains.
+Use the value the backup shows (it may not be `Fail`), and restore `namespaceSelector` the same way with a JSON patch built from the backup. If the whole configuration was deleted and must be re-created from the backup file, first replace `clientConfig.caBundle` in the file with the current CA (or remove it so the CA injector or the operator sets it), and remove server-populated fields such as `resourceVersion`, `uid` and `creationTimestamp`. After any restore, repeat the `caBundle` check from step 3 and confirm it matches the CA that signed the current serving certificate.
 
 - **Certificate renewal made things worse:** reissue from the previous known-good issuer, or restore the previous Secret from your backup, and restart the Pods.
 - **Re-enable GitOps self-heal** and confirm the application is in sync.
@@ -227,6 +230,7 @@ Source-reviewed on 2026-10-20. Only the certificate helper steps were run, in a 
 Each bullet gives the page, the claims it backs and the check date. The documentation sites could not be fetched directly from the review environment, so the claims were checked against the source files of the official documentation repositories; re-read the linked pages before relying on exact wording.
 
 - [Kubernetes: dynamic admission control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/) (read from `kubernetes/website`): `admissionregistration.k8s.io/v1` `failurePolicy` values `Ignore` and `Fail` with default `Fail`; which errors the policy applies to and that an explicit rejection always denies; `timeoutSeconds` default 10 and range 1 to 30, a timeout handled by the failure policy; `matchPolicy` default `Equivalent`; `sideEffects` values `None` and `NoneOnDryRun`, and dry-run behaviour; `namespaceSelector` has no effect on cluster-scoped resources other than Namespaces; `clientConfig.caBundle` is a PEM-encoded CA bundle, base64 encoded; the service certificate must be valid for `<svc>.<ns>.svc`; `clientConfig.url` without `caBundle` uses system trust roots; virtual review resources are excluded from webhooks. Checked 2026-10-20.
+- [Kubernetes API reference: ValidatingWebhookConfiguration v1](https://kubernetes.io/docs/reference/kubernetes-api/extend-resources/validating-webhook-configuration-v1/) and the `rules` field comment in [`k8s.io/api` `admissionregistration/v1/types.go`](https://github.com/kubernetes/api/blob/master/admissionregistration/v1/types.go): admission webhooks are never called on requests for webhook configuration objects. Checked 2026-10-20 (the source file was read; the reference page was not fetched).
 - [cert-manager: CA injector](https://cert-manager.io/docs/concepts/ca-injector/) (read from `cert-manager/website`): annotations `cert-manager.io/inject-ca-from` (value `<namespace>/<certificate>`), `cert-manager.io/inject-ca-from-secret`, `cert-manager.io/inject-apiserver-ca`, and `cert-manager.io/allow-direct-injection: "true"` on a source Secret; works for validating and mutating webhook configurations. Checked 2026-10-20.
 - [cert-manager: Certificate resources](https://cert-manager.io/docs/usage/certificate/) and [cmctl](https://cert-manager.io/docs/reference/cmctl/): `cmctl renew <name> --namespace <ns>` triggers a reissue; the CLI now lives in its own repository. Checked 2026-10-20.
 - Gatekeeper documentation, "Failing Closed" and "Emergency Recovery" (read as `website/docs/failing-closed.md` and `website/docs/emergency.md` in the `open-policy-agent/gatekeeper` repository; the published page URLs were not fetched): default `failurePolicy: Ignore`, the `admission.gatekeeper.sh/ignore` namespace label, the default configuration name `gatekeeper-validating-webhook-configuration`, delete it to disable and redeploy it to re-enable, and the caution that exempting `kube-system` is only a starting point. Checked 2026-10-20.
@@ -235,7 +239,6 @@ Each bullet gives the page, the claims it backs and the check date. The document
 ### Not verified
 
 - Any `kubectl`, `cmctl`, cert-manager, Argo CD, Helm or cluster behaviour: how the API server reports a handshake failure in a real cluster, the exact error strings in When to use, and that a webhook Pod deadlock resolves as described. No cluster was available.
-- That the API server never calls webhooks for webhook configuration objects: the page checked does not say so, so the note no longer claims it.
 - Kyverno, cert-manager's own webhook and any operator-specific certificate rotation or recovery procedure; only Gatekeeper's was read.
 - How a policy engine reconciles `failurePolicy` back, and Argo CD self-heal and sync settings (see [[argocd-sync-failure-and-drift]]).
 - The `kubectl patch` JSON path index and the `grep` filter on live output, the `--dry-run=server` validation commands, and the `registry.k8s.io/pause` image reference.
@@ -260,7 +263,7 @@ See Troubleshooting. Stop and escalate if: the webhook configuration cannot be e
 
 ### Cleanup and rollback
 
-The restore is the backup file: `kubectl apply -f "webhook-$WEBHOOK_CFG-backup.yaml"` puts back `failurePolicy`, selectors, or a deleted webhook configuration (a deleted Gatekeeper configuration can also be redeployed from its manifest or chart). Re-enable GitOps self-heal, confirm the application is in sync, then delete the backup and any private key copies. If the restored webhook fails again, the certificate is still wrong; repeat step 4 rather than leaving the bypass. The lab used only a temporary directory, removed by the script.
+The backup file holds the original `failurePolicy` and selectors: patch those fields back as described in Rollback, rather than re-applying the whole file, because its `caBundle` is the stale one from the incident. A deleted configuration is re-created from the file only after its `caBundle` is replaced (a deleted Gatekeeper configuration can also be redeployed from its manifest or chart). Re-enable GitOps self-heal, confirm the application is in sync, then delete the backup and any private key copies. If the restored webhook fails again, suspect first a stale `caBundle` (for example one restored from the backup), then the serving certificate; fix it with step 4 rather than leaving the bypass. The lab used only a temporary directory, removed by the script.
 
 ### Lab run
 

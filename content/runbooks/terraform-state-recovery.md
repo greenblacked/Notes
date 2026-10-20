@@ -34,7 +34,7 @@ Terraform state is the mapping between your code and real resources. When it is 
 
 ## Preconditions
 
-- Access to the bucket (`roles/storage.objectAdmin` on the state bucket, or equivalent) and to the resources.
+- Access to the bucket and to the resources. `roles/storage.objectAdmin` covers the object steps (read, copy, delete state objects) only. Enabling versioning needs `storage.buckets.update` (Google's Object Versioning page names the Storage Admin role, `roles/storage.admin`, on the bucket or project) and `buckets describe` needs `storage.buckets.get`; confirm the role on the IAM roles page before relying on it.
 - Nobody else is running `apply` for this state: ask in the team channel and check CI pipelines first.
 - Object versioning is enabled on the state bucket. If not, enable it now: it is the safety net for everything below.
 
@@ -87,7 +87,7 @@ terraform force-unlock -force LOCK_ID   # skips the prompt; use only in a script
 > [!danger] Do not unlock a live run
 > Two concurrent writers can corrupt state. Forced unlock does not stop a running process; it only removes the lock. Use it for your own stuck lock after the normal unlock failed, and only once you know why the lock is stuck. Recovery if you unlocked too early: restore the step 0 backup object (step 2) and re-run once.
 
-If `force-unlock` fails, delete the lock object (`gcloud storage rm "gs://$BUCKET/$PREFIX/default.tflock"`) only after confirming the lock info matches the dead run, and after listing the exact object name with `gcloud storage ls`. Then run `terraform plan` to be sure the state is readable. In CI, set `-lock-timeout=5m` (or similar) on `plan` and `apply` so a short overlap waits for the lock instead of failing; `-lock=false` is documented as dangerous if others might run commands against the same workspace, so do not use it here.
+If `force-unlock` fails, delete the lock object (`gcloud storage rm "gs://$BUCKET/$PREFIX/default.tflock"`) only after confirming the lock info matches the dead run, and after listing the exact object name with `gcloud storage ls`. Then run `terraform plan` to be sure the state is readable. In CI, set `-lock-timeout=5m` (or similar) on `plan` and `apply` so a short overlap waits for the lock instead of failing (the `apply` page documents `-lock-timeout` with a default of `0s`; check `terraform plan -help` for your version); `-lock=false` is documented as dangerous if others might run commands against the same workspace, so do not use it here.
 
 ### 2. Corrupted or lost state
 
@@ -144,7 +144,7 @@ terraform state mv google_compute_instance.web google_compute_instance.app
 terraform plan   # must show no changes for the moved resource
 ```
 
-To move into a different state, HashiCorp documents `-state` (source) and `-state-out` (destination) as legacy options for local state files, and a pull/push approach for remote state that it says carries some risk of corrupting remote state. Back up both states first, and check `terraform state mv -help` for your version; a `-dry-run` option for `state mv` was not confirmed in the docs, so do not rely on it.
+To move into a different state, HashiCorp documents `-state` (source) and `-state-out` (destination) as legacy options for local state files, and a pull/push approach for remote state that it says carries some risk of corrupting remote state. Back up both states first, and check `terraform state mv -help` for your version; recent versions of the `state mv` page document `-dry-run` (it reports the resource instances that match the source address without moving them), so preview with `terraform state mv -dry-run SRC DST` first. The 1.8 and 1.9 pages seen in search results did not list it, so check `terraform state mv -help` for your version.
 
 ### 4. Import existing resources
 
@@ -230,7 +230,7 @@ After `terraform init -upgrade`, `plan` may show many changes or errors from cha
 terraform validate
 terraform plan -detailed-exitcode ; echo "exit=$?"   # 0 = clean, 2 = changes, 1 = error
 terraform state list | wc -l                            # compare with the backup resource count
-terraform state pull | jq '.serial'                     # higher than the recorded serial
+terraform state pull | jq '.serial'                     # unchanged after an unlock; the restored generation's serial after a restore; higher after state mv/rm/import
 ```
 
 A recovery is finished only when `plan` is clean (or shows only changes you understand), the lock object is gone, and a normal pipeline run succeeds.
@@ -264,29 +264,30 @@ If recovery touched production infrastructure, record it in the change log and f
 - [removed block](https://developer.hashicorp.com/terraform/language/block/removed) and [Remove a resource from state](https://developer.hashicorp.com/terraform/language/state/remove): Terraform 1.7 and later, `lifecycle { destroy = false }`, destroy is the default without it, checked 2026-10-20 (search excerpts).
 - [Refactor Terraform state](https://developer.hashicorp.com/terraform/language/state/refactor): `moved` blocks need Terraform 1.1 and later; `-state` and `-state-out` are legacy options; pull/push between remote states carries some risk, checked 2026-10-20 (search excerpt).
 - [Upgrade and refactor modules](https://developer.hashicorp.com/validated-patterns/terraform/upgrade-and-refactor-terraform-modules): import blocks need Terraform 1.5.0 and later, checked 2026-10-20 (search excerpt).
+- [terraform state mv](https://developer.hashicorp.com/terraform/cli/v1.15.x/commands/state/mv): `-dry-run` and `-lock-timeout=DURATION`, checked 2026-10-20 (search excerpt). [terraform apply](https://developer.hashicorp.com/terraform/cli/commands/apply): `-lock-timeout` default `0s` and `-refresh-only`, checked 2026-10-20 (search excerpt of a mirror).
 - [terraform plan](https://developer.hashicorp.com/terraform/cli/commands/plan) and [Generating configuration](https://developer.hashicorp.com/terraform/language/import/generating-configuration): `-detailed-exitcode` (0, 1, 2), `-generate-config-out` is experimental and needs a new file path, checked 2026-10-20 (search excerpts).
 - [Recover state from backup](https://developer.hashicorp.com/terraform/cli/state/recover) and [Backends](https://developer.hashicorp.com/terraform/language/state/backends): pull and push as the recovery path, do not unlock until you know the cause, checked 2026-10-20 (search excerpts).
 - [Use versioned objects](https://docs.cloud.google.com/storage/docs/using-versioned-objects) and [Use Object Versioning](https://docs.cloud.google.com/storage/docs/using-object-versioning): `gcloud storage ls --all-versions`, `OBJECT#GENERATION`, restoring by `gcloud storage cp`, the overwritten live version becomes noncurrent, `gcloud storage buckets update --[no-]versioning`, checked 2026-10-20 (search excerpts).
-- [Dependency lock file tutorial](https://developer.hashicorp.com/terraform/tutorials/configuration-language/test): `terraform init -upgrade` updates `.terraform.lock.hcl`; commit the file, checked 2026-10-20 (search excerpt).
+- [Lock and upgrade provider versions](https://developer.hashicorp.com/terraform/tutorials/cli/provider-versioning): `terraform init -upgrade` upgrades providers to the latest version within the constraints; commit `.terraform.lock.hcl` and do not edit it by hand, checked 2026-10-20 (search excerpt).
 
 Corrections made on 2026-10-20: the `state push` rule now says lineage mismatch or a higher remote serial (the old rollback text said the push needed an equal or higher serial, which would make restoring a backup after `state mv/rm/import` fail without `-force`; the rollback now says so and prefers copying the backup object); the lock object name is hedged because the GCS backend page does not describe it; `terraform init -upgrade=false -reconfigure` was replaced by plain `terraform init` with the reverted lock file; `-backup` is described as a legacy local-state option; `state rm -dry-run` and a `removed` example were added; the `moved` (1.1), `import` (1.5) and `removed` (1.7) versions are stated where the docs gave them; error message strings are no longer quoted verbatim; danger callouts were added at force-unlock, restore-over-current and `state rm`.
 
 ### Not verified
 
-- Whether `terraform state mv` has a `-dry-run` option (not found in the docs; the note says not to rely on it).
+- Whether `terraform state mv -dry-run` exists in the Terraform version you run: recent doc versions list it, the 1.8 and 1.9 pages seen did not (search excerpts).
 - The name and format of the GCS lock object (`default.tflock`) and the exact wording of the lock and 412 errors; the docs pages checked do not describe them.
-- `terraform plan -refresh-only`, `terraform apply -refresh-only` and `-lock-timeout` on `plan` and `apply`: the excerpts found did not cover them (`-lock-timeout` was seen only on the `state rm` page).
+- `-lock-timeout` on `plan`: its default of `0s` was seen on the `apply` page only, through a third-party mirror of the docs. `plan -refresh-only` and `apply -refresh-only` are documented (the plan page says refresh-only needs Terraform 0.15.4 or later), seen through search excerpts and mirrors, not the official pages.
 - That a state written by a newer provider schema cannot be read by an older provider, and the exact "newer Terraform version" error text.
 - The behaviour of the commands on OpenTofu, and on HCP Terraform or other backends.
 - The documentation pages were reached through search excerpts only, because the lab could not fetch the Terraform pages; nothing was run against Terraform, GCS or a real state.
 
 ### Environment
 
-Terraform CLI 1.7 or later for `removed` blocks, 1.5 or later for `import` blocks, 1.1 or later for `moved` blocks; the GCS backend; the Google Cloud CLI with `gcloud storage`; `jq`; bash or zsh. The helper checks ran on Linux 6.18.44 with GNU bash 5.2.21, sha256sum (GNU coreutils) 9.4, jq-1.7 and Python 3.13.16. The Terraform binary was not installed there.
+Terraform CLI 1.7 or later for `removed` blocks, 1.5 or later for `import` blocks, 1.1 or later for `moved` blocks; the GCS backend; the Google Cloud CLI with `gcloud storage`; `jq`; bash or zsh. The helper checks ran on Linux 6.18.44 with GNU bash 5.2.21, sha256sum (GNU coreutils) 9.4, Python 3.13.16 (the lab used Python, not jq). The Terraform binary was not installed there.
 
 ### Prerequisites
 
-Object versioning enabled on the state bucket, `roles/storage.objectAdmin` (or equivalent) on it, confirmation that no pipeline or person is running `apply` for this state, a local `$BACKUP_DIR` with restricted permissions, and the pulled and copied backups from step 0.
+Object versioning enabled on the state bucket, `roles/storage.objectAdmin` (or equivalent) for the object steps plus a role with `storage.buckets.update` if versioning must be enabled, confirmation that no pipeline or person is running `apply` for this state, a local `$BACKUP_DIR` with restricted permissions, and the pulled and copied backups from step 0.
 
 ### Expected results
 
@@ -302,27 +303,71 @@ See the Rollback section. In short: copy the `backup-$STAMP` object back over th
 
 ### Lab run
 
-A helper check only; it does not raise the evidence level and no Terraform binary was involved. Host: Linux 6.18.44, no network. `bash --version | head -1` printed `GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)`; `sha256sum --version | head -1` printed `sha256sum (GNU coreutils) 9.4`; `jq --version` printed `jq-1.7`; `python3 --version` printed `Python 3.13.16`; `which terraform` found nothing. Run 2026-10-20 in a fresh temporary directory, deleted afterwards. A fixture state (version 4, serial 7, a made-up lineage, no resources) stood in for `terraform state pull`, so the copy was a plain `cp`; the change was a `jq` edit that raised the serial and added a resource.
+A helper check only; it does not raise the evidence level and no Terraform binary was involved. Host: Linux 6.18.44-fc-v139, no network. `bash --version | head -1` printed `GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)`; `sha256sum --version | head -1` printed `sha256sum (GNU coreutils) 9.4`; `python3 --version` printed `Python 3.13.16`; `which terraform` found nothing. Run 2026-10-20 in a fresh directory. A fixture state (version 4, serial 7, a made-up lineage, no resources) stood in for `terraform state pull`, so the copy was a plain `cp`. Three small standard-library Python scripts do the JSON work (run as `python3 -I`).
 
-```bash
+`edit.py` simulates the change (serial plus one, one extra resource), `summ.py` prints serial, lineage and resource count, and `cmp.py` applies the two documented push checks (lineage differs, remote serial higher) to fixture files:
+
+```python title="edit.py"
+import json, sys
+# usage: edit.py FILE  -> raises serial by 1 and adds one resource, in place
+p = sys.argv[1]
+s = json.load(open(p))
+s["serial"] += 1
+s["resources"].append({"mode": "managed", "type": "google_storage_bucket", "name": "assets", "provider": "x", "instances": []})
+json.dump(s, open(p, "w"), indent=2)
+```
+
+```python title="summ.py"
+import json, sys
+s = json.load(open(sys.argv[1]))
+print(json.dumps([s["serial"], s["lineage"], len(s["resources"])], separators=(",", ":")))
+```
+
+```python title="cmp.py"
+import json, sys
+# usage: cmp.py REMOTE LOCAL...  -> applies the two documented push checks to fixtures
+remote = json.load(open(sys.argv[1]))
+for path in sys.argv[2:]:
+    local = json.load(open(path))
+    reasons = []
+    if local["lineage"] != remote["lineage"]:
+        reasons.append("lineage differs")
+    if remote["serial"] > local["serial"]:
+        reasons.append(f"remote serial {remote['serial']} > local serial {local['serial']}")
+    print(path, "->", ("would be refused without -force: " + "; ".join(reasons)) if reasons else "would be accepted")
+```
+
+```bash title="run.sh"
+set -eu
+STAMP=20261020T120000Z
+mkdir state-backups
+printf '{"version":4,"terraform_version":"1.9.0","serial":7,"lineage":"3f1c9a52-aaaa-4bbb-8ccc-0123456789ab","outputs":{},"resources":[]}\n' > live.tfstate
 cp live.tfstate state-backups/pre-change-$STAMP.tfstate
-jq -c '[.serial, .lineage, (.resources | length)]' state-backups/pre-change-$STAMP.tfstate
+python3 -I summ.py state-backups/pre-change-$STAMP.tfstate
 sha256sum live.tfstate state-backups/pre-change-$STAMP.tfstate
-# simulated change: serial + 1 and one resource
-jq '.serial += 1 | .resources += [{"mode":"managed","type":"google_storage_bucket","name":"assets","provider":"x","instances":[]}]' live.tfstate > tmp && mv tmp live.tfstate
+python3 -I edit.py live.tfstate
+echo "after change:"; python3 -I summ.py live.tfstate; sha256sum live.tfstate
+cp live.tfstate remote.tfstate
 cp state-backups/pre-change-$STAMP.tfstate live.tfstate
+echo "after restore:"; python3 -I summ.py live.tfstate; sha256sum live.tfstate
 cmp live.tfstate state-backups/pre-change-$STAMP.tfstate && echo IDENTICAL
-python3 -I cmp.py remote.tfstate backup.tfstate otherlineage.tfstate
+sed 's/3f1c9a52/00000000/' live.tfstate > otherlineage.tfstate
+python3 -I cmp.py remote.tfstate live.tfstate otherlineage.tfstate
 ```
 
 ```text
 [7,"3f1c9a52-aaaa-4bbb-8ccc-0123456789ab",0]
-75f98710...6773  live.tfstate  (same hash for the backup copy)
-after change: [8,"3f1c9a52-...",1]  hash 56e43794...96e9
-after restore: [7,"3f1c9a52-...",0]  hash 75f98710...6773 (equals the backup)
+75f98710216d17371ad7f75482da29259daa74f533b22dab6685599c5dc16773  live.tfstate
+75f98710216d17371ad7f75482da29259daa74f533b22dab6685599c5dc16773  state-backups/pre-change-20261020T120000Z.tfstate
+after change:
+[8,"3f1c9a52-aaaa-4bbb-8ccc-0123456789ab",1]
+b9ac5807ca054cb66f017ee2ae948ebd3e46f3b04869eff87f7c52ef66045577  live.tfstate
+after restore:
+[7,"3f1c9a52-aaaa-4bbb-8ccc-0123456789ab",0]
+75f98710216d17371ad7f75482da29259daa74f533b22dab6685599c5dc16773  live.tfstate
 IDENTICAL
-backup.tfstate -> would be refused without -force: remote serial 8 > local serial 7
+live.tfstate -> would be refused without -force: remote serial 8 > local serial 7
 otherlineage.tfstate -> would be refused without -force: lineage differs; remote serial 8 > local serial 7
 ```
 
-The last two lines come from a small Python script that applies the two documented push checks (lineage differs, remote serial higher) to fixture files. It illustrates why restoring a backup after a change needs `-force` or an object copy; it is not Terraform's code and proves nothing about Terraform's behaviour. No cloud or Terraform backend was touched.
+`cmp.py` is not Terraform's code and proves nothing about Terraform's behaviour; it illustrates why restoring a backup after a change needs `-force` or an object copy. No cloud or Terraform backend was touched.

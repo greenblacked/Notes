@@ -10,7 +10,7 @@ tags:
   - observability
 created: 2026-10-16
 modified: 2026-10-20
-evidence: lab-tested
+evidence: source-reviewed
 reviewed: 2026-10-20
 review-due: 2027-04-20
 destructive: true
@@ -19,8 +19,8 @@ draft: false
 
 Certificates fail quietly until the day they expire. This runbook covers finding what expires and when, forcing and debugging renewal with cert-manager, Google-managed certificates on GKE, and the alerts that stop it happening again.
 
-> [!info] Lab-tested on 2026-10-20: the `openssl` parts only
-> The `openssl` commands (outside view, expiry check, key and certificate match, chain verification, the Secret decoding pipeline) were run against a throwaway CA and local test servers. The cert-manager, GKE and `gcloud` claims were checked against official documentation and API definitions, not run. No `kubectl`, `cmctl`, cluster, Google Cloud or ACME command was run. The Evidence section at the end lists the sources, what was not verified and the lab output.
+> [!info] Source-reviewed on 2026-10-20, with the `openssl` helper checks run in a lab
+> This note is rated source-reviewed because its main procedures (cert-manager, GKE managed certificates, replacing the Secret) were not run. The `openssl` commands (outside view, expiry check, key and certificate match, chain verification, the Secret decoding pipeline) were run against a throwaway CA and local test servers. The cert-manager, GKE and `gcloud` claims were checked against official documentation and API definitions, not run. No `kubectl`, `cmctl`, cluster, Google Cloud or ACME command was run. The Evidence section at the end lists the sources, what was not verified and the lab output.
 
 > [!warning] Parts of this runbook delete or overwrite a certificate Secret
 > Deleting the Secret (step 2) or re-applying one (step 5) replaces the certificate and key the ingress serves, and the Secret backup contains the private key. Back up first, prefer `cmctl renew`, and read the Cleanup and rollback part of the Evidence section before running anything.
@@ -29,7 +29,7 @@ Certificates fail quietly until the day they expire. This runbook covers finding
 
 - A certificate has expired or will within days, or a browser or client reports a TLS error (`certificate has expired`, `unable to verify`, name mismatch).
 - cert-manager shows a Certificate that is not `Ready`, or an Order or Challenge stuck.
-- A Google-managed certificate is stuck in `Provisioning`, or a domain shows `FAILED_NOT_VISIBLE` (the spelling depends on the API, see step 4).
+- A Google-managed certificate is stuck in `Provisioning`, or a domain shows `FailedNotVisible` (`ManagedCertificate`) or `FAILED_NOT_VISIBLE` (Compute Engine API); see step 4.
 - You are setting up expiry monitoring.
 
 ## Preconditions
@@ -118,21 +118,21 @@ kubectl describe challenge -n "$NS"
 kubectl logs -n cert-manager deploy/cert-manager --tail=100
 ```
 
-| Where it fails                       | Typical cause                                                                                                                                                                                                                  |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Certificate: `Issuing`, no request   | Issuer or ClusterIssuer missing or not `Ready` (`kubectl describe clusterissuer`), wrong `issuerRef`.                                                                                                                          |
-| CertificateRequest `Denied`/`Failed` | Approval policy or issuer rejected it; read the message. Private CA issuers may need the CA Secret.                                                                                                                            |
-| Order `pending`, Challenge `pending` | The ACME check cannot succeed yet.                                                                                                                                                                                             |
-| Challenge HTTP-01 fails              | `/.well-known/acme-challenge/<token>` not reachable from the internet: ingress class wrong, a redirect to HTTPS, a NetworkPolicy or WAF blocking, wrong DNS. Test with `curl -v http://$HOST/.well-known/acme-challenge/test`. |
-| Challenge DNS-01 fails               | Missing DNS permissions (for Cloud DNS, the cert-manager service account needs DNS admin on the zone, ideally through Workload Identity, see [[gke-workload-identity]]), propagation delay, wrong zone.                        |
-| `429` / rate limited                 | Let's Encrypt limits for the domain or failed validations. Wait, or use the staging issuer while testing.                                                                                                                      |
-| Renewal never triggers               | `renewBefore` not smaller than `duration` (the docs require `duration` > `renewBefore`), or a controller that is down. Check the cert-manager pods and `status.renewalTime`.                                                   |
+| Where it fails                       | Typical cause                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Certificate: `Issuing`, no request   | Issuer or ClusterIssuer missing or not `Ready` (`kubectl describe clusterissuer`), wrong `issuerRef`.                                                                                                                                                                                                            |
+| CertificateRequest `Denied`/`Failed` | Approval policy or issuer rejected it; read the message. Private CA issuers may need the CA Secret.                                                                                                                                                                                                              |
+| Order `pending`, Challenge `pending` | The ACME check cannot succeed yet.                                                                                                                                                                                                                                                                               |
+| Challenge HTTP-01 fails              | `/.well-known/acme-challenge/<token>` not reachable from the internet: ingress class wrong, a redirect to HTTPS, a NetworkPolicy or WAF blocking, wrong DNS. Test with `curl -v http://$HOST/.well-known/acme-challenge/test`.                                                                                   |
+| Challenge DNS-01 fails               | Missing DNS permissions (for Cloud DNS, the cert-manager service account needs DNS admin on the zone, ideally through Workload Identity, see [[gke-workload-identity]]), propagation delay, wrong zone.                                                                                                          |
+| `429` / rate limited                 | Let's Encrypt limits for the domain or failed validations. Wait, or use the staging issuer while testing.                                                                                                                                                                                                        |
+| Renewal never triggers               | A `renewBefore` larger than or equal to `duration` is rejected when the Certificate is applied (`kubectl apply` fails), and one close to `duration` can cause a renewal loop (see the cert-manager docs). Otherwise the controller is down or not running. Check the cert-manager pods and `status.renewalTime`. |
 
 Fix the cause, then renew again with `cmctl renew`. Failed Orders are retried with back-off, so a fix may need a manual renew to avoid waiting.
 
 ### 4. Google-managed certificates on GKE
 
-GKE Ingress and Google Cloud load balancers can use Google-managed certificates, which are provisioned and renewed by Google once the domain's DNS points at the load balancer IP. Two APIs are common: the GKE `ManagedCertificate` resource (referenced from an Ingress annotation) and Certificate Manager certificates attached to a load balancer. The status fields differ between them. The Compute Engine API (classic managed SSL certificates, as printed by `gcloud compute ssl-certificates`) uses upper-case names: certificate `status` is one of `PROVISIONING`, `ACTIVE`, `PROVISIONING_FAILED`, `PROVISIONING_FAILED_PERMANENTLY` or `RENEWAL_FAILED`, and each domain in `domainStatus` is `PROVISIONING`, `ACTIVE`, `FAILED_NOT_VISIBLE`, `FAILED_CAA_CHECKING`, `FAILED_CAA_FORBIDDEN` or `FAILED_RATE_LIMITED`. A Certificate Manager managed certificate has a `state` of `PROVISIONING`, `FAILED` or `ACTIVE`. The `ManagedCertificate` Kubernetes resource exposes `status.certificateStatus` and a list `status.domainStatus`; its exact value spelling (it may be CamelCase such as `FailedNotVisible`) was not confirmed from the GKE page, so read what `kubectl describe` prints and compare with the current GKE documentation.
+GKE Ingress and Google Cloud load balancers can use Google-managed certificates, which are provisioned and renewed by Google once the domain's DNS points at the load balancer IP. Two APIs are common: the GKE `ManagedCertificate` resource (referenced from an Ingress annotation) and Certificate Manager certificates attached to a load balancer. The status fields differ between them. The Compute Engine API (classic managed SSL certificates, as printed by `gcloud compute ssl-certificates`) uses upper-case names: certificate `status` is one of `PROVISIONING`, `ACTIVE`, `PROVISIONING_FAILED`, `PROVISIONING_FAILED_PERMANENTLY` or `RENEWAL_FAILED`, and each domain in `domainStatus` is `PROVISIONING`, `ACTIVE`, `FAILED_NOT_VISIBLE`, `FAILED_CAA_CHECKING`, `FAILED_CAA_FORBIDDEN` or `FAILED_RATE_LIMITED`. A Certificate Manager managed certificate has a `state` of `PROVISIONING`, `FAILED` or `ACTIVE`. The `ManagedCertificate` Kubernetes resource exposes `status.certificateStatus` and a list `status.domainStatus`; its values are CamelCase (`Provisioning`, `Active`, `FailedNotVisible`, `FailedCaaChecking`, `ProvisioningFailedPermanently` and others), as the `gke-managed-certs` controller source maps them in `pkg/config/config.go` (checked 2026-10-20). The GKE page was only seen through a search excerpt, so compare with what `kubectl describe` prints and the current GKE documentation.
 
 ```bash
 kubectl get managedcertificate -n "$NS"
@@ -148,9 +148,9 @@ Common failure modes:
 
 - The domain's A/AAAA record does not point at the load balancer's IP (or points at the old one). Provisioning cannot complete; fix DNS and wait.
 - CAA records block the issuing CA. Allow the CA Google uses (see the docs).
-- A domain in `FAILED_NOT_VISIBLE` means Google found a problem with the DNS or load balancer configuration for that domain; check DNS and that the frontend uses the right IP and an HTTP(S) forwarding rule. A DNS proxy in front of the record (for example a CDN proxy that hides the load balancer IP) can cause it too.
+- A domain in `FailedNotVisible` (`ManagedCertificate`) or `FAILED_NOT_VISIBLE` (Compute Engine API) means Google found a problem with the DNS or load balancer configuration for that domain; check DNS and that the frontend uses the right IP and an HTTP(S) forwarding rule. A DNS proxy in front of the record (for example a CDN proxy that hides the load balancer IP) can cause it too.
 - Certificate status `PROVISIONING_FAILED_PERMANENTLY` is not retried: the Compute Engine API reference says to delete and create a new managed certificate. `RENEWAL_FAILED` means the existing certificate still serves but will expire soon; the same reference says to create a new managed certificate.
-- Provisioning can take a long time (the docs say up to many minutes to hours; check the current figure) and cannot be sped up.
+- Provisioning can take up to 60 minutes per the GKE page (seen through a search excerpt; check the current docs) and cannot be sped up.
 
 You cannot renew a Google-managed certificate on demand. If one fails, fix DNS or replace it: create a new certificate, add it to the target proxy or ingress, then remove the old one. Do not delete the old certificate first, so the load balancer always has a valid certificate attached (this ordering is conservative advice, not something the pages checked state).
 
@@ -221,7 +221,7 @@ Because auto-renewal normally happens a third of the way before expiry, an alert
 ```bash
 echo | openssl s_client -connect "$HOST:$PORT" -servername "$HOST" 2>/dev/null | openssl x509 -noout -dates -issuer
 echo | openssl s_client -connect "$HOST:$PORT" -servername "$HOST" -verify_return_error 2>&1 | grep -E "Verify return code"
-curl -sSI "https://$HOST/" -o /dev/null -w '%{http_code} %{ssl_verify_result}\n'
+curl -sS "https://$HOST/" -o /dev/null -w '%{http_code} %{ssl_verify_result}\n'
 kubectl get certificate "$CERT" -n "$NS"      # READY True
 ```
 
@@ -236,21 +236,21 @@ Expected: `notAfter` in the future (and later than before), `Verify return code:
 
 ## Troubleshooting
 
-| Symptom                                             | Cause and fix                                                                                                      |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Clients still see the old certificate after renewal | Ingress or proxy has not reloaded, a CDN or second load balancer serves another copy, or SNI selects another cert. |
-| `unable to get local issuer certificate`            | Missing intermediate in the chain. Use the full chain in `tls.crt`.                                                |
-| Name mismatch                                       | The SAN list lacks the host. Fix `dnsNames` in the Certificate and reissue.                                        |
-| Certificate `Ready` but ingress serves a fake cert  | Ingress references the wrong Secret name or namespace, or uses the controller's default certificate.               |
-| HTTP-01 challenge works in staging, not in prod     | A production WAF, redirect or NetworkPolicy blocks the solver pod; see [[kubernetes-network-policies]].            |
-| `FAILED_NOT_VISIBLE` on managed certificate         | DNS does not point to the load balancer. Fix DNS and wait for retry.                                               |
-| Expiry alert fires for a decommissioned host        | Remove the probe target or the Certificate, rather than silencing the alert.                                       |
+| Symptom                                                          | Cause and fix                                                                                                      |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Clients still see the old certificate after renewal              | Ingress or proxy has not reloaded, a CDN or second load balancer serves another copy, or SNI selects another cert. |
+| `unable to get local issuer certificate`                         | Missing intermediate in the chain. Use the full chain in `tls.crt`.                                                |
+| Name mismatch                                                    | The SAN list lacks the host. Fix `dnsNames` in the Certificate and reissue.                                        |
+| Certificate `Ready` but ingress serves a fake cert               | Ingress references the wrong Secret name or namespace, or uses the controller's default certificate.               |
+| HTTP-01 challenge works in staging, not in prod                  | A production WAF, redirect or NetworkPolicy blocks the solver pod; see [[kubernetes-network-policies]].            |
+| `FailedNotVisible` / `FAILED_NOT_VISIBLE` on managed certificate | DNS does not point to the load balancer. Fix DNS and wait for retry.                                               |
+| Expiry alert fires for a decommissioned host                     | Remove the probe target or the Certificate, rather than silencing the alert.                                       |
 
 If an expired certificate caused customer impact, run it as an incident with [[incident-response]] and ask in the review why the 14 day alert did not lead to action.
 
 ## Evidence
 
-Lab-tested on 2026-10-20 for the `openssl` procedures; everything else is source-reviewed. Read this section before using the note.
+Source-reviewed on 2026-10-20. The `openssl` and `curl` inspection and verification helpers were also run in a lab (see Lab run), but the main procedures (cert-manager renewal, Google-managed certificates, replacing the Secret) were not, so the level is not lab-tested. Read this section before using the note.
 
 ### Sources checked
 
@@ -260,7 +260,7 @@ Each bullet gives the page, the claims it backs and the check date. The document
 - [cert-manager: cmctl](https://cert-manager.io/docs/reference/cmctl/) (same source): `cmctl renew`, `cmctl status certificate`, and the notice that the CLI moved to its own repository. Checked 2026-10-20.
 - [cert-manager: Prometheus metrics](https://cert-manager.io/docs/devops-tips/prometheus-metrics/) and the metrics package in the [cert-manager source](https://github.com/cert-manager/cert-manager/blob/master/pkg/metrics/metrics.go): metric names `certmanager_certificate_expiration_timestamp_seconds`, `certmanager_certificate_renewal_timestamp_seconds`, `certmanager_certificate_ready_status` and their labels (the metrics page itself does not list them). Checked 2026-10-20.
 - Compute Engine API discovery document (`https://compute.googleapis.com/$discovery/rest?version=v1`), `SslCertificate` and `SslCertificateManagedSslCertificate`: `managed.status` and `managed.domainStatus` value names and meanings, `type` of `MANAGED` or `SELF_MANAGED`, `expireTime`. Certificate Manager API discovery document (`https://certificatemanager.googleapis.com/$discovery/rest?version=v1`): managed certificate `state` of `PROVISIONING`, `FAILED` or `ACTIVE`. Checked 2026-10-20.
-- [GKE: Google-managed SSL certificates](https://cloud.google.com/kubernetes-engine/docs/how-to/managed-certs): not reachable from the review environment; only the archived [gke-managed-certs README](https://github.com/GoogleCloudPlatform/gke-managed-certs) and its type definition were read (fields `certificateStatus`, `domainStatus`, `certificateName`, `expireTime`; the README says the feature moved into GKE). Checked 2026-10-20.
+- [GKE: Google-managed SSL certificates](https://cloud.google.com/kubernetes-engine/docs/how-to/managed-certs): not reachable from the review environment; only the archived [gke-managed-certs README](https://github.com/GoogleCloudPlatform/gke-managed-certs) and its type definition were read (fields `certificateStatus`, `domainStatus`, `certificateName`, `expireTime`; the README says the feature moved into GKE) and `pkg/config/config.go` (CamelCase status values such as `FailedNotVisible`). The "up to 60 minutes" provisioning figure was seen only in a search excerpt of the GKE page. Checked 2026-10-20.
 - [`gcloud certificate-manager certificates list`](https://cloud.google.com/sdk/gcloud/reference/certificate-manager/certificates/list) and [`gcloud compute ssl-certificates`](https://cloud.google.com/sdk/gcloud/reference/compute/ssl-certificates): command names and the `--global` flag, read from the installed `gcloud` 570.0.0 help. Checked 2026-10-20.
 - [Prometheus blackbox exporter](https://github.com/prometheus/blackbox_exporter): `probe_ssl_earliest_cert_expiry` is set in `prober/tls.go`. Checked 2026-10-20.
 - [OpenSSL 3.0 manual: openssl-x509, openssl-s_client](https://docs.openssl.org/3.0/man1/openssl-x509/): behaviour of `-checkend`, `-ext`, `-verify_hostname` and `-verify_return_error` was confirmed by running them (see Lab run). Checked 2026-10-20.
@@ -270,10 +270,9 @@ Each bullet gives the page, the claims it backs and the check date. The document
 - Any `kubectl`, `cmctl`, cluster, cert-manager, ACME, Google Cloud or `gcloud` command (`kubectl` is not installed in the lab; `gcloud` was used only to read help text). The `kubectl get certificate -o custom-columns` and `jsonpath` expressions are untested.
 - The Certificate to CertificateRequest to Order to Challenge chain and the troubleshooting table are from the cert-manager model and were not exercised.
 - That deleting the Secret makes cert-manager reissue, and how long the ingress serves a stale or default certificate meanwhile.
-- The exact value spelling and field layout printed by `kubectl describe managedcertificate` (the GKE page was not reachable), the Google-managed provisioning time, and the CAA issuer to allow.
+- The exact field layout printed by `kubectl describe managedcertificate` and the CAA issuer to allow. The CamelCase status values come from the controller source and the 60 minute figure from a search excerpt of the GKE page; neither was run.
 - The Prometheus rules in `cert-alerts.yaml` were not loaded into Prometheus or run through `promtool`; the `condition` label values of `certmanager_certificate_ready_status` and Alertmanager routing are unconfirmed.
 - Chain order: only a missing intermediate (verify code 20) and a correctly supplied one were tested; the claim that the chain must be in order was not tested. Some servers also need the chain in a separate file.
-- The `curl -I` form of the Validation command: the lab server (`s_server -www`) answers only GET, so a GET request was used. `-w '%{ssl_verify_result}'` itself was confirmed.
 - Behaviour on OpenSSL 1.1.1, LibreSSL (macOS) and other versions; `base64 -d` on macOS (`-D` on old versions).
 - Ingress controller reload behaviour and CDN or second-load-balancer effects.
 

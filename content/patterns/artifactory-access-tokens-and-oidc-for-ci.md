@@ -125,7 +125,7 @@ promote-prod:
 
 The image reference above is a placeholder: replace `X.Y.Z` and the digest with a real pinned version ([[dockerfile-hardening]]). `jf eot` (short for `jf exchange-oidc-token`) takes the provider name first and, per the JFrog CLI docs, reads the ID token from the optional second argument, from `--oidc-token-id`, or from the `JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID` environment variable. The example uses the environment variable, so the JWT is not in the command line. `--oidc-provider-type` accepts `GitHub` (the default), `Azure` or `GenericOidc`; GitLab needs `GenericOidc`, so leaving it out would use the wrong default. `--format` (json or table) exists from JFrog CLI 2.105.0. `jf eot` prints the exchanged token and username rather than configuring the CLI, so the job captures the token into `JF_ACCESS_TOKEN`. The docs reviewed do not show the JSON key name, so `AccessToken` is an assumption: print the output once in a test job and adjust. The `JF_URL` and `JF_ACCESS_TOKEN` variable names for the later `jf rt` calls, and `jf rt build-promote` itself, were not checked; confirm with `jf --help` on the version your runners use. `--copy=true` makes the promotion copy instead of move, so `ci-promote-prod` does not need delete permission on the staging repository.
 
-Without the CLI, the Access API does the same exchange: `POST /access/api/v1/oidc/token` with a token-exchange grant type, the CI ID token as `subject_token`, its type as `subject_token_type` and the integration's `provider_name`; optional fields include `project_key`, `identity_mapping_name` and `include_reference_token`. JFrog recommends keeping exchanges below 40 requests per second. Send the JWT from a file or stdin, as with the bootstrap token above, not in a command-line argument.
+Without the CLI, the Access API does the same exchange: `POST /access/api/v1/oidc/token` with a token-exchange grant type, the CI ID token as `subject_token`, its type as `subject_token_type` and the integration's `provider_name`; optional fields include `project_key`, `identity_mapping_name` and `include_reference_token`. I found no documented rate guidance for exchanges, so check the OIDC Token Exchange reference before running many exchanges in parallel. Send the JWT from a file or stdin, as with the bootstrap token above, not in a command-line argument.
 
 ### The identity mapping
 
@@ -152,7 +152,7 @@ The mapping is where least privilege is actually enforced. It must say "this cla
 
 Field names above are illustrative; check the current JFrog docs for the real schema and for how claim matching works (exact, wildcard, regex). The docs state that a mapping's expiration is limited to 24 hours (1440 minutes), that priority 1 is the highest, and that a project-scoped mapping wins over a global one when the request names a project. For GitLab you choose the Generic OpenID Connect provider type, and a token issuer value is needed only if the `iss` claim differs from the provider URL.
 
-GitLab's documented ID token claims include `project_path`, `namespace_path`, `ref`, `ref_type` (branch or tag), `ref_protected` (a boolean) and, only for jobs that declare an environment, `environment` and related fields such as `environment_protected`. Newer claims exist on newer GitLab versions, so check your instance.
+GitLab's documented ID token claims include `project_path`, `namespace_path`, `ref`, `ref_type` (branch or tag), `ref_protected` (the string `"true"` or `"false"`; match it as a string) and, only for jobs that declare an environment, `environment` and related fields such as `environment_protected`. Newer claims exist on newer GitLab versions, so check your instance.
 
 Conditions to put in mappings:
 
@@ -220,7 +220,7 @@ jf rt ping
 # Positive: protected tag pipeline can promote
 # Negative: the production job only runs on protected tags, so pushing an unprotected branch tests nothing.
 # Instead add a temporary job, with no protected-ref rule, that runs only the token exchange:
-#   jf eot "${OIDC_PROVIDER_NAME}" "${ARTIFACTORY_ID_TOKEN}" --oidc-audience "https://artifactory.example.com"
+#   export JFROG_CLI_OIDC_EXCHANGE_TOKEN_ID="${ARTIFACTORY_ID_TOKEN}"; jf eot "${OIDC_PROVIDER_NAME}" --url "${JF_URL}" --oidc-provider-type=GenericOidc --oidc-audience "https://artifactory.example.com"
 git switch -c test/unprotected-oidc
 git push origin test/unprotected-oidc
 # Expect the exchange to be refused (401/403) and no token minted. Then delete the temporary job and branch:
@@ -271,6 +271,7 @@ Each bullet gives the page, the claims it backs and the check date.
 
 ### Not verified
 
+- Any rate limit or recommended request rate for the OIDC token exchange: none was found in the pages reached, so the note gives no figure.
 - Direct page fetches of `docs.gitlab.com` and `docs.jfrog.com` were blocked in the review environment. The claims above were checked against search results that summarise the official pages. Re-read the linked pages before relying on exact wording.
 - The identity-mapping JSON schema (`token_spec`, `claims` and the matching rules); the note's example stays labelled illustrative.
 - The JSON key name that `jf eot --format=json` prints (`AccessToken` is an assumption), the `JF_URL` and `JF_ACCESS_TOKEN` environment variable names, `jf rt ping`, and `jf rt build-promote --copy=true`. The `jf` binary was not available.

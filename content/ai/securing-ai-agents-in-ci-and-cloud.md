@@ -67,7 +67,7 @@ Decide per trigger what the agent may read and what it may hold. Treat the matri
 
 The common point: the more untrusted the text, the fewer credentials the job may hold.
 
-On GitLab, a merge request from a fork normally gets a pipeline that is created and runs in the fork, with the fork's own configuration and variables, not the parent project's. A member of the parent project can start a pipeline for that merge request in the parent project; that pipeline uses the fork branch's `.gitlab-ci.yml` but the parent project's variables and runners, and GitLab warns that the fork's code could try to steal them. So "a maintainer triggers a run" is not a safe default for an agent job: it hands the parent's variables to untrusted code. Review the change first, and keep agent jobs out of that pipeline (the rule in the next section does this). Admins can disable parent-project pipelines for forks per project through the `ci_allow_fork_pipelines_to_run_in_parent_project` setting; check the current API reference.
+On GitLab, a merge request from a fork normally gets a pipeline that is created and runs in the fork, with the fork's own configuration and variables, not the parent project's. A member of the parent project can start a pipeline for that merge request in the parent project; that pipeline uses the fork branch's `.gitlab-ci.yml` but the parent project's variables and runners, and GitLab warns that the fork's code could try to steal them. So "a maintainer triggers a run" is not a safe default for an agent job: it hands the parent's variables to untrusted code. Review the change first. The rule in the next section is not a control for this case: the fork author controls the `.gitlab-ci.yml` that pipeline uses and can remove or rewrite the rule, so it only keeps an honest configuration from adding agent jobs to a fork pipeline. The real control is not running parent-project pipelines for forks at all. Admins can disable parent-project pipelines for forks per project through the `ci_allow_fork_pipelines_to_run_in_parent_project` setting; check the current API reference.
 
 ## Isolating the job
 
@@ -75,7 +75,7 @@ Run agent jobs on an ephemeral runner that is thrown away after each job. On GKE
 
 ### GitLab: same-project merge requests only
 
-The job runs only for merge request pipelines whose source project is the target project. By default a fork merge request pipeline runs in the fork's own project, where the source project ID equals that project's ID, so the rule mainly blocks the dangerous case: a pipeline in this (parent) project for a fork merge request, which a parent member can start by hand.
+The job runs only for merge request pipelines whose source project is the target project. By default a fork merge request pipeline runs in the fork's own project, where the source project ID equals that project's ID, so the rule covers an honest configuration only. It does not stop the dangerous case, a pipeline in this (parent) project for a fork merge request that a parent member starts by hand, because that pipeline uses the fork branch's `.gitlab-ci.yml` and the fork author can remove the rule. The real control is to not run parent-project pipelines for forks (disable `ci_allow_fork_pipelines_to_run_in_parent_project`) and to keep secrets out of the project.
 
 ```yaml title=".gitlab-ci.yml"
 ai-agent-review:
@@ -125,7 +125,7 @@ ai-agent-post:
         --data @- "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
 ```
 
-Pitfalls to check against your GitLab version: protected variables are only exposed to pipelines on protected branches and tags. Merge request pipelines were treated differently across versions: the 17.9 documentation says they do not get protected variables, while the current documentation says they can when both the source and target branches are protected, and never for pipelines from forks. Do not rely on one behaviour; keep deploy secrets out of any project where an agent job runs, and check the page for your version. Masking only hides a value in job logs and is not a guarantee against a malicious job reading it; hidden variables cannot be revealed in the UI after saving but can still be used by jobs. Neither replaces keeping the secret away from the job. The agent token is an unprotected, masked variable that any pipeline in the project can read, which is acceptable only because it is read-only. Keep the poster token out of the agent job: scope `POSTER_TOKEN` to the `ai-comment-poster` environment only, so the agent job does not receive it. Environment scoping is not a hard boundary, because a branch author in the same project can still change `.gitlab-ci.yml`, so the token must stay limited to commenting (Reporter role, `api` scope). `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` is a documented predefined variable for merge request pipelines; still test the rule with a real fork on your instance. The job token (`CI_JOB_TOKEN`) is a separate credential: by default a project's job token allowlist contains only the project itself, and adding a project or group to the allowlist lets that project's jobs reach yours, so keep the allowlist short and do not disable it.
+Pitfalls to check against your GitLab version: protected variables are only exposed to pipelines on protected branches and tags. Merge request pipelines were treated differently across versions: the 17.9 documentation says they do not get protected variables, while the current documentation says they can when a Maintainer-controlled project setting (Settings > CI/CD > Variables, added in GitLab 18.1) is on, both the source and target branches are protected and in the same project, and the user who triggers the pipeline can push or merge to the target branch; never for pipelines from forks. A GitLab planning epic names the underlying setting `protect_merge_request_pipelines` and says it is on for new projects (not confirmed against the shipped behaviour), so an agent job on a merge request between two protected branches can receive protected variables. In a project that runs agent jobs, turn the setting off or keep the agent jobs off those merge requests. Do not rely on one behaviour; keep deploy secrets out of any project where an agent job runs, and check the page for your version. Masking only hides a value in job logs and is not a guarantee against a malicious job reading it; hidden variables cannot be revealed in the UI after saving but can still be used by jobs. Neither replaces keeping the secret away from the job. The agent token is an unprotected, masked variable that any pipeline in the project can read, which is acceptable only because it is read-only. Keep the poster token out of the agent job: scope `POSTER_TOKEN` to the `ai-comment-poster` environment only, so the agent job does not receive it. Environment scoping is not a hard boundary, because a branch author in the same project can still change `.gitlab-ci.yml`, so the token must stay limited to commenting (Reporter role, `api` scope). `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` is a documented predefined variable for merge request pipelines; still test the rule with a real fork on your instance. The job token (`CI_JOB_TOKEN`) is a separate credential: by default a project's job token allowlist contains only the project itself, and adding a project or group to the allowlist lets that project's jobs reach yours, so keep the allowlist short and do not disable it.
 
 ### GitHub Actions: read-only, `pull_request` trigger
 
@@ -249,7 +249,7 @@ Route model traffic through an internal gateway where you can log requests, enfo
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): 2025 IDs and names LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure, LLM05 Improper Output Handling, LLM06 Excessive Agency, LLM10 Unbounded Consumption, checked 2026-10-20 (IDs from search results, including the OWASP pages for LLM05 and LLM10; the list page itself could not be fetched).
 - [Merge request pipelines](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/): fork merge request pipelines run in the fork by default; a parent member can run one in the parent with the parent's variables; the security warning; the `ci_allow_fork_pipelines_to_run_in_parent_project` setting; `merge_request_event` as the pipeline source, checked 2026-10-20 (search excerpts).
 - [Predefined variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_MERGE_REQUEST_SOURCE_PROJECT_ID`, `CI_MERGE_REQUEST_IID` and the `CI_PIPELINE_SOURCE` values, checked 2026-10-20 (search excerpt).
-- [CI/CD variables](https://docs.gitlab.com/ci/variables/): protected variables only on protected branches and tags, the version difference for merge request pipelines, masking limits and hidden variables, checked 2026-10-20 (search excerpt; the 17.9 and current pages disagree, as stated in the note).
+- [CI/CD variables](https://docs.gitlab.com/ci/variables/): protected variables only on protected branches and tags, the version difference for merge request pipelines, masking limits and hidden variables, checked 2026-10-20 (search excerpt; the 17.9 and current pages disagree, as stated in the note). The 18.1 project setting, its conditions and the `protect_merge_request_pipelines` name come from a search excerpt of the current page and a GitLab planning epic; re-read the page for your version.
 - [CI/CD job token](https://docs.gitlab.com/ci/jobs/ci_job_token/): the default allowlist contains only the project itself, checked 2026-10-20 (search excerpt).
 
 Corrections made on 2026-10-20: OWASP names and IDs updated to the 2025 edition; the fork row of the trigger matrix no longer says a maintainer triggers a manual run, because that run exposes the parent's variables; the protected-variable statement was corrected to say the behaviour differs between GitLab versions; the masking limits and the job token allowlist were added; the GitLab documentation link now uses the current `/ci/` path.
@@ -265,7 +265,26 @@ Corrections made on 2026-10-20: OWASP names and IDs updated to the 2025 edition;
 
 ### Lab run
 
-A helper check, not part of the evidence level. Host: Ubuntu 24.04.5 LTS, `python3 --version` printed `Python 3.13.16`, run 2026-10-20 with `python3 -I`. It models the egress allowlist decision as exact `host:port` matching against the list above.
+A helper check, not part of the evidence level. Host: Ubuntu 24.04.5 LTS, `python3 --version` printed `Python 3.13.16`, run 2026-10-20 with `python3 -I`. It models the egress allowlist decision as `host:port` matching against the list above, compared in lower case. The script is shown in full so the run can be repeated.
+
+```python title="egress_check.py"
+ALLOW = {"llm-gateway.example.com:443"}
+
+
+def decide(target):
+    return "ALLOW" if target.lower() in ALLOW else "DENY"
+
+
+for t in [
+    "llm-gateway.example.com:443",
+    "llm-gateway.example.com:80",
+    "api.example.com:443",
+    "llm-gateway.example.com.attacker.example:443",
+    "attacker.example:443",
+    "LLM-GATEWAY.EXAMPLE.COM:443",
+]:
+    print(f"{t:<50} {decide(t)}")
+```
 
 ```bash
 python3 -I egress_check.py
@@ -280,7 +299,7 @@ attacker.example:443                               DENY
 LLM-GATEWAY.EXAMPLE.COM:443                        ALLOW
 ```
 
-This shows only that exact matching rejects a subdomain trick and an unlisted host. A real firewall or proxy was not tested, and it must also do case-insensitive matching and DNS handling that the model leaves out.
+This shows only that exact (lower-cased) matching rejects a subdomain trick and an unlisted host. A real firewall or proxy was not tested, and it must also handle DNS, resolved IP addresses and redirects, which the model leaves out.
 
 ## Related
 

@@ -245,7 +245,19 @@ See the Rollback section. In short: delete or update the deny policy (permanent,
 
 ### Lab run
 
-A helper check only; it does not raise the evidence level. Host: Ubuntu 24.04.5 LTS, Linux 6.18.44. `python3 --version` printed `Python 3.13.16`. Run 2026-10-20 with `python3 -I`, no network. It checks that the JSON example in this note parses and that the two permissions the example is meant to deny are in the rule.
+A helper check only; it does not raise the evidence level. Host: Ubuntu 24.04.5 LTS, Linux 6.18.44. `python3 --version` printed `Python 3.13.16`. Run 2026-10-20 with `python3 -I`, no network. The file `agent-deny-policy.json` is the JSON example above, saved as is. The script is shown in full. It checks that the JSON example in this note parses and that the two permissions the example is meant to deny are in the rule.
+
+```python title="check_policy.py"
+import json
+import sys
+
+policy = json.load(open(sys.argv[1]))
+rules = policy["rules"]
+print("parsed OK; keys:", sorted(policy.keys(), key=lambda k: k != "displayName"), "rules:", len(rules))
+text = json.dumps(rules)
+for perm in ("secretmanager.googleapis.com/versions.access", "iam.googleapis.com/serviceAccountKeys.create"):
+    print(perm, "in rule:", perm in text)
+```
 
 ```bash
 python3 -I check_policy.py agent-deny-policy.json
