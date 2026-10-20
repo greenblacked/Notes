@@ -317,7 +317,7 @@ The target was 2 minutes with every check. It is not reachable on GitHub-hosted 
 
 ### Shards and billed minutes
 
-The shard count is the `matrix.include` list of the `browser` job in `.github/workflows/ci.yml` (each project's shards must be exactly `1/N` to `N/N`; `scripts/workflows.test.mjs` checks it). More jobs shorten the wall-clock time, but each job bills at least one whole minute and is rounded up on its own. Estimates, with warm caches (re-measure from `gh api repos/greenblacked/Notes/actions/runs/<id>/jobs`):
+The browser matrix uses `fail-fast: false`: when one shard fails the others finish, `CI OK` still fails, and "Re-run failed jobs" re-runs only the failed shard (about 3 billed minutes). With `fail-fast: true` the cancelled shards would be re-run too, costing about 8 minutes or more. The price is that a real failure still bills the other shards. The shard count is the `matrix.include` list of the `browser` job in `.github/workflows/ci.yml` (each project's shards must be exactly `1/N` to `N/N`; `scripts/workflows.test.mjs` checks it). More jobs shorten the wall-clock time, but each job bills at least one whole minute and is rounded up on its own. Estimates, with warm caches (re-measure from `gh api repos/greenblacked/Notes/actions/runs/<id>/jobs`):
 
 | Variant                                | PR wall-clock | Billed per CI run | Per merged PR (3 PR runs, 1 push run, Deploy stage) | Merged PRs per 2,000 min |
 | -------------------------------------- | ------------- | ----------------- | --------------------------------------------------- | ------------------------ |

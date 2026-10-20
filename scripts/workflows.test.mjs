@@ -454,8 +454,8 @@ test("each project's shards are exactly 1/N to N/N and the ids are unique", () =
   }
 })
 
-test("the browser matrix fails fast and passes its values through env, not expressions", () => {
-  assert.equal(browserJob.strategy["fail-fast"], true)
+test("the browser matrix runs every shard and passes its values through env, not expressions", () => {
+  assert.equal(browserJob.strategy["fail-fast"], false)
   assert.equal(browserJob.name, "Browser ${{ matrix.id }}")
   assert.equal(browserJob.env.PROJECT, "${{ matrix.project }}")
   assert.equal(browserJob.env.BROWSER, "${{ matrix.browser }}")

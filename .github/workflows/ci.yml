@@ -98,7 +98,9 @@ jobs:
     permissions:
       contents: read
     strategy:
-      fail-fast: true
+      # Every shard runs even if one fails, so a flaky shard can be re-run alone (Re-run failed
+      # jobs would otherwise re-run all cancelled shards too). CI OK still needs every shard.
+      fail-fast: false
       matrix:
         include:
           - {
