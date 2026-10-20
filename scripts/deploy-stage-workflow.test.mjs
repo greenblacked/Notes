@@ -497,7 +497,7 @@ test("the teardown re-reads the latest deployment right before deleting", () => 
   assert.doesNotMatch(ours.output, /left_in_place/)
   assert.match(ours.stdout, /::notice::Deleted the stage Preview/)
 
-  const other = run("latest_deployment_id=d2", "d1")
+  const other = run("latest_deployment_id=d2", "d1", "p0")
   assert.equal(other.deleted, false)
   assert.equal(other.status, 1)
   assert.match(other.output, /^left_in_place=true$/m)
@@ -516,10 +516,17 @@ test("the teardown re-reads the latest deployment right before deleting", () => 
   assert.equal(stale.status, 1)
   assert.doesNotMatch(stale.output, /left_in_place/)
   assert.match(stale.stdout, /stale read/)
-  // A different well-formed id is still left in place when a previous id is known.
+  // A foreign id is left in place only when the previous id is a real id.
   const other2 = run("latest_deployment_id=d2", "d1", "p0")
   assert.equal(other2.deleted, false)
   assert.match(other2.output, /^left_in_place=true$/m)
+  for (const prev of ["none", "unknown", ""]) {
+    const r2 = run("latest_deployment_id=d2", "d1", prev)
+    assert.equal(r2.deleted, true, `previous=${prev}`)
+    assert.equal(r2.status, 1, `previous=${prev}`)
+    assert.doesNotMatch(r2.output, /left_in_place/, `previous=${prev}`)
+    assert.match(r2.stdout, /::warning::The re-read returned deployment d2/, `previous=${prev}`)
+  }
 
   for (const [line, id] of [
     ["latest_deployment_id=unknown", "d1"],

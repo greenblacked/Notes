@@ -18,11 +18,11 @@
  * deployment alone. An id equal to the previous one is a stale read (lag), not a newer upload: an
  * ordinary failure. Without `--previous`, with `none` (the Preview did not exist: a foreign id may
  * be a lagging replica's last deployment of a deleted Preview) or when the pre-read failed
- * (`unknown`), nothing is ever superseded. A tag or message mismatch on our own deployment, a transient or missing-preview
- * (10025 / 10222) answer on the last attempt, or a malformed answer is an ordinary failure
- * (exit 1). Right after the upload creates or recreates the Preview, the read side may briefly
- * answer 10025 / 10222 (or show our deployment without annotations); those are retried within the
- * same attempt budget.
+ * (`unknown`), nothing is ever superseded. A tag or message mismatch on our own deployment, a
+ * transient or missing-preview (10025 / 10222) answer on the last attempt, or a malformed answer
+ * is an ordinary failure (exit 1). Right after the upload creates or recreates the Preview, the
+ * read side may briefly answer 10025 / 10222 (or show our deployment without annotations); those
+ * are retried within the same attempt budget.
  *
  *   node scripts/verify-preview-deployment.mjs --read-previous --worker notes --preview stage
  * prints `previous_deployment_id=<id>`, `none` (the Preview or its deployment does not exist yet)

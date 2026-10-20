@@ -433,12 +433,14 @@ jobs:
       # Preview down, so stage keeps only an upload whose checks all passed (see `Decide the stage
       # result`). Nothing is deleted when the active check already found the Preview superseded.
       # Otherwise the Preview's latest deployment is read again right before the delete, because
-      # another uploader may have replaced ours since the earlier read: ours -> delete; a
-      # well-formed id that is neither ours nor the one live before the upload -> leave it in place
-      # (the run still fails); the previous id (a stale read), `none` (Preview absent or lagging;
-      # deleting is idempotent), `unknown` (API error) or no known id of ours -> delete, so an
-      # unverified upload never stays live. A failed delete counts as "already gone" only when
-      # Wrangler itself reports that the Preview "stage" was not found.
+      # another uploader may have replaced ours since the earlier read: ours -> delete. A foreign
+      # id is left in place only when the id live before the upload is a real well-formed id (not
+      # `none`, `unknown` or empty) and the re-read differs from both ours and that id (the run
+      # still fails). Otherwise it may be a stale or lagging read and the Preview is deleted
+      # (fail closed, as in verify-preview-deployment.mjs): the previous id, `none` (Preview
+      # absent or lagging; deleting is idempotent), `unknown` (API error), no known id of ours,
+      # or any foreign id while the previous id is `none`/`unknown`/empty. A failed delete counts
+      # as "already gone" only when Wrangler itself reports that the Preview "stage" was not found.
       - name: Take stage down after a failed check
         id: teardown
         if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && steps.active.outputs.superseded != 'true' && (failure() || cancelled())
@@ -459,12 +461,18 @@ jobs:
             ours=""
             echo "::warning::This run's deployment id is unknown; the Preview is deleted without comparing."
           fi
+          prev_ok=false
+          if [[ "${PREVIOUS_ID:-}" =~ $id_re && "${PREVIOUS_ID:-}" != "none" && "${PREVIOUS_ID:-}" != "unknown" ]]; then
+            prev_ok=true
+          fi
           if [[ "$latest" == "none" ]]; then
             echo "::notice::The stage Preview reads as having no deployment (absent, or a stale read); deleting is idempotent, so the delete still runs."
           elif [[ "$latest" == "unknown" ]]; then
             echo "::warning::Could not read the stage Preview's latest deployment; deleting it so an unverified upload does not stay live."
           elif [[ "$latest" == "${PREVIOUS_ID:-}" ]]; then
             echo "::warning::The re-read returned the deployment that was live before the upload (a stale read); deleting so an unverified upload does not stay live."
+          elif [[ -n "$ours" && "$latest" != "$ours" && "$prev_ok" != "true" ]]; then
+            echo "::warning::The re-read returned deployment $latest, but the id live before the upload is not known (none, unknown or empty), so it may be a stale read; deleting so an unverified upload does not stay live."
           elif [[ -n "$ours" && "$latest" != "$ours" ]]; then
             echo "left_in_place=true" >>"$GITHUB_OUTPUT"
             echo "left_in_place_id=$latest" >>"$GITHUB_OUTPUT"
