@@ -27,7 +27,7 @@ export default (() => {
     return (
       <section class={classNames(displayClass, "note-index")} aria-labelledby="note-index-title">
         <h2 id="note-index-title" class="note-index-title">
-          All notes
+          By section
         </h2>
         <div class="note-index-head" aria-hidden="true">
           <span>No.</span>
