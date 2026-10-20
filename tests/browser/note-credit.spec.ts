@@ -110,19 +110,64 @@ test.describe("note credit", () => {
     })
   }
 
-  test("links are reachable by keyboard and show a focus outline", async ({ page }) => {
+  test("links are reachable by Tab and show the site focus outline", async ({ page }) => {
     await page.goto(note)
     const links = page.locator(".note-credit a")
     await expect(links).toHaveCount(3)
-    await links.first().focus()
+    // Start from the focusable element just before the credit, then Tab in.
+    await page.evaluate(() => {
+      const credit = document.querySelector(".note-credit")!
+      const all = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "a[href], button, input, select, textarea, [tabindex]",
+        ),
+      ).filter((el) => !credit.contains(el) && el.tabIndex >= 0)
+      const before = all.filter(
+        (el) => el.compareDocumentPosition(credit) & Node.DOCUMENT_POSITION_FOLLOWING,
+      )
+      before[before.length - 1].focus()
+    })
     for (let i = 0; i < 3; i++) {
+      await page.keyboard.press("Tab")
       const focused = await page.evaluate(() => {
         const a = document.activeElement as HTMLElement
-        return { inside: !!a.closest(".note-credit"), outline: getComputedStyle(a).outlineStyle }
+        const cs = getComputedStyle(a)
+        return {
+          inside: !!a.closest(".note-credit"),
+          text: a.textContent,
+          style: cs.outlineStyle,
+          width: cs.outlineWidth,
+        }
       })
-      expect(focused.inside).toBe(true)
-      expect(focused.outline).not.toBe("none")
-      await page.keyboard.press("Tab")
+      expect(focused.inside, `Tab ${i + 1} lands in the credit`).toBe(true)
+      expect(focused.text).toBe(await links.nth(i).innerText())
+      expect(focused.style).toBe("solid")
+      expect(focused.width).toBe("2px")
+    }
+  })
+
+  test("sits after the Linked from list and before the graph", async ({ page }) => {
+    await page.goto(note)
+    await expect(page.locator(".linked-from")).toHaveCount(1)
+    const order = await page.evaluate(() => {
+      const follows = (a: Element, b: Element) =>
+        !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+      const lf = document.querySelector(".linked-from")!
+      const cr = document.querySelector(".note-credit")!
+      const g = document.querySelector(".note-graph")
+      return { listBeforeCredit: follows(lf, cr), creditBeforeGraph: g ? follows(cr, g) : null }
+    })
+    expect(order.listBeforeCredit).toBe(true)
+    if (order.creditBeforeGraph !== null) expect(order.creditBeforeGraph).toBe(true)
+  })
+
+  test("each separator stays on one line with its link", async ({ page }) => {
+    await page.goto(note)
+    const items = page.locator(".note-credit .note-credit-item")
+    await expect(items).toHaveCount(3)
+    for (const item of await items.all()) {
+      await expect(item).toHaveCSS("white-space", "nowrap")
+      await expect(item.locator("a")).toHaveCount(1)
     }
   })
 })

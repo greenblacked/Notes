@@ -22,12 +22,15 @@ export function NoteCredit({ fileData }: { fileData: QuartzPluginData }) {
         Engineering notes by {AUTHOR}
         {links.map((l) => (
           <>
-            <span class="note-credit-sep" aria-hidden="true">
-              {" · "}
+            {" "}
+            <span class="note-credit-item">
+              <span class="note-credit-sep" aria-hidden="true">
+                {"· "}
+              </span>
+              <a href={l.href} rel="noopener">
+                {l.text}
+              </a>
             </span>
-            <a href={l.href} rel="noopener">
-              {l.text}
-            </a>
           </>
         ))}
       </p>
@@ -47,6 +50,10 @@ export const noteCreditCss = `
   font: 400 0.8rem/1.7 var(--ui);
   color: var(--gray);
   overflow-wrap: anywhere;
+}
+
+.note-credit-item {
+  white-space: nowrap;
 }
 
 .note-credit a {
