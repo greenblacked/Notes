@@ -33,11 +33,13 @@ test("the home page offers four reader goals, each leading to a note with eviden
     // Let the page finish its lazy resources before leaving it. A note with Mermaid diagrams
     // imports the Mermaid module after load; navigating away mid-import makes WebKit abort the
     // module load, and Mermaid rejects with an object that surfaces as an unhandled rejection.
+    // Wait for the rendered SVG itself: Mermaid sets data-processed when it STARTS processing,
+    // before the SVG is inserted, so that attribute alone would still let the next goto race.
     await page.waitForLoadState("networkidle")
     await page.waitForFunction(
       () =>
         [...document.querySelectorAll("code.mermaid, pre.mermaid")].every(
-          (el) => el.hasAttribute("data-processed") || el.querySelector("svg") !== null,
+          (el) => el.querySelector("svg") !== null,
         ),
       undefined,
       { timeout: 15_000 },
