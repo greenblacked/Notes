@@ -54,7 +54,8 @@ export async function recordProblems(page: Page, baseURL: string | undefined) {
   await page.addInitScript(installDetailReporter, DETAIL_PREFIX)
   page.on("pageerror", (error) => {
     const loc = locations.get(error)
-    const where = loc?.url ? `${loc.url}:${loc.line}:${loc.column}` : "unknown"
+    // WebError.location() is zero-based; show line and column one-based like stack traces do.
+    const where = loc?.url ? `${loc.url}:${loc.line + 1}:${loc.column + 1}` : "unknown"
     const frames = (error.stack ?? "")
       .split("\n")
       .filter((l) => l.startsWith("    at "))
