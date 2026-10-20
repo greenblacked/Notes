@@ -88,7 +88,9 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
 
 function expectStillGeometry(samples: Sample[]) {
   const first = samples[0]
-  expect(samples.length).toBeGreaterThan(10)
+  // Frames get sparse while the snapshot is captured, so check the span, not a frame count.
+  expect(samples.at(-1)!.t).toBeGreaterThanOrEqual(900)
+  expect(samples.length).toBeGreaterThan(3)
   for (const s of samples) {
     s.bar.forEach((v, i) => expect(Math.abs(v - first.bar[i])).toBeLessThanOrEqual(0.5))
     s.row.forEach((v, i) => expect(Math.abs(v - first.row[i])).toBeLessThanOrEqual(0.5))

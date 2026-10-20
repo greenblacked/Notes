@@ -93,9 +93,9 @@ $unicode-ranges: (
   // Motion. Durations: hover and focus, state changes, entrances. Curves: --ease-out decelerates
   // (the default for anything that arrives or reacts), --ease-in-out is for colour fades that run
   // both ways and --ease-drawer is a spring-like settle without overshoot (the drawer sits on the
-  // screen edge, so overshoot would show a gap). Only cheap properties are transitioned: opacity, transform,
-  // colours and box-shadow, never `all` and never layout. --dur-theme is the cross-fade of the whole
-  // page on a theme change (one snapshot fade, see .theme-switching).
+  // screen edge, so overshoot would show a gap). Only cheap properties are transitioned: opacity,
+  // transform, colours and box-shadow, never `all` and never layout. --dur-theme is the cross-fade
+  // of the whole page on a theme change (one snapshot fade, see .theme-switching).
   --dur-fast: 180ms;
   --dur: 260ms;
   --dur-slow: 380ms;
@@ -231,8 +231,8 @@ $unicode-ranges: (
 // nothing transitions, so a flip costs one recalc and no per-element transitions. The theme icon
 // keeps its own turn only on the one-frame path; inside the cross-fade (data-theme-snapshot) the
 // fade swaps the icons and a turn would show twice and outlast it. Where the View Transitions API
-// exists and the device has a mouse or trackpad, the whole page cross-fades as one snapshot. Elsewhere (phones, tablets), and with
-// reduced motion, the colours flip in one frame.
+// exists and the device has a mouse or trackpad, the whole page cross-fades as one snapshot.
+// Elsewhere (phones, tablets), and with reduced motion, the colours flip in one frame.
 :root.theme-switching,
 :root.theme-switching *:not(.darkmode > svg),
 :root.theme-switching *::before,
