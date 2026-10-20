@@ -234,7 +234,7 @@ If the repository moves to a paid plan or becomes public again, the expected set
   - `production`: deployment tag rule `v*`, plus required reviewers.
 - **Fork pull requests**: workflows from all external contributors need the owner's approval (CI has no secrets anyway; this only limits resource use).
 
-**Optional: a separate Cloudflare account or token for stage.** The stage Preview is a Preview of the same Worker, so the stage token can also deploy production. If that matters, deploy stage from a separate Cloudflare account (its own `CLOUDFLARE_ACCOUNT_ID` and token as separate secrets, which needs environment secrets on a paid plan, and a Worker named `notes` there) so a compromised stage job cannot touch production. Until then the `main` ruleset is the control.
+**Optional: a separate Cloudflare account or token for stage.** The stage Preview is a Preview of the same Worker, so the stage token can also deploy production. If that matters, deploy stage from a separate Cloudflare account (its own `CLOUDFLARE_ACCOUNT_ID` and token as separate secrets, which needs environment secrets on a paid plan, and a Worker named `notes` there) so a compromised stage job cannot touch production. Until then the control is that only the owner has write access to the repository (rulesets are not enforced on a private repository on GitHub Free).
 
 ### Rollback drill (once, after the first two releases)
 
