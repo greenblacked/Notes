@@ -24,7 +24,7 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
   const box = await btn.boundingBox() // does not scroll, unlike locator.click()
   expect(box).not.toBeNull()
   await page.evaluate(() => {
-    const w = window as unknown as { __s: Sample[]; __done: Promise<void> }
+    const w = window as unknown as { __s: Sample[]; __tc: number; __done: Promise<void> }
     const bar = document.querySelector(".page > #quartz-body > .sidebar.left")!
     const row = bar.querySelector(".section-row")!
     const icons = [...document.querySelectorAll<SVGElement>(".darkmode > svg")]
@@ -33,13 +33,19 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
       return [b.top, b.left, b.width, b.height]
     }
     w.__s = []
-    const t0 = performance.now()
+    w.__tc = NaN
+    // The click time, taken in the capture phase on window so it runs before top-bar's own
+    // capture listener on document starts the switch.
+    window.addEventListener("pointerdown", () => (w.__tc = performance.now()), {
+      capture: true,
+      once: true,
+    })
     w.__done = new Promise<void>((res) => {
       let finished = false
       let last = -1
       const tick = () => {
         if (finished) return
-        const t = performance.now() - t0
+        const t = performance.now() // absolute for now; made relative to the click on return
         if (t === last) return // a frame and a timer can fire at the same instant
         last = t
         w.__s.push({
@@ -70,7 +76,7 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
               ),
             ),
         })
-        if (t >= 900) {
+        if (t - w.__tc >= 900) {
           finished = true
           res()
         }
@@ -96,7 +102,11 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
   else await page.mouse.click(x, y)
   await page.evaluate(() => (window as unknown as { __done: Promise<void> }).__done)
   return page.evaluate(() => ({
-    samples: (window as unknown as { __s: Sample[] }).__s,
+    // t in ms from the click: negative before it.
+    samples: (window as unknown as { __s: Sample[]; __tc: number }).__s.map((s) => ({
+      ...s,
+      t: s.t - (window as unknown as { __tc: number }).__tc,
+    })),
     fadePath:
       typeof (document as unknown as { startViewTransition?: unknown }).startViewTransition ===
         "function" &&
@@ -106,9 +116,9 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
   }))
 }
 
-// The switch itself lasts under 400ms (cross-fade 180ms, icon turn 260ms). How many samples land
+// The switch itself lasts under 400ms (cross-fade 180ms after a 70-200ms snapshot, icon turn 380ms). How many samples land
 // in it depends on the engine, since WebKit's main thread is busy during the switch, so assert
-// that the samples cover the switch instead of counting them.
+// that the samples cover the switch instead of counting them. Sample times count from the click.
 function expectStillGeometry(samples: Sample[], testInfo: TestInfo) {
   const first = samples[0]
   const times = samples.map((s) => Math.round(s.t))
@@ -121,7 +131,7 @@ function expectStillGeometry(samples: Sample[], testInfo: TestInfo) {
   const covered = samples.at(-1)!.t >= 900 && samples.length >= 5 && inWindow >= 1 && after >= 1
   expect(
     covered,
-    `samples must span 900ms with at least one in 30-400ms and one from 600ms on (got ${samples.length} samples, ${inWindow} in the window, ${after} after it): ${times.join(" ")}`,
+    `samples, timed from the click, must span 900ms with at least one in 30-400ms and one from 600ms on (got ${samples.length} samples, ${inWindow} in the window, ${after} after it): ${times.join(" ")}`,
   ).toBe(true)
   for (const s of samples) {
     s.bar.forEach((v, i) => expect(Math.abs(v - first.bar[i])).toBeLessThanOrEqual(0.5))
