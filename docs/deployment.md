@@ -291,7 +291,7 @@ What the pipeline already does: PR runs of `ci.yml` cancel when a newer commit a
 
 ### CI job graph
 
-Every check runs on every pull request and every push to `main`; none is optional, path-filtered or deferred. `CI OK` waits for all jobs.
+Every check runs on every pull request and every push to `main`; none is optional, path-filtered or deferred. `CI OK` waits for all jobs. The durations in the graph are estimated: the 8-shard graph has never run in CI, and private repositories use 2-core runners, which have not been measured either. The only measured figures are from public 4-core runner runs on 2026-10-20 (the single browser job and the cold plugin restore).
 
 ```
 workflow-lint            attribution, actionlint, shellcheck, zizmor            about 15 s
@@ -308,16 +308,16 @@ ci-ok                    CI OK                                                  
 
 ### Why CI is not 2 minutes
 
-The target was 2 minutes with every check. It is not reachable on GitHub-hosted runners for the browser suite (estimates; re-measure after the repository is private):
+The target was 2 minutes with every check. It is not reachable on GitHub-hosted runners for the browser suite, because a browser job needs the build output and the setup of every job is a fixed cost. The owner chose 8 shards (about 4.3 minutes estimated, about 25 billed minutes per run estimated) over the 2-minute target, which would need about 38 shards. All figures below are estimated unless marked measured; re-measure after the repository is private:
 
 - A browser job needs the build output, so the critical path is the build (about 85 to 100 s on 2 vCPU), then a shard's setup (checkout, `npm ci`, artifact download, browser restore, about 55 to 65 s), then its tests, then `CI OK`. That is about 150 to 160 s before the first test starts.
 - With 8 shards the floor is about 4.3 minutes on 2 vCPU (the slowest is a WebKit shard) and about 3.2 minutes on 4 vCPU. Running the browser jobs before the build finishes and waiting for the artifact would need about 38 shards, about 80 billed minutes per run, so it was rejected.
-- Measured locally, the suite is 160 tests (40 per project), about 4 s each on Chromium; two workers on 2 CPUs take about 227 s for the two Chromium projects against 170 s on 4 CPUs. Four workers on 2 CPUs were no faster and made the theme-switch test flaky, so `workers` stays at 2.
+- Measured locally on a development machine (not in CI), the suite is 160 tests (40 per project), about 4 s each on Chromium; two workers on 2 CPUs take about 227 s for the two Chromium projects against 170 s on 4 CPUs. Four workers on 2 CPUs were no faster and made the theme-switch test flaky, so `workers` stays at 2.
 - Follow-ups, not part of this change: `trace: "retain-on-failure"` costs about 23% of the test time (`on-first-retry` is faster but exposes a race in which the explorer plugin logs `Failed to fetch` when a test navigates while it loads the 5.5 MB `static/contentIndex.json`), and every page downloads that file 2 to 3 times.
 
 ### Shards and billed minutes
 
-The browser matrix uses `fail-fast: false`: when one shard fails the others finish, `CI OK` still fails, and "Re-run failed jobs" re-runs only the failed shard (about 3 billed minutes). With `fail-fast: true` the cancelled shards would be re-run too, costing about 8 minutes or more. The price is that a real failure still bills the other shards. The shard count is the `matrix.include` list of the `browser` job in `.github/workflows/ci.yml` (each project's shards must be exactly `1/N` to `N/N`; `scripts/workflows.test.mjs` checks it). More jobs shorten the wall-clock time, but each job bills at least one whole minute and is rounded up on its own. Estimates, with warm caches (re-measure from `gh api repos/greenblacked/Notes/actions/runs/<id>/jobs`):
+The browser matrix uses `fail-fast: false`: when one shard fails the others finish, `CI OK` still fails, and "Re-run failed jobs" re-runs only the failed shard (about 3 billed minutes, estimated). With `fail-fast: true` the cancelled shards would be re-run too, costing about 8 minutes or more (estimated). The price is that a real failure still bills the other shards. The shard count is the `matrix.include` list of the `browser` job in `.github/workflows/ci.yml` (each project's shards must be exactly `1/N` to `N/N`; `scripts/workflows.test.mjs` checks it). More jobs shorten the wall-clock time, but each job bills at least one whole minute and is rounded up on its own. All figures except the first row are estimated, with warm caches; the first row was measured on public 4-core runners on 2026-10-20 (re-measure from `gh api repos/greenblacked/Notes/actions/runs/<id>/jobs`):
 
 | Variant                                | PR wall-clock | Billed per CI run | Per merged PR (3 PR runs, 1 push run, Deploy stage) | Merged PRs per 2,000 min |
 | -------------------------------------- | ------------- | ----------------- | --------------------------------------------------- | ------------------------ |
@@ -329,7 +329,7 @@ The browser matrix uses `fail-fast: false`: when one shard fails the others fini
 
 Eight shards cost about two more billed minutes per run than six because of the rounding, but each shard sits near a minute boundary, so the figure is sensitive. Switching to four jobs is a matrix change (`shard: 1/1` and one entry per project). GitHub Free allows about 20 concurrent jobs (check the docs); one run uses up to 10 of them, so a third concurrent run queues.
 
-Cold runs are slower: a plugin-cache miss (only when `quartz.lock.json` changes) adds about 7 to 10 minutes to the build job, and a Playwright cache miss adds about 30 to 50 seconds per shard. PR runs read the caches written by `main` and write only their own scope; no cache or artifact written by a PR run is read by a deploy.
+Cold runs are slower: a plugin-cache miss (only when `quartz.lock.json` changes) adds about 7 to 10 minutes to the build job, and a Playwright cache miss adds about 30 to 50 seconds per shard (estimated). The 7 to 10 minutes for a plugin-cache miss was measured on 4-core runners on 2026-10-20 (7 to 8 minutes) and is slower on 2-core. PR runs read the caches written by `main` and write only their own scope; no cache or artifact written by a PR run is read by a deploy.
 
 Savings from the private-repository change, estimated from the run durations of 2026-10-10 to 2026-10-20 (about 550 CI runs and 125 Deploy stage runs a month at that burst cadence):
 
