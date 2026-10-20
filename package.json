@@ -17,6 +17,7 @@
     "check:browser": "tsc -p tests/browser",
     "check:links": "node scripts/check-links.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
+    "check:notes": "node scripts/check-notes.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "serve:built": "node scripts/serve-built-site.mjs",
