@@ -60,6 +60,8 @@ test("no dangerous triggers", () => {
   }
 })
 
+// The environment no longer scopes secrets on a private Free repository; kept so that jobs
+// holding secrets stay the deploy jobs (deployment records, environment URL, cleanup).
 test("every job that references secrets has an environment", () => {
   for (const f of files) {
     for (const [name, job] of Object.entries(wf[f].jobs)) {
@@ -154,20 +156,35 @@ test("dependabot targets the default branch", () => {
   for (const u of d.updates) assert.equal(u["target-branch"], undefined)
 })
 
-test("the attribution check runs in ci and gates CI OK", () => {
+test("the attribution check runs in the workflow lint job and gates CI OK", () => {
   const ci = wf["ci.yml"]
-  assert.ok(ci.jobs.attribution)
-  assert.ok(ci.jobs["ci-ok"].needs.includes("attribution"))
-  assert.deepEqual(ci.jobs.attribution.permissions, {
-    contents: "read",
-    "pull-requests": "read",
-  })
-  const step = ci.jobs.attribution.steps.find((s) => s.name === "Require no tooling attribution")
+  const job = ci.jobs["workflow-lint"]
+  assert.equal(ci.jobs.attribution, undefined)
+  assert.deepEqual(ci.jobs["ci-ok"].needs, ["build-and-check", "browser", "workflow-lint"])
+  assert.deepEqual(job.permissions, { contents: "read", "pull-requests": "read" })
+  assert.equal(job.name, "Lint workflows and check attribution")
+  const idx = (name) => job.steps.findIndex((s) => s.name === name)
+  const attribution = idx("Require no tooling attribution")
+  const step = job.steps[attribution]
   assert.match(step.run, /gh api "repos\/\$GH_REPO\/pulls\/\$PR_NUMBER"/)
   assert.doesNotMatch(step.run, /GITHUB_EVENT_PATH/)
-  const checkout = ci.jobs.attribution.steps.find((s) =>
-    (s.uses ?? "").startsWith("actions/checkout"),
-  )
+  for (const key of [
+    "EVENT_NAME",
+    "PR_NUMBER",
+    "PR_BASE",
+    "PR_HEAD",
+    "PUSH_BEFORE",
+    "PUSH_AFTER",
+    "GH_TOKEN",
+    "GH_REPO",
+  ]) {
+    assert.ok(step.env[key], key)
+  }
+  assert.equal(job.env.PR_NUMBER, undefined)
+  assert.equal(job.env.GH_TOKEN, undefined)
+  assert.ok(attribution >= 0 && attribution < idx("Install actionlint"))
+  assert.ok(attribution < idx("Install zizmor"))
+  const checkout = job.steps.find((s) => (s.uses ?? "").startsWith("actions/checkout"))
   assert.equal(checkout.with["fetch-depth"], 0)
 })
 
@@ -254,5 +271,81 @@ test("scripts run in the deploy jobs import only Node built-ins", () => {
       ...source.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g),
     ].map((m) => m[1])
     for (const spec of specs) assert.ok(spec.startsWith("node:"), `${name} imports ${spec}`)
+  }
+})
+
+test("Cloudflare credentials come from the repository secret and variable", () => {
+  let tokens = 0
+  let accounts = 0
+  for (const f of files) {
+    assert.ok(!raw[f].includes("secrets.CLOUDFLARE_ACCOUNT_ID"), `${f} reads an account id secret`)
+    for (const job of Object.values(wf[f].jobs)) {
+      for (const env of [job.env, ...(job.steps ?? []).map((s) => s.env)]) {
+        if (env?.CLOUDFLARE_ACCOUNT_ID !== undefined) {
+          accounts++
+          assert.equal(env.CLOUDFLARE_ACCOUNT_ID, "${{ vars.CLOUDFLARE_ACCOUNT_ID }}", f)
+        }
+        if (env?.CLOUDFLARE_API_TOKEN !== undefined) {
+          tokens++
+          assert.equal(env.CLOUDFLARE_API_TOKEN, "${{ secrets.CLOUDFLARE_API_TOKEN }}", f)
+        }
+      }
+    }
+  }
+  assert.ok(tokens > 0 && accounts > 0)
+})
+
+test("the production guard requires the owner or an owner's Cut release", () => {
+  const w = wf["deploy-production.yml"]
+  const steps = w.jobs.guard.steps
+  const actor = steps.findIndex((s) => s.run === ".github/scripts/require-release-actor.sh")
+  const tag = steps.findIndex((s) => (s.run ?? "").includes("refs/tags/"))
+  const ci = steps.findIndex((s) => s.run === ".github/scripts/require-ci-success.sh")
+  assert.ok(tag >= 0 && actor > tag && ci > actor)
+  assert.equal(steps[actor].env.ACTOR, "${{ github.actor }}")
+  assert.equal(steps[actor].env.TRIGGERING_ACTOR, "${{ github.triggering_actor }}")
+  assert.equal(steps[actor].if, undefined)
+  assert.equal(steps[actor]["continue-on-error"], undefined)
+  assert.ok([w.jobs.deploy.needs].flat().includes("guard"))
+  assert.deepEqual(w.jobs.guard.permissions, { contents: "read", actions: "read" })
+})
+
+test("the browser job caches Playwright browsers keyed on the Playwright version", () => {
+  const steps = wf["ci.yml"].jobs.browser.steps
+  const at = (pred) => steps.findIndex(pred)
+  const cache = at((s) => (s.uses ?? "").startsWith("actions/cache@"))
+  const version = at((s) => s.id === "playwright")
+  const install = at((s) => s.name === "Install browsers")
+  const deps = at((s) => s.name === "Install browser system dependencies")
+  const deps_ = at((s) => s.name === "Install dependencies")
+  assert.ok(cache >= 0 && version >= 0 && install >= 0 && deps >= 0)
+  assert.ok(deps_ < version && version < cache && cache < install && cache < deps)
+  assert.equal(steps[cache].id, "pw-cache")
+  assert.equal(steps[cache].with.path, "~/.cache/ms-playwright")
+  assert.equal(
+    steps[cache].with.key,
+    "playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-webkit",
+  )
+  assert.equal(steps[cache].with["restore-keys"], undefined)
+  assert.ok(steps[version].run.includes("node_modules/playwright-core/package.json"))
+  assert.equal(steps[install].if, "steps.pw-cache.outputs.cache-hit != 'true'")
+  assert.match(steps[install].run, /install --with-deps chromium webkit$/)
+  assert.equal(steps[deps].if, "steps.pw-cache.outputs.cache-hit == 'true'")
+  assert.match(steps[deps].run, /^\.\/node_modules\/\.bin\/playwright install-deps chromium webkit/)
+})
+
+test("dependabot version updates run monthly", () => {
+  const d = parse(readFileSync(join(root, ".github", "dependabot.yml"), "utf8"))
+  assert.ok(d.updates.length > 0)
+  for (const u of d.updates) {
+    assert.equal(u.schedule.interval, "monthly", u.directory)
+    assert.equal(u.schedule.day, undefined, u.directory)
+  }
+})
+
+test("the deploy probes name the site, not the private repository, in the user agent", () => {
+  for (const f of ["deploy-stage.yml", "deploy-production.yml"]) {
+    assert.ok(raw[f].includes("notes-smoke-test/1 (+https://notes.szolotov.com)"), f)
+    assert.ok(!raw[f].includes("github.com/greenblacked"), f)
   }
 })

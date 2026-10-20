@@ -6,9 +6,9 @@ name: Deploy stage
 # but production; see docs/deployment.md#stage-preview). Production is not touched: Previews
 # never change production traffic.
 #
-# The `guard` job refuses any other ref, event, repository or actor, so the jobs that hold the
-# Cloudflare token only ever run code of `main` (a `main`-only branch policy on the
-# environment `stage` is recommended hardening; the guard is what enforces it).
+# The first step of `build` refuses any other ref, event, repository or actor, so the jobs that
+# hold the Cloudflare token only ever run code of `main`. On a private repository on GitHub Free
+# there are no environment branch policies, so this step is the only branch control.
 #
 # Two jobs: `build` runs the (third-party plugin) build code with no secrets and no
 # environment; `upload` has the secrets, installs only wrangler (tools/, without
@@ -42,21 +42,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  guard:
-    name: Require main and the owner
+  build:
+    name: Build
     # Forks never run it (their Actions skip quietly instead of failing).
     if: github.repository == 'greenblacked/Notes'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions: {}
+    # A cold `quartz plugin restore` (no cache here on purpose) takes about 15 minutes.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      current: ${{ steps.fresh.outputs.current }}
     env:
-      REPO: ${{ github.repository }}
-      REF: ${{ github.ref }}
-      EVENT: ${{ github.event_name }}
-      ACTOR: ${{ github.actor }}
-      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      SHA: ${{ github.sha }}
+      # Neither our dependencies nor the plugins' (npm-installed by `quartz plugin restore`) may
+      # run install scripts next to this job's checkout; the build needs none of them.
+      NPM_CONFIG_IGNORE_SCRIPTS: "true"
     steps:
+      # First, before any repository code runs.
       - name: Require the main branch and the owner
+        env:
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: |
           if [[ "$REPO" != "greenblacked/Notes" ]]; then
             echo "::error::Unexpected repository '$REPO'."
@@ -77,22 +87,6 @@ jobs:
             exit 1
           fi
 
-  build:
-    name: Build
-    needs: guard
-    runs-on: ubuntu-24.04
-    # A cold `quartz plugin restore` (no cache here on purpose) takes about 15 minutes.
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    outputs:
-      current: ${{ steps.fresh.outputs.current }}
-    env:
-      SHA: ${{ github.sha }}
-      # Neither our dependencies nor the plugins' (npm-installed by `quartz plugin restore`) may
-      # run install scripts next to this job's checkout; the build needs none of them.
-      NPM_CONFIG_IGNORE_SCRIPTS: "true"
-    steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -175,9 +169,10 @@ jobs:
       SHA: ${{ github.sha }}
       WRANGLER_SEND_METRICS: "false"
     steps:
-      # The guard job ensures github.sha is a commit of main. Intended: main receives only PR merges
-      # that passed CI OK (the `main` ruleset in docs/deployment.md#repository-settings; until it
-      # exists, only the owner-only actor check limits who deploys).
+      # The first step of the build job ensures github.sha is a commit of main. Intended: main
+      # receives only PR merges that passed CI OK; rulesets do not apply on a private Free
+      # repository, so only the owner-only actor check limits who deploys
+      # (docs/deployment.md#repository-settings).
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -239,7 +234,7 @@ jobs:
         if: steps.fresh.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           wrangler=tools/node_modules/.bin/wrangler
           if out="$("$wrangler" preview delete --name dev --skip-confirmation 2>&1)"; then
@@ -264,7 +259,7 @@ jobs:
         if: steps.fresh.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-preview.ndjson
         run: tools/node_modules/.bin/wrangler preview --name stage --message "stage ${SHA::7}" --tag "$SHA"
 
@@ -287,7 +282,7 @@ jobs:
         if: steps.fresh.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           DEPLOYMENT_ID: ${{ steps.parse.outputs.deployment_id }}
         run: |
           rc=0
@@ -356,7 +351,7 @@ jobs:
           probe="$RUNNER_TEMP/stage-probe.h"
           : >"$probe"
           code="$(curl --proto '=https' --tlsv1.2 -s -D "$probe" -o /dev/null -w '%{http_code}' --max-time 30 \
-            --user-agent 'notes-smoke-test/1 (+https://github.com/greenblacked/Notes)' \
+            --user-agent 'notes-smoke-test/1 (+https://notes.szolotov.com)' \
             https://stage.notes.szolotov.com/ || true)"
           echo "code=$code" >>"$GITHUB_OUTPUT"
           if [[ "$code" == "200" ]]; then
@@ -413,7 +408,7 @@ jobs:
         if: always() && steps.fresh.outputs.current == 'true' && contains(fromJSON('["success","failure","cancelled"]'), steps.preview.outcome) && (failure() || cancelled())
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           wrangler=tools/node_modules/.bin/wrangler
           if out="$("$wrangler" preview delete --name stage --skip-confirmation 2>&1)"; then

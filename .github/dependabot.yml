@@ -1,11 +1,13 @@
-# Version and security updates target the default branch (main).
+# Version updates target the default branch (main), monthly to save Actions minutes on the
+# private repository. Security updates are not tied to this schedule and still open as soon as an
+# advisory is published (they need Dependabot security updates enabled under Settings, Code
+# security).
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
@@ -30,8 +32,7 @@ updates:
   - package-ecosystem: npm
     directory: /tools
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
@@ -44,8 +45,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
@@ -57,8 +57,7 @@ updates:
   - package-ecosystem: pip
     directory: /.github/requirements
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 2
     cooldown:
       default-days: 7
