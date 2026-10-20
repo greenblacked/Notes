@@ -150,21 +150,53 @@ jobs:
           if-no-files-found: ignore
 
   workflow-lint:
-    name: Lint workflows
+    name: Lint workflows and check attribution
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: read # read the PR's current title and body
     env:
       # actionlint: release binary, verified against the sha256 published in the
       # release's checksums file (rhysd/actionlint v1.7.12, linux_amd64).
       ACTIONLINT_VERSION: 1.7.12
       ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
     steps:
+      # Full history so that the range of the pull request or push can be listed.
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      # Commit messages, author and committer emails, and for a pull request its title and body
+      # (fetched when the step runs, not taken from the event payload, which keeps the body as it
+      # was when the run started: a footer appended at creation and cleaned afterwards is gone
+      # on a re-run) must carry no tooling attribution. A zero `before`
+      # (first push) checks only the head commit. Runs before any downloaded tool.
+      - name: Require no tooling attribution
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            gh api "repos/$GH_REPO/pulls/$PR_NUMBER" | jq '{pull_request: .}' >"$RUNNER_TEMP/pr.json"
+            node scripts/check-attribution.mjs --range "$PR_BASE..$PR_HEAD" --event "$RUNNER_TEMP/pr.json"
+          else
+            node scripts/check-attribution.mjs --range "$PUSH_BEFORE..$PUSH_AFTER"
+          fi
 
       - name: Install actionlint
         run: |
@@ -196,54 +228,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: '"$RUNNER_TEMP/zizmor-venv/bin/zizmor" --format=github .github'
 
-  attribution:
-    name: Check attribution
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read # read the PR's current title and body
-    env:
-      EVENT_NAME: ${{ github.event_name }}
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      PR_BASE: ${{ github.event.pull_request.base.sha }}
-      PR_HEAD: ${{ github.event.pull_request.head.sha }}
-      PUSH_BEFORE: ${{ github.event.before }}
-      PUSH_AFTER: ${{ github.event.after }}
-    steps:
-      # Full history so that the range of the pull request or push can be listed.
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-
-      # Commit messages, author and committer emails, and for a pull request its title and body
-      # (fetched when the step runs, not taken from the event payload, which keeps the body as it
-      # was when the run started: a footer appended at creation and cleaned afterwards is gone
-      # on a re-run) must carry no tooling attribution. A zero `before`
-      # (first push) checks only the head commit.
-      - name: Require no tooling attribution
-        run: |
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            gh api "repos/$GH_REPO/pulls/$PR_NUMBER" | jq '{pull_request: .}' >"$RUNNER_TEMP/pr.json"
-            node scripts/check-attribution.mjs --range "$PR_BASE..$PR_HEAD" --event "$RUNNER_TEMP/pr.json"
-          else
-            node scripts/check-attribution.mjs --range "$PUSH_BEFORE..$PUSH_AFTER"
-          fi
-
   ci-ok:
     name: CI OK
     if: always()
-    needs: [build-and-check, browser, workflow-lint, attribution]
+    needs: [build-and-check, browser, workflow-lint]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

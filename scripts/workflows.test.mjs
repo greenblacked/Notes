@@ -156,20 +156,35 @@ test("dependabot targets the default branch", () => {
   for (const u of d.updates) assert.equal(u["target-branch"], undefined)
 })
 
-test("the attribution check runs in ci and gates CI OK", () => {
+test("the attribution check runs in the workflow lint job and gates CI OK", () => {
   const ci = wf["ci.yml"]
-  assert.ok(ci.jobs.attribution)
-  assert.ok(ci.jobs["ci-ok"].needs.includes("attribution"))
-  assert.deepEqual(ci.jobs.attribution.permissions, {
-    contents: "read",
-    "pull-requests": "read",
-  })
-  const step = ci.jobs.attribution.steps.find((s) => s.name === "Require no tooling attribution")
+  const job = ci.jobs["workflow-lint"]
+  assert.equal(ci.jobs.attribution, undefined)
+  assert.deepEqual(ci.jobs["ci-ok"].needs, ["build-and-check", "browser", "workflow-lint"])
+  assert.deepEqual(job.permissions, { contents: "read", "pull-requests": "read" })
+  assert.equal(job.name, "Lint workflows and check attribution")
+  const idx = (name) => job.steps.findIndex((s) => s.name === name)
+  const attribution = idx("Require no tooling attribution")
+  const step = job.steps[attribution]
   assert.match(step.run, /gh api "repos\/\$GH_REPO\/pulls\/\$PR_NUMBER"/)
   assert.doesNotMatch(step.run, /GITHUB_EVENT_PATH/)
-  const checkout = ci.jobs.attribution.steps.find((s) =>
-    (s.uses ?? "").startsWith("actions/checkout"),
-  )
+  for (const key of [
+    "EVENT_NAME",
+    "PR_NUMBER",
+    "PR_BASE",
+    "PR_HEAD",
+    "PUSH_BEFORE",
+    "PUSH_AFTER",
+    "GH_TOKEN",
+    "GH_REPO",
+  ]) {
+    assert.ok(step.env[key], key)
+  }
+  assert.equal(job.env.PR_NUMBER, undefined)
+  assert.equal(job.env.GH_TOKEN, undefined)
+  assert.ok(attribution >= 0 && attribution < idx("Install actionlint"))
+  assert.ok(attribution < idx("Install zizmor"))
+  const checkout = job.steps.find((s) => (s.uses ?? "").startsWith("actions/checkout"))
   assert.equal(checkout.with["fetch-depth"], 0)
 })
 
