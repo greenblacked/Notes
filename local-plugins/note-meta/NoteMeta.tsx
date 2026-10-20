@@ -3,6 +3,7 @@ import type { ComponentChildren } from "preact"
 import { classNames } from "../../quartz/util/lang"
 import type { QuartzComponent, QuartzComponentProps } from "../../quartz/components/types"
 import { asLowerString, evidenceLabel, isoDay, typeLabel } from "./format"
+import { learnNav, learnNavCss } from "./LearnNav"
 
 /**
  * Spec sheet under the title, driven by the frontmatter fields `type`, `evidence`, `decided`,
@@ -12,9 +13,17 @@ import { asLowerString, evidenceLabel, isoDay, typeLabel } from "./format"
  * and the tags page stay clean (the content-meta plugin shows their date instead; the styles hide
  * its date where this sheet already has one). The sheet is a definition list: a term and a value
  * per item, so a screen reader hears "Verified, 2026-10-11".
+ *
+ * Under the sheet, a lesson in learn/ also gets its stage and place in the path with links to the
+ * previous and next lesson (LearnNav.tsx; the order is in learn-path.json). Its styles ship as the
+ * component's own CSS.
  */
 export default (() => {
-  const NoteMeta: QuartzComponent = ({ fileData, displayClass }: QuartzComponentProps) => {
+  const NoteMeta: QuartzComponent = ({
+    fileData,
+    allFiles,
+    displayClass,
+  }: QuartzComponentProps) => {
     const fm = (fileData.frontmatter ?? {}) as Record<string, unknown>
     const type = asLowerString(fm.type)
     const verified = isoDay(fm.verified)
@@ -36,7 +45,7 @@ export default (() => {
     )
     const day = (iso: string) => <time datetime={iso}>{iso}</time>
 
-    return (
+    const sheet = (
       <dl class={classNames(displayClass, "note-meta")}>
         {type &&
           item(
@@ -53,6 +62,16 @@ export default (() => {
         {minutes !== undefined && item("Reading time", `${minutes} min`)}
       </dl>
     )
+    const lessons = learnNav(fileData.slug ?? "", allFiles)
+    return lessons ? (
+      <>
+        {sheet}
+        {lessons}
+      </>
+    ) : (
+      sheet
+    )
   }
+  NoteMeta.css = learnNavCss
   return NoteMeta
 }) satisfies () => QuartzComponent
