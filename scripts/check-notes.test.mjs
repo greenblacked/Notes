@@ -503,3 +503,44 @@ test("an undeclared note with a bad type or missing base fields still passes", (
   const bad = tree({ "b.md": note({ fm: { type: "runbok" } }) })
   assert.equal(run(bad).status, 1)
 })
+
+test("an ADR that declares evidence needs a valid status and decided date", () => {
+  const adr = (fm) => problems(note({ fm: { type: "adr", ...fm } }))
+  const ok = { status: "accepted", decided: "2026-10-01" }
+  assert.deepEqual(adr(ok), [])
+  for (const bad of [undefined, "Accepted", "maybe", '""']) {
+    const list = adr({ ...ok, status: bad })
+    assert.ok(has(list, /`status` must be one of/), `${bad}: ${list.join("|")}`)
+  }
+  for (const bad of [undefined, "2026-02-30", "soon"]) {
+    const list = adr({ ...ok, decided: bad })
+    assert.ok(
+      has(list, /`decided` is missing or not a valid ISO date/),
+      `${bad}: ${list.join("|")}`,
+    )
+  }
+  assert.ok(!has(problems(note()), /`status`|`decided`/))
+})
+
+test("verified must be a valid date that is not in the future", () => {
+  for (const level of ["source-reviewed", "lab-tested"]) {
+    const base = { evidence: level }
+    assert.ok(!has(problems(note({ fm: { ...base, verified: "2026-10-11" } })), /`verified`/))
+    assert.ok(
+      has(problems(note({ fm: { ...base, verified: "nope" } })), /`verified` is not a valid/),
+    )
+    assert.ok(
+      has(problems(note({ fm: { ...base, verified: "2026-10-21" } })), /`verified`.*after today/),
+    )
+  }
+  const op = problems(note({ fm: { evidence: "operationally-verified", verified: "2026-10-21" } }))
+  assert.ok(has(op, /`verified`.*after today/), op.join("|"))
+})
+
+test("the example in writing-notes.md has no base-field problems", () => {
+  const doc = readFileSync(join(root, "content", "standards", "writing-notes.md"), "utf8")
+  const m = doc.match(/### Example\n\n```markdown\n([\s\S]*?)\n```\n/)
+  assert.ok(m, "example block not found")
+  const list = problems(m[1])
+  assert.ok(!has(list, /`(title|description|tags|created|modified|draft|type)`/), list.join("|"))
+})

@@ -161,6 +161,9 @@ export const NOTE_TYPES = [
   "note",
 ]
 
+// The statuses of the lifecycle table in content/adr/index.md.
+export const ADR_STATUSES = ["proposed", "accepted", "rejected", "deprecated", "superseded"]
+
 const META_FIELDS = ["evidence", "reviewed", "review-due", "destructive"]
 
 /**
@@ -185,6 +188,14 @@ function baseProblems(fm) {
   if (typeof fm.draft !== "boolean") problems.push("`draft` must be true or false")
   if (typeof fm.type !== "string" || !NOTE_TYPES.includes(fm.type)) {
     problems.push(`\`type\` is missing or not one of ${NOTE_TYPES.join(", ")} (lowercase)`)
+  }
+  if (fm.type === "adr") {
+    if (typeof fm.status !== "string" || !ADR_STATUSES.includes(fm.status)) {
+      problems.push(`\`status\` must be one of ${ADR_STATUSES.join(", ")} (lowercase)`)
+    }
+    if (!isoDay(fm.decided)) {
+      problems.push("`decided` is missing or not a valid ISO date (YYYY-MM-DD)")
+    }
   }
   return problems
 }
@@ -232,6 +243,13 @@ export function checkNote(note, { today }) {
   }
   if (level === "operationally-verified" && !isoDay(fm.verified)) {
     problems.push("`operationally-verified` needs a valid `verified` date")
+  } else if (has("verified")) {
+    const verified = isoDay(fm.verified)
+    if (!verified) problems.push("`verified` is not a valid ISO date (YYYY-MM-DD)")
+    else if (verified > today) problems.push(`\`verified\` ${verified} is after today (${today})`)
+  }
+  if (level === "operationally-verified" && isoDay(fm.verified) > today) {
+    problems.push(`\`verified\` ${isoDay(fm.verified)} is after today (${today})`)
   }
 
   const ol = outline(note.body)
