@@ -192,10 +192,10 @@ jobs:
       - name: Require Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
-            echo "::error::CLOUDFLARE_API_TOKEN (secret) and CLOUDFLARE_ACCOUNT_ID (variable or secret) must be set."
+            echo "::error::Repository secret CLOUDFLARE_API_TOKEN and repository variable CLOUDFLARE_ACCOUNT_ID must be set (Settings, Secrets and variables, Actions). Environment secrets are not available on a private repository on GitHub Free."
             exit 1
           fi
 
@@ -206,7 +206,7 @@ jobs:
         id: previous
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if out="$(tools/node_modules/.bin/wrangler deployments status --json 2>"$RUNNER_TEMP/previous.err")"; then
             id="$(jq -r 'if (.versions | length) == 1 then .versions[0].version_id else "" end' <<<"$out" || true)"
@@ -228,7 +228,7 @@ jobs:
         id: wrangler
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-deploy.ndjson
         run: |
           tools/node_modules/.bin/wrangler deploy
@@ -261,7 +261,7 @@ jobs:
       - name: Verify the new version serves 100%
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           VERSION_ID: ${{ steps.wrangler.outputs.version_id }}
         run: |
           out="$(tools/node_modules/.bin/wrangler deployments status --json)"
@@ -292,7 +292,7 @@ jobs:
         if: (failure() || cancelled()) && steps.previous.outputs.version_id != '' && steps.wrangler.outcome != 'skipped'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           PREVIOUS_VERSION_ID: ${{ steps.previous.outputs.version_id }}
         run: |
           # The failure may have happened before the new version went live.

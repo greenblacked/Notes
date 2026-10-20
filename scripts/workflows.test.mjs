@@ -60,6 +60,8 @@ test("no dangerous triggers", () => {
   }
 })
 
+// The environment no longer scopes secrets on a private Free repository; kept so that jobs
+// holding secrets stay the deploy jobs (deployment records, environment URL, cleanup).
 test("every job that references secrets has an environment", () => {
   for (const f of files) {
     for (const [name, job] of Object.entries(wf[f].jobs)) {
@@ -255,4 +257,25 @@ test("scripts run in the deploy jobs import only Node built-ins", () => {
     ].map((m) => m[1])
     for (const spec of specs) assert.ok(spec.startsWith("node:"), `${name} imports ${spec}`)
   }
+})
+
+test("Cloudflare credentials come from the repository secret and variable", () => {
+  let tokens = 0
+  let accounts = 0
+  for (const f of files) {
+    assert.ok(!raw[f].includes("secrets.CLOUDFLARE_ACCOUNT_ID"), `${f} reads an account id secret`)
+    for (const job of Object.values(wf[f].jobs)) {
+      for (const env of [job.env, ...(job.steps ?? []).map((s) => s.env)]) {
+        if (env?.CLOUDFLARE_ACCOUNT_ID !== undefined) {
+          accounts++
+          assert.equal(env.CLOUDFLARE_ACCOUNT_ID, "${{ vars.CLOUDFLARE_ACCOUNT_ID }}", f)
+        }
+        if (env?.CLOUDFLARE_API_TOKEN !== undefined) {
+          tokens++
+          assert.equal(env.CLOUDFLARE_API_TOKEN, "${{ secrets.CLOUDFLARE_API_TOKEN }}", f)
+        }
+      }
+    }
+  }
+  assert.ok(tokens > 0 && accounts > 0)
 })
