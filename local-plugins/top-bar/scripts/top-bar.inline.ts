@@ -363,22 +363,29 @@ requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add("moti
 // exists, motion is allowed and the device has a mouse or trackpad (a fine pointer), the
 // click is replayed inside startViewTransition: the whole page then cross-fades as one snapshot
 // (--dur-theme). Otherwise the colours flip in one frame: capturing the old snapshot costs
-// 100-200ms of main-thread time on a slow phone, which is slower than the flip itself.
+// 100-200ms of main-thread time on a slow phone, which is slower than the flip itself. Inside the
+// cross-fade the fade itself swaps the theme icons, so the icon's own turn is off there (a turn
+// under the fade would show twice and outlast it).
 const SWITCHING = "theme-switching"
+const SNAPSHOT = "data-theme-snapshot" // set while the switch runs inside a View Transition
 type ViewTransitionLike = { ready: Promise<void>; finished: Promise<void> }
 type StartViewTransition = (update: () => void) => ViewTransitionLike
 let switchId = 0
 let replaying = false
 
-function beginSwitch() {
+function beginSwitch(snapshot = false) {
   root.classList.add(SWITCHING)
+  root.toggleAttribute(SNAPSHOT, snapshot)
   return ++switchId
 }
 // Taking the class off restyles the whole tree once (no visible change, but it costs about as
 // much as the flip itself on a big page); do it when the page is idle, never in the flip's frame.
 function endSwitch(id: number) {
   const done = () => {
-    if (id === switchId) root.classList.remove(SWITCHING)
+    if (id === switchId) {
+      root.classList.remove(SWITCHING)
+      root.removeAttribute(SNAPSHOT)
+    }
   }
   const idle = (
     window as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
@@ -408,7 +415,7 @@ document.addEventListener(
     e.stopImmediatePropagation()
     let id = 0
     const vt = start.call(document, () => {
-      id = beginSwitch()
+      id = beginSwitch(true)
       replaying = true
       try {
         btn.click()

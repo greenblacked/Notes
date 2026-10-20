@@ -163,6 +163,11 @@ test("theme switch: no per-element theme fade, transitions off for the flip", ()
     scss,
     /:root\.theme-switching \*:not\(\.darkmode > svg\),[\s\S]*?\{\s*transition:\s*none !important;/,
   )
+  assert.match(
+    scss,
+    /:root\.theme-switching\[data-theme-snapshot\] \.darkmode > svg[\s\S]*?\{\s*transition:\s*none !important;/,
+  )
+  assert.ok(!scss.includes("--ease-spring"), "the theme icon must not overshoot")
   assert.ok(
     !/transition-property:[^;]*\b(opacity|transform|visibility)\b[^;]*!important/.test(scss),
     "no global forced transform/opacity/visibility transition",
@@ -184,5 +189,7 @@ test("theme switch: script feature-detects the API, respects reduced motion, no 
   assert.match(topBar, /reducedMotion\(\) \|\| typeof start/)
   assert.match(topBar, /addEventListener\(\s*"click",[\s\S]*?,\s*true,?\s*\)/)
   assert.match(topBar, /vt\.ready\.catch\(/)
+  assert.match(topBar, /beginSwitch\(true\)/)
+  assert.match(topBar, /removeAttribute\(SNAPSHOT\)/)
   assert.ok(!/setTimeout\([^)]*theme[^)]*,\s*450\)/.test(topBar), "the fixed 450ms timer is gone")
 })

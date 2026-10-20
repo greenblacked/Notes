@@ -92,11 +92,10 @@ $unicode-ranges: (
 
   // Motion. Durations: hover and focus, state changes, entrances. Curves: --ease-out decelerates
   // (the default for anything that arrives or reacts), --ease-in-out is for colour fades that run
-  // both ways, --ease-drawer is a spring-like settle without overshoot (the drawer sits on the
-  // screen edge, so overshoot would show a gap) and --ease-spring overshoots slightly, for small
-  // things such as the theme icon. Only cheap properties are transitioned: opacity, transform,
-  // colours and box-shadow, never `all` and never layout. --dur-theme is the cross-fade of the whole
-  // page on a theme change (one snapshot fade, see .theme-switching).
+  // both ways and --ease-drawer is a spring-like settle without overshoot (the drawer sits on the
+  // screen edge, so overshoot would show a gap). Only cheap properties are transitioned: opacity,
+  // transform, colours and box-shadow, never `all` and never layout. --dur-theme is the cross-fade
+  // of the whole page on a theme change (one snapshot fade, see .theme-switching).
   --dur-fast: 180ms;
   --dur: 260ms;
   --dur-slow: 380ms;
@@ -106,7 +105,6 @@ $unicode-ranges: (
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   // The desk behind the sheet, and the tint of callouts, code and cards on the sheet.
   --desk: #ebe5d7;
@@ -230,14 +228,16 @@ $unicode-ranges: (
 
 // Changing the theme. The top-bar script puts .theme-switching on the root in the same style
 // recalc that flips saved-theme, and takes it off once the switch has painted. While it is on,
-// nothing transitions, so a flip costs one recalc and no per-element transitions; the theme icon
-// keeps its own turn. Where the View Transitions API exists and the device has a mouse or
-// trackpad, the whole page cross-fades as one snapshot. Elsewhere (phones, tablets), and with
-// reduced motion, the colours flip in one frame.
+// nothing transitions, so a flip costs one recalc and no per-element transitions. The theme icon
+// keeps its own turn only on the one-frame path; inside the cross-fade (data-theme-snapshot) the
+// fade swaps the icons and a turn would show twice and outlast it. Where the View Transitions API
+// exists and the device has a mouse or trackpad, the whole page cross-fades as one snapshot.
+// Elsewhere (phones, tablets), and with reduced motion, the colours flip in one frame.
 :root.theme-switching,
 :root.theme-switching *:not(.darkmode > svg),
 :root.theme-switching *::before,
-:root.theme-switching *::after {
+:root.theme-switching *::after,
+:root.theme-switching[data-theme-snapshot] .darkmode > svg {
   transition: none !important;
 }
 
@@ -869,7 +869,7 @@ body {
       transform: none;
       transition:
         opacity var(--dur) var(--ease-out),
-        transform var(--dur-slow) var(--ease-spring),
+        transform var(--dur-slow) var(--ease-out),
         fill var(--dur-fast) var(--ease-out),
         visibility 0s;
     }
@@ -880,7 +880,7 @@ body {
       transform: rotate(-70deg) scale(0.55);
       transition:
         opacity var(--dur) var(--ease-out),
-        transform var(--dur-slow) var(--ease-spring),
+        transform var(--dur-slow) var(--ease-out),
         fill var(--dur-fast) var(--ease-out),
         visibility 0s linear var(--dur);
     }
@@ -900,7 +900,7 @@ body {
       transform: rotate(70deg) scale(0.55);
       transition:
         opacity var(--dur) var(--ease-out),
-        transform var(--dur-slow) var(--ease-spring),
+        transform var(--dur-slow) var(--ease-out),
         fill var(--dur-fast) var(--ease-out),
         visibility 0s linear var(--dur);
     }
@@ -911,7 +911,7 @@ body {
       transform: none;
       transition:
         opacity var(--dur) var(--ease-out),
-        transform var(--dur-slow) var(--ease-spring),
+        transform var(--dur-slow) var(--ease-out),
         fill var(--dur-fast) var(--ease-out),
         visibility 0s;
     }
