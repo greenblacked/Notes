@@ -7,34 +7,27 @@ const credit = read("local-plugins/linked-from/credit.ts")
 const component = read("local-plugins/linked-from/NoteCredit.tsx")
 const linkedFrom = read("local-plugins/linked-from/LinkedFrom.tsx")
 
-test("the canonical host matches the worker's", () => {
-  const w = read("worker/indexing.js").match(/CANONICAL_HOST = "([^"]+)"/)
-  const c = credit.match(/CANONICAL_HOST = "([^"]+)"/)
-  assert.ok(w && c)
-  assert.equal(c[1], w[1])
+test("the credit links no source repository or issue tracker", () => {
+  assert.doesNotMatch(credit + component, /github\.com/)
+  assert.doesNotMatch(credit + component, /REPO_URL|sourceUrl|reportUrl|issues\/new/)
 })
 
-test("the repo URL matches the one in the smoke test", () => {
-  const c = credit.match(/REPO_URL = "([^"]+)"/)
-  assert.ok(c)
-  assert.ok(read("scripts/smoke-test.sh").includes(c[1]))
+test("the smoke test user agent names the site, not the repository", () => {
+  const smoke = read("scripts/smoke-test.sh")
+  assert.ok(smoke.includes("notes-smoke-test/1 (+https://notes.szolotov.com)"))
+  assert.doesNotMatch(smoke, /github\.com\/greenblacked/)
 })
 
 test("only known absolute URLs appear", () => {
   const urls = (credit + component).match(/https?:\/\/[^\s"'`)\\]+/g) ?? []
   assert.ok(urls.length > 0)
   for (const u of urls) {
-    assert.match(
-      u,
-      /^https:\/\/(\$\{CANONICAL_HOST\}|github\.com\/greenblacked\/Notes|ai\.szolotov\.com|notes\.szolotov\.com)(\/|$)/,
-      u,
-    )
+    assert.match(u, /^https:\/\/ai\.szolotov\.com(\/|$)/, u)
   }
 })
 
-test("the report link encodes its parts and has no forbidden constructs", () => {
+test("the credit has no forbidden constructs", () => {
   const all = credit + component
-  assert.match(credit, /encodeURIComponent/)
   assert.doesNotMatch(all, /cfg\.baseUrl|baseUrl/)
   assert.doesNotMatch(all, /<form/)
   assert.doesNotMatch(all, /dangerouslySetInnerHTML/)
