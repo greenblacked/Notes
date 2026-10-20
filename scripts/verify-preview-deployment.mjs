@@ -16,8 +16,9 @@
  * run's upload (`--previous <id|none>`, read by `--read-previous` before the upload), it prints
  * `superseded=true` and `superseded_by=<id>` and exits 3, so the caller can leave the newer
  * deployment alone. An id equal to the previous one is a stale read (lag), not a newer upload: an
- * ordinary failure. Without `--previous`, or when the pre-read failed (`unknown`), nothing is ever
- * superseded. A tag or message mismatch on our own deployment, a transient or missing-preview
+ * ordinary failure. Without `--previous`, with `none` (the Preview did not exist: a foreign id may
+ * be a lagging replica's last deployment of a deleted Preview) or when the pre-read failed
+ * (`unknown`), nothing is ever superseded. A tag or message mismatch on our own deployment, a transient or missing-preview
  * (10025 / 10222) answer on the last attempt, or a malformed answer is an ordinary failure
  * (exit 1). Right after the upload creates or recreates the Preview, the read side may briefly
  * answer 10025 / 10222 (or show our deployment without annotations); those are retried within the
@@ -345,7 +346,10 @@ export async function main(argv, env, deps = {}) {
   }
   // Only a deployment that is neither ours nor the one that was live before our upload is newer
   // than our upload. Without a known previous id, a stale read cannot be told from a newer upload.
-  if (supersededBy !== undefined && args.previous !== undefined && supersededBy !== args.previous) {
+  // `none` is no basis either: a lagging replica can still serve the last deployment of a Preview
+  // that an earlier teardown deleted, which would look like a newer upload.
+  const known = args.previous !== undefined && args.previous !== "none"
+  if (supersededBy !== undefined && known && supersededBy !== args.previous) {
     throw new SupersededError(`${last} (after ${attempts} attempts; superseded)`, supersededBy)
   }
   return fail(`${last} (after ${attempts} attempts)`)

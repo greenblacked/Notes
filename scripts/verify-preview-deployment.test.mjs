@@ -314,10 +314,11 @@ test("not superseded: a stale answer equal to the previous id, or no usable prev
   await assert.rejects(main(argv, env, deps(fakeFetch(other), 2)), (error) => {
     return !(error instanceof SupersededError) && /after 2 attempts/.test(error.message)
   })
-  // The Preview did not exist before (`none`): a different id is a real newer upload.
+  // The Preview did not exist before (`none`): a foreign id may be a lagging replica's last
+  // deployment of a deleted Preview, so it is an ordinary failure (teardown runs).
   await assert.rejects(
     main([...argv, "--previous", "none"], env, deps(fakeFetch(other), 2)),
-    SupersededError,
+    (error) => !(error instanceof SupersededError) && /after 2 attempts/.test(error.message),
   )
 })
 
