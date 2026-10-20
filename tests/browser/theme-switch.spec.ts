@@ -18,7 +18,7 @@ type Sampled = { samples: Sample[]; fadePath: boolean; motion: boolean }
 
 // Clicks the theme toggle like a user (mouse on desktop, a tap on phones) and samples the top bar,
 // its section row, the scroll position and the theme icon on every animation frame and
-// every 16ms timer tick for 900ms.
+// every 16ms timer tick until 900ms after the click event.
 async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> {
   const btn = page.locator(".darkmode").first()
   const box = await btn.boundingBox() // does not scroll, unlike locator.click()
@@ -34,15 +34,17 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
     }
     w.__s = []
     w.__tc = NaN
-    // The click time, taken in the capture phase on window so it runs before top-bar's own
-    // capture listener on document starts the switch.
-    window.addEventListener("pointerdown", () => (w.__tc = performance.now()), {
+    // The switch starts on the click event (top-bar's capture listener on document), so take the
+    // click time in the capture phase on window, which runs first. "once" skips the click that
+    // top-bar replays inside startViewTransition.
+    window.addEventListener("click", () => (w.__tc = performance.now()), {
       capture: true,
       once: true,
     })
     w.__done = new Promise<void>((res) => {
       let finished = false
       let last = -1
+      const started = performance.now()
       const tick = () => {
         if (finished) return
         const t = performance.now() // absolute for now; made relative to the click on return
@@ -76,7 +78,9 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
               ),
             ),
         })
-        if (t - w.__tc >= 900) {
+        // Without a click event after 3s, stop anyway so the coverage check fails with its
+        // timestamps instead of the test hanging to the timeout.
+        if (t - w.__tc >= 900 || t - started >= 3000) {
           finished = true
           res()
         }
@@ -116,9 +120,10 @@ async function switchAndSample(page: Page, isMobile: boolean): Promise<Sampled> 
   }))
 }
 
-// The switch itself lasts under 400ms (cross-fade 180ms after a 70-200ms snapshot, icon turn 380ms). How many samples land
-// in it depends on the engine, since WebKit's main thread is busy during the switch, so assert
-// that the samples cover the switch instead of counting them. Sample times count from the click.
+// The switch itself lasts under 400ms (cross-fade 180ms after a 70-200ms snapshot, icon turn
+// 380ms). How many samples land in it depends on the engine, since WebKit's main thread is busy
+// during the switch, so assert that the samples cover the switch instead of counting them.
+// Sample times count from the click event.
 function expectStillGeometry(samples: Sample[], testInfo: TestInfo) {
   const first = samples[0]
   const times = samples.map((s) => Math.round(s.t))
