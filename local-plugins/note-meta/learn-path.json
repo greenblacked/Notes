@@ -1,0 +1,118 @@
+{
+  "stages": [
+    {
+      "title": "Stage 0: Start",
+      "core": ["lab-setup"],
+      "deeper": []
+    },
+    {
+      "title": "Stage 1: Linux",
+      "core": [
+        "linux-shell-and-filesystem",
+        "linux-users-permissions-sudo-and-ssh",
+        "text-and-data-tools",
+        "linux-processes-memory-and-disk",
+        "linux-services-packages-and-scheduled-jobs"
+      ],
+      "deeper": ["linux-performance-triage-with-mpstat-pidstat-sar-and-psi"]
+    },
+    {
+      "title": "Stage 2: Networking",
+      "core": [
+        "network-layers-tcp-and-udp",
+        "ip-addressing-and-subnets",
+        "dns-resolution",
+        "http-and-tls",
+        "load-balancers-firewalls-and-network-troubleshooting"
+      ],
+      "deeper": []
+    },
+    {
+      "title": "Stage 3: Git and collaboration",
+      "core": [
+        "git-mental-model-and-daily-workflow",
+        "git-merge-rebase-and-undo",
+        "pull-requests-and-code-review"
+      ],
+      "deeper": []
+    },
+    {
+      "title": "Stage 4: Scripting",
+      "core": ["bash-scripting-fundamentals", "safe-bash-scripts", "python-for-ops"],
+      "deeper": []
+    },
+    {
+      "title": "Stage 5: Containers",
+      "core": [
+        "containers-under-the-hood",
+        "running-and-debugging-containers",
+        "building-and-shipping-images",
+        "container-storage-networking-and-compose"
+      ],
+      "deeper": ["image-build-speed-cache-mounts-and-measurement"]
+    },
+    {
+      "title": "Stage 6: Kubernetes",
+      "core": [
+        "kubernetes-architecture-and-kind",
+        "kubernetes-pods-and-deployments",
+        "kubernetes-services-and-ingress",
+        "kubernetes-config-secrets-and-namespaces",
+        "kubernetes-probes-resources-and-debugging",
+        "helm-basics-and-capstone"
+      ],
+      "deeper": [
+        "rbac-roles-bindings-and-least-privilege",
+        "helm-chart-authoring-schema-dependencies-and-tests"
+      ]
+    },
+    {
+      "title": "Stage 7: Google Cloud",
+      "core": [
+        "gcp-foundations",
+        "gcp-iam-and-service-accounts",
+        "gcp-vpc-compute-and-cloud-sql",
+        "gke-for-beginners"
+      ],
+      "deeper": []
+    },
+    {
+      "title": "Stage 8: CI/CD and infrastructure as code",
+      "core": [
+        "ci-cd-concepts-and-branching",
+        "first-pipeline-gitlab-ci-and-jenkins",
+        "environments-releases-and-rollbacks",
+        "terraform-basics-on-gcp",
+        "terraform-state-modules-and-pipelines"
+      ],
+      "deeper": [
+        "gitlab-ci-rules-dag-matrix-and-includes",
+        "jenkins-agents-configuration-as-code-and-shared-libraries",
+        "artifactory-repositories-access-and-retention",
+        "sonarqube-basics-first-scan-and-triage",
+        "terraform-for-each-lifecycle-and-tests"
+      ]
+    },
+    {
+      "title": "Stage 9: Security",
+      "core": ["security-basics-for-devops"],
+      "deeper": []
+    },
+    {
+      "title": "Stage 10: Observability and incidents",
+      "core": [
+        "observability-signals-and-dashboards",
+        "searching-logs",
+        "first-prometheus-alert",
+        "troubleshooting-method",
+        "on-call-incidents-and-postmortems"
+      ],
+      "deeper": ["promql-for-alert-rules-and-recording-rules"]
+    },
+    {
+      "title": "Stage 11: Next level",
+      "core": ["becoming-a-middle-devops-engineer"],
+      "deeper": []
+    }
+  ]
+}

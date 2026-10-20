@@ -5,7 +5,7 @@ tags:
   - learning
   - meta
 created: 2026-10-17
-modified: 2026-10-19
+modified: 2026-10-20
 draft: false
 ---
 
@@ -29,6 +29,23 @@ It is for people from their first job to middle level: new engineers, developers
 > Every lesson has the same shape: an opening callout with the level, time, prerequisites and lab; what you will learn; concept sections; hands-on exercises; common mistakes; check-your-understanding questions with folded answers; next steps; and sources. Time estimates are rough. Facts that depend on a tool version are flagged "Check before relying on this" or "verify for your version"; check them before relying on them.
 
 Level chips: `junior` can be done without prior experience of the topic; `junior-middle` needs the earlier stages and takes more thought; `middle` is the level of independent work, with trade-offs and judgement.
+
+## Stages
+
+Each lesson shows its stage, its number in the path and the previous and next lesson at the top. Jump to a stage:
+
+- [Stage 0: Start](#stage-0-start)
+- [Stage 1: Linux](#stage-1-linux)
+- [Stage 2: Networking](#stage-2-networking)
+- [Stage 3: Git and collaboration](#stage-3-git-and-collaboration)
+- [Stage 4: Scripting](#stage-4-scripting)
+- [Stage 5: Containers](#stage-5-containers)
+- [Stage 6: Kubernetes](#stage-6-kubernetes)
+- [Stage 7: Google Cloud](#stage-7-google-cloud)
+- [Stage 8: CI/CD and infrastructure as code](#stage-8-cicd-and-infrastructure-as-code)
+- [Stage 9: Security](#stage-9-security)
+- [Stage 10: Observability and incidents](#stage-10-observability-and-incidents)
+- [Stage 11: Next level](#stage-11-next-level)
 
 ## Stage 0: Start
 
