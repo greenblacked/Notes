@@ -6,6 +6,7 @@ import { componentRegistry } from "./quartz/components/registry"
 import { registerCondition } from "./quartz/plugins/loader/conditions"
 import NoteMeta from "./local-plugins/note-meta/NoteMeta"
 import NoteIndex from "./local-plugins/note-index/NoteIndex"
+import StartHere from "./local-plugins/start-here/StartHere"
 import TopBar from "./local-plugins/top-bar/TopBar"
 import SectionRow from "./local-plugins/section-row/SectionRow"
 import LinkedFrom from "./local-plugins/linked-from/LinkedFrom"
@@ -20,15 +21,18 @@ const baseUrl = (process.env.NOTES_BASE_URL || "notes.szolotov.com")
   .replace(/^https?:\/\//, "")
   .replace(/\/+$/, "")
 
-// The `home` condition limits a component to the home page (note-index uses it).
+// The `home` condition limits a component to the home page (start-here uses it), `all-notes` to
+// the All notes page (note-index uses it).
 registerCondition("home", (props) => props.fileData.slug === "index")
+registerCondition("all-notes", (props) => props.fileData.slug === "all-notes")
 
-// Spec sheet, note index, top bar, section row, skip-link target, "Linked from", graph launcher and note graph (local-plugins/, laid out in
+// Spec sheet, note index, start here, top bar, section row, skip-link target, "Linked from", graph launcher and note graph (local-plugins/, laid out in
 // quartz.config.yaml). Registered here because the plugin loader only registers components that a
 // plugin's manifest declares, and these have none. The sidenotes transformer in
 // local-plugins/sidenotes needs no registration.
 componentRegistry.register("note-meta", NoteMeta as QuartzComponentConstructor<any>, "note-meta")
 componentRegistry.register("note-index", NoteIndex as QuartzComponentConstructor<any>, "note-index")
+componentRegistry.register("start-here", StartHere as QuartzComponentConstructor<any>, "start-here")
 componentRegistry.register("top-bar", TopBar as QuartzComponentConstructor<any>, "top-bar")
 componentRegistry.register(
   "section-row",

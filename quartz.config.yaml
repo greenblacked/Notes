@@ -216,13 +216,21 @@ plugins:
     layout:
       position: beforeBody
       priority: 12
-  # Index of every note, grouped by section: the body of the home page (condition `home`).
-  - source: ./local-plugins/note-index
+  # Start here, the section cards and the link to All notes: the body of the home page (condition
+  # `home`).
+  - source: ./local-plugins/start-here
     enabled: true
     layout:
       position: afterBody
       priority: 10
       condition: home
+  # Index of every note, grouped by section: the body of the All notes page (condition `all-notes`).
+  - source: ./local-plugins/note-index
+    enabled: true
+    layout:
+      position: afterBody
+      priority: 10
+      condition: all-notes
   # The sticky top bar: the wordmark. The page frame's left sidebar is the bar, and holds this
   # component, the Explorer (its Browse button opens the drawer), the search and the dark-mode
   # toggle (see custom.scss).

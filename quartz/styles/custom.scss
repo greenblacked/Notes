@@ -1759,7 +1759,125 @@ body[data-slug="index"] {
 }
 
 // ============================================================================
-// Home page: section cards and the index of notes
+// Home page: Start here
+// ============================================================================
+// local-plugins/start-here. Four reader goals on the sheet (one column on a phone, two from 40rem
+// of sheet width, a container query so it follows the sheet and not the screen), each with a link
+// to its section and a few notes. The evidence level is on the note itself, so only the review
+// date is repeated here, as plain text. Below the section cards, a short link to All notes.
+
+.start-here {
+  container-type: inline-size;
+  margin: 2.25rem 0 0;
+
+  & .start-here-title,
+  & + .section-cards + .all-notes-link .all-notes-title {
+    @extend %label;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    font-size: 0.72rem;
+  }
+
+  & .start-here-lookup {
+    margin: 0 0 1.1rem;
+    font: 400 0.9rem/1.5 var(--ui);
+    color: var(--darkgray);
+  }
+
+  & .start-here-goals {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem 2rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  & .start-here-goal {
+    min-width: 0;
+    margin: 0;
+    padding: 0.9rem 0 0;
+    border-top: 1px solid var(--rule);
+
+    & h3 {
+      margin: 0 0 0.3rem;
+      font-size: 1.2rem;
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--dark);
+    }
+
+    & p {
+      margin: 0 0 0.6rem;
+      font: 400 0.875rem/1.5 var(--ui);
+      color: var(--darkgray);
+    }
+
+    & ol,
+    & ul {
+      margin: 0 0 0.6rem;
+      padding: 0;
+      list-style: none;
+    }
+
+    & li {
+      margin: 0;
+      padding: 0.3rem 0;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    & .start-here-featured a {
+      font-weight: 600;
+    }
+
+    & .start-here-more a {
+      font-weight: 400;
+    }
+  }
+
+  & .start-here-reviewed {
+    display: block;
+    font: 500 0.75rem/1.4 var(--ui);
+    color: var(--gray);
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+}
+
+@container (min-width: 40rem) {
+  .start-here .start-here-goals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@supports not (container-type: inline-size) {
+  @media all and (min-width: 40rem) {
+    .start-here .start-here-goals {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}
+
+.all-notes-link {
+  margin: 2.25rem 0 0;
+
+  & p {
+    margin: 0;
+    font: 400 0.9rem/1.5 var(--ui);
+    color: var(--darkgray);
+  }
+}
+
+@media print {
+  .start-here .start-here-reviewed {
+    display: none;
+  }
+}
+
+// ============================================================================
+// Home page: section cards. All notes page: the index of notes
 // ============================================================================
 // local-plugins/note-index. A card per section (the whole card is the link: the title's link is
 // stretched over it), then a ruled table on the sheet; below 40rem of width (a container query, so
