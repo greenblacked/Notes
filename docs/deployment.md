@@ -291,16 +291,16 @@ What the pipeline already does: PR runs of `ci.yml` cancel when a newer commit a
 
 Savings from the private-repository change, estimated from the run durations of 2026-10-10 to 2026-10-20 (about 550 CI runs and 125 Deploy stage runs a month at that burst cadence):
 
-| Change                                                      | Per run                           | Per month          |
-| ----------------------------------------------------------- | --------------------------------- | ------------------ |
-| Attribution check merged into the workflow lint job         | 1 min per CI run                  | about 550          |
-| Deploy stage guard is the first build step                  | 1 min per Deploy stage run        | about 125          |
-| Playwright browser cache                                    | 0 to 1 min per CI run (about 0.4) | about 200 to 275   |
-| Dependabot version updates monthly                          | fewer PRs (23 to 35 min each)     | about 100 to 150   |
-| Repository-level secret and variable, production actor gate | 0                                 | 0                  |
-| Total                                                       |                                   | about 975 to 1,100 |
+| Change                                                      | Per run                          | Per month        |
+| ----------------------------------------------------------- | -------------------------------- | ---------------- |
+| Attribution check merged into the workflow lint job         | 1 min per CI run                 | about 550        |
+| Deploy stage guard is the first build step                  | 1 min per Deploy stage run       | about 125        |
+| Playwright browser cache                                    | unmeasured, likely 0 to 0.25 min | not counted      |
+| Dependabot version updates monthly                          | fewer PRs (23 to 35 min each)    | about 100 to 150 |
+| Repository-level secret and variable, production actor gate | 0                                | 0                |
+| Total (without the browser cache)                           |                                  | about 775 to 825 |
 
-A merged PR costs about 55 minutes (about 3 PR CI runs at about 11, the push run on `main` at about 11 and Deploy stage at about 11), so 2,000 minutes cover about 35 merged PRs a month. Re-measure the cache saving after 10 runs from the step timings of `gh api repos/greenblacked/Notes/actions/runs/<id>/jobs`.
+A merged PR costs about 55 minutes (about 3 PR CI runs at about 11, the push run on `main` at about 11 and Deploy stage at about 11), so 2,000 minutes cover about 35 merged PRs a month. Re-measure the browser cache saving (a hit still runs the apt part and restores the cache; a miss also saves it) after 10 runs from the step timings of `gh api repos/greenblacked/Notes/actions/runs/<id>/jobs`.
 
 Levers not taken, both owner decisions:
 
