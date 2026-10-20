@@ -81,11 +81,11 @@ test("the home page shows no status chips", async ({ page }) => {
   await expect(page.locator(".chip-status, [data-status]")).toHaveCount(0)
 })
 
-test("the home page has no backlinks block and All notes has a single All notes h1", async ({
+test("the home page has no Linked from block and All notes has a single All notes h1", async ({
   page,
 }) => {
   await page.goto("/")
-  await expect(page.locator(".backlinks")).toHaveCount(0)
+  await expect(page.locator(".linked-from")).toHaveCount(0)
   await page.goto("/all-notes")
   await expect(page.getByRole("heading", { name: "All notes", exact: true })).toHaveCount(1)
   await expect(page.locator('[id="note-index-title"]')).toHaveCount(1)
