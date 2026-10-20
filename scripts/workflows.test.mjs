@@ -333,3 +333,12 @@ test("the browser job caches Playwright browsers keyed on the Playwright version
   assert.equal(steps[deps].if, "steps.pw-cache.outputs.cache-hit == 'true'")
   assert.match(steps[deps].run, /^\.\/node_modules\/\.bin\/playwright install-deps chromium webkit/)
 })
+
+test("dependabot version updates run monthly", () => {
+  const d = parse(readFileSync(join(root, ".github", "dependabot.yml"), "utf8"))
+  assert.ok(d.updates.length > 0)
+  for (const u of d.updates) {
+    assert.equal(u.schedule.interval, "monthly", u.directory)
+    assert.equal(u.schedule.day, undefined, u.directory)
+  }
+})
