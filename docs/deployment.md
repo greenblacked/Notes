@@ -291,7 +291,7 @@ What the pipeline already does: PR runs of `ci.yml` cancel when a newer commit a
 
 ### CI job graph
 
-Every check runs on every pull request and every push to `main`; none is optional, path-filtered or deferred. `CI OK` waits for all jobs. The durations in the graph are estimated for 2-core runners (private repositories); the 8-shard graph was measured on 4-core runners on 2026-10-20 (about 4 minutes start to CI OK, see "Measured 8-shard runs"). The CI-measured figures are from public 4-core runner runs on 2026-10-20: the single browser job, the cold plugin restore and, since this PR, the 8-shard graph (see "Measured 8-shard runs" below). The 2-core private figures are still estimated.
+Every check runs on every pull request and every push to `main`; none is optional, path-filtered or deferred. `CI OK` waits for all jobs. The durations in the graph are estimated for 2-core runners (private repositories). The CI-measured figures are from public 4-core runner runs on 2026-10-20: the single browser job, the cold plugin restore and the 8-shard graph (about 4 minutes start to CI OK, see "Measured 8-shard runs" below). The 2-core private figures are still estimated.
 
 ```
 workflow-lint            attribution, actionlint, shellcheck, zizmor            about 15 s
@@ -308,7 +308,7 @@ ci-ok                    CI OK                                                  
 
 ### Why CI is not 2 minutes
 
-The target was 2 minutes with every check. It is not reachable on GitHub-hosted runners for the browser suite, because a browser job needs the build output and the setup of every job is a fixed cost. The owner chose 8 shards (about 4.3 minutes and about 25 billed minutes per run on 2-core runners, estimated; 4 min 0 s to 4 min 5 s and 24 billed minutes measured 2026-10-20 on 4-core runners, public repository) over the 2-minute target, which would need about 38 shards. All figures below are estimated unless marked measured; re-measure after the repository is private:
+The target was 2 minutes with every check. It is not reachable on GitHub-hosted runners for the browser suite, because a browser job needs the build output and the setup of every job is a fixed cost. The owner chose 8 shards (about 4.3 minutes and about 25 billed minutes per run on 2-core runners, estimated; 4 min 0 s to 4 min 5 s and 24 to 25 billed minutes measured 2026-10-20 on 4-core runners, public repository) over the 2-minute target, which would need about 38 shards. All figures below are estimated unless marked measured; re-measure after the repository is private:
 
 - A browser job needs the build output, so the critical path is the build (about 85 to 100 s on 2 vCPU), then a shard's setup (checkout, `npm ci`, artifact download, browser restore, about 55 to 65 s), then its tests, then `CI OK`. That is about 150 to 160 s before the first test starts.
 - With 8 shards the floor is about 4.3 minutes on 2 vCPU (the slowest is a WebKit shard) and about 3.2 minutes on 4 vCPU. Running the browser jobs before the build finishes and waiting for the artifact would need about 38 shards, about 80 billed minutes per run, so it was rejected.
@@ -319,25 +319,30 @@ The target was 2 minutes with every check. It is not reachable on GitHub-hosted 
 
 Measured 2026-10-20 on 4-core runners (public repository), PR #73, two runs of the 8-shard graph (22 and 21 tests per shard):
 
-| Head      | Start to CI OK | Build and check | Slowest browser shard        |
-| --------- | -------------- | --------------- | ---------------------------- |
-| `214d3f4` | 4 min 5 s      | 1 min 19 s      | webkit-desktop-1, 2 min 35 s |
-| `cce229a` | 4 min 0 s      | 1 min 13 s      | webkit-desktop-1, 2 min 37 s |
+| Head      | Start to CI OK | Build and check | Slowest browser shard        | Billed minutes |
+| --------- | -------------- | --------------- | ---------------------------- | -------------- |
+| `214d3f4` | 4 min 5 s      | 1 min 19 s      | webkit-desktop-1, 2 min 35 s | 25             |
+| `cce229a` | 4 min 0 s      | 1 min 13 s      | webkit-desktop-1, 2 min 39 s | 24             |
 
-Billed minutes of the first run, from the job times (billed minutes are the sum over jobs of each job's duration rounded up to a whole minute): Build and check 2, workflow lint 1, the eight shards (1:30, 1:37, 1:43, 1:58, 2:06, 2:30, 2:30, 2:37) rounded up 2, 2, 2, 2, 3, 3, 3, 3 = 20, CI OK 1; total 2 + 1 + 20 + 1 = 24 billed minutes for the 11 jobs. These are 4-core figures; the 2-core private-repository figures below stay estimated.
+Job durations from the GitHub API (`started_at` to `completed_at`), with billed minutes in brackets (each job's duration rounded up to a whole minute, minimum 1; the total is the sum over the 11 jobs):
+
+- Run of `214d3f4`: Build and check 1:19 (2), Lint 0:14 (1, its re-run), chromium-desktop-1 2:01 (3), chromium-desktop-2 1:15 (2), chromium-phone-1 1:43 (2), chromium-phone-2 1:40 (2), webkit-desktop-1 2:35 (3), webkit-desktop-2 2:15 (3), webkit-phone-1 2:34 (3), webkit-phone-2 2:09 (3), CI OK 0:02 (1); total 25 billed minutes.
+- Run of `cce229a`: Build and check 1:13 (2), Lint 0:14 (1), chromium-desktop-1 1:58 (2), chromium-desktop-2 1:19 (2), chromium-phone-1 1:43 (2), chromium-phone-2 1:30 (2), webkit-desktop-1 2:39 (3), webkit-desktop-2 2:04 (3), webkit-phone-1 2:30 (3), webkit-phone-2 2:06 (3), CI OK 0:04 (1); total 24 billed minutes.
+
+Billed minutes per measured 4-core run are 24 to 25. These are 4-core figures; the 2-core private-repository figures below stay estimated.
 
 ### Shards and billed minutes
 
 The browser matrix uses `fail-fast: false`: when one shard fails the others finish, `CI OK` still fails, and "Re-run failed jobs" re-runs only the failed shard (about 3 billed minutes, estimated). With `fail-fast: true` the cancelled shards would be re-run too, costing about 8 minutes or more (estimated). The price is that a real failure still bills the other shards. The shard count is the `matrix.include` list of the `browser` job in `.github/workflows/ci.yml` (each project's shards must be exactly `1/N` to `N/N`; `scripts/workflows.test.mjs` checks it). More jobs shorten the wall-clock time, but each job bills at least one whole minute and is rounded up on its own. Rows are estimated with warm caches, except the first row and the measured 8-shard row, which were measured on public 4-core runners on 2026-10-20 (re-measure from `gh api repos/greenblacked/Notes/actions/runs/<id>/jobs`):
 
-| Variant                                 | PR wall-clock | Billed per CI run             | Per merged PR (3 PR runs, 1 push run, Deploy stage)      | Merged PRs per 2,000 min |
-| --------------------------------------- | ------------- | ----------------------------- | -------------------------------------------------------- | ------------------------ |
-| Before: one browser job (4 vCPU)        | 7 to 11.5 min | 10 to 14                      | 50 to 55                                                 | about 35                 |
-| Before, projected on 2 vCPU             | about 12.5    | about 15                      | about 71                                                 | about 28                 |
-| 8 shards (this setup), estimated 2-core | about 4.3     | about 25                      | about 111                                                | about 18                 |
-| 8 shards (this setup), measured 4-core  | 4.0 to 4.1    | 24 (11 jobs, each rounded up) | about 107 (4 runs x 24 + Deploy stage about 11, derived) | about 18                 |
-| 4 jobs (one per project, `shard: 1/1`)  | about 5.7     | about 19                      | about 87                                                 | about 23                 |
-| About 38 shards (rejected)              | about 2       | about 80                      | about 330                                                | about 6                  |
+| Variant                                 | PR wall-clock | Billed per CI run                   | Per merged PR (3 PR runs, 1 push run, Deploy stage)                  | Merged PRs per 2,000 min |
+| --------------------------------------- | ------------- | ----------------------------------- | -------------------------------------------------------------------- | ------------------------ |
+| Before: one browser job (4 vCPU)        | 7 to 11.5 min | 10 to 14                            | 50 to 55                                                             | about 35                 |
+| Before, projected on 2 vCPU             | about 12.5    | about 15                            | about 71                                                             | about 28                 |
+| 8 shards (this setup), estimated 2-core | about 4.3     | about 25                            | about 111                                                            | about 18                 |
+| 8 shards (this setup), measured 4-core  | 4.0 to 4.1    | 24 to 25 (11 jobs, each rounded up) | about 111 (4 runs x 25 + Deploy stage about 11, worst case, derived) | about 18                 |
+| 4 jobs (one per project, `shard: 1/1`)  | about 5.7     | about 19                            | about 87                                                             | about 23                 |
+| About 38 shards (rejected)              | about 2       | about 80                            | about 330                                                            | about 6                  |
 
 Eight shards cost about two more billed minutes per run than six because of the rounding, but each shard sits near a minute boundary, so the figure is sensitive. Switching to four jobs is a matrix change (`shard: 1/1` and one entry per project). GitHub Free allows about 20 concurrent jobs (check the docs); one run uses up to 10 of them, so a third concurrent run queues.
 
