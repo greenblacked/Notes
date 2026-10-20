@@ -50,6 +50,9 @@ jobs:
       - name: Type check
         run: npm run check
 
+      - name: Check note metadata and print the review queue
+        run: npm run check:notes -- --summary "$GITHUB_STEP_SUMMARY"
+
       - name: Build
         run: npm run build
 

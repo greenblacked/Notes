@@ -17,6 +17,19 @@ const own = (map: object, key: string) => Object.prototype.hasOwnProperty.call(m
 export const typeLabel = (type: string): string =>
   own(TYPE_LABELS, type) ? TYPE_LABELS[type] : type
 
+/** Display text for the `evidence` levels (see content/standards/writing-notes.md). */
+export const EVIDENCE_LABELS: Record<string, string> = {
+  "source-reviewed": "Source-reviewed",
+  "lab-tested": "Lab-tested",
+  "operationally-verified": "Operationally verified",
+}
+
+/** Label for an `evidence` value; unknown or non-string values are not shown (undefined). */
+export function evidenceLabel(value: unknown): string | undefined {
+  const key = asLowerString(value)
+  return key !== undefined && own(EVIDENCE_LABELS, key) ? EVIDENCE_LABELS[key] : undefined
+}
+
 /**
  * YAML turns an unquoted `2026-10-11` into a Date (midnight UTC), while a quoted one stays a
  * string. Accept both and read the calendar day without a time zone shift. Returns `YYYY-MM-DD`,
