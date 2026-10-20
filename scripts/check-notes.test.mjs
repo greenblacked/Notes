@@ -5,7 +5,14 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { after, test } from "node:test"
 import { fileURLToPath } from "node:url"
-import { EVIDENCE_LEVELS, checkNote, parseNote, reviewQueue } from "./check-notes.mjs"
+import {
+  EVIDENCE_LEVELS,
+  checkNote,
+  isoDay,
+  loadNotes,
+  parseNote,
+  reviewQueue,
+} from "./check-notes.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const script = join(root, "scripts", "check-notes.mjs")
@@ -235,6 +242,18 @@ test("quoted and unquoted dates both work", () => {
   assert.deepEqual(problems(note()), [])
 })
 
+test("dates with trailing text or a time part are rejected", () => {
+  for (const bad of ['"2026-10-20junk"', '"2026-10-20T12:00"', '"2026-10-20 x"']) {
+    const list = problems(note({ fm: { reviewed: bad } }))
+    assert.ok(has(list, /`reviewed` is missing or not a valid ISO date/), bad + list.join("|"))
+  }
+  const due = problems(note({ fm: { "review-due": '"2027-04-20T12:00"' } }))
+  assert.ok(has(due, /`review-due` is missing or not a valid ISO date/), due.join("|"))
+  assert.equal(isoDay(" 2026-10-20 "), "2026-10-20")
+  assert.equal(isoDay(new Date("2026-10-20T00:00:00Z")), "2026-10-20")
+  assert.equal(isoDay("2026-10-20junk"), undefined)
+})
+
 test("CRLF frontmatter parses", () => {
   const text = note().replaceAll("\n", "\r\n")
   assert.deepEqual(problems(text), [])
@@ -282,6 +301,26 @@ test("undeclared notes are counted", () => {
   )
   assert.deepEqual(queue.undeclared, ["a.md", "b/c.md"])
   assert.match(run(dir).stdout, /No evidence level \(2\)/)
+})
+
+test("a note with metadata fields but a missing or misspelled type is checked", () => {
+  const dir = tree({
+    "a.md": note({ fm: { type: undefined, evidence: "nope" } }),
+    "b.md": note({ fm: { type: "" } }),
+    "c.md": "---\ntitle: C\nreviewed: 2026-10-20\n---\n\nBody.\n",
+    "d.md": "---\ntitle: D\n---\n\nNo type, no metadata.\n",
+  })
+  const loaded = loadNotes(dir).map((n) => n.path.split("/").pop())
+  assert.deepEqual(loaded.sort(), ["a.md", "b.md", "c.md"])
+  const r = run(dir)
+  assert.equal(r.status, 1)
+  assert.match(r.stdout, /::error file=.*a\.md::.*`type`/)
+  assert.match(r.stdout, /::error file=.*a\.md::`evidence` must be one of/)
+  assert.match(r.stdout, /::error file=.*b\.md::.*`type`/)
+  assert.match(r.stdout, /::error file=.*c\.md::.*`type`/)
+  assert.doesNotMatch(r.stdout, /d\.md::/)
+  assert.match(r.stdout, /No evidence level \(0\)/)
+  assert.ok(has(problems(note({ fm: { type: undefined } })), /`type` is missing/))
 })
 
 test("errors exit 1 with annotations, and --queue exits 0 with warnings", () => {

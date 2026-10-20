@@ -47,7 +47,7 @@ export function isoDay(value) {
   } else if (typeof value === "string") {
     iso = value.trim()
   }
-  const m = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null
+  const m = iso ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso) : null
   if (!m) return undefined
   const check = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
   if (check.getUTCMonth() !== Number(m[2]) - 1 || check.getUTCDate() !== Number(m[3])) {
@@ -142,12 +142,17 @@ function sectionsNamed(ol, level, name, parent) {
 
 const isEmpty = (section) => !section || section.text.trim() === ""
 
+const META_FIELDS = ["evidence", "reviewed", "review-due", "destructive"]
+
 /** Problems with one parsed note, as plain strings. `today` is `YYYY-MM-DD`. */
 export function checkNote(note, { today }) {
   if (note.parseError) return [`frontmatter YAML does not parse: ${note.parseError}`]
   const fm = note.frontmatter ?? {}
   const has = (key) => Object.hasOwn(fm, key) && fm[key] !== null && fm[key] !== undefined
   const problems = []
+  if (!fm.type && META_FIELDS.some((key) => Object.hasOwn(fm, key))) {
+    problems.push("`type` is missing or empty, but the note declares evidence metadata")
+  }
 
   if (!Object.hasOwn(fm, "evidence")) {
     for (const key of ["reviewed", "review-due", "destructive"]) {
@@ -305,13 +310,18 @@ function* walk(dir) {
   }
 }
 
-/** Parses every note in `dir` that is not skipped and has a `type` (or broken frontmatter). */
+/**
+ * Parses every note in `dir` that is not skipped and has a `type`, broken frontmatter, or any
+ * evidence field (so a missing or misspelled `type` cannot hide a note from the check).
+ */
 export function loadNotes(dir) {
   const notes = []
   for (const file of walk(dir)) {
     const path = file.split("\\").join("/")
     const note = parseNote(path, readFileSync(file, "utf8"))
-    if (note.parseError || (note.frontmatter && note.frontmatter.type)) notes.push(note)
+    const fm = note.frontmatter
+    if (note.parseError || (fm && (fm.type || META_FIELDS.some((key) => Object.hasOwn(fm, key)))))
+      notes.push(note)
   }
   return notes
 }
