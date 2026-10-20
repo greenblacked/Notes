@@ -1,22 +1,18 @@
 import { test as base, expect } from "@playwright/test"
+import { recordProblems } from "./page-problems"
 
 // Every test also fails on an uncaught page error, a console error or a failed (status >= 400)
-// request to the site's own origin.
+// request to the site's own origin. Details of non-Error values are shown with the failure; they
+// never pass a test.
 export const test = base.extend<{ problems: void }>({
   problems: [
     async ({ page, baseURL }, use) => {
-      const problems: string[] = []
-      page.on("pageerror", (error) => problems.push(`page error: ${error.message}`))
-      page.on("console", (message) => {
-        if (message.type() === "error") problems.push(`console error: ${message.text()}`)
-      })
-      page.on("response", (response) => {
-        if (baseURL && response.url().startsWith(baseURL) && response.status() >= 400) {
-          problems.push(`HTTP ${response.status()}: ${response.url()}`)
-        }
-      })
+      const { problems, details } = await recordProblems(page, baseURL)
       await use()
-      expect(problems, "no page errors, console errors or failed requests").toEqual([])
+      expect(
+        problems,
+        `no page errors, console errors or failed requests${details.length ? "\n" + details.join("\n") : ""}`,
+      ).toEqual([])
     },
     { auto: true },
   ],
