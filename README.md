@@ -40,6 +40,17 @@ npm run test:scripts     # unit tests for scripts/ and the Worker's indexing pol
 npm run deploy:dry-run   # wrangler deploy --dry-run (the single Worker `notes`)
 ```
 
+Browser smoke tests (Playwright, Chromium and WebKit at desktop and phone sizes):
+
+```sh
+npm run build                                          # the tests run against public/
+./node_modules/.bin/playwright install chromium webkit # once per Playwright version (Linux may need --with-deps)
+npm run test:browser                                   # starts scripts/serve-built-site.mjs on 127.0.0.1:4173
+npm run check:browser                                  # type-checks the specs
+```
+
+`scripts/serve-built-site.mjs` serves `public/` through the real Worker, so the tests see its headers, the pretty URLs (`/foo`, `/foo/`) and the 404 page, with `ENVIRONMENT=preview` and without the CSP's `upgrade-insecure-requests` (plain http). The four projects are `chromium-desktop`, `webkit-desktop`, `chromium-phone` and `webkit-phone`.
+
 Also `npm run check:contrast`: WCAG AA contrast of the palette in both themes (CI runs it after the build; run it after changing a colour).
 
 `npm run dev` skips `scripts/postprocess-build.mjs`, so the dev server has no self-hosted fonts and follows the system theme. Use `npm run build` and `npm run preview` to see the site as deployed.

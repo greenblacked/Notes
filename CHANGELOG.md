@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- **Browser smoke tests** (`npm run test:browser`, Playwright in Chromium and WebKit at desktop and phone sizes) against the built site served through the Worker. They cover the home page (no console errors, no sideways scroll), the search shortcut, the Browse drawer, the theme toggle, section navigation and Back, the tucking section row, keyboard folding of callouts and the graph dialog. CI runs them in the new Browser smoke tests job, which CI OK requires (so it also gates releases).
 - 160 new notes across all sections: 50 architecture decision records (0002 to 0051, covering Artifactory, CI/CD, the Kubernetes platform, GCP foundations, infrastructure as code, security and supply chain, observability, and operations and release), 20 tool comparisons and deep dives, 15 patterns, 15 runbooks, 10 standards, 10 reference architectures, 10 compliance notes, 10 management guides, 10 AI notes and 10 learning lessons, with more Artifactory and wider DevOps tooling coverage. Their section indexes list them.
 
 ### Changed

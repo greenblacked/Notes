@@ -8,6 +8,9 @@ public/
 .quartz/
 prof/
 tsconfig.tsbuildinfo
+/playwright-report/
+/test-results/
+/blob-report/
 
 # Cloudflare / wrangler
 .wrangler/
