@@ -140,8 +140,9 @@ test("API error codes 10025 and 10222 give a specific message", async () => {
   ]) {
     for (const status of [200, 404]) {
       const f = fakeFetch(reply(status, { success: false, errors: [{ code, message: "x" }] }))
-      await assert.rejects(main(argv, env, deps(f)), text)
-      assert.equal(f.calls.length, 1)
+      await assert.rejects(main(argv, env, deps(f, 3)), text)
+      // Read-after-write lag: bounded retries, not a hard failure at once.
+      assert.equal(f.calls.length, 3)
     }
   }
 })
@@ -397,4 +398,59 @@ test("the CLI has a --read-latest mode that prints latest_deployment_id and exit
     })
     assert.equal(bad.stdout, `${key}=unknown\n`, mode)
   }
+})
+
+test("missing-preview answers right after the upload are retried, then succeed", async () => {
+  const miss = (status, code) => reply(status, { success: false, errors: [{ code, message: "x" }] })
+  const f = fakeFetch(
+    miss(404, 10025),
+    miss(200, 10222),
+    reply(200, good({ annotations: null })),
+    reply(200, good()),
+  )
+  assert.equal(await main(argv, env, deps(f)), "active=true\nactive_deployment_id=d1")
+  assert.equal(f.calls.length, 4)
+})
+
+test("missing-preview through every attempt is an ordinary failure, not superseded", async () => {
+  const miss = reply(404, { success: false, errors: [{ code: 10025, message: "x" }] })
+  const f = fakeFetch(miss)
+  const sleeps = []
+  await assert.rejects(
+    main(argv, env, { fetchImpl: f, sleep: async (ms) => void sleeps.push(ms) }),
+    (error) =>
+      !(error instanceof SupersededError) &&
+      /does not exist/.test(error.message) &&
+      new RegExp(`after ${MAX_ATTEMPTS} attempts`).test(error.message),
+  )
+  assert.equal(f.calls.length, MAX_ATTEMPTS)
+  assert.equal(sleeps.length, MAX_ATTEMPTS - 1)
+  // A stale newer-looking id seen earlier does not make a final missing-preview answer superseded.
+  const g = fakeFetch(reply(200, good({ id: "d2" })), miss)
+  await assert.rejects(
+    main(argvPrev, env, deps(g, 2)),
+    (error) => !(error instanceof SupersededError),
+  )
+})
+
+test("mixed missing-preview, transient and stale answers share the one budget", async () => {
+  const miss = reply(404, { success: false, errors: [{ code: 10222, message: "x" }] })
+  const stale = reply(200, good({ id: "old" }))
+  const f = fakeFetch(miss, reply(503, {}), stale, miss, new Error("boom"), stale, miss)
+  const sleeps = []
+  await assert.rejects(
+    main(argv, env, { fetchImpl: f, sleep: async (ms) => void sleeps.push(ms) }),
+    new RegExp(`after ${MAX_ATTEMPTS} attempts`),
+  )
+  assert.equal(f.calls.length, MAX_ATTEMPTS)
+  assert.equal(sleeps.length, MAX_ATTEMPTS - 1)
+})
+
+test("unrelated API errors and a non-object annotations value still fail at once", async () => {
+  const f = fakeFetch(reply(200, { success: false, errors: [{ code: 9999, message: "x" }] }))
+  await assert.rejects(main(argv, env, deps(f)), /9999/)
+  assert.equal(f.calls.length, 1)
+  const g = fakeFetch(reply(200, good({ annotations: "nope" })))
+  await assert.rejects(main(argv, env, deps(g)), /no annotations object/)
+  assert.equal(g.calls.length, 1)
 })

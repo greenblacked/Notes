@@ -17,8 +17,11 @@
  * `superseded=true` and `superseded_by=<id>` and exits 3, so the caller can leave the newer
  * deployment alone. An id equal to the previous one is a stale read (lag), not a newer upload: an
  * ordinary failure. Without `--previous`, or when the pre-read failed (`unknown`), nothing is ever
- * superseded. A tag or message mismatch on our own deployment, a transient error on the last
- * attempt, or a malformed answer is an ordinary failure (exit 1).
+ * superseded. A tag or message mismatch on our own deployment, a transient or missing-preview
+ * (10025 / 10222) answer on the last attempt, or a malformed answer is an ordinary failure
+ * (exit 1). Right after the upload creates or recreates the Preview, the read side may briefly
+ * answer 10025 / 10222 (or show our deployment without annotations); those are retried within the
+ * same attempt budget.
  *
  *   node scripts/verify-preview-deployment.mjs --read-previous --worker notes --preview stage
  * prints `previous_deployment_id=<id>`, `none` (the Preview or its deployment does not exist yet)
@@ -59,6 +62,8 @@ function fail(message) {
   throw new Error(message)
 }
 
+const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v)
+
 /**
  * An id mismatch can be read-after-write lag, so it is retried. `otherId` is set only when the
  * latest deployment is a well-formed id different from ours (a candidate for "superseded").
@@ -70,6 +75,20 @@ class MismatchError extends Error {
     this.otherId = otherId
   }
 }
+
+/**
+ * Read-after-write lag that is not an id mismatch: the Preview was just created or recreated and
+ * the read side still answers "not found" (10025) or "no deployment" (10222), or still shows our
+ * deployment without its annotations. Retried against the same attempt budget as a mismatch; if it
+ * persists it is an ordinary failure (never superseded).
+ */
+class PendingError extends Error {}
+
+/** @param {unknown} body */
+const hasMissingPreviewCode = (body) =>
+  isObject(body) &&
+  Array.isArray(body.errors) &&
+  body.errors.some((e) => isObject(e) && (e.code === 10025 || e.code === 10222))
 
 /** Exit code of the CLI when a newer, valid deployment replaced ours (see SupersededError). */
 export const EXIT_SUPERSEDED = 3
@@ -135,8 +154,6 @@ export function deploymentPath(accountId, worker, preview) {
   return `/accounts/${accountId}/workers/workers/${worker}/previews/${encodeURIComponent(preview)}/deployments/latest`
 }
 
-const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v)
-
 /** @param {unknown} body @param {string} preview */
 function describeErrors(body, preview) {
   const errors = isObject(body) && Array.isArray(body.errors) ? body.errors : []
@@ -160,7 +177,9 @@ function describeErrors(body, preview) {
  */
 export function checkDeployment(body, expected) {
   if (!isObject(body) || body.success !== true) {
-    fail(`the API answered without success: ${describeErrors(body, expected.preview ?? "stage")}`)
+    const text = `the API answered without success: ${describeErrors(body, expected.preview ?? "stage")}`
+    if (hasMissingPreviewCode(body)) throw new PendingError(text)
+    fail(text)
   }
   const result = body.result
   if (!isObject(result)) fail("the API answer has no result object")
@@ -173,7 +192,10 @@ export function checkDeployment(body, expected) {
   }
   const annotations = result.annotations
   if (!isObject(annotations)) {
-    fail(
+    // Our own deployment is already visible but its annotations are not: replica lag. Any other
+    // type (array, string) is a shape change and stays a hard failure.
+    const Failure = annotations === undefined || annotations === null ? PendingError : Error
+    throw new Failure(
       `the latest deployment has no annotations object (result keys: ${Object.keys(result).sort().join(", ")})`,
     )
   }
@@ -210,8 +232,8 @@ class TransientError extends Error {}
 
 /**
  * ONE request for the latest deployment, with no retry of its own. Network errors, HTTP 429 and
- * 5xx throw a TransientError (main() counts it against the same attempt budget as a stale
- * answer); any other failure throws at once.
+ * 5xx throw a TransientError, and API codes 10025 / 10222 a PendingError (main() counts both
+ * against the same attempt budget as a stale answer); any other failure throws at once.
  *
  * @param {{ token: string, accountId: string, worker: string, preview: string,
  *   fetchImpl?: typeof fetch }} options
@@ -243,7 +265,10 @@ export async function fetchLatest({ token, accountId, worker, preview, fetchImpl
   }
   if (response.status < 200 || response.status > 299) {
     const details = isObject(body) ? `: ${describeErrors(body, preview)}` : ""
-    fail(`GET ${shown} answered HTTP ${response.status}${details}`)
+    const text = `GET ${shown} answered HTTP ${response.status}${details}`
+    // Same text as before, so readPrevious still maps it to "none"; main() retries it.
+    if (hasMissingPreviewCode(body)) throw new PendingError(text)
+    fail(text)
   }
   if (body === undefined) fail(`GET ${shown} answered with a body that is not JSON`)
   return body
@@ -274,7 +299,8 @@ export async function readPrevious(options) {
 
 /**
  * One bounded loop: at most `attempts` requests in total (default MAX_ATTEMPTS), one per
- * iteration, with `delayMs` between them. Transient errors and a stale deployment id both count
+ * iteration, with `delayMs` between them. Transient errors, a stale deployment id, a
+ * missing-preview answer (10025 / 10222) and missing annotations on our own deployment all count
  * against that single budget; any other failure throws at once.
  *
  * @param {string[]} argv
@@ -306,7 +332,13 @@ export async function main(argv, env, deps = {}) {
       const { id } = checkDeployment(body, args)
       return `active=true\nactive_deployment_id=${id}`
     } catch (error) {
-      if (!(error instanceof MismatchError || error instanceof TransientError)) throw error
+      if (!(
+        error instanceof MismatchError ||
+        error instanceof TransientError ||
+        error instanceof PendingError
+      )) {
+        throw error
+      }
       last = error.message
       supersededBy = error instanceof MismatchError ? error.otherId : undefined
     }
