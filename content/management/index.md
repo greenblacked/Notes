@@ -5,7 +5,7 @@ tags:
   - management
   - leadership
 created: 2026-10-16
-modified: 2026-10-19
+modified: 2026-10-21
 draft: false
 ---
 
@@ -17,6 +17,7 @@ These notes cover the engineering manager's side of a platform or DevOps team. T
 - [[delegation-and-ownership|Delegation and service ownership for a new EM]]: levels of delegation, service ownership, avoiding the prod-access bottleneck and a RACI for platform work, for EMs coming from a hands-on DevOps role.
 - [[platform-team-operating-model|Platform team operating model]]: how to run a DevOps platform team as a product team, with Team Topologies interaction modes, golden paths, intake, a shield rotation and adoption metrics.
 - [[team-charter|Writing a team charter]]: a one-page operating contract for a team, with mission, ownership, decision rights, working agreements, intake and on-call commitments, a full template and a platform team example.
+- [[technology-radar-for-platform-tooling|A technology radar for platform tooling]]: keep platform tool choices visible and governed with a radar stored as code, rings tied to support obligations, a validator in CI and soft enforcement of hold.
 
 ## People
 
@@ -27,6 +28,10 @@ These notes cover the engineering manager's side of a platform or DevOps team. T
 - [[performance-feedback|Performance feedback and reviews]]: giving feedback with the SBI model, writing reviews, handling underperformance with an improvement plan, documenting and recognising good work.
 - [[managing-conflict|Managing conflict]]: handling disagreement in technical teams, from tooling wars and design disputes to Dev versus Ops friction, using disagree-and-commit, escalation, ADRs and mediation.
 - [[bus-factor-and-knowledge-transfer|Bus factor and knowledge transfer for platform systems]]: find single points of knowledge in infrastructure from commit and on-call data, then make them survivable with runbooks, pairing and rotations.
+- [[offboarding-platform-engineers|Offboarding a platform engineer safely]]: hand over ownership, inventory and remove a leaving platform engineer's access across GCP, GKE, GitLab, Jenkins and Artifactory, and prove it is gone.
+- [[platform-team-across-time-zones|Running a platform team across time zones]]: overlap maths that handles daylight saving, async decisions, written handoffs of in-flight changes, fair meeting slots and on-call for distributed teams.
+- [[security-champions-programme|Running a security champions programme with product teams]]: scale security triage through one trained champion per product team, with agreed time, a responsibilities menu, platform support, a charter and honest metrics.
+- [[contractors-and-managed-service-providers|Working with contractors and managed service providers on platform work]]: scope, access, review, knowledge transfer and exit for contractors and MSPs, with time-bound GCP and GitLab access and an expiry report.
 
 ## Planning and delivery
 
@@ -46,6 +51,10 @@ These notes cover the engineering manager's side of a platform or DevOps team. T
 - [[platform-roadmap-multi-quarter|Writing a multi-quarter platform roadmap]]: outcome-based platform roadmap themes for 12 to 18 months, with capacity bands, dependencies, confidence by horizon and a published change log.
 - [[jenkins-to-gitlab-migration-programme|Running a Jenkins to GitLab CI migration as a programme]]: sequence, staff, communicate and close out a Jenkins to GitLab CI migration across many teams, with waves, parallel runs and a retirement gate.
 - [[decommissioning-platform-services|Decommissioning and retiring platform tooling]]: decide when a legacy tool or platform service is retired, then run consumer discovery, deprecation, read-only freeze, archive and cost removal.
+- [[rfc-and-design-review-process|RFC and design review process for platform changes]]: when a platform change needs an RFC, its lifecycle to a decision, one named decider, a template with rollback and cost, docs-as-code review and timeboxes.
+- [[developer-experience-surveys|Developer experience surveys for platform teams]]: run a repeatable developer experience survey for a platform, with question design, a question bank, anonymity rules, an analysis script and follow-up.
+- [[fleet-wide-change-campaigns|Running fleet-wide change campaigns across many repositories]]: plan, automate, track and enforce a change that must land in every team's repositories, from inventory and bot merge requests to deadlines and exceptions.
+- [[flow-metrics-and-forecasting|Flow metrics and forecasting for platform work]]: use WIP, cycle time, throughput and work item age from GitLab issues, and a Monte Carlo forecast, to answer "when will it be done" with honest ranges.
 
 ## Operations
 
@@ -58,3 +67,5 @@ These notes cover the engineering manager's side of a platform or DevOps team. T
 - [[team-reorg-runbook|Splitting, merging and reorganising teams]]: a checklist-driven runbook for the change event of a team reorg, covering readiness, ownership and on-call re-cut, access moves, communication, a week -2 to week 4 timeline and rollback triggers.
 - [[incident-review-programme|Running an incident review programme across many teams]]: schedule, facilitate, track and measure postmortem reviews across teams so action items get done and the process does not become theatre.
 - [[on-call-compensation-and-recovery|On-call compensation, incident fatigue and recovery time]]: design an auditable on-call compensation policy and fatigue rules for long incidents: shift limits, relief handover and recovery time afterwards.
+- [[weekly-operations-review|Weekly operations review for a platform team]]: a one-hour weekly review of error budgets, pages, incidents, toil, capacity, CI health, cost and upcoming changes, with queries and a template.
+- [[critical-vulnerability-response-programme|Coordinating a fleet-wide response to a critical vulnerability]]: run a widely exploited CVE as an incident, with an inventory of running images, triage, mitigation, base-image-first rebuilds and proof by rescan.
