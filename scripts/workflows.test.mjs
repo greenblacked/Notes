@@ -552,14 +552,34 @@ test("each project's shards are exactly 1/N to N/N and the ids are unique", () =
   assert.equal(new Set(ids).size, ids.length)
   for (const { project } of configProjects) {
     const mine = matrixEntries.filter((e) => e.project === project)
+    // WebKit shards pay an install-deps step and run slower, so it gets more shards than Chromium.
     const total = Number(mine[0].shard.split("/")[1])
-    assert.ok(total >= 1 && total <= 9)
+    assert.equal(total, project.startsWith("webkit-") ? 3 : 2, project)
     assert.deepEqual(
       mine.map((e) => e.shard).sort(),
       Array.from({ length: total }, (_, k) => `${k + 1}/${total}`),
     )
     for (const e of mine) assert.equal(e.id, `${project}-${e.shard.split("/")[0]}`)
   }
+})
+
+test("the browser matrix is exactly ten shards: three per WebKit project, two per Chromium project", () => {
+  assert.equal(matrixEntries.length, 10)
+  assert.deepEqual(
+    matrixEntries.map((e) => `${e.id} ${e.shard}`),
+    [
+      "chromium-desktop-1 1/2",
+      "chromium-desktop-2 2/2",
+      "chromium-phone-1 1/2",
+      "chromium-phone-2 2/2",
+      "webkit-desktop-1 1/3",
+      "webkit-desktop-2 2/3",
+      "webkit-desktop-3 3/3",
+      "webkit-phone-1 1/3",
+      "webkit-phone-2 2/3",
+      "webkit-phone-3 3/3",
+    ],
+  )
 })
 
 test("the browser matrix runs every shard and passes its values through env, not expressions", () => {
