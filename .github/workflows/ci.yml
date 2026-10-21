@@ -109,16 +109,20 @@ jobs:
               id: chromium-desktop-1,
               project: chromium-desktop,
               browser: chromium,
-              shard: 1/2,
+              shard: 1/3,
               format: true,
             }
-          - { id: chromium-desktop-2, project: chromium-desktop, browser: chromium, shard: 2/2 }
-          - { id: chromium-phone-1, project: chromium-phone, browser: chromium, shard: 1/2 }
-          - { id: chromium-phone-2, project: chromium-phone, browser: chromium, shard: 2/2 }
-          - { id: webkit-desktop-1, project: webkit-desktop, browser: webkit, shard: 1/2 }
-          - { id: webkit-desktop-2, project: webkit-desktop, browser: webkit, shard: 2/2 }
-          - { id: webkit-phone-1, project: webkit-phone, browser: webkit, shard: 1/2 }
-          - { id: webkit-phone-2, project: webkit-phone, browser: webkit, shard: 2/2 }
+          - { id: chromium-desktop-2, project: chromium-desktop, browser: chromium, shard: 2/3 }
+          - { id: chromium-desktop-3, project: chromium-desktop, browser: chromium, shard: 3/3 }
+          - { id: chromium-phone-1, project: chromium-phone, browser: chromium, shard: 1/3 }
+          - { id: chromium-phone-2, project: chromium-phone, browser: chromium, shard: 2/3 }
+          - { id: chromium-phone-3, project: chromium-phone, browser: chromium, shard: 3/3 }
+          - { id: webkit-desktop-1, project: webkit-desktop, browser: webkit, shard: 1/3 }
+          - { id: webkit-desktop-2, project: webkit-desktop, browser: webkit, shard: 2/3 }
+          - { id: webkit-desktop-3, project: webkit-desktop, browser: webkit, shard: 3/3 }
+          - { id: webkit-phone-1, project: webkit-phone, browser: webkit, shard: 1/3 }
+          - { id: webkit-phone-2, project: webkit-phone, browser: webkit, shard: 2/3 }
+          - { id: webkit-phone-3, project: webkit-phone, browser: webkit, shard: 3/3 }
     env:
       NPM_CONFIG_IGNORE_SCRIPTS: "true"
       PROJECT: ${{ matrix.project }}
