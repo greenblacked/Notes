@@ -88,10 +88,11 @@ jobs:
 
   # One job per (Playwright project, shard). Shards start with the build job and wait for it
   # (step "Wait for the build job"), so that the wall-clock time is about the slower of the
-  # build and a shard's setup, plus the slowest shard's tests, not the sum of four projects. Every job bills at least one whole minute (and each is
-  # rounded up on its own), so the shard count trades wall-clock against billed minutes: see
-  # "CI minutes" in docs/deployment.md. The shard count is this list; each project's shards
-  # must be exactly 1/N to N/N (checked by scripts/workflows.test.mjs).
+  # build and a shard's setup, plus the slowest shard's tests, not the sum of four projects.
+  # Every job bills at least one whole minute (and each is rounded up on its own), so the
+  # shard count trades wall-clock against billed minutes: see "CI minutes" in
+  # docs/deployment.md. The shard count is this list; each project's shards must be exactly
+  # 1/N to N/N (checked by scripts/workflows.test.mjs).
   browser:
     name: Browser ${{ matrix.id }}
     runs-on: ubuntu-24.04

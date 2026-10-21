@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Changed
 
-- **CI browser tests run as twelve shards that start together with the build job** (each of the four Playwright projects in three shards) instead of eight shards that start after it. Each shard prepares itself (`npm ci`, type check, browsers, system packages) while the build runs, then waits for the latest attempt of Build and check and fails at once if it fails. Every check is kept. The estimate is about 2.5 to 2.75 minutes from start to CI OK instead of about 4 (not measured yet), for about 30 to 34 billed minutes per run instead of 24 to 25. A failed build still bills every shard's setup, a cold plugin restore (about 7 to 8 minutes) is billed in every shard while it waits, and the build job timeout is now 24 minutes so a hung build ends before the shards give up after 25.
+- **CI browser tests run as twelve shards that start together with the build job** (each of the four Playwright projects in three shards) instead of eight shards that start after it. Each shard prepares itself (`npm ci`, type check, browsers, system packages) while the build runs, then waits for the latest attempt of Build and check and fails at once if it fails. Every check is kept. The estimate is about 2.5 to 2.75 minutes from start to CI OK instead of about 4 (not measured yet), for about 33 to 39 billed (estimated, to be measured) minutes per run instead of 24 to 25. A failed build still bills every shard's setup, a cold plugin restore (about 7 to 8 minutes) is billed in every shard while it waits, and the build job timeout is now 24 minutes so a hung build ends before the shards give up after 25.
 
 ## [0.7.0] - 2026-10-21
 
