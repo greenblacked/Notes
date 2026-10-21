@@ -91,6 +91,13 @@ All custom CSS is in `quartz/styles/custom.scss` and the colour keys are in `qua
 
 ![A note on a phone](docs/screenshots/phone-light.png)
 
+## Branch names
+
+- `<type>/<kebab>`, where type is one of `feat`, `fix`, `docs`, `ci`, `chore`, `refactor`, `test`, `perf`, `build`: the normal flow below, through stage and Cut release.
+- `text/<kebab>` (lower-case kebab): notes text only, that is `.md` files and raster images under `content/`. CI fails a `text/` pull request that changes anything else. Merged by the owner, it goes straight to production as the next patch tag, without stage and without Cut release ([Text releases](docs/deployment.md#text-releases-text-branches)).
+
+Use a normal type for anything else, including `CHANGELOG.md` edits.
+
 ## Delivery flow
 
 ```mermaid
@@ -100,12 +107,16 @@ flowchart LR
     C --> D[Deploy stage: automatic]
     D --> F[Cut release: tag vX.Y.Z]
     F -->|guard| G[Deploy production]
+    C -->|text/ merge, content only| T[Text release: tag vX.Y.Z+1]
+    T -->|guard| G
 ```
 
 1. Branch `<type>/<kebab>` from `main` and open a pull request into `main`. CI must pass (`CI OK`); merge with a merge commit.
 2. The merge deploys stage automatically: https://stage.notes.szolotov.com (public, noindex; about 8 to 9 minutes with the cold build, measured on 4-core runners (2026-10-20), slower on 2-core; `/version.txt` shows `stage+<sha>`) ([Stage Preview](docs/deployment.md#stage-preview)). Run workflow on `main` re-deploys it. Production traffic is untouched.
 3. To release: update `CHANGELOG.md` (`[Unreleased]` to `[X.Y.Z] - date`) by pull request, then Actions, **Cut release**, **Run workflow** on `main`, enter the version as `X.Y.Z`. The workflow validates it, checks that CI passed and Deploy stage updated stage for that commit (the stage requirement is skipped only for the first release, while no vX.Y.Z tag exists), and that the version is higher than the latest tag, creates the tag and GitHub Release from the CHANGELOG section, and dispatches Deploy production on the tag.
 4. Deploy production runs straight after Cut release. Its guard checks the tag, CI on main and that the owner (or the owner's Cut release run) started it. A smoke test runs against the Worker's workers.dev URL after the deploy; on failure the previous version is restored automatically.
+
+5. Text only: a pull request from a `text/<kebab>` branch changes only notes under `content/` (CI enforces it). When the owner merges it, **Text release** waits for CI on the merge commit, requires that everything since the latest `vX.Y.Z` tag is notes under `content/`, creates the next patch tag and a GitHub Release that lists the changed notes, and dispatches Deploy production on the tag, with no stage gate and no Cut release. It refuses while `main` has unreleased code or configuration ("run Cut release first", which ships the text too), and it works only after a Cut release that contains this change. Versions created this way have no `CHANGELOG.md` section. Details and recovery: [Text releases](docs/deployment.md#text-releases-text-branches).
 
 Production only ever deploys from a `vX.Y.Z` tag. Deploy workflows build in a job without secrets and deploy from a second job, because `npm run build` fetches and builds third-party Quartz plugins (pinned in `quartz.lock.json`, whose changes deserve review). Deploy builds are cold and take about 7 to 8 minutes measured on 4-core runners (2026-10-20), slower on 2-core; CI caches the plugins. Builds need access to github.com and npm. Details: [docs/deployment.md](docs/deployment.md#build-and-deploy-are-separate-jobs). Setup (repository secret `CLOUDFLARE_API_TOKEN` and repository variable, or secret, `CLOUDFLARE_ACCOUNT_ID`; variable preferred) is in [docs/deployment.md](docs/deployment.md); the expected repository settings are in [docs/deployment.md](docs/deployment.md#repository-settings). The repository is private on GitHub Free, so Actions minutes are metered; see [CI minutes](docs/deployment.md#ci-minutes).
 

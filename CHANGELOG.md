@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Versions are the `vX.Y.Z` git tags created by the Cut release workflow.
+The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Versions are the `vX.Y.Z` git tags created by the Cut release workflow, or by the Text release workflow for content-only patch releases (those have no section here; their GitHub Release lists the changed notes).
 
 ## [Unreleased]
 
@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Added
 
+- **Text releases.** A `text/<kebab>` branch may change only notes under `content/` (checked in CI). When the owner merges it, Text release waits for CI and then tags the next patch version, writes a GitHub Release listing the changed notes and deploys production without stage. It refuses whenever `main` has changes outside `content/` that have not been released (run Cut release then).
 - **Start here on the home page and an All notes page.** The home page now offers four reader goals (resolve an operational problem, design or improve a platform, develop engineering skills, lead a platform team) with the section cards below, and the full note catalogue moved to `/all-notes`, linked from the first screen. The anchors `#note-index-title` and `#note-index-<section>` still work on the home page.
 - **Authorship on every note.** After the note text (and its Linked from list) a quiet credit line names the author and links the AI skills catalogue. Plain links, no form or script; hidden in print. Folder, tag and 404 pages have none.
 - **Stage and lesson navigation** on the learning path. Under the spec sheet, each lesson shows its stage (linked to the stage on the learning path), its place ("Lesson 31 of 43", or "Optional lesson 5 of 10" for the going-deeper lessons) and links to the previous and next lesson. The order lives in `local-plugins/note-meta/learn-path.json`, and a script test keeps it equal to the lists on the learning path index and to the hand-written next and previous links. The index gains a short list that jumps to each of the twelve stages.

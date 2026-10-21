@@ -1,10 +1,11 @@
 name: Deploy production
 
 # Production starts only by workflow_dispatch on a vX.Y.Z tag ref: from Cut release
-# (cut-release.yml), or Run workflow on a tag to redeploy or roll forward. Pushing a tag
-# deploys nothing. Tag-only and the actor rule (the owner, or a Cut release run by the owner)
-# are enforced here (the `guard` job): a private repository on GitHub Free has no environment
-# rules, reviewers or rulesets.
+# (cut-release.yml), from Text release (text-release.yml), or Run workflow on a tag to redeploy
+# or roll forward. Pushing a tag deploys nothing. Tag-only and the actor rule (the owner, a Cut
+# release run by the owner, or a Text release run for a text/ pull request that the owner
+# merged) are enforced here (the `guard` job): a private repository on GitHub Free has no
+# environment rules, reviewers or rulesets.
 on:
   workflow_dispatch:
 
@@ -21,7 +22,8 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      actions: read # look up the CI run for this commit
+      actions: read # look up the CI run for this commit and the Cut release or Text release run
+      pull-requests: read # the pull request behind a text/ merge (commits/{sha}/pulls, pulls/{n})
     outputs:
       tag: ${{ steps.check.outputs.tag }}
       version: ${{ steps.check.outputs.version }}
@@ -71,12 +73,14 @@ jobs:
           echo "version=${tag#v}" >>"$GITHUB_OUTPUT"
 
       # No environment reviewers on a private Free repo: the owner deploys directly, or Cut
-      # release (run by the owner) dispatches as github-actions[bot].
-      - name: Require the owner or a Cut release by the owner
+      # release (run by the owner) or Text release (after the owner merged a text/ pull request)
+      # dispatches as github-actions[bot].
+      - name: Require the owner, a Cut release by the owner, or an owner's text/ merge release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
+          TAG: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: .github/scripts/require-release-actor.sh

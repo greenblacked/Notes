@@ -13,7 +13,7 @@ const files = readdirSync(dir)
 const raw = Object.fromEntries(files.map((f) => [f, readFileSync(join(dir, f), "utf8")]))
 const wf = Object.fromEntries(files.map((f) => [f, parse(raw[f])]))
 
-test("the workflow set is exactly ci, cleanup-deployments, cut-release, delete-merged-branches, deploy-production and deploy-stage", () => {
+test("the workflow set is exactly ci, cleanup-deployments, cut-release, delete-merged-branches, deploy-production, deploy-stage and text-release", () => {
   assert.deepEqual(files, [
     "ci.yml",
     "cleanup-deployments.yml",
@@ -21,6 +21,7 @@ test("the workflow set is exactly ci, cleanup-deployments, cut-release, delete-m
     "delete-merged-branches.yml",
     "deploy-production.yml",
     "deploy-stage.yml",
+    "text-release.yml",
   ])
 })
 
@@ -188,6 +189,43 @@ test("the attribution check runs in the workflow lint job and gates CI OK", () =
   assert.equal(checkout.with["fetch-depth"], 0)
 })
 
+test("a text/ pull request may change only notes: the check runs early in the workflow lint job, from the base commit", () => {
+  const job = wf["ci.yml"].jobs["workflow-lint"]
+  const idx = (name) => job.steps.findIndex((s) => s.name === name)
+  const step = job.steps[idx("Require only content changes on a text/ branch")]
+  assert.ok(step)
+  // Before any step that runs the pull request's own code.
+  assert.ok(idx(step.name) > idx("Check out"))
+  assert.ok(idx(step.name) < idx("Set up Node.js"))
+  assert.ok(idx(step.name) < idx("Require no tooling attribution"))
+  assert.ok(idx(step.name) < idx("Install actionlint"))
+  assert.match(step.run, /git cat-file -e "\$PR_BASE\^\{commit\}"/)
+  assert.match(
+    step.run,
+    /git archive --format=tar "\$PR_BASE" \.github\/scripts \| tar -x -f - -C "\$trusted"/,
+  )
+  assert.match(step.run, /"\$trusted\/\.github\/scripts\/require-text-paths\.sh"/)
+  assert.ok(step.run.indexOf("text/*") < step.run.indexOf("git archive"))
+  // Never the pull request's own copy of a gate script.
+  assert.ok(!/(?<![\w/$])\.?\/?\.github\/scripts\/[\w.-]+\.sh/.test(step.run), step.run)
+  const lintCheckout = job.steps.find((s) => (s.uses ?? "").startsWith("actions/checkout"))
+  assert.equal(lintCheckout.with["fetch-depth"], 0)
+  assert.deepEqual(step.env, {
+    EVENT_NAME: "${{ github.event_name }}",
+    HEAD_REF: "${{ github.head_ref }}",
+    PR_BASE: "${{ github.event.pull_request.base.sha }}",
+    PR_HEAD: "${{ github.event.pull_request.head.sha }}",
+    GIT_NO_REPLACE_OBJECTS: "1",
+  })
+  assert.equal(step.if, undefined)
+  assert.equal(step["continue-on-error"], undefined)
+  assert.deepEqual(wf["ci.yml"].jobs["ci-ok"].needs, [
+    "build-and-check",
+    "browser",
+    "workflow-lint",
+  ])
+})
+
 test("the browser smoke tests run in ci and gate CI OK", () => {
   const ci = wf["ci.yml"]
   const job = ci.jobs.browser
@@ -319,7 +357,7 @@ test("Deploy stage fails on missing Cloudflare credentials before anything is up
   assert.match(step.run, /exit 1/)
 })
 
-test("the production guard requires the owner or an owner's Cut release", () => {
+test("the production guard requires the owner, an owner's Cut release or an owner's text/ merge release", () => {
   const w = wf["deploy-production.yml"]
   const steps = w.jobs.guard.steps
   const actor = steps.findIndex((s) => s.run === ".github/scripts/require-release-actor.sh")
@@ -331,7 +369,16 @@ test("the production guard requires the owner or an owner's Cut release", () => 
   assert.equal(steps[actor].if, undefined)
   assert.equal(steps[actor]["continue-on-error"], undefined)
   assert.ok([w.jobs.deploy.needs].flat().includes("guard"))
-  assert.deepEqual(w.jobs.guard.permissions, { contents: "read", actions: "read" })
+  assert.equal(steps[actor].env.TAG, "${{ github.ref_name }}")
+  assert.equal(
+    steps[actor].name,
+    "Require the owner, a Cut release by the owner, or an owner's text/ merge release",
+  )
+  assert.deepEqual(w.jobs.guard.permissions, {
+    contents: "read",
+    actions: "read",
+    "pull-requests": "read",
+  })
 })
 
 test("the browser job caches Playwright browsers keyed on the Playwright version", () => {
@@ -396,6 +443,7 @@ test("every CI check still runs in ci.yml, unconditionally and without continue-
     /\bnpm run test:browser(\s|$)/,
     /check-attribution\.mjs/,
     /actionlint\/actionlint/,
+    /require-text-paths\.sh/,
     /shellcheck scripts\/smoke-test\.sh \.github\/scripts\/\*\.sh/,
     /zizmor" --format=github \.github/,
   ]
