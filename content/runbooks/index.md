@@ -5,7 +5,7 @@ tags:
   - runbooks
   - meta
 created: 2026-10-11
-modified: 2026-10-19
+modified: 2026-10-21
 draft: false
 ---
 
@@ -37,6 +37,9 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 - [[admission-webhook-certificate-expiry|Expired admission webhook certificates that block every create]]: fix an expired admission webhook certificate that makes the API server reject creates and updates, with a safe temporary bypass and alerts.
 - [[namespace-stuck-terminating|Namespace stuck in Terminating]]: find the leftover resource, broken APIService or finalizer that stops a namespace deleting, and clear it in the right order.
 - [[pvc-stuck-terminating|PersistentVolumeClaim or PersistentVolume stuck in Terminating]]: find which Pod, finalizer or volume attachment holds a PVC or PV in Terminating, check the reclaim policy, and release it without losing data.
+- [[gke-cluster-autoscaler-not-scaling-up|Pods Pending and the GKE cluster autoscaler does not scale up]]: read the autoscaler's verdict, then rule out node pool and auto-provisioning limits, quota, zone stockouts, Pod IP exhaustion and Pod-side constraints.
+- [[pods-stuck-terminating-and-blocked-drains|Pods stuck in Terminating and node drains that never finish]]: classify a Pod stuck in Terminating, clear finalizers and dead-node Pods safely, and unblock drains held by PodDisruptionBudgets.
+- [[gke-cluster-credential-rotation|Rotate GKE cluster credentials and the control plane IP]]: run a two-phase credential rotation, refresh every client that holds the old CA or endpoint, and complete it without locking out CI or GitOps.
 
 ## Infrastructure as code
 
@@ -46,6 +49,8 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 ## Networking
 
 - [[hybrid-connectivity-bgp-troubleshooting|HA VPN, Interconnect and Cloud Router BGP troubleshooting]]: find where a hybrid link between on-prem and GCP is broken, layer by layer, from IKE and IPsec through the BGP session to routes and firewalls.
+- [[cloud-nat-egress-port-exhaustion|Cloud NAT egress failures and port exhaustion]]: prove outbound timeouts come from Cloud NAT, read port allocation and drops, and fix port exhaustion with port settings, NAT IPs and connection reuse.
+- [[gce-vm-ssh-access-recovery|Regain SSH access to a locked-out Compute Engine VM]]: classify a failed SSH login, fix the IAP, IAM or guest cause, and use the serial console or a rescue disk safely.
 
 ## CI and artifacts
 
@@ -54,11 +59,17 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 - [[gitlab-runner-jobs-stuck-pending|GitLab runner jobs stuck pending]]: find why GitLab CI jobs wait forever: tags, runner health, concurrency limits or cluster capacity, and fix the cheapest layer first.
 - [[jenkins-controller-down-and-queue-stuck|Jenkins controller down or build queue stuck]]: triage an unresponsive Jenkins controller or a queue that never drains, tell controller faults from agent faults, and restart without losing builds.
 - [[sonarqube-upgrade-and-db-migration|SonarQube server upgrade and database migration]]: upgrade a self-managed SonarQube server along a supported path, with a tested database backup, a watched migration and a restore-based way back.
+- [[gitlab-pipeline-or-job-did-not-run|GitLab pipeline or job did not run, or a CI variable is empty]]: debug a missing pipeline or job, duplicate branch and MR pipelines or an empty CI/CD variable with CI Lint, workflow rules and variable scopes.
+- [[jenkins-core-and-plugin-upgrade-rollback|Upgrade Jenkins core and plugins with a way back]]: upgrade a controller's core and plugins through a pinned image and plugins.txt, with a JENKINS_HOME snapshot, a smoke test and a tested rollback.
+- [[sonarqube-analysis-stuck-or-gate-missing|SonarQube analysis stuck or quality gate not reported on merge requests]]: trace an analysis from scanner to Compute Engine task to gate result, unstick the queue, fix missing MR status and unblock merges safely.
 
 ## Data and observability
 
 - [[cloud-sql-ha-failover-recovery|Cloud SQL HA failover and connection recovery]]: confirm or run a Cloud SQL HA failover, make applications reconnect cleanly, find stale pools and proxies, and know what failing back means.
 - [[prometheus-high-cardinality-triage|Prometheus high cardinality triage]]: find the metric or label exploding the series count, stop growth with scrape limits and relabeling, and recover Prometheus memory safely.
+- [[cloud-sql-point-in-time-recovery|Recover from a bad data change with Cloud SQL point-in-time recovery]]: stop the damage, pin the timestamp, clone the PostgreSQL instance to just before the bad change, verify it, then repair rows or cut over.
+- [[gcs-deleted-object-recovery|Restore deleted or overwritten Cloud Storage objects]]: stop the cause, check soft delete and versioning, then restore deleted or overwritten objects or a deleted bucket with gcloud storage, and prove it.
+- [[alert-fired-but-nobody-was-paged|An alert fired but nobody was paged]]: trace a missed page hop by hop from the Prometheus rule through Alertmanager routing, silences and inhibition to the receiver, then prove the path end to end.
 
 ## This site
 
