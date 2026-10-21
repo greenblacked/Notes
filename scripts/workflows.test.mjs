@@ -552,7 +552,7 @@ test("each project's shards are exactly 1/N to N/N and the ids are unique", () =
   assert.equal(new Set(ids).size, ids.length)
   for (const { project } of configProjects) {
     const mine = matrixEntries.filter((e) => e.project === project)
-    // WebKit shards pay an install-deps step and run slower, so it gets more shards than Chromium.
+    // WebKit shards pay an install-deps step and run slower, so WebKit gets more shards than Chromium.
     const total = Number(mine[0].shard.split("/")[1])
     assert.equal(total, project.startsWith("webkit-") ? 3 : 2, project)
     assert.deepEqual(
