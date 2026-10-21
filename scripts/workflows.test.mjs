@@ -342,7 +342,7 @@ test("Deploy stage fails on missing Cloudflare credentials before anything is up
   assert.match(step.run, /exit 1/)
 })
 
-test("the production guard requires the owner or an owner's Cut release", () => {
+test("the production guard requires the owner, an owner's Cut release or an owner's text/ merge release", () => {
   const w = wf["deploy-production.yml"]
   const steps = w.jobs.guard.steps
   const actor = steps.findIndex((s) => s.run === ".github/scripts/require-release-actor.sh")
@@ -354,7 +354,16 @@ test("the production guard requires the owner or an owner's Cut release", () => 
   assert.equal(steps[actor].if, undefined)
   assert.equal(steps[actor]["continue-on-error"], undefined)
   assert.ok([w.jobs.deploy.needs].flat().includes("guard"))
-  assert.deepEqual(w.jobs.guard.permissions, { contents: "read", actions: "read" })
+  assert.equal(steps[actor].env.TAG, "${{ github.ref_name }}")
+  assert.equal(
+    steps[actor].name,
+    "Require the owner, a Cut release by the owner, or an owner's text/ merge release",
+  )
+  assert.deepEqual(w.jobs.guard.permissions, {
+    contents: "read",
+    actions: "read",
+    "pull-requests": "read",
+  })
 })
 
 test("the browser job caches Playwright browsers keyed on the Playwright version", () => {
