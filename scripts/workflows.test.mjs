@@ -230,14 +230,48 @@ test("the browser smoke tests run in ci and gate CI OK", () => {
   const ci = wf["ci.yml"]
   const job = ci.jobs.browser
   assert.ok(job)
-  assert.deepEqual([job.needs].flat(), ["build-and-check"])
-  assert.deepEqual(job.permissions, { contents: "read" })
+  assert.equal(job.needs, undefined)
+  assert.deepEqual(job.permissions, { contents: "read", actions: "read" })
   assert.ok(ci.jobs["ci-ok"].needs.includes("browser"))
   const runs = job.steps.map((s) => s.run ?? "")
   assert.ok(runs.some((r) => r.includes("npm run test:browser")))
   assert.ok(runs.some((r) => r.includes("node scripts/check-artifact.mjs --root")))
   const report = job.steps.find((s) => (s.uses ?? "").startsWith("actions/upload-artifact"))
   assert.equal(report.if, "failure()")
+})
+
+test("browser shards wait for the latest successful build job before using its output", () => {
+  const ci = wf["ci.yml"]
+  const job = ci.jobs.browser
+  const steps = job.steps
+  const idx = (f) => steps.findIndex(f)
+  const waitAt = idx((s) => s.name === "Wait for the build job")
+  assert.ok(waitAt >= 0)
+  const wait = steps[waitAt]
+  assert.equal(wait.if, undefined)
+  assert.equal(wait["continue-on-error"], undefined)
+  assert.equal(wait.env.GH_TOKEN, "${{ github.token }}")
+  assert.equal(wait.env.GH_REPO, "${{ github.repository }}")
+  for (const part of [
+    `select(.name == "${ci.jobs["build-and-check"].name}")`,
+    "$GITHUB_RUN_ID",
+    "filter=all",
+    "sort -n | tail -n 1",
+    "exit 1",
+    '"$conclusion" == "success"',
+  ]) {
+    assert.ok(wait.run.includes(part), part)
+  }
+  assert.doesNotMatch(wait.run, /\$\{\{/)
+  const download = idx((s) => (s.uses ?? "").startsWith("actions/download-artifact@"))
+  const install = idx((s) => s.name === "Install build output")
+  const tests = idx((s) => (s.run ?? "").includes("npm run test:browser"))
+  assert.ok(waitAt < download && download < install && install < tests)
+  const limit = Number(/elapsed >= (\d+)/.exec(wait.run)?.[1])
+  assert.ok(limit > 0 && limit < job["timeout-minutes"] * 60)
+  for (const s of steps.slice(0, waitAt)) {
+    assert.doesNotMatch(s.run ?? "", /public\/|\$RUNNER_TEMP\/site/, s.name)
+  }
 })
 
 test("playwright is never fetched by npx", () => {
