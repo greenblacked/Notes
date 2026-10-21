@@ -13,7 +13,7 @@ const files = readdirSync(dir)
 const raw = Object.fromEntries(files.map((f) => [f, readFileSync(join(dir, f), "utf8")]))
 const wf = Object.fromEntries(files.map((f) => [f, parse(raw[f])]))
 
-test("the workflow set is exactly ci, cleanup-deployments, cut-release, delete-merged-branches, deploy-production and deploy-stage", () => {
+test("the workflow set is exactly ci, cleanup-deployments, cut-release, delete-merged-branches, deploy-production, deploy-stage and text-release", () => {
   assert.deepEqual(files, [
     "ci.yml",
     "cleanup-deployments.yml",
@@ -21,6 +21,7 @@ test("the workflow set is exactly ci, cleanup-deployments, cut-release, delete-m
     "delete-merged-branches.yml",
     "deploy-production.yml",
     "deploy-stage.yml",
+    "text-release.yml",
   ])
 })
 

@@ -1,0 +1,191 @@
+name: Text release
+
+# A pull request from a text/<kebab> branch may change only notes under content/ (CI checks it:
+# require-text-paths.sh). When the owner merges one into main, this workflow releases it to
+# production without stage and without a manual Cut release:
+#   detect:  the push must be the owner's merge of a text/ pull request of this repository
+#            (verify-text-merge.sh), then it waits (bounded) for the CI push run of the commit.
+#   release: refuses unless everything since the latest vX.Y.Z tag is notes under content/
+#            (so it never ships code that skipped stage; run Cut release first when main has
+#            unreleased code, which ships the text too), re-checks CI, then creates the next PATCH
+#            tag and its GitHub Release and dispatches deploy-production.yml on the tag exactly as
+#            Cut release does. Production still only deploys from a vX.Y.Z tag; its guard accepts
+#            this dispatch only for a verified owner merge of a text/ pull request and the highest tag.
+# Deploy stage still runs on the same push; nothing waits for it. The release job shares the
+# `cut-release` concurrency group with Cut release, so the two never tag at the same time; the
+# long CI wait is in `detect`, outside the group. If Cut release shows as cancelled (GitHub keeps
+# one pending run per group), run it again.
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  detect:
+    name: Detect a text/ merge
+    if: github.repository == 'greenblacked/Notes'
+    runs-on: ubuntu-24.04
+    # The CI wait is bounded by 2700 seconds (45 minutes) in wait-for-ci.sh.
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      pull-requests: read # the pull request behind the merge commit
+      actions: read # the CI run of the commit
+    outputs:
+      text: ${{ steps.merge.outputs.text }}
+      pr: ${{ steps.merge.outputs.pr }}
+      head_ref: ${{ steps.merge.outputs.head_ref }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+      REF: ${{ github.ref }}
+      REPO: ${{ github.repository }}
+      EVENT_NAME: ${{ github.event_name }}
+      ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+    steps:
+      # A failing step, not a job-level `if`: a skipped job reports success.
+      - name: Refuse anything but a push to main by the owner
+        run: |
+          set -Eeuo pipefail
+          if [[ "$REPO" != "greenblacked/Notes" || "$EVENT_NAME" != "push" ]]; then
+            echo "::error::Unexpected repository '$REPO' or event '$EVENT_NAME'."
+            exit 1
+          fi
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "::error::Text releases only come from main (got '$REF')."
+            exit 1
+          fi
+          if [[ "$ACTOR" != "greenblacked" || "$TRIGGERING_ACTOR" != "greenblacked" ]]; then
+            echo "::error::Text release is limited to pushes by the repository owner (actor '$ACTOR', triggered by '$TRIGGERING_ACTOR')."
+            exit 1
+          fi
+
+      - name: Check out the helper scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Verify a text/ merge by the owner
+        id: merge
+        run: |
+          set -Euo pipefail
+          rc=0
+          .github/scripts/verify-text-merge.sh || rc=$?
+          if [[ "$rc" -eq 0 ]]; then
+            echo "text=true" >>"$GITHUB_OUTPUT"
+          elif [[ "$rc" -eq 3 ]]; then
+            echo "text=false" >>"$GITHUB_OUTPUT"
+            echo "::notice::Not a text/ merge by the owner; nothing to release (code ships with Cut release)."
+          else
+            exit "$rc"
+          fi
+
+      - name: Wait for CI on this commit
+        if: steps.merge.outputs.text == 'true'
+        run: .github/scripts/wait-for-ci.sh
+
+  release:
+    name: Release text to production
+    needs: detect
+    if: needs.detect.outputs.text == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Same group as Cut release: one tag-creating run at a time.
+    concurrency:
+      group: cut-release
+      cancel-in-progress: false
+    permissions:
+      contents: write # the tag object, refs/tags/vX.Y.Z and the GitHub Release; never a code push
+      actions: write # dispatch deploy-production.yml (includes read for require-ci-success.sh)
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+      REF: ${{ github.ref }}
+      REPO: ${{ github.repository }}
+      EVENT_NAME: ${{ github.event_name }}
+      ACTOR: ${{ github.actor }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+      PR: ${{ needs.detect.outputs.pr }}
+      HEAD_REF: ${{ needs.detect.outputs.head_ref }}
+    steps:
+      - name: Refuse anything but a push to main by the owner
+        run: |
+          set -Eeuo pipefail
+          if [[ "$REPO" != "greenblacked/Notes" || "$EVENT_NAME" != "push" ]]; then
+            echo "::error::Unexpected repository '$REPO' or event '$EVENT_NAME'."
+            exit 1
+          fi
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "::error::Text releases only come from main (got '$REF')."
+            exit 1
+          fi
+          if [[ "$ACTOR" != "greenblacked" || "$TRIGGERING_ACTOR" != "greenblacked" ]]; then
+            echo "::error::Text release is limited to pushes by the repository owner (actor '$ACTOR', triggered by '$TRIGGERING_ACTOR')."
+            exit 1
+          fi
+
+      # Full history and tags: the plan diffs from the latest vX.Y.Z tag to this commit.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Releases only when everything since the latest tag is notes under content/; otherwise it
+      # says why and the steps below are skipped. The id is `validate` so that the steps copied
+      # from Cut release resolve steps.validate.outputs.tag.
+      - name: Plan the text release
+        id: validate
+        run: .github/scripts/text-release-plan.sh
+
+      - name: Require a successful CI run for this commit
+        if: steps.validate.outputs.release == 'true'
+        run: .github/scripts/require-ci-success.sh
+
+      - name: Re-check the latest release tag
+        if: steps.validate.outputs.release == 'true'
+        env:
+          EXPECT_LATEST: ${{ steps.validate.outputs.latest }}
+        run: .github/scripts/text-release-version.sh >/dev/null
+
+      - name: Create the annotated tag
+        if: steps.validate.outputs.release == 'true'
+        env:
+          TAG: ${{ steps.validate.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          jq -n --arg tag "$TAG" --rawfile message "$RUNNER_TEMP/notes.md" --arg object "$SHA" \
+            '{tag:$tag,message:$message,object:$object,type:"commit",tagger:{name:"github-actions[bot]",email:"41898282+github-actions[bot]@users.noreply.github.com"}}' \
+            >"$RUNNER_TEMP/tag.json"
+          tag_sha="$(gh api "repos/$GH_REPO/git/tags" --input "$RUNNER_TEMP/tag.json" --jq .sha)"
+          gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$tag_sha" --silent
+          echo "Created tag $TAG on $SHA."
+
+      - name: Create the GitHub Release
+        if: steps.validate.outputs.release == 'true'
+        env:
+          TAG: ${{ steps.validate.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          if ! gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"; then
+            echo "::error::The tag $TAG exists but the GitHub Release failed; do not cut again. Run: gh release create $TAG --repo $GH_REPO --verify-tag --title $TAG --notes-file <notes>"
+            exit 1
+          fi
+
+      - name: Dispatch Deploy production on the tag
+        if: steps.validate.outputs.release == 'true'
+        env:
+          TAG: ${{ steps.validate.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          if ! gh workflow run deploy-production.yml --ref "$TAG"; then
+            echo "::error::The tag $TAG and its Release exist but the dispatch failed. Run: gh workflow run deploy-production.yml --repo $GH_REPO --ref $TAG"
+            exit 1
+          fi
+          echo "::notice::Dispatched Deploy production on $TAG: $GITHUB_SERVER_URL/$GH_REPO/actions/workflows/deploy-production.yml"
