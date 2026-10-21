@@ -69,7 +69,10 @@ const gateEnv = (base, head, headRef = "text/fix-typo") => ({
 test("a text/ pull request that rewrites the gate scripts is still judged by the base's scripts", () => {
   const { repo, base } = gateRepo()
   repo.branch("text/fix-typo", base)
-  for (const f of gateScripts) repo.write("package.json", "{}\n")
+  for (const f of gateScripts) {
+    repo.write(`.github/scripts/${f}`, "#!/usr/bin/env bash\nexit 0\n", 0o755)
+  }
+  repo.write("package.json", "{}\n")
   const head = repo.commit("hostile")
   const r = runStep(gate, repo, gateEnv(base, head))
   assert.equal(r.code, 1, r.out)

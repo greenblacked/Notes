@@ -194,7 +194,10 @@ test("a text/ pull request may change only notes: the check runs early in the wo
   const idx = (name) => job.steps.findIndex((s) => s.name === name)
   const step = job.steps[idx("Require only content changes on a text/ branch")]
   assert.ok(step)
-  assert.ok(idx(step.name) > idx("Require no tooling attribution"))
+  // Before any step that runs the pull request's own code.
+  assert.ok(idx(step.name) > idx("Check out"))
+  assert.ok(idx(step.name) < idx("Set up Node.js"))
+  assert.ok(idx(step.name) < idx("Require no tooling attribution"))
   assert.ok(idx(step.name) < idx("Install actionlint"))
   assert.match(step.run, /git cat-file -e "\$PR_BASE\^\{commit\}"/)
   assert.match(
@@ -212,6 +215,7 @@ test("a text/ pull request may change only notes: the check runs early in the wo
     HEAD_REF: "${{ github.head_ref }}",
     PR_BASE: "${{ github.event.pull_request.base.sha }}",
     PR_HEAD: "${{ github.event.pull_request.head.sha }}",
+    GIT_NO_REPLACE_OBJECTS: "1",
   })
   assert.equal(step.if, undefined)
   assert.equal(step["continue-on-error"], undefined)

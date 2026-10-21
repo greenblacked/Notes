@@ -223,6 +223,42 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # A text/ branch ships to production without stage (text-release.yml), so its pull request
+      # may change only notes under content/. The gate scripts run from the pull request's base
+      # commit, never from its head: a text/ pull request cannot rewrite the check that judges it.
+      # It runs right after the checkout, before any step that executes the pull request's code
+      # (that code could otherwise shadow git or tar, or plant replace refs, to forge the extract).
+      # Every other check still runs on it.
+      - name: Require only content changes on a text/ branch
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          GIT_NO_REPLACE_OBJECTS: "1"
+        run: |
+          set -Eeuo pipefail
+          if [[ "${EVENT_NAME:-}" != "pull_request" || "${HEAD_REF:-}" != text/* ]]; then
+            echo "Not a text/ pull request; no path restriction."
+            exit 0
+          fi
+          if [[ ! "$PR_BASE" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "$PR_BASE^{commit}" 2>/dev/null; then
+            echo "::error::The base commit '$PR_BASE' is not in this checkout; refusing to judge a text/ pull request."
+            exit 1
+          fi
+          for f in require-text-paths.sh require-content-only.sh; do
+            mode="" type=""
+            read -r mode type _ < <(git ls-tree "$PR_BASE" -- ".github/scripts/$f") || true
+            if [[ "$mode" != "100755" || "$type" != "blob" ]]; then
+              echo "::error::The base commit $PR_BASE has no executable .github/scripts/$f; a text/ pull request needs the gate on its base branch first."
+              exit 1
+            fi
+          done
+          trusted="$RUNNER_TEMP/trusted-base"
+          mkdir "$trusted"
+          git archive --format=tar "$PR_BASE" .github/scripts | tar -x -f - -C "$trusted"
+          "$trusted/.github/scripts/require-text-paths.sh"
+
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -251,39 +287,6 @@ jobs:
           else
             node scripts/check-attribution.mjs --range "$PUSH_BEFORE..$PUSH_AFTER"
           fi
-
-      # A text/ branch ships to production without stage (text-release.yml), so its pull request
-      # may change only notes under content/. The gate scripts run from the pull request's base
-      # commit, never from its head: a text/ pull request cannot rewrite the check that judges it.
-      # Every other check still runs on it.
-      - name: Require only content changes on a text/ branch
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          HEAD_REF: ${{ github.head_ref }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -Eeuo pipefail
-          if [[ "${EVENT_NAME:-}" != "pull_request" || "${HEAD_REF:-}" != text/* ]]; then
-            echo "Not a text/ pull request; no path restriction."
-            exit 0
-          fi
-          if [[ ! "$PR_BASE" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "$PR_BASE^{commit}" 2>/dev/null; then
-            echo "::error::The base commit '$PR_BASE' is not in this checkout; refusing to judge a text/ pull request."
-            exit 1
-          fi
-          for f in require-text-paths.sh require-content-only.sh; do
-            mode="" type=""
-            read -r mode type _ < <(git ls-tree "$PR_BASE" -- ".github/scripts/$f") || true
-            if [[ "$mode" != "100755" || "$type" != "blob" ]]; then
-              echo "::error::The base commit $PR_BASE has no executable .github/scripts/$f; a text/ pull request needs the gate on its base branch first."
-              exit 1
-            fi
-          done
-          trusted="$RUNNER_TEMP/trusted-base"
-          mkdir "$trusted"
-          git archive --format=tar "$PR_BASE" .github/scripts | tar -x -f - -C "$trusted"
-          "$trusted/.github/scripts/require-text-paths.sh"
 
       - name: Install actionlint
         run: |
