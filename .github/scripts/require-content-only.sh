@@ -6,6 +6,8 @@
 # content, so they are refused), regular files only (mode 100644: no symlinks, submodules or
 # executables), and only added, modified or deleted (no type changes). Renames are not detected
 # (--no-renames), so a move into content/ still shows the path it came from.
+# A .md note can still carry raw HTML that Quartz renders; that is accepted, as for any note the
+# owner merges, because the owner reviews and merges every text/ pull request.
 # Optional LIST_FILE: receives one "A|M|D<TAB>path" line per changed file.
 # Exit codes: 0 allowed (an empty diff too), 1 at least one violation, 2 usage or git error.
 set -euo pipefail
