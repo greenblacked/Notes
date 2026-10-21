@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-21
+
 ### Added
 
 - **Start here on the home page and an All notes page.** The home page now offers four reader goals (resolve an operational problem, design or improve a platform, develop engineering skills, lead a platform team) with the section cards below, and the full note catalogue moved to `/all-notes`, linked from the first screen. The anchors `#note-index-title` and `#note-index-<section>` still work on the home page.
