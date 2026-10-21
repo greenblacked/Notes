@@ -188,6 +188,29 @@ test("the attribution check runs in the workflow lint job and gates CI OK", () =
   assert.equal(checkout.with["fetch-depth"], 0)
 })
 
+test("a text/ pull request may change only notes: the check runs early in the workflow lint job", () => {
+  const job = wf["ci.yml"].jobs["workflow-lint"]
+  const idx = (name) => job.steps.findIndex((s) => s.name === name)
+  const step = job.steps[idx("Require only content changes on a text/ branch")]
+  assert.ok(step)
+  assert.ok(idx(step.name) > idx("Require no tooling attribution"))
+  assert.ok(idx(step.name) < idx("Install actionlint"))
+  assert.equal(step.run, ".github/scripts/require-text-paths.sh")
+  assert.deepEqual(step.env, {
+    EVENT_NAME: "${{ github.event_name }}",
+    HEAD_REF: "${{ github.head_ref }}",
+    PR_BASE: "${{ github.event.pull_request.base.sha }}",
+    PR_HEAD: "${{ github.event.pull_request.head.sha }}",
+  })
+  assert.equal(step.if, undefined)
+  assert.equal(step["continue-on-error"], undefined)
+  assert.deepEqual(wf["ci.yml"].jobs["ci-ok"].needs, [
+    "build-and-check",
+    "browser",
+    "workflow-lint",
+  ])
+})
+
 test("the browser smoke tests run in ci and gate CI OK", () => {
   const ci = wf["ci.yml"]
   const job = ci.jobs.browser
@@ -396,6 +419,7 @@ test("every CI check still runs in ci.yml, unconditionally and without continue-
     /\bnpm run test:browser(\s|$)/,
     /check-attribution\.mjs/,
     /actionlint\/actionlint/,
+    /require-text-paths\.sh/,
     /shellcheck scripts\/smoke-test\.sh \.github\/scripts\/\*\.sh/,
     /zizmor" --format=github \.github/,
   ]

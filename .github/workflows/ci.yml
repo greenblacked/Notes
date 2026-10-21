@@ -252,6 +252,16 @@ jobs:
             node scripts/check-attribution.mjs --range "$PUSH_BEFORE..$PUSH_AFTER"
           fi
 
+      # A text/ branch ships to production without stage (text-release.yml), so its pull request
+      # may change only notes under content/. Every other check still runs on it.
+      - name: Require only content changes on a text/ branch
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: .github/scripts/require-text-paths.sh
+
       - name: Install actionlint
         run: |
           curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/actionlint.tgz" \
