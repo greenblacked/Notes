@@ -17,7 +17,8 @@ jobs:
     name: Build and check
     runs-on: ubuntu-24.04
     # A cold `quartz plugin restore` takes about 7 to 8 minutes measured on 4-core runners (2026-10-20), slower on 2-core.
-    timeout-minutes: 45
+    # Kept under the 25 minutes the browser shards wait for this job, so a hung build ends before they give up.
+    timeout-minutes: 24
     permissions:
       contents: read
     env:
@@ -186,10 +187,12 @@ jobs:
         run: |
           set -Eeuo pipefail
           start=$SECONDS
+          failures=0
           while :; do
             if latest="$(gh api --paginate "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
               --jq '.jobs[] | select(.name == "Build and check") | "\(.run_attempt) \(.status) \(.conclusion)"' |
               sort -n | tail -n 1)"; then
+              failures=0
               read -r attempt status conclusion <<<"${latest:-0 missing none}"
               if [[ "$status" == "completed" ]]; then
                 if [[ "$conclusion" == "success" ]]; then
@@ -200,15 +203,21 @@ jobs:
                 exit 1
               fi
             else
-              echo "::warning::Could not read the job list; retrying."
+              failures=$((failures + 1))
+              echo "::warning::Could not read the job list ($failures in a row); retrying."
+              if ((failures >= 10)); then
+                echo "::error::The job list stayed unreadable (API error or rate limit); giving up."
+                exit 1
+              fi
             fi
             elapsed=$((SECONDS - start))
             if ((elapsed >= 1500)); then
               echo "::error::Timed out after $elapsed s waiting for Build and check."
               exit 1
             fi
-            # Poll often while a warm build is due, then slowly (a cold plugin restore takes minutes).
-            if ((elapsed < 180)); then sleep 10; else sleep 30; fi
+            # Poll often while a warm build is due, then slowly (a cold plugin restore takes minutes),
+            # which keeps 12 shards well under the token's API rate limit.
+            if ((elapsed < 90)); then sleep 5; elif ((elapsed < 300)); then sleep 15; else sleep 30; fi
           done
 
       - name: Download build output

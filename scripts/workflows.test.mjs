@@ -269,6 +269,8 @@ test("browser shards wait for the latest successful build job before using its o
   assert.ok(waitAt < download && download < install && install < tests)
   const limit = Number(/elapsed >= (\d+)/.exec(wait.run)?.[1])
   assert.ok(limit > 0 && limit < job["timeout-minutes"] * 60)
+  // A hung build must end before the shards give up waiting for it.
+  assert.ok(ci.jobs["build-and-check"]["timeout-minutes"] * 60 < limit)
   for (const s of steps.slice(0, waitAt)) {
     assert.doesNotMatch(s.run ?? "", /public\/|\$RUNNER_TEMP\/site/, s.name)
   }
