@@ -5,7 +5,7 @@ tags:
   - tools
   - meta
 created: 2026-10-10
-modified: 2026-10-19
+modified: 2026-10-21
 draft: false
 ---
 
@@ -38,12 +38,23 @@ Notes in this section compare tools and record why one was preferred. They are t
 - [[kaniko-vs-buildkit-vs-cloud-build|Kaniko vs BuildKit vs Cloud Build for image builds]]: choosing a rootless or managed image builder for GitLab CI, Jenkins and GCP: privilege model, cache, provenance, SBOM and maintenance status.
 - [[cosign-vs-notation|cosign vs Notation for container image signing]]: comparing Sigstore cosign and Notary Project Notation on signing models, attestations, trust policy, KMS support and admission enforcement on GKE.
 - [[renovate-vs-dependabot|Renovate vs Dependabot]]: choosing a dependency update bot for GitHub and GitLab repos with Terraform, Helm, Dockerfiles and CI images: coverage, grouping, automerge and hosting.
+- [[terraform-vs-config-connector-vs-crossplane|Terraform vs Config Connector vs Crossplane for GCP resources]]: comparing Terraform, Config Connector and Crossplane for Google Cloud resources on change preview, drift, deletion semantics, identity and failure modes.
+- [[cloud-deploy-vs-config-sync-vs-argocd|Cloud Deploy and Config Sync vs Argo CD for GKE delivery]]: how Google Cloud Deploy (push pipelines) and Config Sync (pull GitOps) compare with Argo CD on GKE: promotion, approvals, rollback, drift and lock-in.
+- [[gke-gateway-vs-envoy-gateway-vs-ingress-nginx|Replacing ingress-nginx on GKE: GKE Gateway controller vs Envoy Gateway]]: moving off retired ingress-nginx on GKE: managed GKE Gateway vs in-cluster Envoy Gateway, annotation mapping, ingress2gateway, parallel run and DNS cutover.
+- [[keda-vs-hpa-external-metrics|KEDA vs HPA with external metrics on GKE]]: scaling GKE workloads on queue depth and other external metrics with the HPA and a metrics adapter or with KEDA, including scale to zero and failure handling.
+- [[falco-vs-tetragon-vs-gke-threat-detection|Falco vs Tetragon vs Google threat detection for GKE runtime security]]: choosing a runtime detection source for GKE between Falco, Tetragon and Security Command Center Container Threat Detection, with rollout and tuning.
+- [[tempo-vs-jaeger-vs-cloud-trace|Tempo vs Jaeger vs Cloud Trace for distributed tracing]]: choosing a trace backend behind the OpenTelemetry Collector gateway on GKE between Grafana Tempo, Jaeger and Cloud Trace, with exporter configs and checks.
+- [[pagerduty-vs-opsgenie-vs-grafana-irm|PagerDuty vs Opsgenie vs Grafana IRM for on-call paging]]: choosing the tool that delivers pages from Alertmanager and Cloud Monitoring: routing, schedules as code, testing the path, and Opsgenie's end of sale.
+- [[opencost-vs-kubecost-vs-gke-cost-allocation|OpenCost vs Kubecost vs GKE cost allocation]]: comparing GKE cost allocation in the billing export, OpenCost and Kubecost for per-workload cost, idle cost and request efficiency on GKE.
+- [[flyway-vs-liquibase-vs-atlas|Flyway vs Liquibase vs Atlas for database schema migrations]]: choosing and running a PostgreSQL migration tool on GCP: licences, locking, lint, where migrations run, a guarded GitLab CI job, and forward-only rollback.
+- [[mise-vs-asdf-vs-dev-containers|mise vs asdf vs dev containers for pinned CLI toolchains]]: pinning terraform, kubectl, helm and gcloud the same on laptops and CI runners: mise, asdf and dev containers compared, with a CI drift check that fails.
 
 ## Deep dives and toolkits
 
 - [[artifactory-repository-design|Artifactory repository design: local, remote and virtual]]: how to lay out Artifactory local, remote and virtual repositories, names, permissions and resolution order so every client resolves the right artefact.
 - [[k9s-kubectx-stern-toolbox|k9s, kubectx and stern toolbox]]: A terminal kit for daily Kubernetes work, with k9s for cluster views, kubectx and kubens for context switching and stern for multi-pod logs, plus safety habits.
 - [[opentofu-migration-notes|OpenTofu migration notes for GCS-backed Terraform]]: A gated per-workspace move from Terraform to OpenTofu with a GCS backend: compatibility checks, state backup, CI image changes, validation and rollback.
+- [[crane-skopeo-oras-registry-toolbox|crane, skopeo and ORAS registry toolbox]]: daemonless registry tools for digests, promotion by copy, mirroring and OCI artifacts: crane, skopeo and ORAS recipes with safety habits.
 
 ## Writing a comparison
 
