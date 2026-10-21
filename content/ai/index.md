@@ -5,7 +5,7 @@ tags:
   - ai
   - meta
 created: 2026-10-17
-modified: 2026-10-19
+modified: 2026-10-21
 draft: false
 ---
 
@@ -20,6 +20,10 @@ These notes cover using AI agents and assistants in delivery and operations with
 - [[prompt-injection-test-harness-for-ci-agents|Testing CI agents against prompt injection, including tool and MCP inputs]]: a repeatable suite of planted instructions with canary secrets and fail-closed assertions on tool calls and egress.
 - [[ai-coding-assistant-admin-controls|Admin controls for AI coding assistants: seats, data, telemetry and deny rules]]: the settings an admin controls on coding assistants and how to verify each one.
 - [[llm-assisted-terraform-plan-review|LLM-assisted Terraform plan review: what the model checks and what it must not decide]]: an advisory model review of redacted plan JSON after deterministic gates, with a human approving every apply.
+- [[kubernetes-rbac-for-ai-agents|Kubernetes RBAC for AI agents: read-only troubleshooting without secrets]]: a dedicated identity and hand-written read-only role with no secrets, exec or escalation verbs, short-lived tokens and tests that prove it.
+- [[internal-mcp-servers-for-platform-tools|Building internal MCP servers for platform tools: scope, auth, deployment and audit]]: narrow, typed, read-mostly tools with server-side limits, audience-checked tokens and a per-call audit log.
+- [[redacting-sensitive-data-before-llm-calls|Redacting sensitive data before LLM calls: secrets, personal data and a fail-closed filter]]: a shared, tested redaction layer in the gateway that blocks the call when it cannot be sure.
+- [[sandboxing-coding-agents-on-workstations-and-runners|Sandboxing coding agents on workstations and runners: containers, credentials and egress]]: run agents where they reach only the repository, short-lived scoped credentials and an egress allowlist.
 
 ## Operations and teams
 
@@ -29,6 +33,16 @@ These notes cover using AI agents and assistants in delivery and operations with
 - [[llm-log-analysis-and-alert-triage|LLM-assisted log analysis and alert triage without losing evidence]]: deterministic clustering, evidence-linked summaries and advisory alert triage that never silences.
 - [[rag-over-runbooks-for-on-call|RAG over internal runbooks for on-call: access control, citations, staleness and evaluation]]: a retrieval assistant that enforces permissions, cites sources, flags stale pages and is gated on golden questions.
 - [[verifying-ai-generated-runbooks|Verifying AI-generated runbooks before on-call uses them]]: check every drafted step against the live system and a staging dry run, with a named owner and a last-verified date.
+- [[validating-ai-generated-infrastructure-code|Validating AI-generated Terraform, Helm, Kubernetes and PromQL before review]]: a deterministic ladder of offline and live checks that catches invented arguments, removed APIs and queries that match nothing.
+- [[runaway-or-compromised-ai-agent-response|Runbook: stopping a runaway or compromised AI agent]]: stop the agent, contain its credentials, keep the evidence, assess the blast radius and recover.
+
+## Platform for AI
+
+- [[self-hosted-llm-inference-on-gke|Self-hosted LLM inference on GKE: GPU node pools, serving, autoscaling and cost]]: dedicated GPU node pools, a pinned vLLM server, queue-based autoscaling, Spot capacity and a one-step rollback.
+- [[vertex-ai-private-access-from-gke|Calling Vertex AI from GKE privately: Workload Identity, VPC Service Controls, regions and quotas]]: no keys or public egress, a VPC Service Controls perimeter, region choice, 429 handling and audit logs.
+- [[model-artifacts-in-artifactory|Model weights as supply-chain artifacts: Artifactory, safe formats, scanning and provenance]]: proxied model hubs, pinned revisions, safe weight formats only, scanning and licence review before promotion.
+- [[llm-observability-tracing-and-slos|Observability for LLM-backed services and agents: traces, metrics and SLOs]]: traces of model and tool calls, time to first token, errors, 429s and tokens as low-cardinality metrics, and SLOs.
+- [[model-version-pinning-and-upgrade-evals|Model versions as dependencies: pinning, deprecation tracking and upgrade evals]]: pinned model IDs with an inventory, retirement dates in the EOL register, an eval gate, a canary and a one-commit rollback.
 
 ## Evaluation and cost
 
