@@ -25,7 +25,7 @@ writeFileSync(
   `#!/usr/bin/env bash
 if [[ "$2" == "--paginate" ]]; then shift; fi
 case "$2" in
-  */git/matching-refs/tags/v) printf '%s' "$FAKE_REFS" | jq -r "$4" ;;
+  */git/matching-refs/tags/v) [[ -n "$FAKE_API_FAIL" ]] && exit 1; printf '%s' "$FAKE_REFS" | jq -r "$4" ;;
   */git/ref/tags/*) jq -c --arg t "\${2##*/}" '.[$t]' <<<"$FAKE_REF_OBJS" | jq -r "$4" ;;
   */git/tags/*) jq -c --arg s "\${2##*/}" '.[$s]' <<<"$FAKE_TAG_OBJS" | jq -r "$4" ;;
   *) exit 1 ;;
@@ -52,6 +52,11 @@ function run({ tags, objs = {}, tagObjs = {}, env = {} }) {
   })
   return { code: r.status, out: r.stdout, err: r.stdout + r.stderr }
 }
+
+test("a failing tag listing is an error (exit 1), not 'no tag yet' (exit 3)", () => {
+  const r = run({ tags: ["v0.6.0"], env: { FAKE_API_FAIL: "1" } })
+  assert.equal(r.code, 1, r.err)
+})
 
 test("the next tag is the patch bump of the latest tag", () => {
   const a = run({ tags: ["v0.5.0", "v0.6.0"], objs: { "v0.6.0": lightweight(C1) } })

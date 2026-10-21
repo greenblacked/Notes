@@ -6,7 +6,12 @@
 # meanwhile). Requires GH_TOKEN (contents: read) and GH_REPO in the env.
 set -euo pipefail
 
-latest="$(gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/v" --jq '.[].ref' \
+# gh runs on its own so an API failure is an error (exit 1), not "no tag yet" (exit 3).
+refs="$(gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/v" --jq '.[].ref')" || {
+  echo "::error::Could not list the release tags." >&2
+  exit 1
+}
+latest="$(printf '%s\n' "$refs" \
   | sed 's#^refs/tags/##' \
   | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' \
   | sort -V | tail -n 1 || true)"
