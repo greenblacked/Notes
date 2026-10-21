@@ -110,7 +110,7 @@ Use a `text/<lower-case-kebab>` branch for changes to the notes' text only. It g
 
 When to use it:
 
-- The change is only `.md` notes or raster images (`png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`) under `content/`, with plain file names (no spaces or dot-segments; no symlinks, executables or submodules). CI (`require-text-paths.sh`, in the `workflow-lint` job, part of `CI OK`) fails a pull request from a `text/` branch that changes anything else, including `CHANGELOG.md`. Other checks (build, links, notes check, browser suite) still run on it: text skips stage, not CI.
+- The change is only `.md` notes or raster images (`png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`) under `content/`, with plain file names (no spaces or dot-segments; no symlinks, executables or submodules). CI (`require-text-paths.sh`, in the `workflow-lint` job, part of `CI OK`; it runs from the pull request's base commit, never its head, so a `text/` pull request cannot rewrite its own check) fails a pull request from a `text/` branch that changes anything else, including `CHANGELOG.md`. Other checks (build, links, notes check, browser suite) still run on it: text skips stage, not CI. GitHub still runs the workflow files of the pull request's merge commit, so a `text/` pull request that touches `.github/` is rejected in review.
 - Use a normal `<type>/<kebab>` branch and Cut release for anything else: code, configuration, workflows, dependencies, the changelog, SVG or HTML. Cut release is also the way out when `main` has unreleased code (below).
 
 What happens on merge (see `text-release.yml` under Workflows):

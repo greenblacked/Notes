@@ -189,14 +189,24 @@ test("the attribution check runs in the workflow lint job and gates CI OK", () =
   assert.equal(checkout.with["fetch-depth"], 0)
 })
 
-test("a text/ pull request may change only notes: the check runs early in the workflow lint job", () => {
+test("a text/ pull request may change only notes: the check runs early in the workflow lint job, from the base commit", () => {
   const job = wf["ci.yml"].jobs["workflow-lint"]
   const idx = (name) => job.steps.findIndex((s) => s.name === name)
   const step = job.steps[idx("Require only content changes on a text/ branch")]
   assert.ok(step)
   assert.ok(idx(step.name) > idx("Require no tooling attribution"))
   assert.ok(idx(step.name) < idx("Install actionlint"))
-  assert.equal(step.run, ".github/scripts/require-text-paths.sh")
+  assert.match(step.run, /git cat-file -e "\$PR_BASE\^\{commit\}"/)
+  assert.match(
+    step.run,
+    /git archive --format=tar "\$PR_BASE" \.github\/scripts \| tar -x -f - -C "\$trusted"/,
+  )
+  assert.match(step.run, /"\$trusted\/\.github\/scripts\/require-text-paths\.sh"/)
+  assert.ok(step.run.indexOf("text/*") < step.run.indexOf("git archive"))
+  // Never the pull request's own copy of a gate script.
+  assert.ok(!/(?<![\w/$])\.?\/?\.github\/scripts\/[\w.-]+\.sh/.test(step.run), step.run)
+  const lintCheckout = job.steps.find((s) => (s.uses ?? "").startsWith("actions/checkout"))
+  assert.equal(lintCheckout.with["fetch-depth"], 0)
   assert.deepEqual(step.env, {
     EVENT_NAME: "${{ github.event_name }}",
     HEAD_REF: "${{ github.head_ref }}",
