@@ -17,7 +17,8 @@ jobs:
     name: Build and check
     runs-on: ubuntu-24.04
     # A cold `quartz plugin restore` takes about 7 to 8 minutes measured on 4-core runners (2026-10-20), slower on 2-core.
-    timeout-minutes: 45
+    # Kept under the 25 minutes the browser shards wait for this job, so a hung build ends before they give up.
+    timeout-minutes: 24
     permissions:
       contents: read
     env:
@@ -85,18 +86,21 @@ jobs:
       - name: Deploy dry run (no credentials)
         run: npm run deploy:dry-run
 
-  # One job per (Playwright project, shard) so that the wall-clock time is the slowest shard,
-  # not the sum of four projects. Every job bills at least one whole minute (and each is
-  # rounded up on its own), so the shard count trades wall-clock against billed minutes: see
-  # "CI minutes" in docs/deployment.md. The shard count is this list; each project's shards
-  # must be exactly 1/N to N/N (checked by scripts/workflows.test.mjs).
+  # One job per (Playwright project, shard). Shards start with the build job and wait for it
+  # (step "Wait for the build job"), so that the wall-clock time is about the slower of the
+  # build and a shard's setup, plus the slowest shard's tests, not the sum of four projects.
+  # Every job bills at least one whole minute (and each is rounded up on its own), so the
+  # shard count trades wall-clock against billed minutes: see "CI minutes" in
+  # docs/deployment.md. The shard count is this list; each project's shards must be exactly
+  # 1/N to N/N (checked by scripts/workflows.test.mjs).
   browser:
     name: Browser ${{ matrix.id }}
-    needs: build-and-check
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35
     permissions:
       contents: read
+      # Read this run's job list (the wait step).
+      actions: read
     strategy:
       # Every shard runs even if one fails, so a flaky shard can be re-run alone (Re-run failed
       # jobs would otherwise re-run all cancelled shards too). CI OK still needs every shard.
@@ -113,10 +117,12 @@ jobs:
           - { id: chromium-desktop-2, project: chromium-desktop, browser: chromium, shard: 2/2 }
           - { id: chromium-phone-1, project: chromium-phone, browser: chromium, shard: 1/2 }
           - { id: chromium-phone-2, project: chromium-phone, browser: chromium, shard: 2/2 }
-          - { id: webkit-desktop-1, project: webkit-desktop, browser: webkit, shard: 1/2 }
-          - { id: webkit-desktop-2, project: webkit-desktop, browser: webkit, shard: 2/2 }
-          - { id: webkit-phone-1, project: webkit-phone, browser: webkit, shard: 1/2 }
-          - { id: webkit-phone-2, project: webkit-phone, browser: webkit, shard: 2/2 }
+          - { id: webkit-desktop-1, project: webkit-desktop, browser: webkit, shard: 1/3 }
+          - { id: webkit-desktop-2, project: webkit-desktop, browser: webkit, shard: 2/3 }
+          - { id: webkit-desktop-3, project: webkit-desktop, browser: webkit, shard: 3/3 }
+          - { id: webkit-phone-1, project: webkit-phone, browser: webkit, shard: 1/3 }
+          - { id: webkit-phone-2, project: webkit-phone, browser: webkit, shard: 2/3 }
+          - { id: webkit-phone-3, project: webkit-phone, browser: webkit, shard: 3/3 }
     env:
       NPM_CONFIG_IGNORE_SCRIPTS: "true"
       PROJECT: ${{ matrix.project }}
@@ -136,22 +142,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Download build output
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: ci-site
-          path: ${{ runner.temp }}/site
-
-      # The same checks as the deploy jobs: only a valid public/ is used, and the Worker's CSP
-      # hashes are regenerated from it.
-      - name: Install build output
-        run: |
-          site="$RUNNER_TEMP/site"
-          node scripts/check-artifact.mjs --root "$site"
-          rm -rf public worker/csp.generated.js
-          cp -R "$site/public" public
-          node scripts/build-csp.mjs
 
       - name: Type check the browser tests
         run: npm run check:browser
@@ -184,6 +174,66 @@ jobs:
       - name: Install browser system dependencies
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: ./node_modules/.bin/playwright install-deps "$BROWSER"
+
+      # The shards start with the build instead of after it, so that their setup (npm ci,
+      # browsers, system packages) overlaps the build. This waits for the latest attempt of the
+      # build job and fails as soon as that attempt fails, so a broken build never leaves the
+      # shards waiting. A re-run of only the failed shards finds the earlier successful attempt.
+      - name: Wait for the build job
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          start=$SECONDS
+          failures=0
+          while :; do
+            if latest="$(gh api --paginate "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
+              --jq '.jobs[] | select(.name == "Build and check") | "\(.run_attempt) \(.status) \(.conclusion)"' |
+              sort -n | tail -n 1)"; then
+              failures=0
+              read -r attempt status conclusion <<<"${latest:-0 missing none}"
+              if [[ "$status" == "completed" ]]; then
+                if [[ "$conclusion" == "success" ]]; then
+                  echo "Build and check (attempt $attempt) succeeded."
+                  exit 0
+                fi
+                echo "::error::Build and check (attempt $attempt) ended with '$conclusion'; there is no build output to test."
+                exit 1
+              fi
+            else
+              failures=$((failures + 1))
+              echo "::warning::Could not read the job list ($failures in a row); retrying."
+              if ((failures >= 10)); then
+                echo "::error::The job list stayed unreadable (API error or rate limit); giving up."
+                exit 1
+              fi
+            fi
+            elapsed=$((SECONDS - start))
+            if ((elapsed >= 1500)); then
+              echo "::error::Timed out after $elapsed s waiting for Build and check."
+              exit 1
+            fi
+            # Poll often while a warm build is due, then slowly (a cold plugin restore takes minutes),
+            # which keeps 10 shards well under the token's API rate limit.
+            if ((elapsed < 90)); then sleep 5; elif ((elapsed < 300)); then sleep 15; else sleep 30; fi
+          done
+
+      - name: Download build output
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ci-site
+          path: ${{ runner.temp }}/site
+
+      # The same checks as the deploy jobs: only a valid public/ is used, and the Worker's CSP
+      # hashes are regenerated from it.
+      - name: Install build output
+        run: |
+          site="$RUNNER_TEMP/site"
+          node scripts/check-artifact.mjs --root "$site"
+          rm -rf public worker/csp.generated.js
+          cp -R "$site/public" public
+          node scripts/build-csp.mjs
 
       - name: Run the browser smoke tests
         run: |
