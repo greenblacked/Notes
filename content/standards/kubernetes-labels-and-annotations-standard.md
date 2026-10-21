@@ -9,7 +9,7 @@ tags:
   - policy-as-code
   - cost
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-10-21
 draft: false
 ---
 
@@ -151,7 +151,7 @@ In Helm, a selector change is a major chart version with a migration note ([[hel
 
 Google Cloud resource labels (on a project, a node pool, a disk) are not Kubernetes labels. They have **stricter rules**: lowercase letters, digits, underscores and hyphens, with length and count limits, and they cannot contain `/` or `.`, so a key such as `app.kubernetes.io/name` is not valid there. See [Labels overview](https://cloud.google.com/resource-manager/docs/labels-overview) and check the current limits.
 
-For cost reporting, GKE cost allocation can break down cluster spend by Kubernetes namespace and by Kubernetes labels you choose, which appear in the billing export. Enable it on the cluster and decide which keys to export (check the [GKE cost allocation docs](https://cloud.google.com/kubernetes-engine/docs/how-to/cost-allocations) for the current setup and how label keys are mapped). Use short, lowercase keys (`team`, `cost-center`, `environment`) for the cost labels precisely because they are valid in both systems, and apply the same three on the GCP resources (projects, buckets, disks) through Terraform.
+For cost reporting, GKE cost allocation can break down cluster spend by Kubernetes namespace and by Kubernetes labels you choose, which appear in the billing export. Enable it on the cluster and decide which keys to export (check the [GKE cost allocation docs](https://cloud.google.com/kubernetes-engine/docs/how-to/cost-allocations) for the current setup and how label keys are mapped). Use short, lowercase keys (`team`, `cost-center`, `environment`) for the Kubernetes cost labels because they are valid in both systems. On the GCP resources (projects, buckets, disks), apply the same `team` and `cost-center` keys through Terraform, with `env` (not `environment`) as the environment key, per [[gcp-resource-naming-and-labels-standard]]; map `environment` to `env` in the billing report query.
 
 ## Enforcement
 

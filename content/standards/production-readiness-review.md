@@ -8,7 +8,7 @@ tags:
   - on-call
   - management
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-10-21
 draft: false
 ---
 
@@ -109,7 +109,7 @@ Recommendation, not a sourced rule:
 - **Other production services**: when their shape changes, or every 24 months.
 - **Conditional go**: the conditions are checked by the due date. If one is missed, the manager decides to extend once with a reason, or the service returns to review.
 
-Define "critical" before you need it: a service whose outage stops revenue, blocks other teams' production, or touches regulated data. Keep the list in the team charter or service catalogue and review it yearly.
+Define "critical" before you need it: a service whose outage stops revenue, blocks other teams' production, or touches regulated data. Keep the list in the team charter or service catalogue and review it yearly. [[service-tiering-standard]] makes this concrete: critical means tier 0 or tier 1, or any service that holds Restricted data.
 
 In a re-review, do not start from a blank page. Copy the last record, re-check each evidence link (links rot, dashboards get renamed), and focus on what changed: new dependencies, new traffic, new owners.
 
