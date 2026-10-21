@@ -1,11 +1,11 @@
 ---
 title: Learning path
-description: Fifty-three lessons from first job to middle level in DevOps, in stages with milestones, a self-assessment and a weekly plan.
+description: Sixty-four lessons from first job to middle level in DevOps, in stages with milestones, a self-assessment and a weekly plan.
 tags:
   - learning
   - meta
 created: 2026-10-17
-modified: 2026-10-20
+modified: 2026-10-21
 draft: false
 ---
 
@@ -15,7 +15,7 @@ This is a structured path for someone who has started a DevOps or platform job, 
 
 It is for people from their first job to middle level: new engineers, developers moving towards operations, and system administrators who want the cloud-native side. It assumes you can use a computer comfortably and have no prior Linux, Kubernetes or cloud knowledge. Where a lesson needs earlier material, it says so in its opening line.
 
-- **Go in order.** Later lessons build on earlier ones. A plan of about 8 to 10 hours a week finishes in about 14 weeks (see the week-by-week map below), or about 18 with the "Going deeper" lessons.
+- **Go in order.** Later lessons build on earlier ones. A plan of about 8 to 10 hours a week finishes in about 14 weeks (see the week-by-week map below), or about 22 with the "Going deeper" lessons.
 - **Or jump in.** Do the self-assessment below. If you score 3 on every row of a stage, skip that stage's lessons and read only the milestone. At 2, do the exercises as a test. Start at the first stage where you score below 3.
 - **Do the exercises.** Reading is not learning. Every lesson has numbered exercises with expected output and an "If you see something else" line for when it goes wrong.
 - **Keep a notes file** with the commands that worked. It becomes your own runbook.
@@ -66,6 +66,7 @@ Each lesson shows its stage, its number in the path and the previous and next le
 **Going deeper:**
 
 - `middle` [[learn/linux-performance-triage-with-mpstat-pidstat-sar-and-psi|Linux 06: Performance triage with mpstat, pidstat, sar and PSI]]
+- `junior-middle` [[learn/linux-disks-filesystems-and-lvm|Linux 07: Disks, partitions, filesystems and LVM]]
 
 **Homelab P1** after this stage: a VM with nginx, a systemd unit and a restore checked by checksum (see [[learn/lab-setup#The homelab ladder|the ladder]]).
 
@@ -128,6 +129,10 @@ Each lesson shows its stage, its number in the path and the previous and next le
 
 - `middle` [[learn/rbac-roles-bindings-and-least-privilege|Kubernetes 07: RBAC, least privilege and a first audit]]
 - `middle` [[learn/helm-chart-authoring-schema-dependencies-and-tests|Kubernetes 08: Authoring a reusable Helm chart]]
+- `middle` [[learn/kubernetes-storage-volumes-pvcs-and-statefulsets|Kubernetes 09: Storage: volumes, PersistentVolumeClaims, StorageClasses and StatefulSets]]
+- `middle` [[learn/kubernetes-scheduling-affinity-taints-and-draining|Kubernetes 10: Scheduling: affinity, taints, topology spread, PodDisruptionBudgets and draining]]
+- `middle` [[learn/kubernetes-network-policies-from-zero|Kubernetes 11: NetworkPolicy from zero]]
+- `junior-middle` [[learn/kubernetes-jobs-and-cronjobs|Kubernetes 12: Jobs and CronJobs]]
 
 **Homelab P3** after this stage: a kind or k3s cluster with Helm, ingress and a rollback.
 
@@ -142,6 +147,10 @@ Each lesson shows its stage, its number in the path and the previous and next le
 - `junior-middle` [[learn/gcp-iam-and-service-accounts|GCP 02: IAM and service accounts]]
 - `junior-middle` [[learn/gcp-vpc-compute-and-cloud-sql|GCP 03: VPC, Compute Engine and Cloud SQL]]
 - `middle` [[learn/gke-for-beginners|GCP 04: GKE for beginners]]
+
+**Going deeper:**
+
+- `middle` [[learn/gcp-keyless-ci-with-workload-identity-federation|GCP 05: Keyless CI to Google Cloud with Workload Identity Federation]]
 
 ## Stage 8: CI/CD and infrastructure as code
 
@@ -160,6 +169,9 @@ Each lesson shows its stage, its number in the path and the previous and next le
 - `junior-middle` [[learn/artifactory-repositories-access-and-retention|Delivery 08: Artifactory repositories, clients, access and cleanup]]
 - `junior-middle` [[learn/sonarqube-basics-first-scan-and-triage|Delivery 09: SonarQube basics, a first scan and triage]]
 - `middle` [[learn/terraform-for-each-lifecycle-and-tests|Delivery 10: Terraform for_each, lifecycle rules and terraform test]]
+- `middle` [[learn/gitops-with-argo-cd|Delivery 11: GitOps with Argo CD]]
+- `middle` [[learn/spinnaker-basics-applications-pipelines-and-judgment|Delivery 12: Spinnaker basics]]
+- `junior-middle` [[learn/chef-basics-cookbooks-test-kitchen-and-inspec|Config 01: Chef basics, Test Kitchen and InSpec]]
 
 **Homelab P4** after this stage: Terraform, CI and GitOps on one repository.
 
@@ -171,6 +183,10 @@ Each lesson shows its stage, its number in the path and the previous and next le
 **Goal:** apply the basics that stop the common failures.
 
 - `junior-middle` [[learn/security-basics-for-devops|Security 01: Basics for DevOps]]
+
+**Going deeper:**
+
+- `middle` [[learn/supply-chain-sboms-signing-and-verification|Security 02: SBOMs, signing and verifying images, and attestations]]
 
 ## Stage 10: Observability and incidents
 
@@ -185,6 +201,7 @@ Each lesson shows its stage, its number in the path and the previous and next le
 **Going deeper:**
 
 - `middle` [[learn/promql-for-alert-rules-and-recording-rules|Observability 04: PromQL for alert rules and recording rules]]
+- `middle` [[learn/slis-slos-and-error-budgets|Observability 05: SLIs, SLOs and error budgets]]
 
 **Homelab P5** after this stage: Prometheus, Grafana and Loki, plus an alert that fires.
 
@@ -253,6 +270,8 @@ This folds a 14-week plan onto the stages, at about three lessons a week. The ho
 After week 14, do P6 (the recovery drill) and repeat the self-assessment. Lesson numbers count from 01 for the lab setup through 43 for the career lesson, in the stage order above; the "Going deeper" lessons are not numbered in this map.
 
 **Weeks 15 to 18 (optional, going deeper):** week 15, Linux 06, Containers 05 and Kubernetes 07; week 16, Kubernetes 08, Delivery 06 and Delivery 07; week 17, Delivery 08, Delivery 09 and Delivery 10; week 18, Observability 04 and the self-assessment again. Times are estimates, not measured.
+
+**Weeks 19 to 22 (optional, going deeper):** week 19, Linux 07, Kubernetes 09 and Kubernetes 10; week 20, Kubernetes 11, Kubernetes 12 and Security 02; week 21, GCP 05, Delivery 11 and Delivery 12; week 22, Config 01, Observability 05 and the self-assessment again. Times are estimates, not measured.
 
 ## Using AI while learning
 
