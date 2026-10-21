@@ -43,7 +43,7 @@ if [[ "$ACTOR" == "$bot" && ("$TRIGGERING_ACTOR" == "$bot" || "$TRIGGERING_ACTOR
       GITHUB_OUTPUT="" "$(dirname "${BASH_SOURCE[0]}")/verify-text-merge.sh"; then
       latest="$(gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/v" --jq '.[].ref' \
         | sed 's#^refs/tags/##' \
-        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+        | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' \
         | sort -V | tail -n 1 || true)"
       if [[ "$tag" == "$latest" ]]; then
         echo "Dispatched by a Text release run of the owner for $SHA ($tag, the latest release tag)."
