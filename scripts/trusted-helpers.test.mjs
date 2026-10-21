@@ -69,9 +69,7 @@ const gateEnv = (base, head, headRef = "text/fix-typo") => ({
 test("a text/ pull request that rewrites the gate scripts is still judged by the base's scripts", () => {
   const { repo, base } = gateRepo()
   repo.branch("text/fix-typo", base)
-  for (const f of gateScripts)
-    repo.write(`.github/scripts/${f}`, "#!/usr/bin/env bash\nexit 0\n", 0o755)
-  repo.write("package.json", "{}\n")
+  for (const f of gateScripts) repo.write("package.json", "{}\n")
   const head = repo.commit("hostile")
   const r = runStep(gate, repo, gateEnv(base, head))
   assert.equal(r.code, 1, r.out)
@@ -117,4 +115,117 @@ test("a text/ pull request whose base commit is not in the checkout fails closed
   const r = runStep(gate, repo, gateEnv("0".repeat(40), base))
   assert.equal(r.code, 1, r.out)
   assert.match(r.out, /not in this checkout/)
+})
+
+// ---- text-release.yml: the helpers come from the latest release tag ----
+
+const trustedStep = workflow("text-release.yml").jobs.detect.steps.find(
+  (s) => s.id === "trusted",
+).run
+const helperNames = [
+  "verify-text-merge.sh",
+  "wait-for-ci.sh",
+  "text-release-plan.sh",
+  "text-release-version.sh",
+  "text-release-notes.sh",
+  "require-content-only.sh",
+  "require-ci-success.sh",
+]
+
+function releaseRepo() {
+  const repo = newRepo("trusted-")
+  repo.write("README.md", "readme\n")
+  for (const f of helperNames) repo.write(`.github/scripts/${f}`, realScript(f), 0o755)
+  const a = repo.commit("A")
+  repo.git("tag", "-a", "-m", "v0.1.0", "v0.1.0")
+  repo.write(".github/scripts/verify-text-merge.sh", "#!/usr/bin/env bash\necho PWNED\n", 0o755)
+  const b = repo.commit("B")
+  return { repo, a, b }
+}
+
+function trustedRun(repo, sha, mode = "skip") {
+  const outFile = join(tmp("gh-output-"), "out")
+  const r = runStep(trustedStep, repo, { SHA: sha, ON_MISSING: mode, GITHUB_OUTPUT: outFile })
+  let outputs = {}
+  try {
+    for (const line of readFileSync(outFile, "utf8").split("\n")) {
+      const i = line.indexOf("=")
+      if (i > 0) outputs[line.slice(0, i)] = line.slice(i + 1)
+    }
+  } catch {
+    outputs = {}
+  }
+  return { ...r, outputs }
+}
+
+test("the helpers come from the latest release tag, not from the pushed commit", () => {
+  const { repo, b } = releaseRepo()
+  const r = trustedRun(repo, b)
+  assert.equal(r.code, 0, r.out)
+  assert.equal(r.outputs.ready, "true")
+  assert.equal(r.outputs.tag, "v0.1.0")
+  const got = readFileSync(
+    join(r.runnerTemp, "trusted/.github/scripts/verify-text-merge.sh"),
+    "utf8",
+  )
+  assert.equal(got, realScript("verify-text-merge.sh"))
+})
+
+test("tags that are not strict vX.Y.Z are ignored", () => {
+  const { repo, b } = releaseRepo()
+  for (const t of ["v9.9", "v01.0.0", "v1.0.0-rc.1"]) repo.git("tag", t, b)
+  const r = trustedRun(repo, b)
+  assert.equal(r.code, 0, r.out)
+  assert.equal(r.outputs.tag, "v0.1.0")
+})
+
+test("a release tag on a merged branch commit is refused", () => {
+  const { repo, a, b } = releaseRepo()
+  repo.branch("side", a)
+  repo.write(".github/scripts/wait-for-ci.sh", "#!/usr/bin/env bash\nexit 0\n", 0o755)
+  const c = repo.commit("C")
+  repo.git("tag", "-a", "-m", "v0.2.0", "v0.2.0", c)
+  repo.checkout("main")
+  repo.git("merge", "-q", "--no-ff", "-m", "M", "side")
+  const m = repo.git("rev-parse", "HEAD")
+  assert.notEqual(m, b)
+  const r = trustedRun(repo, m)
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /first-parent/)
+})
+
+test("a commit already in the latest tag is not released again", () => {
+  const { repo, a, b } = releaseRepo()
+  repo.git("tag", "-a", "-m", "v0.3.0", "v0.3.0", b)
+  const r = trustedRun(repo, a)
+  assert.equal(r.code, 0, r.out)
+  assert.equal(r.outputs.ready, "false")
+  assert.match(r.out, /already in v0\.3\.0/)
+})
+
+test("without a release tag the step skips or fails by mode", () => {
+  const repo = newRepo("no-tag-")
+  repo.write("README.md", "x\n")
+  const sha = repo.commit("A")
+  const skip = trustedRun(repo, sha, "skip")
+  assert.equal(skip.code, 0, skip.out)
+  assert.equal(skip.outputs.ready, "false")
+  assert.match(skip.out, /run Cut release first/)
+  const fail = trustedRun(repo, sha, "fail")
+  assert.equal(fail.code, 1, fail.out)
+})
+
+test("a tag that predates the helpers skips or fails by mode", () => {
+  const repo = newRepo("old-tag-")
+  repo.write(".github/scripts/is-branch-head.sh", realScript("is-branch-head.sh"), 0o755)
+  repo.commit("A")
+  repo.git("tag", "-a", "-m", "v0.6.0", "v0.6.0")
+  repo.write("content/a.md", "a\n")
+  const sha = repo.commit("B")
+  const skip = trustedRun(repo, sha, "skip")
+  assert.equal(skip.code, 0, skip.out)
+  assert.equal(skip.outputs.ready, "false")
+  const fail = trustedRun(repo, sha, "fail")
+  assert.equal(fail.code, 1, fail.out)
+  assert.match(fail.out, /has no executable \.github\/scripts\/verify-text-merge\.sh/)
 })

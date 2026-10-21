@@ -12,6 +12,7 @@ const text = parse(rawText)
 const cut = parse(read("cut-release.yml"))
 const { detect, release } = text.jobs
 const names = (job) => job.steps.map((s) => s.name)
+const helper = (name) => `"$RUNNER_TEMP/trusted/.github/scripts/${name}"`
 
 test("Text release runs on pushes to main only and drops all token permissions", () => {
   assert.deepEqual(text.on, { push: { branches: ["main"] } })
@@ -28,7 +29,7 @@ test("detect holds no concurrency group, reads only and outlasts the CI wait", (
     actions: "read",
   })
   assert.equal(detect.if, "github.repository == 'greenblacked/Notes'")
-  const wait = detect.steps.find((s) => s.run === ".github/scripts/wait-for-ci.sh")
+  const wait = detect.steps.find((s) => s.run === helper("wait-for-ci.sh"))
   assert.ok(wait)
   assert.ok(detect["timeout-minutes"] * 60 > 2700, "the job timeout exceeds the default wait")
   assert.deepEqual(detect.outputs, {
@@ -40,17 +41,26 @@ test("detect holds no concurrency group, reads only and outlasts the CI wait", (
 
 test("detect checks the actor, then checks out, verifies the merge and waits for CI", () => {
   const order = detect.steps.map((s) => s.id ?? s.name)
-  assert.equal(detect.steps.length, 4)
+  assert.equal(detect.steps.length, 5)
   assert.match(detect.steps[0].name, /^Refuse anything but a push to main by the owner/)
   assert.match(detect.steps[1].uses, /^actions\/checkout@[0-9a-f]{40}$/)
   assert.equal(detect.steps[1].with["persist-credentials"], false)
-  assert.equal(detect.steps[1].with["sparse-checkout"], ".github/scripts")
+  assert.equal(detect.steps[1].with["fetch-depth"], 0)
+  assert.equal(detect.steps[1].with["sparse-checkout"], undefined)
   assert.equal(detect.steps[1].with.ref, "${{ github.sha }}")
-  assert.equal(detect.steps[2].id, "merge")
-  assert.match(detect.steps[2].run, /verify-text-merge\.sh/)
-  assert.match(detect.steps[2].run, /text=true/)
-  assert.match(detect.steps[2].run, /text=false/)
-  assert.equal(detect.steps[3].if, "steps.merge.outputs.text == 'true'")
+  assert.equal(detect.steps[2].id, "trusted")
+  assert.deepEqual(detect.steps[2].env, { ON_MISSING: "skip" })
+  assert.equal(detect.steps[2].if, undefined)
+  assert.equal(detect.steps[3].id, "merge")
+  assert.equal(detect.steps[3].if, "steps.trusted.outputs.ready == 'true'")
+  assert.match(
+    detect.steps[3].run,
+    /"\$RUNNER_TEMP\/trusted\/\.github\/scripts\/verify-text-merge\.sh" \|\| rc=\$\?/,
+  )
+  assert.match(detect.steps[3].run, /text=true/)
+  assert.match(detect.steps[3].run, /text=false/)
+  assert.equal(detect.steps[4].run, helper("wait-for-ci.sh"))
+  assert.equal(detect.steps[4].if, "steps.merge.outputs.text == 'true'")
   assert.ok(order.length)
 })
 
@@ -86,25 +96,64 @@ test("release needs detect and joins the Cut release concurrency group", () => {
   assert.equal(release.env.SHA, "${{ github.sha }}")
 })
 
-test("release steps run in order and all but the first three are gated on the plan", () => {
+test("release steps run in order and all but the first four are gated on the plan", () => {
   const s = release.steps
+  const ready = "steps.trusted.outputs.ready == 'true'"
   assert.match(s[0].name, /^Refuse anything but a push to main by the owner/)
   assert.match(s[1].uses, /^actions\/checkout@[0-9a-f]{40}$/)
   assert.equal(s[1].with["fetch-depth"], 0)
   assert.equal(s[1].with["persist-credentials"], false)
-  assert.equal(s[2].id, "validate")
-  assert.equal(s[2].run, ".github/scripts/text-release-plan.sh")
-  assert.equal(s[3].run, ".github/scripts/require-ci-success.sh")
-  assert.equal(s[4].run, ".github/scripts/text-release-version.sh >/dev/null")
-  assert.equal(s[4].env.EXPECT_LATEST, "${{ steps.validate.outputs.latest }}")
-  assert.equal(s[5].name, "Create the annotated tag")
-  assert.equal(s[6].name, "Create the GitHub Release")
-  assert.equal(s[7].name, "Dispatch Deploy production on the tag")
-  assert.equal(s.length, 8)
-  for (const step of s.slice(3)) {
+  assert.equal(s[2].id, "trusted")
+  assert.equal(s[2].env.ON_MISSING, "fail")
+  assert.equal(s[2].run, detect.steps[2].run)
+  assert.equal(s[3].id, "validate")
+  assert.equal(s[3].if, ready)
+  assert.equal(s[3].run, helper("text-release-plan.sh"))
+  assert.equal(s[4].run, helper("require-ci-success.sh"))
+  assert.deepEqual(s[5].env, {
+    EXPECT_LATEST: "${{ steps.validate.outputs.latest }}",
+    TRUSTED_TAG: "${{ steps.trusted.outputs.tag }}",
+  })
+  assert.ok(s[5].run.includes('"$EXPECT_LATEST" != "$TRUSTED_TAG"'))
+  assert.ok(s[5].run.includes(helper("text-release-version.sh")))
+  assert.equal(s[6].name, "Create the annotated tag")
+  assert.equal(s[7].name, "Create the GitHub Release")
+  assert.equal(s[8].name, "Dispatch Deploy production on the tag")
+  assert.equal(s.length, 9)
+  for (const step of s.slice(4)) {
     assert.equal(step.if, "steps.validate.outputs.release == 'true'", step.name)
   }
   for (const step of s.slice(0, 3)) assert.equal(step.if, undefined, step.name)
+})
+
+test("no step runs a helper from the pushed commit", () => {
+  for (const job of [detect, release]) {
+    for (const step of job.steps) {
+      const run = step.run ?? ""
+      assert.ok(!/(?<![\w/$])\.?\/?\.github\/scripts\/[\w.-]+\.sh/.test(run), step.name)
+      for (const m of run.matchAll(/[\w$"/.]*\.github\/scripts\/[\w.-]+\.sh/g)) {
+        assert.ok(m[0].startsWith('"$RUNNER_TEMP/trusted/'), `${step.name}: ${m[0]}`)
+      }
+    }
+  }
+})
+
+test("the trusted step takes the latest strict SemVer tag on first-parent history", () => {
+  const run = detect.steps[2].run
+  assert.ok(run.includes("semver='^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$'"))
+  assert.ok(run.includes("--first-parent"))
+  assert.ok(run.includes('git archive --format=tar "$tag_sha" .github/scripts'))
+  for (const f of [
+    "verify-text-merge.sh",
+    "wait-for-ci.sh",
+    "text-release-plan.sh",
+    "text-release-version.sh",
+    "text-release-notes.sh",
+    "require-content-only.sh",
+    "require-ci-success.sh",
+  ]) {
+    assert.ok(run.includes(f), f)
+  }
 })
 
 test("the tag, Release and dispatch steps are exactly Cut release's", () => {

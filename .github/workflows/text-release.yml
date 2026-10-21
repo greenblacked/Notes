@@ -11,6 +11,8 @@ name: Text release
 #            tag and its GitHub Release and dispatches deploy-production.yml on the tag exactly as
 #            Cut release does. Production still only deploys from a vX.Y.Z tag; its guard accepts
 #            this dispatch only for a verified owner merge of a text/ pull request and the highest tag.
+# Every helper script runs from the latest vX.Y.Z tag on main's first-parent history (extracted
+# with git archive), never from the pushed commit, and the plan diffs from that same tag.
 # Deploy stage still runs on the same push; nothing waits for it. The release job shares the
 # `cut-release` concurrency group with Cut release, so the two never tag at the same time; the
 # long CI wait is in `detect`, outside the group. If Cut release shows as cancelled (GitHub keeps
@@ -63,19 +65,78 @@ jobs:
             exit 1
           fi
 
-      - name: Check out the helper scripts
+      - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
-          sparse-checkout: .github/scripts
+          fetch-depth: 0 # history and tags: the helpers come from the latest release tag
           persist-credentials: false
+
+      # The helpers below run from the latest vX.Y.Z tag, never from this push: a merged text/
+      # pull request cannot change the code that decides whether it ships. The tag must be on
+      # main's first-parent history (a tag on a merged branch commit is refused).
+      - name: Extract the helpers of the latest release tag
+        id: trusted
+        env:
+          ON_MISSING: skip
+        run: |
+          set -Eeuo pipefail
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          missing() {
+            if [[ "$ON_MISSING" == "skip" ]]; then
+              echo "::warning::$1 Nothing was released: run Cut release first."
+              echo "ready=false" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::$1 Run Cut release first."
+            exit 1
+          }
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "$SHA^{commit}" 2>/dev/null; then
+            echo "::error::SHA '$SHA' is not a commit in this checkout."
+            exit 1
+          fi
+          tags="$(git for-each-ref --format='%(refname:strip=2)' refs/tags/)"
+          latest="$(printf '%s\n' "$tags" | grep -E "$semver" | sort -V | tail -n 1 || true)"
+          if [[ -z "$latest" ]]; then
+            missing "No vX.Y.Z release tag exists yet."
+          fi
+          if ! tag_sha="$(git rev-parse --verify --quiet "refs/tags/$latest^{commit}")"; then
+            echo "::error::Could not resolve $latest to a commit."
+            exit 1
+          fi
+          if git merge-base --is-ancestor "$SHA" "$tag_sha"; then
+            echo "::notice::$SHA is already in $latest; nothing to release."
+            echo "ready=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git rev-list --first-parent "$SHA" >"$RUNNER_TEMP/first-parent.txt"
+          if ! grep -Fxq "$tag_sha" "$RUNNER_TEMP/first-parent.txt"; then
+            echo "::error::$latest ($tag_sha) is not on the first-parent history of main at $SHA; refusing to run its helpers."
+            exit 1
+          fi
+          for f in verify-text-merge.sh wait-for-ci.sh text-release-plan.sh text-release-version.sh text-release-notes.sh require-content-only.sh require-ci-success.sh; do
+            mode="" type=""
+            read -r mode type _ < <(git ls-tree "$tag_sha" -- ".github/scripts/$f") || true
+            if [[ "$mode" != "100755" || "$type" != "blob" ]]; then
+              missing "$latest has no executable .github/scripts/$f (it predates text releases)."
+            fi
+          done
+          trusted="$RUNNER_TEMP/trusted"
+          mkdir "$trusted"
+          git archive --format=tar "$tag_sha" .github/scripts | tar -x -f - -C "$trusted"
+          {
+            echo "ready=true"
+            echo "tag=$latest"
+          } >>"$GITHUB_OUTPUT"
+          echo "Helpers come from $latest ($tag_sha)."
 
       - name: Verify a text/ merge by the owner
         id: merge
+        if: steps.trusted.outputs.ready == 'true'
         run: |
           set -Euo pipefail
           rc=0
-          .github/scripts/verify-text-merge.sh || rc=$?
+          "$RUNNER_TEMP/trusted/.github/scripts/verify-text-merge.sh" || rc=$?
           if [[ "$rc" -eq 0 ]]; then
             echo "text=true" >>"$GITHUB_OUTPUT"
           elif [[ "$rc" -eq 3 ]]; then
@@ -87,7 +148,7 @@ jobs:
 
       - name: Wait for CI on this commit
         if: steps.merge.outputs.text == 'true'
-        run: .github/scripts/wait-for-ci.sh
+        run: '"$RUNNER_TEMP/trusted/.github/scripts/wait-for-ci.sh"'
 
   release:
     name: Release text to production
@@ -130,29 +191,96 @@ jobs:
             exit 1
           fi
 
-      # Full history and tags: the plan diffs from the latest vX.Y.Z tag to this commit.
+      # Full history and tags: the helpers come from the latest vX.Y.Z tag and the plan diffs from it
+      # to this commit.
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
+      # The helpers below run from the latest vX.Y.Z tag, never from this push: a merged text/
+      # pull request cannot change the code that decides whether it ships. The tag must be on
+      # main's first-parent history (a tag on a merged branch commit is refused).
+      - name: Extract the helpers of the latest release tag
+        id: trusted
+        env:
+          ON_MISSING: fail
+        run: |
+          set -Eeuo pipefail
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          missing() {
+            if [[ "$ON_MISSING" == "skip" ]]; then
+              echo "::warning::$1 Nothing was released: run Cut release first."
+              echo "ready=false" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::$1 Run Cut release first."
+            exit 1
+          }
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "$SHA^{commit}" 2>/dev/null; then
+            echo "::error::SHA '$SHA' is not a commit in this checkout."
+            exit 1
+          fi
+          tags="$(git for-each-ref --format='%(refname:strip=2)' refs/tags/)"
+          latest="$(printf '%s\n' "$tags" | grep -E "$semver" | sort -V | tail -n 1 || true)"
+          if [[ -z "$latest" ]]; then
+            missing "No vX.Y.Z release tag exists yet."
+          fi
+          if ! tag_sha="$(git rev-parse --verify --quiet "refs/tags/$latest^{commit}")"; then
+            echo "::error::Could not resolve $latest to a commit."
+            exit 1
+          fi
+          if git merge-base --is-ancestor "$SHA" "$tag_sha"; then
+            echo "::notice::$SHA is already in $latest; nothing to release."
+            echo "ready=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git rev-list --first-parent "$SHA" >"$RUNNER_TEMP/first-parent.txt"
+          if ! grep -Fxq "$tag_sha" "$RUNNER_TEMP/first-parent.txt"; then
+            echo "::error::$latest ($tag_sha) is not on the first-parent history of main at $SHA; refusing to run its helpers."
+            exit 1
+          fi
+          for f in verify-text-merge.sh wait-for-ci.sh text-release-plan.sh text-release-version.sh text-release-notes.sh require-content-only.sh require-ci-success.sh; do
+            mode="" type=""
+            read -r mode type _ < <(git ls-tree "$tag_sha" -- ".github/scripts/$f") || true
+            if [[ "$mode" != "100755" || "$type" != "blob" ]]; then
+              missing "$latest has no executable .github/scripts/$f (it predates text releases)."
+            fi
+          done
+          trusted="$RUNNER_TEMP/trusted"
+          mkdir "$trusted"
+          git archive --format=tar "$tag_sha" .github/scripts | tar -x -f - -C "$trusted"
+          {
+            echo "ready=true"
+            echo "tag=$latest"
+          } >>"$GITHUB_OUTPUT"
+          echo "Helpers come from $latest ($tag_sha)."
+
       # Releases only when everything since the latest tag is notes under content/; otherwise it
       # says why and the steps below are skipped. The id is `validate` so that the steps copied
       # from Cut release resolve steps.validate.outputs.tag.
       - name: Plan the text release
         id: validate
-        run: .github/scripts/text-release-plan.sh
+        if: steps.trusted.outputs.ready == 'true'
+        run: '"$RUNNER_TEMP/trusted/.github/scripts/text-release-plan.sh"'
 
       - name: Require a successful CI run for this commit
         if: steps.validate.outputs.release == 'true'
-        run: .github/scripts/require-ci-success.sh
+        run: '"$RUNNER_TEMP/trusted/.github/scripts/require-ci-success.sh"'
 
       - name: Re-check the latest release tag
         if: steps.validate.outputs.release == 'true'
         env:
           EXPECT_LATEST: ${{ steps.validate.outputs.latest }}
-        run: .github/scripts/text-release-version.sh >/dev/null
+          TRUSTED_TAG: ${{ steps.trusted.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "$EXPECT_LATEST" != "$TRUSTED_TAG" ]]; then
+            echo "::error::The plan diffed from $EXPECT_LATEST but its helpers came from $TRUSTED_TAG; refusing to release."
+            exit 1
+          fi
+          "$RUNNER_TEMP/trusted/.github/scripts/text-release-version.sh" >/dev/null
 
       - name: Create the annotated tag
         if: steps.validate.outputs.release == 'true'
