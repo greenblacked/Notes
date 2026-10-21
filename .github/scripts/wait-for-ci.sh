@@ -19,9 +19,17 @@ fi
 
 hint="A newer text/ merge releases this content with it, or fix CI and re-run this workflow."
 deadline=$((SECONDS + max))
+fetch_state() {
+  gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=push&per_page=100" \
+    --jq '[.workflow_runs[] | select(.head_branch == "main")] | sort_by(.run_number, .run_attempt) | last | "\(.status // "none") \(.conclusion // "none")"'
+}
 while true; do
-  state="$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=push&per_page=100" \
-    --jq '[.workflow_runs[] | select(.head_branch == "main")] | sort_by(.run_number, .run_attempt) | last | "\(.status // "none") \(.conclusion // "none")"')"
+  # One retry per poll absorbs a transient API error (e.g. a 502); a second one fails closed.
+  if ! state="$(fetch_state)"; then
+    echo "GitHub API error while polling CI for $SHA; retrying once in ${poll}s." >&2
+    sleep "$poll"
+    state="$(fetch_state)"
+  fi
   read -r status conclusion <<<"$state"
   if [[ "$status" == "completed" ]]; then
     if [[ "$conclusion" == "success" ]]; then

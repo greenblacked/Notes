@@ -19,6 +19,7 @@ writeFileSync(
   `#!/usr/bin/env bash
 echo "$2" >>"$FAKE_GH_LOG"
 n=$(wc -l <"$FAKE_GH_LOG")
+case ",$FAKE_FAIL_CALLS," in *",$n,"*) exit 1 ;; esac
 jq -c --argjson n "$n" '.[ ([$n, length] | min) - 1 ]' <<<"$FAKE_SEQ" | jq -r "$4"
 `,
 )
@@ -63,6 +64,18 @@ test("a finished successful run passes at once and asks for this commit's push r
   assert.equal(code, 0, out)
   assert.equal(calls.length, 1)
   assert.match(calls[0], new RegExp(`ci\\.yml/runs\\?head_sha=${SHA}&event=push`))
+})
+
+test("one transient API error per poll is retried", () => {
+  const { code, out, calls } = run([runs(wr())], { FAKE_FAIL_CALLS: "1" })
+  assert.equal(code, 0, out)
+  assert.equal(calls.length, 2)
+})
+
+test("two API errors in a row fail closed", () => {
+  const { code, out } = run([runs(wr())], { FAKE_FAIL_CALLS: "1,2" })
+  assert.equal(code, 1, out)
+  assert.doesNotMatch(out, /CI succeeded/)
 })
 
 test("an in-progress run is polled until it succeeds", () => {
