@@ -40,10 +40,10 @@ test("learn-path.json matches the lesson order in the learning path index", () =
   assert.deepEqual(path, { stages: parseIndex() })
 })
 
-test("43 core and 10 optional lessons, and the week map ends at 43", () => {
+test("43 core and 21 optional lessons, and the week map ends at 43", () => {
   assert.equal(path.stages.length, 12)
   assert.equal(core.length, 43)
-  assert.equal(deeper.length, 10)
+  assert.equal(deeper.length, 21)
   const rows = [...index.matchAll(/^\| (\d+)\s+\| ([\d, ]+?)\s+\|/gm)]
   const last = rows
     .at(-1)[2]

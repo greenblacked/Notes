@@ -49,7 +49,7 @@ test("a going-deeper lesson follows the optional chain", async ({ page }) => {
   await page.goto("/learn/rbac-roles-bindings-and-least-privilege")
   const n = nav(page)
   await expect(n).toContainText("Going deeper")
-  await expect(n).toContainText("Optional lesson 3 of 10")
+  await expect(n).toContainText("Optional lesson 4 of 21")
   await expect(n.locator("a[rel=prev]")).toHaveAttribute(
     "href",
     /\/learn\/image-build-speed-cache-mounts-and-measurement$/,
