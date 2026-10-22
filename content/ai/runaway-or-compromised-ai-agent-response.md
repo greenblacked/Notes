@@ -192,32 +192,68 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X DELETE -H "PRIVATE-TOKEN: $GL_TOKEN
 
 #### 2d. Remove the agent's Kubernetes permissions
 
-Save every binding before deleting it; the saved file is both evidence and the rollback.
+Do not delete every binding that names the agent: a RoleBinding or ClusterRoleBinding often lists other subjects too, and deleting it removes their access as well. The script below deletes a binding only when the agent's ServiceAccount is its only subject; in a shared binding it removes just the agent's subject with a JSON patch and keeps the rest. It saves each binding as YAML before changing it; the saved files are both evidence and the rollback.
 
 ```bash title="remove-agent-rbac.sh"
 set -euo pipefail
 
+OUT="evidence/$INCIDENT"
+mkdir -p "$OUT"
+
+# Every binding that names the agent's ServiceAccount. A RoleBinding subject
+# may leave out its namespace, which then means the binding's own namespace.
 kubectl --context="$K8S_CONTEXT" get rolebindings,clusterrolebindings -A -o json \
   | jq --arg ns "$AGENT_NS" --arg sa "$K8S_SA" '{apiVersion: "v1", kind: "List", items: [.items[]
-      | select(any(.subjects[]?; .kind == "ServiceAccount" and .name == $sa and .namespace == $ns))]}' \
-  > "evidence/$INCIDENT/agent-bindings.json"
+      | . as $b
+      | select(any(.subjects[]?; .kind == "ServiceAccount" and .name == $sa
+          and (.namespace // $b.metadata.namespace) == $ns))]}' \
+  > "$OUT/agent-bindings.json"
 
-jq -r '.items[] | "\(.kind) \(.metadata.namespace // "-") \(.metadata.name)"' "evidence/$INCIDENT/agent-bindings.json"
+jq -r '.items[] | "\(.kind) \(.metadata.namespace // "-") \(.metadata.name) subjects=\(.subjects | length)"' \
+  "$OUT/agent-bindings.json"
 
-jq -r '.items[] | if .kind == "ClusterRoleBinding" then "clusterrolebinding/\(.metadata.name)"
-  else "-n \(.metadata.namespace) rolebinding/\(.metadata.name)" end' "evidence/$INCIDENT/agent-bindings.json" \
-  | while read -r args; do
-      # shellcheck disable=SC2086
-      kubectl --context="$K8S_CONTEXT" delete $args
-    done
+# One line per binding: kind, namespace, name, action, JSON patch. The patch
+# removes the matching subjects from the highest index down, so earlier
+# indexes do not shift, and each remove is guarded by a test of that exact
+# subject: if the binding changed since it was read, the patch fails and the
+# script stops instead of removing the wrong subject.
+jq -r --arg ns "$AGENT_NS" --arg sa "$K8S_SA" '.items[]
+  | . as $b
+  | [range(0; $b.subjects | length)
+      | . as $i
+      | select($b.subjects[$i].kind == "ServiceAccount" and $b.subjects[$i].name == $sa
+          and ($b.subjects[$i].namespace // $b.metadata.namespace) == $ns)] as $idx
+  | (if ($idx | length) == ($b.subjects | length) then "delete" else "patch" end) as $action
+  | [$idx | sort | reverse | .[]
+      | {op: "test", path: "/subjects/\(.)", value: $b.subjects[.]},
+        {op: "remove", path: "/subjects/\(.)"}] as $patch
+  | [$b.kind, ($b.metadata.namespace // "-"), $b.metadata.name, $action, ($patch | tojson)]
+  | @tsv' "$OUT/agent-bindings.json" > "$OUT/agent-bindings-plan.tsv"
+
+while IFS=$'\t' read -r kind ns name action patch; do
+  if [ "$kind" = "ClusterRoleBinding" ]; then
+    ref=(clusterrolebinding "$name")
+  else
+    ref=(-n "$ns" rolebinding "$name")
+  fi
+  # Rollback copy of the binding exactly as it is before the change.
+  kubectl --context="$K8S_CONTEXT" get "${ref[@]}" -o yaml > "$OUT/rollback-$kind-$ns-$name.yaml"
+  if [ "$action" = "delete" ]; then
+    kubectl --context="$K8S_CONTEXT" delete "${ref[@]}"
+    echo "deleted $kind $ns/$name: the agent ServiceAccount was its only subject"
+  else
+    kubectl --context="$K8S_CONTEXT" patch "${ref[@]}" --type=json -p "$patch"
+    echo "patched $kind $ns/$name: removed only the agent ServiceAccount, applied $patch"
+  fi
+done < "$OUT/agent-bindings-plan.tsv"
 ```
 
-- **Expected:** one `deleted` line per binding listed.
-- **Verify:** `kubectl --context="$K8S_CONTEXT" auth can-i --list --as="system:serviceaccount:$AGENT_NS:$K8S_SA"` shows only the default discovery permissions.
-- **Bindings shared with other subjects:** if a binding lists the agent next to other subjects, deleting it removes their access too. Edit that binding to remove only the agent's subject instead, after saving it.
+- **Expected:** for each binding listed, a `deleted` line (the agent was the only subject) or a `patched` line naming the removed subject indexes (other subjects kept), and one `rollback-*.yaml` file per binding.
+- **Verify:** `kubectl --context="$K8S_CONTEXT" auth can-i --list --as="system:serviceaccount:$AGENT_NS:$K8S_SA"` shows only the default discovery permissions, and each patched binding still lists its other subjects (`kubectl --context="$K8S_CONTEXT" get -n <namespace> rolebinding <name> -o jsonpath='{.subjects}'`).
+- **Patch refused:** a `test` operation that fails means the binding changed after it was read. Run the script again; it re-reads every binding.
 - **Workload Identity:** if the Kubernetes ServiceAccount is bound to the Google service account, disabling the Google account (2a) already blocks it. Removing the `roles/iam.workloadIdentityUser` binding is the longer-term fix.
 - **Tokens already issued:** whether ServiceAccount tokens already issued stop working was not verified; removing the bindings takes away what they can do, which is the documented route. Deleting the ServiceAccount also invalidates its bound tokens but loses the object; save it first if you do.
-- **Rollback:** restore from the agent's GitOps source in step 6, or re-apply from the saved file after removing `metadata.resourceVersion`, `metadata.uid`, `metadata.creationTimestamp` and `metadata.managedFields`.
+- **Rollback:** restore from the agent's GitOps source in step 6, or re-apply a saved `rollback-*.yaml` file with `kubectl --context="$K8S_CONTEXT" replace -f` (for a patched binding) or `create -f` (for a deleted one) after removing `metadata.resourceVersion`, `metadata.uid`, `metadata.creationTimestamp` and `metadata.managedFields`.
 
 The design of narrow Roles for agents is in [[kubernetes-rbac-for-ai-agents]].
 

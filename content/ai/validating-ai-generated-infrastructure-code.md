@@ -148,7 +148,7 @@ run "versioning_is_on" {
 set -euo pipefail
 
 MANIFESTS="deploy/k8s"      # change: the directory of rendered or plain manifests
-: "${K8S_VERSION:?set K8S_VERSION to your clusters' Kubernetes version, and run again for the next upgrade target}"
+: "${K8S_VERSION:?set K8S_VERSION to the Kubernetes version of your clusters, and run again for the next upgrade target}"
 SCHEMAS_MIRROR="https://artifactory.example.com/artifactory/k8s-schemas"  # change: your mirror, or remove
 
 kubeconform -strict -summary \

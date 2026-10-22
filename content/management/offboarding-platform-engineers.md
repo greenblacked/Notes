@@ -132,7 +132,7 @@ set -euo pipefail
 GITLAB_URL="${GITLAB_URL:-https://gitlab.example.com}"
 LEAVER="${1:?usage: gitlab-ownership.sh <gitlab-username> <group-path>}"
 GROUP="${2:?usage: gitlab-ownership.sh <gitlab-username> <group-path>}"
-: "${GITLAB_TOKEN:?export GITLAB_TOKEN (an administrator's token, read_api scope)}"
+: "${GITLAB_TOKEN:?export GITLAB_TOKEN (an administrator token with read_api scope)}"
 
 # GET every page of a list endpoint; prints one JSON array per page.
 gl_get_all() {

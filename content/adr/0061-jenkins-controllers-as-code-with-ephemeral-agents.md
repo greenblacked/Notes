@@ -201,7 +201,7 @@ Harder or newly required:
 set -o pipefail
 JENKINS_URL="https://jenkins.example.com"
 JENKINS_USER="${JENKINS_USER:?set a read-only user}"
-JENKINS_TOKEN="${JENKINS_TOKEN:?set that user's API token}"
+JENKINS_TOKEN="${JENKINS_TOKEN:?set the API token of that user}"
 PLUGINS_FILE="controller/plugins.txt"
 AGENT_NAMESPACE="jenkins-agents"
 MAX_POD_AGE_SECONDS=7200   # longer than the longest build timeout
