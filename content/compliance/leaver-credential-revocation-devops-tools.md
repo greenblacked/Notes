@@ -233,10 +233,14 @@ LEAVER_SSH_USER="jdoe"      # change: the user name in the key lines
 
 gcloud compute project-info describe --project="${PROJECT_ID}" --format=json \
   | jq -r '.commonInstanceMetadata.items[]? | select(.key == "ssh-keys") | .value' > ssh-keys.before
-grep -v -- "^${LEAVER_SSH_USER}:" ssh-keys.before > ssh-keys.after || true
-diff ssh-keys.before ssh-keys.after || true   # review: only the leaver's lines are removed
-gcloud compute project-info add-metadata --project="${PROJECT_ID}" \
-  --metadata-from-file=ssh-keys=ssh-keys.after
+if [ ! -s ssh-keys.before ]; then
+  echo "No ssh-keys metadata in ${PROJECT_ID}; nothing to change"
+else
+  grep -v -- "^${LEAVER_SSH_USER}:" ssh-keys.before > ssh-keys.after || true
+  diff ssh-keys.before ssh-keys.after || true   # review: only the leaver's lines are removed
+  gcloud compute project-info add-metadata --project="${PROJECT_ID}" \
+    --metadata-from-file=ssh-keys=ssh-keys.after
+fi
 ```
 
 The JSON path to the metadata items was not verified; look at the `describe` output once before scripting it. Check instance-level metadata the same way on instances that do not block project-wide keys, and prefer OS Login, which ties keys to the Google identity, over metadata keys.

@@ -243,19 +243,20 @@ The kubelet rotates the token when it is older than 80% of its lifetime or older
 ```bash title="verify-east-west.sh"
 #!/usr/bin/env bash
 set -euo pipefail
-TARGET="http://payments-api.payments.svc.cluster.local:8080/healthz" # change: the callee
+TARGET="http://payments-api.payments.svc.cluster.local:8080/v1/charges" # change: a callee path its ALLOW rule admits
 CURL_IMAGE="registry.example.com/mirror/curl:pinned"                   # change: a curl image pinned by digest
 
-# 1. Allowed caller (orders-api, meshed; its image must contain curl): expect 200
+# 1. Allowed caller (orders-api, meshed; its image must contain curl): expect the app's own
+#    answer (an empty POST may return 400), never 403 (AuthorizationPolicy) or 000
 kubectl -n orders exec deploy/orders-api -c app -- \
-  curl -s -o /dev/null -w '%{http_code}\n' "$TARGET"
+  curl -s -o /dev/null -w '%{http_code}\n' -X POST "$TARGET"
 
 # 2. Denied caller in another namespace: expect a timeout (NetworkPolicy: HTTP 000, exit 28)
 #    or 403 (AuthorizationPolicy, exit 0), never 200. Any other exit code (6 = DNS
 #    failure, for example) means the probe never reached the policy: not a pass
 kubectl -n team-orders-tools run probe-$RANDOM --rm -i --restart=Never \
   --image="$CURL_IMAGE" --command -- \
-  sh -c "curl -s -m 5 -o /dev/null -w '%{http_code}\n' $TARGET; echo exit=\$?" || true
+  sh -c "curl -s -m 5 -o /dev/null -w '%{http_code}\n' -X POST $TARGET; echo exit=\$?" || true
 
 # 3. Plaintext client from a namespace without mesh injection, under STRICT:
 #    expect curl exit code 56 and HTTP 000. The callee's NetworkPolicy must admit this

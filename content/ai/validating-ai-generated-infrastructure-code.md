@@ -376,7 +376,7 @@ tests:
         values: "0+10x30"
       - series: 'http_requests_total{service="checkout", status="200"}'
         values: "0+90x30"
-    alert_rule_tests:
+    alert_rule_test:
       - eval_time: 25m
         alertname: CheckoutHighErrorRate
         exp_alerts:

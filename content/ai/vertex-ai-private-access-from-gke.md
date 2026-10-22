@@ -183,6 +183,8 @@ PERIMETER="llm_inference"
 gcloud access-context-manager perimeters dry-run enforce "$PERIMETER" --policy="$POLICY_ID"
 ```
 
+Use this command only on a perimeter that Terraform does not manage. On a Terraform-managed perimeter, enforce by copying the reviewed `spec` into the `status` block in a merge request, as [[0058-vpc-service-controls-for-production-data]] decides, because the command changes the perimeter outside state and the next plan would try to undo it.
+
 > [!warning] Enforcing blocks real traffic
 > Once enforced, any caller of Vertex AI from outside the perimeter is refused, including developers using the console or notebooks from their laptops unless an access level or ingress rule allows them. Announce the change, keep an ingress rule ready for the break-glass group, and enforce outside peak hours. Manage the perimeter in Terraform so the enforced state is reviewed and can be reverted by a commit.
 

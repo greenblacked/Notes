@@ -201,7 +201,7 @@ def redact(text: str, policy: dict) -> Result:
     out = text
     for name, pattern in SECRET_RULES.items():
         out = sub(name, pattern, f"[REDACTED:{name}]", out)
-    if any(counts.get(n) for n in SECRET_RULES) and policy.get("on_secret") == "block":
+    if any(counts.get(n) for n in SECRET_RULES) and policy.get("on_secret", "block") == "block":
         return Result("", counts, "secret_detected")
     for name, pattern in PERSONAL_RULES.items():
         out = sub(name, pattern, f"[REDACTED:{name}]", out)
@@ -221,7 +221,7 @@ def guarded_redact(text: str, policy: dict) -> Result:
         return Result("", {}, f"redaction_error:{type(exc).__name__}")
 ```
 
-`redact` returns redacted text and per-rule counts, or a block reason. The gateway sends the request only when `blocked_reason` is empty, and records the counts as metrics. A route can choose `on_secret: block` (no call when a credential is found) or `redact` (strip it and continue); either way a found credential raises an alert, because it means a credential was somewhere it should not be, and the owner should rotate it ([[leaked-credential-rotation]]).
+`redact` returns redacted text and per-rule counts, or a block reason. The gateway sends the request only when `blocked_reason` is empty, and records the counts as metrics. A route can choose `on_secret: block` (no call when a credential is found, and the default when the key is unset) or `redact` (strip it and continue); either way a found credential raises an alert, because it means a credential was somewhere it should not be, and the owner should rotate it ([[leaked-credential-rotation]]).
 
 ## Tests: a seeded corpus and canaries
 

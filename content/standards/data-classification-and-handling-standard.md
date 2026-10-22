@@ -122,7 +122,7 @@ Rules:
 Several controls this standard relies on cannot be undone. Make them deliberate changes with a second reviewer.
 
 > [!danger] Locked log buckets and key destruction are permanent
-> A Cloud Logging bucket with `locked` set cannot have its retention changed, and it can be deleted only when empty (`gcloud logging buckets update BUCKET --locked --retention-days=N`). Lock only after compliance has agreed the period, as [[adr/0044-central-log-sinks-and-retention-tiers|ADR-0044]] requires. A Cloud KMS key version scheduled for destruction stays in `DESTROY_SCHEDULED` for the key's destroy-scheduled duration (30 days if not set at creation, and immutable after creation) and is then destroyed; data encrypted only with it, including backups, is unrecoverable. See [[cloud-kms-key-management]].
+> A Cloud Logging bucket with `locked` set cannot have its retention changed, and it can be deleted only when empty (`gcloud logging buckets update BUCKET --location=LOCATION --locked --retention-days=N`). Lock only after compliance has agreed the period, as [[adr/0044-central-log-sinks-and-retention-tiers|ADR-0044]] requires. A Cloud KMS key version scheduled for destruction stays in `DESTROY_SCHEDULED` for the key's destroy-scheduled duration (30 days if not set at creation, and immutable after creation) and is then destroyed; data encrypted only with it, including backups, is unrecoverable. See [[cloud-kms-key-management]].
 
 Other facts that shape the controls:
 
