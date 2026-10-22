@@ -233,6 +233,10 @@ The app: a `frontend` (and a `stranger` that should get nowhere) in `k11-web`, a
    ```bash title="probe.sh"
    # usage: probe NAMESPACE POD URL
    probe() {
+     # A missing or stopped pod is not a network result: say so instead of printing FAIL.
+     if [ "$(kubectl -n "$1" get pod "$2" -o jsonpath='{.status.phase}')" != "Running" ]; then
+       echo "ERROR $2 is not a Running pod in $1: no test was made"; return 2
+     fi
      kubectl -n "$1" exec "$2" -- wget -q -O /dev/null -T 3 "$3" 2>&1 && echo "OK   $2 -> $3" || echo "FAIL $2 -> $3"
    }
    ```

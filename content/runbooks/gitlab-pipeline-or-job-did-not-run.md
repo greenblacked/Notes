@@ -53,7 +53,8 @@ Most "did not run" cases are the configuration doing exactly what it says. Look 
 - The CI Lint API can lint the committed configuration of any ref and simulate it on another ref:
 
 ```bash
-curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+# --show-error --fail: a 401, 403 or 404 prints an error instead of an empty jobs list
+curl --silent --show-error --fail --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
   "$GITLAB_URL/api/v4/projects/$PROJECT_ID/ci/lint?content_ref=$REF&dry_run=true&dry_run_ref=$REF&include_jobs=true" \
   | jq '{valid, errors, warnings, jobs: [.jobs[]?.name]}'
 ```
@@ -65,7 +66,7 @@ To lint uncommitted content in the context of a ref and get the merged YAML back
 ```bash
 jq --null-input --rawfile content .gitlab-ci.yml --arg ref "$REF" \
   '{content: $content, dry_run: true, include_jobs: true, ref: $ref}' \
-| curl --silent --request POST --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+| curl --silent --show-error --fail --request POST --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
     --header "Content-Type: application/json" --data @- \
     "$GITLAB_URL/api/v4/projects/$PROJECT_ID/ci/lint?include_merged_yaml=true" \
 | jq -r '.valid, .errors[], .merged_yaml' | head -100

@@ -264,17 +264,26 @@ ALLOWED_URL="https://llm-gateway.example.com/healthz"  # change: an allowlisted 
 fail=0
 
 check() { if eval "$2"; then echo "ok    $1"; else echo "LEAK  $1"; fail=1; fi; }
+# Blocked means a network-level refusal: DNS (curl exit 6), connect (7), timeout (28) or
+# the proxy refusing CONNECT (56). Anything else (TLS error, curl missing) is not proof.
+denied() {
+  curl -sS --max-time 5 -o /dev/null "$@" 2>/dev/null
+  local rc=$?
+  case "$rc" in 6 | 7 | 28 | 56) return 0 ;; esac
+  echo "      curl exit ${rc} is not a network refusal" >&2
+  return 1
+}
 
 check "no kubeconfig in home"          '[ ! -e "$HOME/.kube/config" ]'
 check "no KUBECONFIG unless intended"  '[ -z "${KUBECONFIG:-}" ] || [ "${KUBECONFIG}" = "/run/agent/agent.kubeconfig" ]'
 check "no gcloud config"               '[ ! -d "$HOME/.config/gcloud" ]'
-check "no gcloud accounts"             '! command -v gcloud >/dev/null || [ -z "$(gcloud auth list --format="value(account)" 2>/dev/null)" ]'
+check "no gcloud accounts"             '! command -v gcloud >/dev/null || { a="$(gcloud auth list --format="value(account)")" && [ -z "$a" ]; }'
 check "no SSH agent"                   '[ -z "${SSH_AUTH_SOCK:-}" ]'
 check "no SSH keys"                    '[ ! -d "$HOME/.ssh" ]'
 check "no Docker socket"               '[ ! -S /var/run/docker.sock ]'
 check "not root"                       '[ "$(id -u)" -ne 0 ]'
-check "blocked host is blocked"        '! curl -sS --max-time 5 -o /dev/null "$BLOCKED_URL" 2>/dev/null'
-check "blocked host without proxy"     '! curl -sS --noproxy "*" --max-time 5 -o /dev/null "$BLOCKED_URL" 2>/dev/null'
+check "blocked host is blocked"        'denied "$BLOCKED_URL"'
+check "blocked host without proxy"     'denied --noproxy "*" "$BLOCKED_URL"'
 check "allowed host works"             'curl -sS --max-time 10 -o /dev/null "$ALLOWED_URL"'
 
 exit "$fail"

@@ -70,7 +70,9 @@ gl() { curl --fail --silent --show-error --header "PRIVATE-TOKEN: ${GITLAB_ADMIN
 **1a. Transfer pipeline schedules before anything else.** A pipeline schedule runs with its owner's permissions. When the owner is blocked or removed, the schedule becomes inactive. List the schedules the leaver owns in each project, and take ownership with the handover identity's token (`take_ownership` makes the caller the owner; in the UI it needs the Maintainer or Owner role):
 
 ```bash title="Take ownership of pipeline schedules"
-# Projects in the group, including subgroups (endpoint parameters not verified; check the Groups API)
+# Projects in the group, including subgroups (endpoint parameters not verified; check the Groups API).
+# per_page=100 returns the first 100 projects only: in a larger group, repeat with &page=2, 3, ...
+# until a page is empty, or schedules in the remaining projects are missed.
 for PROJECT_ID in $(gl "${GITLAB_URL}/api/v4/groups/${GROUP_ID}/projects?include_subgroups=true&per_page=100" | jq -r '.[].id'); do
   gl "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/pipeline_schedules?per_page=100" \
     | jq -r --argjson uid "${LEAVER_ID}" --arg p "${PROJECT_ID}" \

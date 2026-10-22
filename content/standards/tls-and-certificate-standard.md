@@ -259,7 +259,12 @@ echo | openssl s_client -connect "${HOST}:${PORT}" -servername "${HOST}" -tls1_3
 
 # 5. TLS 1.1 must fail. OpenSSL 3 refuses TLS 1.1 at its default security level,
 #    so lower the level for this test only, or the check proves nothing about the server.
-if echo | openssl s_client -connect "${HOST}:${PORT}" -servername "${HOST}" \
+#    A TLS 1.2 handshake first proves the endpoint answers; without it, a DNS or
+#    connection failure would also read as "TLS 1.1 refused".
+if ! echo | openssl s_client -connect "${HOST}:${PORT}" -servername "${HOST}" \
+     -tls1_2 >/dev/null 2>&1; then
+  echo "FAIL: no TLS 1.2 handshake with ${HOST}:${PORT}; the TLS 1.1 test would prove nothing"
+elif echo | openssl s_client -connect "${HOST}:${PORT}" -servername "${HOST}" \
      -tls1_1 -cipher 'DEFAULT@SECLEVEL=0' >/dev/null 2>&1; then
   echo "FAIL: server accepted TLS 1.1"
 else

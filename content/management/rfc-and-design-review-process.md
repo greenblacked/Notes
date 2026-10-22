@@ -167,8 +167,10 @@ REQUIRED=(
 STATUSES="draft|review|final-comment|accepted|rejected|withdrawn|superseded"
 
 fail=0
+checked=0
 shopt -s nullglob
 for f in "$RFC_DIR"/[0-9][0-9][0-9][0-9]-*.md; do
+  checked=$((checked + 1))
   for h in "${REQUIRED[@]}"; do
     if ! grep -qxF "$h" "$f"; then
       echo "ERROR ${f}: missing section '${h}'" >&2
@@ -184,6 +186,11 @@ for f in "$RFC_DIR"/[0-9][0-9][0-9][0-9]-*.md; do
     fail=1
   fi
 done
+if ((checked == 0)); then
+  # A wrong directory must not pass as "all RFCs valid"; the template itself matches the pattern.
+  echo "ERROR: no NNNN-*.md files in ${RFC_DIR}" >&2
+  fail=1
+fi
 exit "$fail"
 ```
 

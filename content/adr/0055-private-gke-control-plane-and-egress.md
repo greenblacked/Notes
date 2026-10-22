@@ -194,10 +194,15 @@ Egress test from a restricted namespace: a Pod there must fail to reach an arbit
 NAMESPACE="payments"   # a restricted namespace
 kubectl run egress-check --namespace "${NAMESPACE}" --rm -it --restart=Never \
   --image=curlimages/curl:latest -- \
-  sh -c 'curl -s -m 5 -o /dev/null -w "direct: %{http_code}\n" https://example.com || echo "direct: blocked (expected)"'
+  sh -c 'curl -sS -m 5 -o /dev/null https://example.com; rc=$?
+    case "$rc" in
+      0) echo "direct: REACHABLE" ;;
+      7|28) echo "direct: blocked (expected, curl exit $rc)" ;;
+      *) echo "direct: inconclusive, curl exit $rc (not a refused or timed-out connection)" ;;
+    esac'
 ```
 
-Pin the image by digest in real use. A `200` on the direct call means the network policy or firewall still allows internet egress from that namespace; check the namespace's policies ([[0020-default-deny-network-policies]]) before anything else.
+Pin the image by digest in real use. Only a refused connection (curl exit 7) or a timeout (exit 28) counts as blocked; a DNS failure or a TLS error proves nothing about egress. `direct: REACHABLE` means the network policy or firewall still allows internet egress from that namespace; check the namespace's policies ([[0020-default-deny-network-policies]]) before anything else.
 
 ## References
 

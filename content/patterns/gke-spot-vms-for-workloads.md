@@ -431,7 +431,7 @@ kubectl -n "$NS" get pods -l app.kubernetes.io/name="$APP" \
 for node in $(kubectl get nodes -l cloud.google.com/gke-spot=true -o jsonpath='{.items[*].metadata.name}'); do
   kubectl get pods -A --field-selector spec.nodeName="$node" -o json \
     | jq -r --arg node "$node" '.items[] | "\(.metadata.ownerReferences[0].kind // "none")\t\(.metadata.namespace)/\(.metadata.name)\t\($node)"'
-done | sort | grep -v '^DaemonSet' || true
+done | sort | { grep -v '^DaemonSet' || [ "$?" -eq 1 ]; }   # grep exits 1 when nothing is left; a kubectl error still fails
 ```
 
 Expected: Spot nodes show `capacity-type=spot` and the `workload-class=spot:NoSchedule` taint; the Spot-preferring Deployment has most replicas on Spot and the floor Deployment's replicas all on on-demand nodes, spread across zones; the last list holds only ReplicaSet and Job owners (plus workloads you deliberately allowed on Spot), never `StatefulSet` or a Pod without an owner.

@@ -232,7 +232,8 @@ curl -fsS -K "${CURL_CFG}" \
   | jq -r '.[] | .references.full'
 
 # 3. Projects where "Pipelines must succeed" is off (automerge would be unsafe).
-#    Expected: no output.
+#    Expected: no output. This reads the first 100 projects only; in a larger group,
+#    repeat with &page=2, 3, ... until a page is empty, or the rest go unchecked.
 curl -fsS -K "${CURL_CFG}" \
   "${GITLAB_URL}/api/v4/groups/${GROUP_ID}/projects?include_subgroups=true&per_page=100" \
   | jq -r '.[] | select(.only_allow_merge_if_pipeline_succeeds != true) | .path_with_namespace'

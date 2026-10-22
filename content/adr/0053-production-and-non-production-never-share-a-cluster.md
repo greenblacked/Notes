@@ -116,10 +116,12 @@ gcloud projects get-ancestors app-prod
 
 # 3. Clusters in each prod project carry the prod label.
 #    Field name: check once with --format=json if the column is empty.
+#    Errors stay visible: a project whose clusters could not be listed (no permission,
+#    API disabled) was not checked, which is not the same as having no clusters.
 for p in $(gcloud projects list --filter="parent.id=${PROD_FOLDER}" --format='value(projectId)'); do
   gcloud container clusters list --project "${p}" \
-    --format="table[no-heading](name, location, resourceLabels.env)" 2>/dev/null \
-    | sed "s|^|${p}  |"
+    --format="table[no-heading](name, location, resourceLabels.env)" \
+    | sed "s|^|${p}  |" || echo "${p}  NOT CHECKED: clusters list failed"
 done
 
 # 4. Production identities holding roles in non-prod. Expected: only the rows the table

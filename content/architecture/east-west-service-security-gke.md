@@ -250,11 +250,12 @@ CURL_IMAGE="registry.example.com/mirror/curl:pinned"                   # change:
 kubectl -n orders exec deploy/orders-api -c app -- \
   curl -s -o /dev/null -w '%{http_code}\n' "$TARGET"
 
-# 2. Denied caller in another namespace: expect a timeout (NetworkPolicy)
-#    or 403 (AuthorizationPolicy), never 200
+# 2. Denied caller in another namespace: expect a timeout (NetworkPolicy: HTTP 000, exit 28)
+#    or 403 (AuthorizationPolicy, exit 0), never 200. Any other exit code (6 = DNS
+#    failure, for example) means the probe never reached the policy: not a pass
 kubectl -n team-orders-tools run probe-$RANDOM --rm -i --restart=Never \
   --image="$CURL_IMAGE" --command -- \
-  curl -s -m 5 -o /dev/null -w '%{http_code}\n' "$TARGET" || true
+  sh -c "curl -s -m 5 -o /dev/null -w '%{http_code}\n' $TARGET; echo exit=\$?" || true
 
 # 3. Plaintext client from a namespace without mesh injection, under STRICT:
 #    expect curl exit code 56 and HTTP 000. The callee's NetworkPolicy must admit this

@@ -225,7 +225,8 @@ List attributes the provider marks sensitive, and resources of types that are kn
 ```bash title="scan the current state (illustrative)"
 # Read-only: prints addresses and attribute paths, never the values.
 STATE_JSON="$(mktemp)"                   # mode 0600; contains secrets: delete it afterwards
-terraform show -json > "$STATE_JSON"
+terraform show -json > "$STATE_JSON" \
+  || echo "STOP: terraform show failed; the scans below read an empty file and prove nothing" >&2
 
 jq -r '
   .values.root_module

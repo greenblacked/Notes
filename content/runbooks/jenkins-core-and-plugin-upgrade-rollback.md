@@ -93,8 +93,15 @@ Replace `jenkins-home`, `DISK_NAME` and `ZONE` with your PVC name and the disk f
 Quiet down stops new builds from starting while running builds finish. It needs the Manage permission.
 
 ```bash
-curl -sS -X POST -u "$JENKINS_USER:$JENKINS_TOKEN" \
-  "$JENKINS_URL/quietDown" --data-urlencode "message=Upgrade in progress, change $STAMP"
+# --fail-with-body: an HTTP error (401, 403, 404) exits nonzero and still prints Jenkins' error page
+curl -sS --fail-with-body -X POST -u "$JENKINS_USER:$JENKINS_TOKEN" \
+  "$JENKINS_URL/quietDown" --data-urlencode "message=Upgrade in progress, change $STAMP" \
+  > /dev/null || echo "STOP: quiet down was rejected; do not continue"
+
+# Confirm quiet down is active: prints "quiet down active", or STOP. Do not continue on STOP.
+curl -sS --fail-with-body -u "$JENKINS_USER:$JENKINS_TOKEN" "$JENKINS_URL/api/json?tree=quietingDown" \
+  | jq -e '.quietingDown == true' > /dev/null \
+  && echo "quiet down active" || echo "STOP: quiet down is not active"
 
 # Running builds; wait until this prints 0, or until the window says to stop waiting
 curl -sS -u "$JENKINS_USER:$JENKINS_TOKEN" \
@@ -102,7 +109,7 @@ curl -sS -u "$JENKINS_USER:$JENKINS_TOKEN" \
   | jq '[.computer[] | ((.executors // []) + (.oneOffExecutors // []))[] | .currentExecutable] | map(select(. != null)) | length'
 ```
 
-In core source, `quietDown` also accepts `block` and `timeout` (milliseconds) parameters, and the CLI has `quiet-down` with `-block`, `-timeout` and `-reason`. The CLI help notes that running Pipeline builds do not block quiet down: they pause at the end of their current step. Decide in advance which long builds you will abort when the window starts.
+The `quietingDown` field of `/api/json` is not verified here: if the second command prints STOP although the UI shows the quiet-down banner, check the field name in `$JENKINS_URL/api/json?pretty=true` and use what your controller returns. In core source, `quietDown` also accepts `block` and `timeout` (milliseconds) parameters, and the CLI has `quiet-down` with `-block`, `-timeout` and `-reason`. The CLI help notes that running Pipeline builds do not block quiet down: they pause at the end of their current step. Decide in advance which long builds you will abort when the window starts.
 
 ### 4. Build and roll out the new controller image
 

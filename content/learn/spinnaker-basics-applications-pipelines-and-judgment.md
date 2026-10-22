@@ -362,11 +362,11 @@ Work in a scratch directory: `mkdir -p ~/delivery12 && cd ~/delivery12`.
    ```bash
    jq empty my-pipeline.json && echo valid
    jq -r '.stages[] | "\(.refId)  \(.type)  <- [\(.requisiteStageRefIds | join(","))]"' my-pipeline.json
-   grep -c ':latest' my-pipeline.json
+   jq -r '.stages[] | select(.type == "deployManifest") | .name as $n | [.. | objects | .image? | strings] as $imgs | if $imgs == [] then "no image found: \($n)" else $imgs[] | select(test("@(sha256:|[$][{])") | not) | "not a digest: \($n) \(.)" end' my-pipeline.json
    ```
 
-   Expected: `valid`; a chain `1 <- []`, `2 <- [1]`, `3 <- [2]` with types `deployManifest`, `manualJudgment`, `deployManifest`; and `0` from `grep -c` (no mutable tag).
-   If you see something else: if stage 3 lists `1`, it is not gated. If `grep -c` prints a number above 0, replace the tags with `@${parameters.digest}`.
+   Expected: `valid`; a chain `1 <- []`, `2 <- [1]`, `3 <- [2]` with types `deployManifest`, `manualJudgment`, `deployManifest`; and no output from the third command (every deploy uses a digest, not a mutable tag such as `:latest` or `:1.4`).
+   If you see something else: if stage 3 lists `1`, it is not gated. If the third command prints a line, replace that tag with `@${parameters.digest}`.
 
 5. **Design the rollback.** The production deploy of digest `sha256:bbbb...` (illustrative) has raised the error rate; the previous release was `sha256:aaaa...`. Write down, in five lines or fewer: which rollback you use, the exact input, who approves, how you confirm it worked, and what you do about a database migration that shipped with the release.
 

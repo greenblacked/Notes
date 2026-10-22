@@ -102,7 +102,7 @@ set -euo pipefail
 PROJECT_ID="example-project"    # change: the project that holds the gateway
 LOCATION="europe-west4"         # change: the region your data may be processed in
 
-curl -sS -X POST \
+curl -sS --fail-with-body -X POST \
   -H "Authorization: Bearer $(gcloud auth print-access-token)" \
   -H "Content-Type: application/json" \
   "https://dlp.googleapis.com/v2/projects/${PROJECT_ID}/locations/${LOCATION}/content:deidentify" \

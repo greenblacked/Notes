@@ -212,8 +212,11 @@ import sys
 
 today = datetime.date.today()
 problems = []
+paths = sorted(glob.glob("vendor-reviews/*.json"))
+if not paths:  # a failed conversion step must not pass as "no problems"
+    problems.append("vendor-reviews/*.json: no records found")
 
-for path in sorted(glob.glob("vendor-reviews/*.json")):
+for path in paths:
     with open(path, encoding="utf-8") as fh:
         rec = json.load(fh)
     due = datetime.date.fromisoformat(rec["next_review"])

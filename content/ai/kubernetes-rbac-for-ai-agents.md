@@ -173,7 +173,9 @@ set -euo pipefail
 
 for ROLE in roles/container.clusterViewer roles/container.viewer roles/container.developer; do
   echo "== ${ROLE}"
-  gcloud iam roles describe "$ROLE" --format='value(includedPermissions)' | tr ';' '\n' \
+  # Read the role first: a failed describe must stop the script, not read as "none".
+  PERMS="$(gcloud iam roles describe "$ROLE" --format='value(includedPermissions)')"
+  tr ';' '\n' <<< "$PERMS" \
     | grep -E 'secrets|exec|portForward|attach|proxy|impersonate' || echo "(none of the risky permissions listed)"
 done
 ```

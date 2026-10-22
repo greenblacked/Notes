@@ -191,6 +191,7 @@ Soft-deleted data is billed at its storage class rate until its retention ends, 
 Compare the restored set with the list you expected, by count and by hash:
 
 ```bash
+[ -s "$WORKDIR/restore-list.txt" ] || echo "STOP: restore-list.txt is empty; the missing-objects check below proves nothing"
 gcloud storage ls "gs://$BUCKET/$PREFIX**" | sort > "$WORKDIR/live-after.txt"
 wc -l "$WORKDIR/live-after.txt"
 comm -13 "$WORKDIR/live-after.txt" <(sed 's/#.*//' "$WORKDIR/restore-list.txt" | sort -u)   # expected but still missing; should be empty

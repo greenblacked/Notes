@@ -331,7 +331,8 @@ kubectl -n "$NS" get endpointslices -l kubernetes.io/service-name="$SVC" -o wide
 # Connections per server Pod (needs ss in the image, or use an ephemeral debug container).
 for pod in $(kubectl -n "$NS" get pods -l app.kubernetes.io/name=catalog -o name); do
   printf '%s ' "$pod"
-  kubectl -n "$NS" exec "$pod" -- sh -c "ss -tn state established '( sport = :50051 )' | tail -n +2 | wc -l"
+  # A missing or failing ss fails the exec instead of printing a misleading 0.
+  kubectl -n "$NS" exec "$pod" -- sh -c 'out=$(ss -tn state established "( sport = :50051 )") || exit 1; printf "%s\n" "$out" | tail -n +2 | wc -l'
 done
 ```
 

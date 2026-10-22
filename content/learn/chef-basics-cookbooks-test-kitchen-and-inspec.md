@@ -388,9 +388,8 @@ Outside Test Kitchen you run a profile with `inspec exec`, against the local mac
 
 ```bash
 inspec check ./profile
-inspec exec ./profile                          # this machine
-inspec exec ./profile -t ssh://ubuntu@203.0.113.10 -i ~/.ssh/id_ed25519   # a remote host
-echo "exit: $?"
+inspec exec ./profile; echo "exit: $?"         # this machine
+inspec exec ./profile -t ssh://ubuntu@203.0.113.10 -i ~/.ssh/id_ed25519; echo "exit: $?"   # a remote host
 ```
 
 Exit codes matter in CI: 0 all passed, 100 at least one test failed, 101 some skipped and none failed, 172 licence not accepted. A pipeline that treats every non-zero code alike will fail on skips; decide deliberately whether 101 passes.

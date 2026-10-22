@@ -273,7 +273,14 @@ def summary(rows):
 
 
 def main(baseline_path, candidate_path):
-    base, cand = summary(load(baseline_path)), summary(load(candidate_path))
+    base_rows, cand_rows = load(baseline_path), load(candidate_path)
+    base_ids, cand_ids = {r["case_id"] for r in base_rows}, {r["case_id"] for r in cand_rows}
+    if base_ids != cand_ids:
+        # A run that skipped cases (often the hard ones) would otherwise compare as better.
+        print(f"RESULT FAIL: case sets differ, {len(base_ids - cand_ids)} missing from the candidate, "
+              f"{len(cand_ids - base_ids)} not in the baseline")
+        return 1
+    base, cand = summary(base_rows), summary(cand_rows)
     checks = [
         ("pass rate", base["pass_rate"] - cand["pass_rate"] <= MAX_PASS_RATE_DROP),
         ("schema adherence", base["schema_rate"] - cand["schema_rate"] <= MAX_SCHEMA_DROP),
@@ -292,7 +299,7 @@ if __name__ == "__main__":
     sys.exit(main(sys.argv[1], sys.argv[2]))
 ```
 
-Make sure both files cover the same `case_id` set before comparing; a candidate run that silently skipped the hard cases will look better than it is. A pass rate on a few dozen cases is noisy, so read the small-sample notes in [[evaluating-ai-tools-for-a-platform-team]] before treating a one-point difference as real.
+The script fails when the two files do not cover the same `case_id` set, because a candidate run that silently skipped the hard cases would look better than it is. A pass rate on a few dozen cases is noisy, so read the small-sample notes in [[evaluating-ai-tools-for-a-platform-team]] before treating a one-point difference as real.
 
 Retrieval systems need one more check: if the upgrade also changes the embedding model, the stored vectors no longer match the queries. Re-index and re-run the retrieval eval as in [[rag-over-runbooks-for-on-call]]; never mix embeddings from two models in one index.
 

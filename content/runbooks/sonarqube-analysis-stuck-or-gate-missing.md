@@ -51,7 +51,7 @@ For upgrade problems use [[sonarqube-upgrade-and-db-migration]]; for gate design
 SONARQUBE_URL=https://sonarqube.example.com
 PROJECT_KEY=my-service
 # export SONAR_TOKEN=...      # from your secret store; never in a script or job log
-sq() { curl --silent --fail --user "$SONAR_TOKEN:" "$SONARQUBE_URL$1"; }
+sq() { curl --silent --show-error --fail --user "$SONAR_TOKEN:" "$SONARQUBE_URL$1"; }
 ```
 
 The token is passed as the basic-auth user name with an empty password, which SonarQube has long accepted; newer versions also accept a bearer token, see your version's Web API page.

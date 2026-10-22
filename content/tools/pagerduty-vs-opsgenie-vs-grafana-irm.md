@@ -186,7 +186,8 @@ Teams that alert from Cloud Monitoring as well as Prometheus ([[prometheus-vs-cl
 
 ```bash title="list channel types"
 PROJECT_ID="example-project"
-curl -sS -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+# --fail-with-body: a 403 must show as an error, not as an empty list
+curl -sS --fail-with-body -H "Authorization: Bearer $(gcloud auth print-access-token)" \
   "https://monitoring.googleapis.com/v3/projects/${PROJECT_ID}/notificationChannelDescriptors" \
   | jq -r '.channelDescriptors[]?.type'
 ```

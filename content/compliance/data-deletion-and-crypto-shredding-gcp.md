@@ -224,17 +224,21 @@ gcloud kms keys versions list --key="${KEY}" --project="${KMS_PROJECT}" \
   --format="table(name.basename(),state,createTime)"
 
 # 2. Disable every version first and watch for errors (reversible with "enable").
-for V in $(gcloud kms keys versions list --key="${KEY}" --project="${KMS_PROJECT}" \
-    --location="${LOCATION}" --keyring="${KEYRING}" \
-    --filter="state=ENABLED" --format="value(name.basename())"); do
+#    The list goes into a variable first: set -e ignores a failed command substitution in a
+#    for list, which would skip every version and still exit 0.
+ENABLED="$(gcloud kms keys versions list --key="${KEY}" --project="${KMS_PROJECT}" \
+  --location="${LOCATION}" --keyring="${KEYRING}" \
+  --filter="state=ENABLED" --format="value(name.basename())")"
+for V in ${ENABLED}; do
   gcloud kms keys versions disable "${V}" --key="${KEY}" --project="${KMS_PROJECT}" \
     --location="${LOCATION}" --keyring="${KEYRING}"
 done
 
 # 3. After the observation period: schedule destruction of every enabled or disabled version.
-# for V in $(gcloud kms keys versions list --key="${KEY}" --project="${KMS_PROJECT}" \
-#     --location="${LOCATION}" --keyring="${KEYRING}" \
-#     --filter="state=DISABLED OR state=ENABLED" --format="value(name.basename())"); do
+# LIVE="$(gcloud kms keys versions list --key="${KEY}" --project="${KMS_PROJECT}" \
+#   --location="${LOCATION}" --keyring="${KEYRING}" \
+#   --filter="state=DISABLED OR state=ENABLED" --format="value(name.basename())")"
+# for V in ${LIVE}; do
 #   gcloud kms keys versions destroy "${V}" --key="${KEY}" --project="${KMS_PROJECT}" \
 #     --location="${LOCATION}" --keyring="${KEYRING}"
 # done
@@ -283,8 +287,15 @@ KMS_PROJECT="example-kms-prod"; LOCATION="europe-west1"             # change
 KEYRING="tenants"; KEY="tenant-t-0042"                               # change
 LOG_PROJECT="example-kms-prod"                                       # change: project with the KMS audit logs
 
-# No live or noncurrent objects left (expect no output).
-gcloud storage ls --all-versions "${BUCKET}/${PREFIX}**" || true
+# No live or noncurrent objects left. "matched no objects" is the expected result;
+# any other error (wrong bucket, no permission) means the check did not run.
+if OBJECTS="$(gcloud storage ls --all-versions "${BUCKET}/${PREFIX}**" 2>&1)"; then
+  printf 'FAIL: objects remain under %s:\n%s\n' "${BUCKET}/${PREFIX}" "${OBJECTS}" >&2; exit 1
+elif grep -q 'matched no objects' <<< "${OBJECTS}"; then
+  echo "ok: no live or noncurrent objects under ${BUCKET}/${PREFIX}"
+else
+  printf 'FAIL: could not list %s:\n%s\n' "${BUCKET}/${PREFIX}" "${OBJECTS}" >&2; exit 1
+fi
 
 # Every key version scheduled or destroyed, with its destroy time.
 gcloud kms keys versions list --key="${KEY}" --project="${KMS_PROJECT}" \

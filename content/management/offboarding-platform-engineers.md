@@ -107,14 +107,19 @@ Because the [[access-reviews-gcp-and-gke]] process already runs these inventorie
 Google identities appear in Kubernetes RBAC as their email address when bound directly. List every binding that names the person as a `User` subject, case-insensitively, in each cluster:
 
 ```bash title="rbac-inventory.sh"
+#!/usr/bin/env bash
+set -uo pipefail # pipefail: a kubectl error must not look like "no bindings"
 EMAIL="alice@example.com"
+failed=0
 for ctx in $(kubectl config get-contexts -o name); do
   echo "## ${ctx}"
   kubectl --context "$ctx" get rolebindings,clusterrolebindings -A -o json |
     jq -r --arg u "$EMAIL" '.items[]
       | select(any(.subjects[]?; .kind == "User" and (.name | ascii_downcase) == ($u | ascii_downcase)))
-      | [.kind, (.metadata.namespace // "-"), .metadata.name, .roleRef.name] | @tsv'
+      | [.kind, (.metadata.namespace // "-"), .metadata.name, .roleRef.name] | @tsv' ||
+    { echo "ERROR ${ctx}: bindings not listed, this cluster is NOT checked" >&2; failed=1; }
 done
+exit "$failed"
 ```
 
 The filter skips bindings without subjects and ignores a `Group` subject with the same string. It does not see access through groups or through GCP IAM roles on the cluster; those come from the GCP inventory above. Check the GKE documentation for how IAM and RBAC combine on your clusters (not verified here), and see [[rbac-roles-bindings-and-least-privilege]].
@@ -190,7 +195,11 @@ Also check, while you have the project list:
 ```bash title="codeowners-grep.sh"
 # Run in a directory with shallow clones of the group's repositories.
 LEAVER_HANDLE="@alice"
-grep -rIn --include=CODEOWNERS -F "$LEAVER_HANDLE" . || echo "no CODEOWNERS entries"
+grep -rIn --include=CODEOWNERS -F "$LEAVER_HANDLE" .
+case $? in
+  1) echo "no CODEOWNERS entries" ;;
+  2) echo "grep reported an error: the search is incomplete" >&2 ;;
+esac
 ```
 
 GitLab reads `CODEOWNERS` from the repository root, `docs/` and `.gitlab/`, so the `--include` pattern covers all three. Also search for group handles the person was the only member of.

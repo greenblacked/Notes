@@ -270,8 +270,11 @@ gcloud compute instances get-serial-port-output "$VM" --zone "$ZONE" | tail -50
 
 ```bash
 gcloud compute ssh "$VM" --zone "$ZONE" --tunnel-through-iap --command 'id; sudo -n true && echo sudo-ok; df -h /; systemctl is-active sshd || systemctl is-active ssh'
-gcloud compute instances describe "$VM" --zone "$ZONE" --format="value(metadata.items)" | grep -c serial-port-enable   # 0
-gcloud compute project-info describe --format="yaml(commonInstanceMetadata.items)" | grep -c ssh-keys                # as before the incident
+# Each prints a count, or nothing if the describe failed (grep -c would print 0 then)
+gcloud compute instances describe "$VM" --zone "$ZONE" --format=json \
+  | jq '[.metadata.items[]? | select(.key == "serial-port-enable")] | length'           # 0
+gcloud compute project-info describe --format=json \
+  | jq '[.commonInstanceMetadata.items[]? | select(.key == "ssh-keys")] | length'      # as before the incident
 ```
 
 - SSH works through IAP for a normal user with the normal roles, not only for the person who fixed it.

@@ -185,7 +185,7 @@ Points that matter in production:
 - **The API key is not enough.** vLLM's newer documentation says `--api-key` (or `VLLM_API_KEY`) protects only the `/v1`, `/v2` and `/inference` paths; other endpoints are unauthenticated. Keep the server reachable only from the gateway.
 - **`/dev/shm`.** A memory-backed `emptyDir` gives the server shared memory beyond the container default; it counts against the pod's memory.
 - **Pin everything.** The image by digest, the model by a versioned `gs://` prefix, and the vLLM flags in the manifest. vLLM metric names and flags have changed between releases; an unpinned `latest` breaks dashboards and HPAs on its own.
-- **Baseline exceptions.** The Deployment sets no `securityContext`, so the server runs as the image's default user with a writable root filesystem, and it uses the `llm-serving` PriorityClass defined below rather than one of the classes in [[priority-classes-and-preemption]]. Both depart from [[kubernetes-workload-baseline-standard]]: record them as exceptions with a reason and an expiry, or add the security context once you have confirmed which user and writable paths your vLLM image needs.
+- **Baseline exceptions.** The Deployment sets no `securityContext`, so the server runs as the image's default user with a writable root filesystem, and it uses the `llm-serving` PriorityClass defined below (and `llm-serving-base` in the mixed Spot setup) rather than one of the classes in [[priority-classes-and-preemption]]. Both depart from [[kubernetes-workload-baseline-standard]]: record them as exceptions with a reason and an expiry, or add the security context once you have confirmed which user and writable paths your vLLM image needs.
 
 ### Weights through Workload Identity
 
@@ -321,8 +321,66 @@ Spot GPU nodes are cheaper and can be reclaimed at any time. Google's Spot VM pa
 
 A pattern that survives this:
 
-- A small **on-demand pool** sized for the minimum you must always serve, plus a **Spot pool** (`--spot` on a second pool with the same taint and label) for burst capacity.
-- A **PriorityClass** so the guaranteed replicas are not displaced by burst replicas ([[priority-classes-and-preemption]]):
+- A small **on-demand pool** sized for the minimum you must always serve, plus a **Spot pool** for burst capacity. Create the Spot pool like `gpu-inference` above, under another name, with `--spot`, the same `dedicated` taint and `workload` label, and one more of each so that only pods that opt in land on it: `--node-taints="dedicated=llm-inference:NoSchedule,capacity=spot:NoSchedule"` and `--node-labels="workload=llm-inference,capacity=spot"`. Add `capacity=on-demand` to the on-demand pool's `--node-labels`. These labels and the taint are your own, so the scheduling below does not depend on the labels and taints GKE puts on Spot nodes.
+- **Two Deployments per release, not one Deployment with an HPA.** An HPA scales one Deployment, and the scheduler places each of its pods wherever it fits: nothing makes the first replicas land on on-demand nodes, so one reclamation wave can take the whole floor. Split the release into a **baseline** Deployment with a fixed replica count, pinned to the on-demand pool and without the Spot toleration, and a **burst** Deployment that tolerates and prefers Spot and is the HPA's target. Both carry `app: llm-server` and `release: model-a-v2`, so the Service selector and the version switch below cover both; a `tier` label keeps their Deployment selectors from overlapping. The rest of each pod spec is the one in `deploy-model.sh`:
+
+```yaml title="llm-baseline-and-burst.yaml (scheduling fields; the rest as in deploy-model.sh)"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-a-v2-base
+  namespace: llm-serving
+  labels: { app: llm-server, release: model-a-v2, tier: base }
+spec:
+  replicas: 1 # change: the floor you must always serve; no HPA targets this Deployment
+  selector:
+    matchLabels: { app: llm-server, release: model-a-v2, tier: base }
+  template:
+    metadata:
+      labels: { app: llm-server, release: model-a-v2, tier: base }
+    spec:
+      priorityClassName: llm-serving-base
+      nodeSelector:
+        workload: llm-inference
+        capacity: on-demand
+      tolerations: # no capacity=spot toleration, so the Spot taint keeps these pods off Spot nodes
+        - { key: dedicated, operator: Equal, value: llm-inference, effect: NoSchedule }
+        - { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule }
+      # serviceAccountName, initContainers, containers, volumes: as in deploy-model.sh
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-a-v2-burst
+  namespace: llm-serving
+  labels: { app: llm-server, release: model-a-v2, tier: burst }
+spec:
+  # no replicas field: the HPA owns the count, and re-applying a fixed value would reset it
+  selector:
+    matchLabels: { app: llm-server, release: model-a-v2, tier: burst }
+  template:
+    metadata:
+      labels: { app: llm-server, release: model-a-v2, tier: burst }
+    spec:
+      priorityClassName: llm-serving
+      nodeSelector:
+        workload: llm-inference
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - { key: capacity, operator: In, values: [spot] }
+      tolerations:
+        - { key: dedicated, operator: Equal, value: llm-inference, effect: NoSchedule }
+        - { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule }
+        - { key: capacity, operator: Equal, value: spot, effect: NoSchedule }
+      # serviceAccountName, initContainers, containers, volumes: as in deploy-model.sh
+```
+
+- **The HPA targets only the burst Deployment.** Set `scaleTargetRef.name: model-a-v2-burst` in `llm-hpa.yaml` and size `maxReplicas` to the Spot pool. The preference for Spot is soft, so burst pods fall back to on-demand nodes during a Spot stockout; how the cluster autoscaler chooses which pool to grow for a pending burst pod is not verified here. If burst must never use on-demand capacity, make the affinity `requiredDuringSchedulingIgnoredDuringExecution`. In `switch-model.sh`, wait for both `${TARGET}-base` and `${TARGET}-burst` before switching.
+- **Two PriorityClasses, baseline above burst** ([[priority-classes-and-preemption]]). Priority does not choose the node; the node selector and the taint do. Priority decides who yields when a pod cannot be scheduled: if burst pods have fallen back onto on-demand nodes and a baseline pod is Pending (after a node failure or an upgrade), the scheduler can preempt a burst pod to make room for it. Priority does nothing against Spot reclamation, which is why the floor runs only on on-demand nodes.
 
 ```yaml title="llm-priority.yaml"
 apiVersion: scheduling.k8s.io/v1
@@ -332,6 +390,14 @@ metadata:
 value: 100000
 globalDefault: false
 description: Model servers; above batch and dev workloads, below platform components.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: llm-serving-base
+value: 110000
+globalDefault: false
+description: The on-demand floor of the model servers; above the burst replicas, below platform components.
 ```
 
 - A **PodDisruptionBudget** helps with drains and upgrades, but not with Spot reclamation: the VM is going away regardless.

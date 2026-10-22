@@ -304,8 +304,11 @@ spec:
                 - |
                   set -eu
                   now=$(date +%s)
-                  kubectl get ns -l preview=true \
-                    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.labels.preview-expires-at}{"\n"}{end}' |
+                  # List first: sh has no pipefail, so a failed kubectl get piped into
+                  # the loop would end the Job as Complete without deleting anything
+                  list=$(kubectl get ns -l preview=true \
+                    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.labels.preview-expires-at}{"\n"}{end}')
+                  printf '%s\n' "$list" |
                   while read -r ns exp; do
                     case "$ns" in mr-*) ;; *) continue ;; esac
                     if [ -n "$exp" ] && [ "$exp" -lt "$now" ]; then

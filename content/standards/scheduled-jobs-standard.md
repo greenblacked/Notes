@@ -365,9 +365,10 @@ gcloud scheduler jobs resume "$JOB" --project="$PROJECT_ID" --location="$LOCATIO
 gcloud scheduler jobs run    "$JOB" --project="$PROJECT_ID" --location="$LOCATION"
 
 # GitLab: deactivate a schedule, run it now (needs a token with write access, used by a maintainer)
-curl -sS -X PUT -K <(printf 'header = "PRIVATE-TOKEN: %s"\n' "$GITLAB_TOKEN") \
+# --fail-with-body: a 401, 403 or 404 exits non-zero instead of looking like success
+curl -sS --fail-with-body -X PUT -K <(printf 'header = "PRIVATE-TOKEN: %s"\n' "$GITLAB_TOKEN") \
   --form "active=false" "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/pipeline_schedules/${SCHEDULE_ID}"
-curl -sS -X POST -K <(printf 'header = "PRIVATE-TOKEN: %s"\n' "$GITLAB_TOKEN") \
+curl -sS --fail-with-body -X POST -K <(printf 'header = "PRIVATE-TOKEN: %s"\n' "$GITLAB_TOKEN") \
   "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/pipeline_schedules/${SCHEDULE_ID}/play"
 
 # Jenkins: disable the job or start it with parameters from the job page, or through

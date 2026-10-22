@@ -111,15 +111,29 @@ gl_get_all() {
 mkdir -p "$DEST"
 group_enc="$(jq -rn --arg g "$GROUP" '$g | @uri')"
 
+projects="$(mktemp)"
+trap 'rm -f "$projects"' EXIT
 gl_get_all "groups/${group_enc}/projects?include_subgroups=true&archived=false" |
-  jq -r '.[] | [.path_with_namespace, .ssh_url_to_repo] | @tsv' |
-  while IFS=$'\t' read -r path url; do
-    dir="${DEST}/${path//\//__}"   # group/sub/repo -> group__sub__repo
-    git -c core.hooksPath=/dev/null clone --quiet --depth 1 --no-tags "$url" "$dir" ||
-      echo "clone failed: ${path}" >&2
-  done
-echo "cloned $(find "$DEST" -mindepth 1 -maxdepth 1 -type d | wc -l) repositories into ${DEST}"
+  jq -r '.[] | [.path_with_namespace, .ssh_url_to_repo] | @tsv' > "$projects"
+
+# Read from a file, not a pipe, so the failure list survives the loop (a piped loop runs in a subshell).
+failed=()
+while IFS=$'\t' read -r path url; do
+  dir="${DEST}/${path//\//__}"   # group/sub/repo -> group__sub__repo
+  git -c core.hooksPath=/dev/null clone --quiet --depth 1 --no-tags "$url" "$dir" < /dev/null ||
+    failed+=("$path")
+done < "$projects"
+
+echo "cloned $(find "$DEST" -mindepth 1 -maxdepth 1 -type d | wc -l) of $(wc -l < "$projects") projects into ${DEST}"
+if (( ${#failed[@]} > 0 )); then
+  # A missing repository is a missing row in the denominator: fail rather than report a short inventory.
+  echo "clone failed for ${#failed[@]} project(s); the inventory is incomplete:" >&2
+  printf '  %s\n' "${failed[@]}" >&2
+  exit 1
+fi
 ```
+
+A nonzero exit lists the projects that did not clone. Fix access or retry them (into a new directory, or clone the listed ones by hand into the same one) before building the inventory; do not scan a partial set.
 
 Offset pagination works up to a documented limit on the projects endpoints (keyset pagination beyond it); a single group rarely gets near it. Server-side code search is an alternative to cloning, but instance-wide and group code search need advanced search or exact code search, which are Premium and Ultimate features; on the Free tier, cloning and scanning is the portable method.
 

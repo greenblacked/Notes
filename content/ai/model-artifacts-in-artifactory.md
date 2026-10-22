@@ -179,8 +179,11 @@ def check_safetensors(path):
 
 def main(root):
     problems = []
-    for dirpath, _, files in os.walk(root):
+    checked = 0
+    # os.walk skips unreadable directories (and a missing root) silently; report them instead.
+    for dirpath, _, files in os.walk(root, onerror=lambda e: problems.append(f"{e.filename}: {e.strerror}")):
         for fn in files:
+            checked += 1
             path = os.path.join(dirpath, fn)
             ext = os.path.splitext(fn)[1].lower()
             with open(path, "rb") as f:
@@ -195,6 +198,8 @@ def main(root):
                 problems.append(f"{path}: extension {ext!r} is not on the allowed list")
             elif ext in TEXT_EXT and (magic[:1] == b"\x80" or magic == b"PK\x03\x04"):
                 problems.append(f"{path}: looks like a pickle or an archive, not text")
+    if checked == 0:
+        problems.append(f"{root}: no files to check")
     for p in problems:
         print("ERROR", p)
     print(f"{len(problems)} problems")
@@ -277,8 +282,10 @@ NS="llm-serving"         # change: the serving namespace
 DEPLOY="inference"       # change: the serving Deployment
 POD="$(kubectl -n "$NS" get pods -l app="$DEPLOY" -o jsonpath='{.items[0].metadata.name}')"
 
-# The pod must not reach the public hub; expect a timeout or connection failure.
-kubectl -n "$NS" exec "$POD" -- sh -c 'curl -sS --max-time 5 https://huggingface.co >/dev/null && echo REACHABLE || echo BLOCKED'
+# The pod must not reach the public hub; expect a timeout (curl exit 28) or a refused
+# connection (exit 7). Any other exit code (DNS, TLS, curl missing) is not proof of a block.
+kubectl -n "$NS" exec "$POD" -- sh -c 'curl -sS --max-time 5 -o /dev/null https://huggingface.co; rc=$?
+  case "$rc" in 0) echo REACHABLE ;; 7|28) echo "BLOCKED (curl exit $rc)" ;; *) echo "INCONCLUSIVE (curl exit $rc)" ;; esac'
 
 # The files on disk must match the promoted manifest.
 kubectl -n "$NS" exec "$POD" -- sh -c 'cd /models/current && sha256sum --check sha256sums.txt'

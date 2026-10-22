@@ -69,11 +69,12 @@ SINCE="2026-10-20T09:00:00Z"
 An alert is `pending` from its first true evaluation until its `for` duration has held, and only then `firing`. Without `for` it fires on the first evaluation. Only `firing` alerts are sent to Alertmanager.
 
 ```bash
+# -sS --fail: an unreachable Prometheus or an HTTP error prints an error instead of an empty answer
 # Current state, with the full label set
-curl -s "$PROM/api/v1/alerts" | jq --arg a "$ALERT" '.data.alerts[] | select(.labels.alertname == $a) | {state, activeAt, labels}'
+curl -sS --fail "$PROM/api/v1/alerts" | jq --arg a "$ALERT" '.data.alerts[] | select(.labels.alertname == $a) | {state, activeAt, labels}'
 
 # History over the incident window: ALERTS is 1 while the alert is pending or firing
-curl -s "$PROM/api/v1/query_range" \
+curl -sS --fail "$PROM/api/v1/query_range" \
   --data-urlencode "query=ALERTS{alertname=\"$ALERT\"}" \
   --data-urlencode "start=$SINCE" --data-urlencode "end=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --data-urlencode "step=60" | jq '.data.result[] | {state: .metric.alertstate, points: (.values | length)}'

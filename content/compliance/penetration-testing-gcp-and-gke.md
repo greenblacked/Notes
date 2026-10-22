@@ -285,10 +285,11 @@ PROJECT_ID="example-pentest-1"; POLICY="example-pentest-edge"   # change
 TESTER_DOMAIN="example.com"                                      # change: the tester's identity domain
 
 # No bindings for tester identities remain (expired conditional bindings still show
-# in the policy until removed; remove them to keep the policy clean).
-gcloud projects get-iam-policy "${PROJECT_ID}" --flatten="bindings[].members" \
-  --format="table(bindings.role,bindings.members,bindings.condition.title)" \
-  | grep -i "${TESTER_DOMAIN}" || echo "no tester bindings"
+# in the policy until removed; remove them to keep the policy clean). The policy is read
+# first, so a failed read stops the script instead of printing "no tester bindings".
+BINDINGS="$(gcloud projects get-iam-policy "${PROJECT_ID}" --flatten="bindings[].members" \
+  --format="table(bindings.role,bindings.members,bindings.condition.title)")"
+grep -i -- "${TESTER_DOMAIN}" <<< "${BINDINGS}" || echo "no tester bindings"
 
 # No allowlist rule left in the Cloud Armor policy.
 gcloud compute security-policies describe "${POLICY}" \

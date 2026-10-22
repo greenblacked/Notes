@@ -238,19 +238,48 @@ GROUP BY service, principal
 ORDER BY violations DESC"
 ```
 
-The exfiltration test uses a canary object with no real data and a test identity that has read access inside and write access outside. Run it from a workload inside the perimeter.
+The exfiltration test uses a canary object with no real data and a test identity that has read access inside and write access outside. Run it from a workload inside the perimeter, with `dry-run` before enforcement and `enforced` after.
 
 ```bash title="exfiltration-canary.sh"
-set -o pipefail
+#!/usr/bin/env bash
+# usage: exfiltration-canary.sh dry-run|enforced
+# Exit 0 only on the result the phase expects; anything else exits 1.
+set -uo pipefail
+PHASE="${1:?usage: exfiltration-canary.sh dry-run|enforced}"
+[[ "$PHASE" == "dry-run" || "$PHASE" == "enforced" ]] ||
+  { echo "usage: exfiltration-canary.sh dry-run|enforced" >&2; exit 2; }
 INSIDE_BUCKET="app-prod-data-canary"   # bucket in a project inside the perimeter
 OUTSIDE_BUCKET="app-sandbox-canary"    # bucket in a project outside the perimeter
 
+err="$(mktemp)"
+trap 'rm -f "$err"' EXIT
+
 # Dry-run phase: the copy SUCCEEDS and a dry-run violation appears in check 2 above.
-# Enforced phase: the copy FAILS with a 403 that mentions VPC Service Controls
-# and carries a unique identifier for the violation analyzer.
-gcloud storage cp "gs://${INSIDE_BUCKET}/canary.txt" "gs://${OUTSIDE_BUCKET}/canary-$(date +%s).txt" \
-  && echo "copy allowed: perimeter not enforced for this path" \
-  || echo "copy denied: expected once enforced"
+# Enforced phase: the copy FAILS with a 403 from VPC Service Controls that carries a
+# unique identifier for the violation analyzer. Any other error (missing object, IAM
+# denial, wrong bucket name, network) proves nothing about the perimeter and fails the test.
+if gcloud storage cp "gs://${INSIDE_BUCKET}/canary.txt" \
+    "gs://${OUTSIDE_BUCKET}/canary-$(date +%s).txt" 2> "$err"; then
+  if [[ "$PHASE" == "dry-run" ]]; then
+    echo "PASS (dry-run): copy allowed; now confirm the dry-run violation in check 2"
+    exit 0
+  fi
+  echo "FAIL: copy allowed: perimeter not enforced for this path" >&2
+  exit 1
+fi
+
+# Not verified: the exact wording gcloud storage prints for a VPC-SC denial. The markers
+# below are the ones VPC Service Controls errors are expected to carry; confirm them
+# against the first real denial (dry-run cannot produce one) and adjust if needed.
+if [[ "$PHASE" == "enforced" ]] && grep -q '403' "$err" &&
+  grep -Eq "vpcServiceControlsUniqueIdentifier|Request is prohibited by organization's policy" "$err"; then
+  echo "PASS (enforced): copy denied by VPC Service Controls"
+  grep -Eo 'vpcServiceControlsUniqueIdentifier[^ ]*[ :]*[A-Za-z0-9_-]+' "$err" || true
+  exit 0
+fi
+echo "FAIL (${PHASE}): copy failed, but not with the expected VPC Service Controls denial:" >&2
+cat "$err" >&2
+exit 1
 ```
 
 The overview's own examples of blocked actions are a `gcloud storage cp` to a bucket outside the perimeter and a `bq mk` that creates a permanent external BigQuery table; add the second as a test if BigQuery is in scope.

@@ -101,7 +101,8 @@ Useful searches, run in your infrastructure repositories (not in public places):
 OLD_ENDPOINT=$(gcloud container clusters describe "$CLUSTER" --location "$LOCATION" --format="value(endpoint)")
 CA_B64=$(gcloud container clusters describe "$CLUSTER" --location "$LOCATION" --format="value(masterAuth.clusterCaCertificate)")
 # First 40 characters of the base64 CA are enough to find copies
-git grep -n -e "$OLD_ENDPOINT" -e "${CA_B64:0:40}" -- . ':!*.lock' || echo "no copies in this repository"
+git grep -n -e "$OLD_ENDPOINT" -e "${CA_B64:0:40}" -- . ':!*.lock'
+case $? in 0) ;; 1) echo "no copies in this repository" ;; *) echo "STOP: git grep failed; nothing was searched" ;; esac
 
 # Argo CD: list cluster Secrets and their server addresses
 kubectl -n argocd get secrets -l argocd.argoproj.io/secret-type=cluster \
@@ -145,7 +146,10 @@ kubectl get --raw /readyz
 gcloud container clusters describe "$CLUSTER" --location "$LOCATION" \
   --format="value(masterAuth.clusterCaCertificate)" | base64 -d > cluster-ca-new.pem
 openssl x509 -in cluster-ca-new.pem -noout -subject -enddate -fingerprint -sha256
-cmp -s cluster-ca-before.pem cluster-ca-new.pem && echo "CA unchanged: check the operation" || echo "new CA in place"
+if ! openssl x509 -in cluster-ca-new.pem -noout 2>/dev/null; then echo "STOP: cluster-ca-new.pem is missing or not a certificate"
+elif cmp -s cluster-ca-before.pem cluster-ca-new.pem; then echo "CA unchanged: check the operation"
+elif [ -s cluster-ca-before.pem ]; then echo "new CA in place"
+else echo "STOP: cluster-ca-before.pem is missing; compare with the fingerprint recorded in step 1"; fi
 ```
 
 Then work through the inventory from step 2, updating each client through its normal change path. For Argo CD, update the cluster Secret in Git with the new `server` and, inside the `config` field's JSON, the new `tlsClientConfig.caData` (base64 of the new CA), let it sync, and check that the cluster shows as connected in Argo CD before going on. For stored CI kubeconfigs, replace the variable and run a read-only job (`kubectl version`, `kubectl auth can-i --list`) against the cluster.

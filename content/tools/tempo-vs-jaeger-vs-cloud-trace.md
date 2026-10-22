@@ -156,7 +156,7 @@ Then check the gateway is not losing data. ADR 0043 names the Collector metrics 
 
 ```bash title="gateway exporter health (metric names to verify for your Collector version)"
 kubectl -n observability port-forward deploy/otel-gateway 8888:8888 &
-curl -s localhost:8888/metrics | grep -E 'otelcol_exporter_send_failed_spans|otelcol_exporter_queue_size|otelcol_processor_dropped_spans'
+curl -sS --fail localhost:8888/metrics | grep -E 'otelcol_exporter_send_failed_spans|otelcol_exporter_queue_size|otelcol_processor_dropped_spans'
 ```
 
 Non-zero, growing send failures mean the backend is rejecting or throttling: check the gateway log for quota (Cloud Trace), auth or connection errors.

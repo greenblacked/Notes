@@ -343,7 +343,7 @@ When the real fix (quota, a new range, a capacity review) takes hours, buy time 
 kubectl -n "$NS" get pod "$POD" -o wide                         # Running, on a node
 kubectl get events -A --field-selector reason=TriggeredScaleUp --sort-by=.lastTimestamp | tail -5
 kubectl get nodes -L cloud.google.com/gke-nodepool,topology.kubernetes.io/zone   # new nodes Ready
-kubectl get pods -A --field-selector=status.phase=Pending --no-headers | wc -l     # back to the usual level
+kubectl get pods -A --field-selector=status.phase=Pending -o json | jq '.items | length'   # back to the usual level; no output means the call failed
 
 while read -r url; do
   zone=$(echo "$url" | awk -F/ '{for(i=1;i<=NF;i++) if($i=="zones") print $(i+1)}')

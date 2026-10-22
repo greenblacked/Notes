@@ -279,16 +279,25 @@ if [ -d deploy/k8s ]; then
   rung "kubeconform deploy/k8s" kubeconform -strict -summary -kubernetes-version "$K8S_VERSION" deploy/k8s
 fi
 
-# Helm charts: lint and render with each values file under ci/
+# Helm charts: lint and render with each values file under ci/, or with the chart's
+# defaults when it has none, so a chart without ci/ values is not skipped.
 for chart in charts/*/; do
   [ -f "${chart}Chart.yaml" ] || continue
+  found=0
   for values in "${chart}"ci/*-values.yaml; do
     [ -f "$values" ] || continue
+    found=1
     rung "helm lint ${values}" helm lint --strict "$chart" -f "$values" --kube-version "$K8S_VERSION"
     rung "helm render ${values}" bash -c \
       'set -o pipefail; helm template ci "$1" -f "$2" --kube-version "$3" | kubeconform -strict -summary -kubernetes-version "$3" -' \
       _ "$chart" "$values" "$K8S_VERSION"
   done
+  if [ "$found" -eq 0 ]; then
+    rung "helm lint ${chart} (defaults)" helm lint --strict "$chart" --kube-version "$K8S_VERSION"
+    rung "helm render ${chart} (defaults)" bash -c \
+      'set -o pipefail; helm template ci "$1" --kube-version "$2" | kubeconform -strict -summary -kubernetes-version "$2" -' \
+      _ "$chart" "$K8S_VERSION"
+  fi
 done
 
 # Prometheus rules and their unit tests
