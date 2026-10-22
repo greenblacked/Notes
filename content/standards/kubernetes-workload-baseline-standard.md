@@ -293,7 +293,7 @@ jq -r --arg skip "$SKIP" '
   | .metadata.namespace as $ns | .metadata.name as $pod
   | (.spec.securityContext.runAsNonRoot // false) as $podNonRoot
   | .spec.containers[]
-  | select((.securityContext.runAsNonRoot // $podNonRoot) != true)
+  | select((.securityContext.runAsNonRoot | if . == null then $podNonRoot else . end) != true)
   | [$ns, $pod, .name] | @tsv' "$PODS"
 
 echo "== Containers allowing privilege escalation"

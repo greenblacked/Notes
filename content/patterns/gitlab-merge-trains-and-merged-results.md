@@ -192,12 +192,12 @@ PROJECT_ID=1234
 H="PRIVATE-TOKEN: ${GITLAB_TOKEN}"
 
 # All trains of the project, and the merge requests on the main train.
-curl -sS --header "$H" "${GITLAB}/api/v4/projects/${PROJECT_ID}/merge_trains" | jq '.[] | {target_branch, status, merge_request: .merge_request.iid, pipeline: .pipeline.ref}'
-curl -sS --header "$H" "${GITLAB}/api/v4/projects/${PROJECT_ID}/merge_trains/main" | jq 'length'
+curl --fail -sS --header "$H" "${GITLAB}/api/v4/projects/${PROJECT_ID}/merge_trains" | jq '.[] | {target_branch, status, merge_request: .merge_request.iid, pipeline: .pipeline.ref}'
+curl --fail -sS --header "$H" "${GITLAB}/api/v4/projects/${PROJECT_ID}/merge_trains/main" | jq 'length'
 
 # Train status of one merge request.
 MR_IID=59
-curl -sS --header "$H" "${GITLAB}/api/v4/projects/${PROJECT_ID}/merge_trains/merge_requests/${MR_IID}" | jq '{status, pipeline: .pipeline.ref}'
+curl --fail -sS --header "$H" "${GITLAB}/api/v4/projects/${PROJECT_ID}/merge_trains/merge_requests/${MR_IID}" | jq '{status, pipeline: .pipeline.ref}'
 ```
 
 Add a tiny job that prints the pipeline type, so job logs show which kind of pipeline ran:

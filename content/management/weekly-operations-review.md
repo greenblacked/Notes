@@ -305,6 +305,7 @@ WITH daily AS (
     SUM(cost) + SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) AS net_cost
   FROM `example-billing.billing_export.gcp_billing_export_v1_EXAMPLE`
   WHERE DATE(usage_start_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL 35 DAY)
+    AND DATE(usage_start_time) < CURRENT_DATE() -- whole days only: 7 days vs the 28 before them
   GROUP BY project_id, service_name, day
 ),
 weekly AS (

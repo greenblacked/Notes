@@ -220,6 +220,9 @@ check-migrations:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - git fetch --depth=50 origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
+    # Fail if the shallow clone has no merge base: both diffs below would then fail
+    # inside a process substitution or an if, list nothing, and pass the check.
+    - git merge-base "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}" HEAD > /dev/null
     - |
       mapfile -t NEW_FILES < <(git diff --name-only --diff-filter=A \
         "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}...HEAD" -- "${MIGRATIONS_DIR}")

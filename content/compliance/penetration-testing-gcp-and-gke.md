@@ -222,16 +222,19 @@ If the purpose includes detection testing, the SOC is not told the details, and 
 - **A kill switch**: removing the allowlist rule, deleting the IAM bindings and deleting the foothold namespace stops most tests. Script it in advance:
 
 ```bash title="scripts/pentest-kill-switch.sh"
-set -euo pipefail
+# No set -e: every step runs even if an earlier one fails or was already done (re-run after a partial run).
+set -uo pipefail
+fail=0
 
 PROJECT_ID="example-pentest-1"; POLICY="example-pentest-edge"; PRIORITY="100"   # change
 TESTER="user:tester1@example.com"; ROLE="roles/viewer"                          # change
 CONTEXT="gke_example-pentest-1_europe-west1_pt-1"                                # change
 
-gcloud compute security-policies rules delete "${PRIORITY}" --security-policy="${POLICY}" --quiet
+gcloud compute security-policies rules delete "${PRIORITY}" --security-policy="${POLICY}" --quiet || fail=1
 # --all removes every binding of this role and principal, whatever its condition.
-gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member="${TESTER}" --role="${ROLE}" --all
-kubectl --context "${CONTEXT}" delete namespace pentest-foothold --wait=false
+gcloud projects remove-iam-policy-binding "${PROJECT_ID}" --member="${TESTER}" --role="${ROLE}" --all || fail=1
+kubectl --context "${CONTEXT}" delete namespace pentest-foothold --ignore-not-found --wait=false || fail=1
+exit "${fail}"
 ```
 
 - **Critical findings** are reported the same day and handled as incidents if they reveal an exploitable path in production.

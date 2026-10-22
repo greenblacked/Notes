@@ -367,7 +367,9 @@ echo "dry_run: ${DRY_RUN}" >> "${EVIDENCE}"
 
 # GitLab: personal access tokens
 count=0
-for id in $(gl "${GITLAB_URL}/api/v4/personal_access_tokens?user_id=${GITLAB_USER_ID}&state=active&per_page=100" | jq -r '.[].id'); do
+# Lists go into a variable first: set -e ignores a failed command substitution in a for list.
+ids="$(gl "${GITLAB_URL}/api/v4/personal_access_tokens?user_id=${GITLAB_USER_ID}&state=active&per_page=100" | jq -r '.[].id')"
+for id in ${ids}; do
   run gl --request DELETE "${GITLAB_URL}/api/v4/personal_access_tokens/${id}"
   count=$((count + 1))
 done
@@ -375,7 +377,8 @@ echo "gitlab_pats_revoked: { count: ${count}, at: $(now) }" >> "${EVIDENCE}"
 
 # GitLab: SSH keys
 count=0
-for id in $(gl "${GITLAB_URL}/api/v4/users/${GITLAB_USER_ID}/keys" | jq -r '.[].id'); do
+ids="$(gl "${GITLAB_URL}/api/v4/users/${GITLAB_USER_ID}/keys" | jq -r '.[].id')"
+for id in ${ids}; do
   run gl --request DELETE "${GITLAB_URL}/api/v4/users/${GITLAB_USER_ID}/keys/${id}"
   count=$((count + 1))
 done
@@ -383,12 +386,13 @@ echo "gitlab_ssh_keys_deleted: { count: ${count}, at: $(now) }" >> "${EVIDENCE}"
 
 # SonarQube: tokens first, then deactivate (search fails once the user is inactive)
 count=0
+names="$(sq "${SONAR_URL}/api/user_tokens/search?login=${SONAR_LOGIN}" | jq -r '.userTokens[]?.name')"
 while IFS= read -r name; do
   [ -n "${name}" ] || continue
   run sq --request POST --data-urlencode "login=${SONAR_LOGIN}" --data-urlencode "name=${name}" \
     "${SONAR_URL}/api/user_tokens/revoke"
   count=$((count + 1))
-done < <(sq "${SONAR_URL}/api/user_tokens/search?login=${SONAR_LOGIN}" | jq -r '.userTokens[]?.name')
+done <<< "${names}"
 run sq --request POST --data-urlencode "login=${SONAR_LOGIN}" "${SONAR_URL}/api/users/deactivate"
 echo "sonarqube: { tokens_revoked: ${count}, deactivated_at: $(now) }" >> "${EVIDENCE}"
 

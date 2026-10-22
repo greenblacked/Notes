@@ -214,7 +214,13 @@ set -euo pipefail
 PROM_URL="https://prometheus.example.com"  # change: the Prometheus or query frontend that evaluates these rules
 RULES="alerts/checkout.rules.yml"
 
+[ -r "$RULES" ] || { echo "cannot read ${RULES}" >&2; exit 1; }
+
 # Heuristic: pull out selectors written as metric{...}; bare metric names are not found.
+selectors="$(grep -oE '[a-zA-Z_:][a-zA-Z0-9_:]*\{[^{}]*\}' "$RULES" | sort -u)" \
+  || { echo "no selectors found in ${RULES}" >&2; exit 1; }  # grep exits 1 on no match, 2 on a read error
+[ -n "$selectors" ] || { echo "no selectors found in ${RULES}" >&2; exit 1; }
+
 missing=0
 while IFS= read -r sel; do
   n="$(curl -sS --fail -G "$PROM_URL/api/v1/query" \
@@ -225,7 +231,7 @@ while IFS= read -r sel; do
   else
     echo "ok:        ${sel}"
   fi
-done < <(grep -oE '[a-zA-Z_:][a-zA-Z0-9_:]*\{[^{}]*\}' "$RULES" | sort -u)
+done <<< "$selectors"
 
 echo "selectors with no series: ${missing}"
 [ "$missing" -eq 0 ]
@@ -280,7 +286,7 @@ for chart in charts/*/; do
     [ -f "$values" ] || continue
     rung "helm lint ${values}" helm lint --strict "$chart" -f "$values" --kube-version "$K8S_VERSION"
     rung "helm render ${values}" bash -c \
-      'helm template ci "$1" -f "$2" --kube-version "$3" | kubeconform -strict -summary -kubernetes-version "$3" -' \
+      'set -o pipefail; helm template ci "$1" -f "$2" --kube-version "$3" | kubeconform -strict -summary -kubernetes-version "$3" -' \
       _ "$chart" "$values" "$K8S_VERSION"
   done
 done

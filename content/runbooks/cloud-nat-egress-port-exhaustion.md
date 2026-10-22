@@ -68,7 +68,7 @@ Then see the actual allocation per VM:
 ```bash
 gcloud compute routers get-nat-mapping-info "$ROUTER" --region "$REGION" --nat-name "$NAT" --format=json > nat-mapping.json
 jq -r '.[] | .instanceName as $vm | .interfaceNatMappings[]? |
-  [$vm, .sourceVirtualIp, (.numTotalNatPorts // 0), (.natIpPortRanges | join(" "))] | @tsv' nat-mapping.json | head -20
+  [$vm, .sourceVirtualIp, (.numTotalNatPorts // 0), (.natIpPortRanges // [] | join(" "))] | @tsv' nat-mapping.json | head -20
 ```
 
 The JSON field names inside the mapping output come from the API reference and were not run here; if the `jq` paths return nothing, look at `nat-mapping.json` directly.

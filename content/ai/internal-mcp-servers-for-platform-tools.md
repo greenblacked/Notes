@@ -84,6 +84,7 @@ MATCHERS = re.compile(r"\{[^}]*\}")
 RANGES = re.compile(r"\[[^\]]*\]")
 NUMBERS = re.compile(r"(?<![a-zA-Z0-9_:])\d[0-9a-zA-Z_.]*")
 IDENT = re.compile(r"[a-zA-Z_:][a-zA-Z0-9_:]*")
+SELECTOR_START = re.compile(r"([a-zA-Z_:][a-zA-Z0-9_:]*)?\s*\{")  # the name (if any) before each {
 
 
 def metric_names(query: str) -> set:
@@ -125,6 +126,9 @@ def validate(args: dict) -> dict:
         raise ToolError("query must be 1 to 500 characters")
     if "__name__" in query:
         raise ToolError("selecting by __name__ is not allowed; name the metric")
+    # A bare {job="x"} selects every metric of the job, so each selector must start with a metric name.
+    if any(m.group(1) in (None, *KEYWORDS) for m in SELECTOR_START.finditer(STRINGS.sub(" ", query))):
+        raise ToolError("every selector must start with a metric name")
     names = metric_names(query)
     if not names or any(not n.startswith(ALLOWED_METRIC_PREFIXES) for n in names):
         raise ToolError(f"metric names must start with one of {ALLOWED_METRIC_PREFIXES}")

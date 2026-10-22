@@ -276,6 +276,7 @@ expect() {  # expect yes|no verb resource namespace [subresource]
   local args=("$verb" "$res" -n "$ns" --as="$AS")
   [[ -n "$sub" ]] && args+=(--subresource="$sub")
   got="$(kubectl auth can-i "${args[@]}" 2>/dev/null)"
+  got="${got%% *}"  # a denial can print "no - <reason>"; compare the first word only
   if [[ "$got" != "$want" ]]; then
     echo "FAIL: can-i ${args[*]}: got '$got', want '$want'"
     fail=1

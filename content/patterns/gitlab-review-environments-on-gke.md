@@ -79,7 +79,7 @@ The project ID keeps several projects from colliding on one cluster. The hostnam
 Every review namespace gets the same guardrails before the chart is installed. Apply them from a fixed file in the CI image or a platform repository, not from the merge request's own tree, so a branch cannot loosen them.
 
 ```yaml title="review-namespace-baseline.yaml"
-# Applied by the deploy job into a new review namespace.
+# Created by the deploy job in every review namespace; each deploy re-creates any object that is missing.
 # NAMESPACE is substituted with envsubst before kubectl create.
 apiVersion: v1
 kind: ResourceQuota
@@ -227,8 +227,13 @@ deploy-review:
               review.example.com/mr-iid="$CI_MERGE_REQUEST_IID" \
               review.example.com/expose=true \
           | kubectl create -f -
-        NAMESPACE="$NAMESPACE" envsubst < /opt/platform/review-namespace-baseline.yaml | kubectl create -f -
       fi
+      # Reconcile the baseline on every deploy, so a retry after a partial failure still gets it.
+      # Create only what is missing: the deployer may not update quotas (see RBAC below), so no apply.
+      baseline="$(NAMESPACE="$NAMESPACE" envsubst < /opt/platform/review-namespace-baseline.yaml)"
+      printf '%s\n' "$baseline" | kubectl create -f - 2>&1 | grep -v 'AlreadyExists' || true
+      # Fail the job unless every baseline object now exists.
+      printf '%s\n' "$baseline" | kubectl get -f - -o name
     - >
       helm upgrade --install app ./chart
       --namespace "$NAMESPACE"
@@ -389,7 +394,7 @@ subjects:
 ```
 
 ```yaml title="review-namespace-guard.yaml"
-# Only namespaces named review-* and labelled as managed may be created or deleted by the deployer.
+# The deployer may create, update or delete only namespaces named review-* and labelled as managed.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -411,8 +416,10 @@ spec:
         ? (oldObject.metadata.name.startsWith("review-")
            && has(oldObject.metadata.labels)
            && oldObject.metadata.labels[?"review.example.com/managed"].orValue("") == "true")
-        : object.metadata.name.startsWith("review-")
-      message: The review deployer may only manage review-* namespaces it created.
+        : (object.metadata.name.startsWith("review-")
+           && has(object.metadata.labels)
+           && object.metadata.labels[?"review.example.com/managed"].orValue("") == "true")
+      message: The review deployer may only manage review-* namespaces labelled review.example.com/managed=true.
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -462,6 +469,7 @@ kubectl get namespaces -l review.example.com/managed=true -o json \
     ] | @tsv' \
   | while IFS=$'\t' read -r ns project_id mr_iid created phase; do
       [[ "$phase" == "Terminating" ]] && { echo "skip $ns: already terminating"; continue; }
+      [[ "$project_id" =~ ^[0-9]+$ && "$mr_iid" =~ ^[0-9]+$ ]] || { echo "skip $ns: project-id or mr-iid label missing"; continue; }
 
       created_epoch="$(date -u -d "$created" +%s)"   # GNU date; the job image is Linux
       age_hours=$(( (now_epoch - created_epoch) / 3600 ))
@@ -473,13 +481,14 @@ kubectl get namespaces -l review.example.com/managed=true -o json \
       if [[ "$http_code" == "200" ]]; then
         state="$(jq -r '.state' "$mr_json")"
       elif [[ "$http_code" == "404" ]]; then
-        state="missing"
+        # GitLab also answers 404 for a project the token cannot see: only the age limit applies.
+        state="not-visible"
       else
         echo "skip $ns: GitLab API returned $http_code"; continue
       fi
 
       reason=""
-      [[ "$state" != "opened" ]] && reason="merge request is $state"
+      [[ "$state" != "opened" && "$state" != "not-visible" ]] && reason="merge request is $state"
       (( age_hours > MAX_AGE_HOURS )) && reason="${reason:+$reason, }age ${age_hours}h"
 
       if [[ -n "$reason" ]]; then

@@ -257,10 +257,11 @@ kubectl -n team-orders-tools run probe-$RANDOM --rm -i --restart=Never \
   curl -s -m 5 -o /dev/null -w '%{http_code}\n' "$TARGET" || true
 
 # 3. Plaintext client from a namespace without mesh injection, under STRICT:
-#    expect curl exit code 56 and HTTP 000
+#    expect curl exit code 56 and HTTP 000. The callee's NetworkPolicy must admit this
+#    namespace, or the call times out (exit 28) before mTLS is ever checked
 kubectl -n legacy run plain-$RANDOM --rm -i --restart=Never \
   --image="$CURL_IMAGE" --command -- \
-  sh -c "curl -s -o /dev/null -w '%{http_code}\n' $TARGET; echo exit=\$?" || true
+  sh -c "curl -s -m 5 -o /dev/null -w '%{http_code}\n' $TARGET; echo exit=\$?" || true
 
 # 4. Token path: create a token for the caller and review it as the callee would
 TOKEN=$(kubectl -n orders create token orders-api --audience payments-api --duration 10m)

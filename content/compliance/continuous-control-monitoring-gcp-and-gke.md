@@ -146,10 +146,12 @@ cai-export:
           sleep 20
         done
         [ "${DONE}" = "True" ] || { echo "export ${CONTENT} did not finish in time"; exit 1; }
+        ERR=$(gcloud asset operations describe "${OP}" --format='value(error)')
+        [ -z "${ERR}" ] || { echo "export ${CONTENT} failed: ${ERR}"; exit 1; }
       done
 ```
 
-The export is a long-running operation; `gcloud asset operations describe` reports its state, and the loop waits for it before the check job runs. The `--format='value(name)'` and `value(done)` projections and the printed value of `done` are not verified; run the commands once by hand and adjust.
+The export is a long-running operation; `gcloud asset operations describe` reports its state, and the loop waits for it before the check job runs. The `--format='value(name)'`, `value(done)` and `value(error)` projections and the printed value of `done` are not verified; run the commands once by hand and adjust.
 
 A scheduled pipeline runs with the permissions of its owner. Make the schedule owner a team-owned account, not a person, and transfer it when people leave (see [[compliance/leaver-credential-revocation-devops-tools]]).
 

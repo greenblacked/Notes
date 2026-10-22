@@ -160,8 +160,14 @@ gcloud run jobs deploy "$JOB" --project "$PROJECT" --region "$REGION" \
   --image "$IMAGE" --service-account "$JOB_SA" \
   --tasks 1 --max-retries 1 --task-timeout 30m
 
-# Flags: check `gcloud scheduler jobs create http --help`
-gcloud scheduler jobs create http "${JOB}-nightly" --project "$PROJECT" --location "$REGION" \
+# Create on the first run, update on later runs (create fails if the job exists).
+# Flags: check `gcloud scheduler jobs create http --help` and `... update http --help`
+if gcloud scheduler jobs describe "${JOB}-nightly" --project "$PROJECT" --location "$REGION" >/dev/null 2>&1; then
+  ACTION="update"
+else
+  ACTION="create"
+fi
+gcloud scheduler jobs "$ACTION" http "${JOB}-nightly" --project "$PROJECT" --location "$REGION" \
   --schedule "15 2 * * *" --time-zone "Etc/UTC" \
   --uri "https://run.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}/jobs/${JOB}:run" \
   --http-method POST \

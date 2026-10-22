@@ -77,9 +77,9 @@ mise reads a `mise.toml` in the repository. Its `[tools]` table holds version re
 
 ```bash title="pin tools with mise"
 # Exact versions: use the ones your CI toolbox image ships.
-mise use terraform@<terraform-version-in-ci-image>
-mise use kubectl@<kubectl-version-in-ci-image>
-mise use helm@<helm-version-in-ci-image>
+mise use "terraform@<terraform-version-in-ci-image>"
+mise use "kubectl@<kubectl-version-in-ci-image>"
+mise use "helm@<helm-version-in-ci-image>"
 
 # Write mise.lock for every platform that runs these tools, without installing.
 mise lock --platform linux-x64,linux-arm64,macos-arm64

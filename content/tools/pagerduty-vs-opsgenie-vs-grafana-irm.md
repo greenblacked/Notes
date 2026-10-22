@@ -241,6 +241,16 @@ provider "pagerduty" {
   # token is read from the PAGERDUTY_TOKEN environment variable, set by CI from the secret store; never commit it.
 }
 
+variable "payments_rotation_user_ids" {
+  description = "PagerDuty user IDs of the primary rotation, in rotation order."
+  type        = list(string)
+}
+
+variable "payments_engineering_manager_user_id" {
+  description = "PagerDuty user ID of the second escalation level."
+  type        = string
+}
+
 resource "pagerduty_team" "payments" {
   name = "Payments"
 }

@@ -193,7 +193,7 @@ spec:
 
 When it succeeds, the old version is removed from `status.storedVersions`.
 
-Option 2, by hand: with the new version already the storage version, read and write back every object unchanged so it is re-stored, then patch the status:
+Option 2, by hand: with the new version already the storage version, read and write back every object unchanged so it is re-stored, then patch the status. `kubectl replace` of a custom resource needs the object's current `metadata.resourceVersion`, so the script keeps it and drops only `managedFields`. An object changed between the read and the write gets a conflict; the script re-reads it and retries, and any object that still fails stops the script before the status patch:
 
 ```bash
 set -euo pipefail
@@ -202,12 +202,37 @@ CRD="widgets.example.com"     # change
 KIND="widgets.example.com"    # resource.group, as kubectl accepts it
 NEW_VERSION="v1"              # change: the storage version
 
-# Re-store every object in the current storage version.
-kubectl get "$KIND" -A -o json \
-  | jq -c '.items[] | del(.metadata.resourceVersion, .metadata.managedFields)' \
-  | while read -r obj; do
-      printf '%s' "$obj" | kubectl replace -f -
-    done
+# Every object as "namespace name" ("-" for a cluster-scoped kind).
+objects="$(kubectl get "$KIND" -A -o json \
+  | jq -r '.items[] | "\(.metadata.namespace // "-") \(.metadata.name)"')"
+
+# Re-store every object in the current storage version. Each attempt re-reads the
+# object, so a conflict (it changed since the read) is retried with a fresh resourceVersion.
+failed=0
+while read -r ns name; do
+  [ -n "$name" ] || continue
+  ns_args=()
+  [ "$ns" = "-" ] || ns_args=(--namespace "$ns")
+  done_ok=false
+  for attempt in 1 2 3; do
+    if kubectl get "$KIND" ${ns_args[@]+"${ns_args[@]}"} "$name" -o json \
+        | jq 'del(.metadata.managedFields)' \
+        | kubectl replace -f -; then
+      done_ok=true
+      break
+    fi
+    echo "attempt $attempt failed for $ns/$name" >&2
+  done
+  if [ "$done_ok" != true ]; then
+    echo "NOT re-stored: $ns/$name" >&2
+    failed=$((failed + 1))
+  fi
+done <<< "$objects"
+
+if [ "$failed" -ne 0 ]; then
+  echo "$failed object(s) not re-stored; storedVersions left unchanged. Fix them and re-run." >&2
+  exit 1
+fi
 
 # Then tell the API server that only the new version holds data.
 kubectl patch customresourcedefinitions "$CRD" --subresource=status --type=merge \
@@ -255,15 +280,16 @@ kubectl get crd "$CRD" -o jsonpath='{.status.storedVersions}{"\n"}'
 # Established and accepted names.
 kubectl get crd "$CRD" -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\n"}{end}'
 
-# What would change before applying a new CRD manifest.
-kubectl diff --server-side -f crds/
+# What would change before applying a new CRD manifest (exit 1 means differences, above 1 an error).
+kubectl diff --server-side -f crds/ || [ "$?" -eq 1 ]
 
 # Argo CD: what it renders and what differs.
-argocd app manifests cert-manager | grep -c 'kind: CustomResourceDefinition' || true
+manifests="$(argocd app manifests cert-manager)"   # stop here if Argo CD cannot render the app
+grep -c 'kind: CustomResourceDefinition' <<< "$manifests" || true
 argocd app diff cert-manager-crds || true
 ```
 
-Expected: one version with `storage=true`; `storedVersions` lists only versions still in `spec.versions`; conditions show `Established=True` and `NamesAccepted=True`; the operator Application renders zero CRDs when `skipCrds` is set; the diff shows only the changes you meant. `argocd app diff` exits non-zero when there is a diff, hence the `|| true`.
+Expected: one version with `storage=true`; `storedVersions` lists only versions still in `spec.versions`; conditions show `Established=True` and `NamesAccepted=True`; the operator Application renders zero CRDs when `skipCrds` is set; the diff shows only the changes you meant. `kubectl diff` exits 1 and `argocd app diff` exits non-zero when there is a diff, hence the `|| [ "$?" -eq 1 ]` and `|| true`; `grep -c` exits 1 when it counts zero.
 
 ## Troubleshooting
 

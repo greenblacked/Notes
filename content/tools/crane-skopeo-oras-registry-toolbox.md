@@ -203,10 +203,15 @@ DST="artifactory.example.com/docker-prod/apps/api"
 DIGEST="${1:?usage: promote.sh sha256:DIGEST VERSION}"
 VERSION="${2:?usage: promote.sh sha256:DIGEST VERSION}"
 
-crane copy -n "${SRC}@${DIGEST}" "${DST}:${VERSION}"
-GOT="$(crane digest "${DST}:${VERSION}")"
+# A retry after a copy that already landed must pass the check below, not trip -n.
+if GOT="$(crane digest "${DST}:${VERSION}" 2>/dev/null)"; then
+  echo "${DST}:${VERSION} already exists; checking its digest"
+else
+  crane copy -n "${SRC}@${DIGEST}" "${DST}:${VERSION}"
+  GOT="$(crane digest "${DST}:${VERSION}")"
+fi
 if [ "${GOT}" != "${DIGEST}" ]; then
-  echo "digest changed during promotion: ${DIGEST} -> ${GOT}" >&2
+  echo "${DST}:${VERSION} is ${GOT}, expected ${DIGEST}" >&2
   exit 1
 fi
 echo "promoted ${DST}@${DIGEST} as ${VERSION}"

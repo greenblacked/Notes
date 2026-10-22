@@ -319,7 +319,7 @@ ITEM_RE = re.compile(r"^(\s*)-\s+(.*)$")
 def bump(text: str, chart: str, new_version: str):
     """Return (new_text, old_version) for the single dependency named `chart`."""
     lines = text.splitlines(keepends=True)
-    in_deps, items, current = False, [], None
+    in_deps, items, current, item_indent = False, [], None, None
     for i, line in enumerate(lines):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
@@ -332,7 +332,8 @@ def bump(text: str, chart: str, new_version: str):
         if not in_deps:
             continue
         m = ITEM_RE.match(line.rstrip("\n"))
-        if m:
+        if m and (item_indent is None or len(m.group(1)) == item_indent):  # nested lists stay in the item
+            item_indent = len(m.group(1))
             current = {"lines": []}
             items.append(current)
             body = m.group(2)

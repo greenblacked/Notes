@@ -150,10 +150,12 @@ groups:
     rules:
       # Availability: bad / valid over 5 minutes, using the definitions in the SLO document
       # (valid = everything except 4xx, plus 429; good = not 4xx and not 5xx).
+      # "or vector(0)" on good: with only errors there may be no good series at all,
+      # and an empty numerator would make the ratio empty instead of 1.
       - record: slo:http_error_ratio:rate5m
         expr: |
           1 - (
-            sum(rate(http_requests_total{job="orders-api",code!~"4..|5.."}[5m]))
+            (sum(rate(http_requests_total{job="orders-api",code!~"4..|5.."}[5m])) or vector(0))
             /
             (
               sum(rate(http_requests_total{job="orders-api",code!~"4.."}[5m]))

@@ -153,6 +153,7 @@ gcloud access-context-manager perimeters dry-run create --help >/dev/null
 gcloud access-context-manager perimeters dry-run create "$PERIMETER" \
   --policy="$POLICY_ID" \
   --perimeter-title="LLM inference" \
+  --perimeter-type=regular \
   --perimeter-resources="projects/${PROJECT_NUMBER}" \
   --perimeter-restricted-services="aiplatform.googleapis.com"
 

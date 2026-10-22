@@ -423,6 +423,7 @@ kubectl get nodes -l cloud.google.com/gke-spot=true \
 kubectl -n "$NS" get pods -l app.kubernetes.io/name="$APP" \
   -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' \
   | while read -r node; do
+      [ -n "$node" ] || { echo "unscheduled"; continue; }   # a Pending Pod has no node yet
       kubectl get node "$node" --no-headers -L capacity-type,topology.kubernetes.io/zone | awk '{print $(NF-1), $NF}'
     done | sort | uniq -c
 

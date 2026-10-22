@@ -51,10 +51,12 @@ This is the deciding criterion for foundations. Terraform's saved plan is a diff
 
 ```bash title="plan in CI, detect drift by exit code"
 set -euo pipefail
+rc=0
 terraform -chdir=environments/prod plan -input=false -lock-timeout=5m \
   -detailed-exitcode -out=tfplan || rc=$?
 # 0 = no changes, 1 = error, 2 = changes present
-echo "plan exit code: ${rc:-0}"
+echo "plan exit code: ${rc}"
+[ "${rc}" -ne 1 ] || exit 1 # an error must fail the job, not show an older tfplan
 terraform -chdir=environments/prod show -json tfplan > tfplan.json
 ```
 

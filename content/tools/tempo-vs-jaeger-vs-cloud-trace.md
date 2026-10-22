@@ -105,7 +105,7 @@ Jaeger v2 is a customised distribution of the OpenTelemetry Collector with roles
 ```bash title="local Jaeger for development"
 docker run --rm --name jaeger \
   -p 16686:16686 -p 4317:4317 -p 4318:4318 \
-  jaegertracing/jaeger:<pinned-version>
+  "jaegertracing/jaeger:<pinned-version>"
 ```
 
 For production, Jaeger needs a database. **There is no object storage (GCS) backend.** The primary supported backends are Cassandra, Elasticsearch and OpenSearch; ClickHouse is experimental behind a feature gate; Badger is single-instance; a remote storage API lets others plug in. The project distinguishes primary storage (short retention, its example says about two weeks) from archive storage for traces kept longer. In practice, Jaeger on GKE means running or buying an OpenSearch or Elasticsearch cluster and owning its index lifecycle, which is the same operational load compared in [[loki-vs-elasticsearch-vs-cloud-logging]]. Kubernetes deployment is through the OpenTelemetry Operator or the Jaeger v2 Helm chart.

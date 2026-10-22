@@ -224,7 +224,8 @@ List attributes the provider marks sensitive, and resources of types that are kn
 
 ```bash title="scan the current state (illustrative)"
 # Read-only: prints addresses and attribute paths, never the values.
-terraform show -json > /tmp/state.json   # contains secrets: delete it afterwards
+STATE_JSON="$(mktemp)"                   # mode 0600; contains secrets: delete it afterwards
+terraform show -json > "$STATE_JSON"
 
 jq -r '
   .values.root_module
@@ -234,7 +235,7 @@ jq -r '
   | ($r.sensitive_values // {})
   | paths(. == true)
   | "\($r.address)\t\(map(tostring) | join("."))"
-' /tmp/state.json
+' "$STATE_JSON"
 
 jq -r '
   .values.root_module
@@ -243,9 +244,9 @@ jq -r '
   | select(.type | IN("google_service_account_key", "google_sql_user",
                       "google_secret_manager_secret_version", "random_password", "tls_private_key"))
   | "\(.address)\t\(.type)"
-' /tmp/state.json
+' "$STATE_JSON"
 
-shred -u /tmp/state.json 2>/dev/null || rm -f /tmp/state.json
+shred -u "$STATE_JSON" 2>/dev/null || rm -f "$STATE_JSON"
 ```
 
 For each hit:
