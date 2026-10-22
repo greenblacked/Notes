@@ -72,7 +72,7 @@ flowchart TB
 ```
 
 > [!info] Claims not checked against current docs
-> Google's documentation pages could not be opened when this record was written. The `gcloud` flags below were read from the `gcloud --help` text; output and filter field names (`parent.id`, `resourceLabels`, `policy.bindings`) are API names that were not confirmed and should be checked once with `--format=json`. The GKE enterprise multi-tenancy best practices page was located but not read, so the soft and hard tenancy wording here is ours, from [[0019-namespace-per-team-tenancy]]. Per-project cluster limits and the GKE cluster management fee are not stated; see the pricing page.
+> This record was not checked against Google's documentation pages; verify there. The `gcloud` flags below were read from the `gcloud --help` text; output and filter field names (`parent.id`, `resourceLabels`, `policy.bindings`) are API names that were not confirmed and should be checked once with `--format=json`. The soft and hard tenancy wording here is ours, from [[0019-namespace-per-team-tenancy]], and was not checked against the GKE enterprise multi-tenancy best practices page. Per-project cluster limits and the GKE cluster management fee are not stated; see the pricing page.
 
 ## Consequences
 

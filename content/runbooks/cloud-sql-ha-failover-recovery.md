@@ -180,6 +180,8 @@ For the application changes:
 
 - [[postgres-connection-pooling-gke]] for pooler design and reconnect behaviour.
 - [[backup-architecture-gke-cloud-sql-gcs]] for backups and point-in-time recovery.
+- [[cloud-sql-point-in-time-recovery]] when the problem is bad data, not availability.
+- [[cloud-sql-postgres-platform-architecture]] for the HA, replica and backup configuration behind this runbook.
 - [[disaster-recovery-tiers-rpo-rto]] for when promotion and cross-region recovery are the right call.
 - [[timeouts-retries-load-shedding]] for client retry design.
 - [[incident-response]] and [[game-day-chaos-gke]] for roles and for rehearsing this runbook.

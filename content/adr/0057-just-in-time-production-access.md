@@ -45,13 +45,13 @@ Google Cloud **Privileged Access Manager (PAM)** provides time-bound elevation n
 
 Entitlements are defined in Terraform per production project (or folder, for platform-wide ones), owned by the platform security lead, and built **in advance** for the situations on-call meets, so that nobody designs access during an incident.
 
-| Entitlement        | Role(s) granted                         | Scope                          | Max duration | Eligible             | Approval                                            |
-| ------------------ | --------------------------------------- | ------------------------------ | ------------ | -------------------- | --------------------------------------------------- |
-| `oncall-gke-write` | `roles/container.developer`             | Workload project               | 4 h          | Team on-call group   | One step: the team's leads group                    |
-| `oncall-vm-admin`  | `roles/compute.osAdminLogin`            | Workload project               | 2 h          | Team operators group | One step: the team's leads group                    |
-| `db-admin`         | `roles/cloudsql.admin`                  | Data project                   | 2 h          | DBA group            | One step: platform on-call leads                    |
-| `state-recovery`   | `roles/storage.objectAdmin`             | Terraform state bucket project | 1 h          | Platform group       | Security group; platform lead signs the ticket      |
-| `iam-admin`        | `roles/resourcemanager.projectIamAdmin` | Workload project               | 1 h          | Platform group       | Security group; platform lead signs the ticket      |
+| Entitlement        | Role(s) granted                         | Scope                          | Max duration | Eligible             | Approval                                       |
+| ------------------ | --------------------------------------- | ------------------------------ | ------------ | -------------------- | ---------------------------------------------- |
+| `oncall-gke-write` | `roles/container.developer`             | Workload project               | 4 h          | Team on-call group   | One step: the team's leads group               |
+| `oncall-vm-admin`  | `roles/compute.osAdminLogin`            | Workload project               | 2 h          | Team operators group | One step: the team's leads group               |
+| `db-admin`         | `roles/cloudsql.admin`                  | Data project                   | 2 h          | DBA group            | One step: platform on-call leads               |
+| `state-recovery`   | `roles/storage.objectAdmin`             | Terraform state bucket project | 1 h          | Platform group       | Security group; platform lead signs the ticket |
+| `iam-admin`        | `roles/resourcemanager.projectIamAdmin` | Workload project               | 1 h          | Platform group       | Security group; platform lead signs the ticket |
 
 - **Justification is required** on every entitlement and must name an incident, change or ticket reference.
 - **The approver group never equals the eligible group**, and nobody is a member of both for the same entitlement. Whether PAM itself prevents self-approval was not checked, so this is enforced through group design and the weekly review.
@@ -155,7 +155,7 @@ When PAM, the approvers or the identity provider cannot be used and production n
 The security team reviews every production grant of the past week from the central audit sink ([[0044-central-log-sinks-and-retention-tiers]], [[gcp-audit-logs-siem]]): each grant must match an incident or change reference, its duration must fit the work, and break-glass use must have its review. Entitlements nobody used in a quarter are candidates for removal.
 
 > [!info] Claims not checked against current docs
-> The `gcloud pam` commands and flags were read from `gcloud --help` (Google Cloud SDK 570.0.0, where `gcloud pam` is outside the alpha and beta surfaces) and the entitlement arguments from the Google provider's resource documentation; Google's online documentation could not be opened when this record was written. Not verified, check before relying on: PAM's launch stage, the resource levels and roles it supports, its quotas and pricing; whether PAM still supports only one approval step, `approvals_needed` only 1 and approver lists only one entry (as the API reference shipped with SDK 570.0.0 says), which is what forces the second sign-off onto the ticket; whether PAM blocks self-approval; the audit log service and method names for PAM events; whether an active grant appears as a conditional IAM binding; how GKE combines IAM roles with RBAC for `roles/container.developer`; and the Google Groups for RBAC setup (the cluster's `--security-group` and group naming).
+> The `gcloud pam` commands and flags were read from `gcloud --help` (Google Cloud SDK 570.0.0, where `gcloud pam` is outside the alpha and beta surfaces) and the entitlement arguments from the Google provider's resource documentation; the record was not checked against Google's online documentation, so verify there. Not verified, check before relying on: PAM's launch stage, the resource levels and roles it supports, its quotas and pricing; whether PAM still supports only one approval step, `approvals_needed` only 1 and approver lists only one entry (as the API reference shipped with SDK 570.0.0 says), which is what forces the second sign-off onto the ticket; whether PAM blocks self-approval; the audit log service and method names for PAM events; whether an active grant appears as a conditional IAM binding; how GKE combines IAM roles with RBAC for `roles/container.developer`; and the Google Groups for RBAC setup (the cluster's `--security-group` and group naming).
 
 ## Consequences
 

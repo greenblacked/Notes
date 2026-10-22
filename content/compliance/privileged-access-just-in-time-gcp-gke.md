@@ -178,6 +178,7 @@ Rollback: keep the previous IAM policy (`gcloud projects get-iam-policy` output 
 - [[compliance/policy-exception-and-waiver-process]]: break-glass as a logged exception.
 - [[architecture/iam-groups-and-ci-workload-identity-federation]]: group and CI identity design.
 - [[patterns/gke-workload-identity]]: pod identities without keys.
+- [[adr/0057-just-in-time-production-access]]: the decision to make production access just in time.
 - [[runbooks/leaked-credential-rotation]]: after emergency use.
 
 ## Sources

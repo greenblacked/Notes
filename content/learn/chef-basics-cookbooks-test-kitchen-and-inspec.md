@@ -548,7 +548,7 @@ Work in `~/chef-lab` on your lab VM, with Docker running and Chef Workstation (o
 
 ## Next steps
 
-This is the first lesson of the Config track. Previous lesson: [[learn/spinnaker-basics-applications-pipelines-and-judgment|Delivery 12: Spinnaker basics]]. The whole path is mapped in [[learn/index|the learning path]].
+This is the first lesson of the Config track. Next lesson: [[learn/supply-chain-sboms-signing-and-verification|Security 02: SBOMs, signing and verifying images, and attestations]]. Previous lesson: [[learn/spinnaker-basics-applications-pipelines-and-judgment|Delivery 12: Spinnaker basics]]. The whole path is mapped in [[learn/index|the learning path]].
 
 To go deeper:
 

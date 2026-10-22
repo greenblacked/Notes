@@ -1,6 +1,6 @@
 ---
 title: Validating AI-generated Terraform, Helm, Kubernetes and PromQL before review
-description: A deterministic ladder of offline and live checks that catches invented arguments, removed APIs, wrong value paths and queries that match nothing, before review.
+description: A deterministic ladder of offline and live checks that catches invented arguments, removed APIs, wrong value paths and queries that match nothing.
 type: guide
 tags:
   - ai
@@ -435,7 +435,5 @@ The ladder changes nothing in infrastructure, so there is nothing to roll back t
 - [[conftest-policy-gate-for-manifests]]: policy for manifests.
 - [[helm-chart-ci-quality-gates]]: chart unit tests, schemas and chart-testing.
 - [[pod-security-admission]]: what the server-side dry run enforces.
-- [[promql-for-alert-rules-and-recording-rules]]: writing and testing rules.
-- [[safe-bash-scripts]]: what ShellCheck is looking for.
 - [[securing-ai-agents-in-ci-and-cloud]]: keeping credentials away from jobs that handle generated changes.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

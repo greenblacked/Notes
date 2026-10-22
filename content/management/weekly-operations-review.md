@@ -342,38 +342,47 @@ Create the document from a template the day before, fill the numbers by script, 
 ```markdown title="weekly-ops-review-template.md"
 # Weekly operations review: week ending YYYY-MM-DD
 
-Presenter (outgoing on-call): @handle   Incoming on-call: @handle
+Presenter (outgoing on-call): @handle Incoming on-call: @handle
 
 ## Actions from last week
+
 | Action | Owner | Due | Status |
 | ------ | ----- | --- | ------ |
 
 ## SLOs and error budgets
+
 | Service | Budget remaining | Spent this week | Tier | Comment |
 | ------- | ---------------- | --------------- | ---- | ------- |
 
 ## Pages and incidents
-Pages: N (high: N, after hours: N)   Last week: N
+
+Pages: N (high: N, after hours: N) Last week: N
 Noisiest alerts: ...
 Incidents: SEV, title, review date, overdue actions
 
 ## Toil
-Hours: N   Top categories: ...
+
+Hours: N Top categories: ...
 
 ## Capacity, CI and storage
-CPU requested / allocatable: prod N%, non-prod N%   Unschedulable pods: N
-CI default-branch success: N%   Median duration: N min   Median queue: N s
+
+CPU requested / allocatable: prod N%, non-prod N% Unschedulable pods: N
+CI default-branch success: N% Median duration: N min Median queue: N s
 Artifactory total: N TB (+N% week on week)
 
 ## Cost anomalies
+
 | Project | Service | Delta | Owner | Explanation |
 | ------- | ------- | ----- | ----- | ----------- |
 
 ## Next week
-Changes: ...   Freezes: ...   EOL at risk: ...   People away: ...
+
+Changes: ... Freezes: ... EOL at risk: ... People away: ...
 
 ## Decisions
+
 ## New actions
+
 | Action | Owner | Due |
 | ------ | ----- | --- |
 ```
@@ -429,9 +438,9 @@ The weekly documents are the raw material for [[quarterly-engineering-review]]. 
 ## Related
 
 - [[error-budget-policy]] and [[slo-burn-rate-alerting]]: the budget rules and the pages that fire on them.
-- [[on-call-health]] and [[alert-and-runbook-standard]]: on-call load and alert hygiene.
+- [[on-call-health]]: on-call load.
 - [[toil-budget]]: the toil log the review reads.
 - [[incident-review-programme]]: where incidents are reviewed in depth.
-- [[quarterly-engineering-review]] and [[dora-metrics]]: the quarterly roll-up.
+- [[quarterly-engineering-review]]: the quarterly roll-up.
 - [[finops-cost-allocation-and-guardrails]]: labels and budgets behind the cost query.
-- [[end-of-life-tracking-platform-versions]] and [[change-freezes-and-maintenance-windows]]: the forward-looking inputs.
+- [[end-of-life-tracking-platform-versions]]: a forward-looking input.

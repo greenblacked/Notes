@@ -453,7 +453,7 @@ Use the variables block from "The Google side". Output is illustrative.
 
 ## Next steps
 
-Next lesson: back to the Delivery and Kubernetes lessons in [[learn/index|the learning path]]. Previous lesson: [[learn/gke-for-beginners|GCP 04: GKE for beginners]].
+Next lesson: [[learn/gitlab-ci-rules-dag-matrix-and-includes|Delivery 06: GitLab CI beyond the first pipeline]], or go back to the Delivery and Kubernetes lessons in [[learn/index|the learning path]]. Previous lesson: [[learn/gke-for-beginners|GCP 04: GKE for beginners]].
 
 To go deeper:
 

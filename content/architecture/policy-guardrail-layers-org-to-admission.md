@@ -49,14 +49,14 @@ flowchart TB
   org --> iam --> plan --> ci --> adm --> det
 ```
 
-| Layer                     | Enforced by                         | Bypassable by                                  | Sees                                     | Notes                                                                 |
-| ------------------------- | ----------------------------------- | ---------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------- |
-| 1. Organization Policy    | Google Cloud APIs, every caller      | Org policy admins only                         | The resource at create or update time    | [[compliance/gcp-organization-policy-guardrails]]; boundaries by folder per [[adr/0024-gcp-folders-by-policy-boundary]] |
-| 2. IAM deny, VPC-SC       | Google Cloud APIs, every caller      | Deny policy admins, perimeter admins           | The principal and permission or the perimeter | [[architecture/zero-trust-access-iap-and-vpc-service-controls]]   |
-| 3. Terraform plan policy  | The pipeline                         | Anyone who applies outside the pipeline        | The whole planned change, with context   | [[patterns/terraform-plan-policy-checks]], [[adr/0035-terraform-plan-policy-gate-and-ci-only-apply]] |
-| 4. CI gates               | The pipeline                         | Anyone who deploys outside the pipeline        | Source, manifests, images, test results  | [[patterns/conftest-policy-gate-for-manifests]], [[patterns/sonarqube-quality-gates]], [[patterns/image-signing-and-admission-verification]] |
-| 5. Admission              | The cluster API server               | Cluster admins; fail-open webhooks             | The object at admission time             | [[patterns/pod-security-admission]], [[adr/0022-admission-policy-pod-security-vap-and-kyverno]], [[tools/gatekeeper-vs-kyverno]] |
-| 6. Detection              | Logs and scanners                    | Log tampering, disabled logging                | What actually happened                   | [[architecture/threat-detection-and-response-gcp-gke]]               |
+| Layer                    | Enforced by                     | Bypassable by                           | Sees                                          | Notes                                                                                                                                        |
+| ------------------------ | ------------------------------- | --------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Organization Policy   | Google Cloud APIs, every caller | Org policy admins only                  | The resource at create or update time         | [[compliance/gcp-organization-policy-guardrails]]; boundaries by folder per [[adr/0024-gcp-folders-by-policy-boundary]]                      |
+| 2. IAM deny, VPC-SC      | Google Cloud APIs, every caller | Deny policy admins, perimeter admins    | The principal and permission or the perimeter | [[architecture/zero-trust-access-iap-and-vpc-service-controls]]                                                                              |
+| 3. Terraform plan policy | The pipeline                    | Anyone who applies outside the pipeline | The whole planned change, with context        | [[patterns/terraform-plan-policy-checks]], [[adr/0035-terraform-plan-policy-gate-and-ci-only-apply]]                                         |
+| 4. CI gates              | The pipeline                    | Anyone who deploys outside the pipeline | Source, manifests, images, test results       | [[patterns/conftest-policy-gate-for-manifests]], [[patterns/sonarqube-quality-gates]], [[patterns/image-signing-and-admission-verification]] |
+| 5. Admission             | The cluster API server          | Cluster admins; fail-open webhooks      | The object at admission time                  | [[patterns/pod-security-admission]], [[adr/0022-admission-policy-pod-security-vap-and-kyverno]], [[tools/gatekeeper-vs-kyverno]]             |
+| 6. Detection             | Logs and scanners               | Log tampering, disabled logging         | What actually happened                        | [[architecture/threat-detection-and-response-gcp-gke]]                                                                                       |
 
 ## Placement rules
 
@@ -68,18 +68,18 @@ flowchart TB
 
 ## Examples
 
-| Rule                                   | Prevent                                                          | Backstop                                         | Detect                                                       |
-| -------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------ |
-| No external IPs on VMs                 | Org policy `compute.vmExternalIpAccess`                          | Plan policy for a clear MR message               | Asset inventory or SCC finding                               |
-| No public Cloud SQL                    | Org policy `sql.restrictPublicIp`, `sql.restrictAuthorizedNetworks` | Plan policy                                   | SCC finding                                                  |
-| No service account keys                | Org policy `iam.disableServiceAccountKeyCreation`, `iam.disableServiceAccountKeyUpload` | IAM deny on key creation for most principals (check support) | Audit log detection on key creation              |
-| No default service account grants      | Org policy `iam.automaticIamGrantsForDefaultServiceAccounts`      | Plan policy rejecting the default compute SA on nodes and VMs | Audit log on IAM grants to default SAs          |
-| No firewall rule open to `0.0.0.0/0`   | Custom constraint on `compute.googleapis.com/Firewall` (check support) or plan policy | Hierarchical firewall policy deny          | Audit log detection on firewall changes                      |
-| CMEK on data services                  | CMEK org policy constraints (check names)                         | Plan policy on `kms_key_name` fields             | Asset inventory query                                        |
-| No privileged pods                     | Pod Security admission `restricted` on app namespaces            | CI manifest policy for an early message          | Kyverno policy reports in audit mode, runtime detection      |
-| Only signed images                     | Kyverno `verifyImages` at admission ([[adr/0038-kyverno-verifies-image-signatures-at-admission]]) | Signing step in CI | Admission audit results, image inventory               |
-| Default-deny network policy            | Kyverno generate rule ([[adr/0020-default-deny-network-policies]]) | CI check that the namespace manifest has it | Report of namespaces without the policy                  |
-| Code quality and coverage              | SonarQube quality gate in CI                                     | Protected branches require the gate              | Gate history per project                                     |
+| Rule                                 | Prevent                                                                                           | Backstop                                                      | Detect                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------- |
+| No external IPs on VMs               | Org policy `compute.vmExternalIpAccess`                                                           | Plan policy for a clear MR message                            | Asset inventory or SCC finding                          |
+| No public Cloud SQL                  | Org policy `sql.restrictPublicIp`, `sql.restrictAuthorizedNetworks`                               | Plan policy                                                   | SCC finding                                             |
+| No service account keys              | Org policy `iam.disableServiceAccountKeyCreation`, `iam.disableServiceAccountKeyUpload`           | IAM deny on key creation for most principals (check support)  | Audit log detection on key creation                     |
+| No default service account grants    | Org policy `iam.automaticIamGrantsForDefaultServiceAccounts`                                      | Plan policy rejecting the default compute SA on nodes and VMs | Audit log on IAM grants to default SAs                  |
+| No firewall rule open to `0.0.0.0/0` | Custom constraint on `compute.googleapis.com/Firewall` (check support) or plan policy             | Hierarchical firewall policy deny                             | Audit log detection on firewall changes                 |
+| CMEK on data services                | CMEK org policy constraints (check names)                                                         | Plan policy on `kms_key_name` fields                          | Asset inventory query                                   |
+| No privileged pods                   | Pod Security admission `restricted` on app namespaces                                             | CI manifest policy for an early message                       | Kyverno policy reports in audit mode, runtime detection |
+| Only signed images                   | Kyverno `verifyImages` at admission ([[adr/0038-kyverno-verifies-image-signatures-at-admission]]) | Signing step in CI                                            | Admission audit results, image inventory                |
+| Default-deny network policy          | Kyverno generate rule ([[adr/0020-default-deny-network-policies]])                                | CI check that the namespace manifest has it                   | Report of namespaces without the policy                 |
+| Code quality and coverage            | SonarQube quality gate in CI                                                                      | Protected branches require the gate                           | Gate history per project                                |
 
 Constraint names in the first column are the full form `constraints/NAME` in the API; `gcloud org-policies` takes them without the prefix.
 
@@ -87,14 +87,14 @@ Constraint names in the first column are the full form `constraints/NAME` in the
 
 Every new rule goes through the same three steps at every layer, so teams see it coming:
 
-| Layer                | Audit                                       | Warn                                          | Enforce                                  |
-| -------------------- | ------------------------------------------- | --------------------------------------------- | ---------------------------------------- |
-| Organization Policy  | `dryRunSpec` (audit-only policy)            | Announce and list violating projects          | `spec` with the rule                     |
-| Terraform plan       | Policy runs, result reported, job passes    | Job passes with a visible warning             | Job fails                                |
-| CI manifest checks   | Report only                                 | Warn in the MR                                | Fail the pipeline                        |
-| VAP                  | `validationActions: [Audit]`                | `[Warn, Audit]`                               | `[Deny]`                                 |
-| Pod Security         | `audit` label                               | `warn` label                                  | `enforce` label                          |
-| Kyverno              | Audit mode, read policy reports             | Audit mode plus notifications                 | Enforce                                  |
+| Layer               | Audit                                    | Warn                                 | Enforce              |
+| ------------------- | ---------------------------------------- | ------------------------------------ | -------------------- |
+| Organization Policy | `dryRunSpec` (audit-only policy)         | Announce and list violating projects | `spec` with the rule |
+| Terraform plan      | Policy runs, result reported, job passes | Job passes with a visible warning    | Job fails            |
+| CI manifest checks  | Report only                              | Warn in the MR                       | Fail the pipeline    |
+| VAP                 | `validationActions: [Audit]`             | `[Warn, Audit]`                      | `[Deny]`             |
+| Pod Security        | `audit` label                            | `warn` label                         | `enforce` label      |
+| Kyverno             | Audit mode, read policy reports          | Audit mode plus notifications        | Enforce              |
 
 Move a rule to enforce only when its audit results are zero or each remaining violation has an exception. The procedure is [[runbooks/policy-rollout-audit-to-enforce]].
 
@@ -113,14 +113,14 @@ Move a rule to enforce only when its audit results are zero or each remaining vi
 
 ## Bypass paths
 
-| Bypass                                    | Which layers it skips          | Control                                                                                   |
-| ----------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------- |
-| Console or `gcloud` changes               | 3, 4                           | Layer 1 and 2 backstops; no human holds write roles in production; detection             |
-| Break-glass service accounts              | 3, 4, sometimes 2              | Just-in-time access, every use alerts, codify or revert afterwards                       |
-| Org policy admins changing the policy     | 1                              | Few admins, policies in Terraform, alert on policy changes in audit logs                 |
-| Admission webhook failing open            | 5 (webhook-based engines)      | `failurePolicy` chosen deliberately, engine HA, alert on webhook errors and policy report gaps |
-| Webhook certificate expiry                | 5                              | Certificate monitoring and the runbook [[runbooks/admission-webhook-certificate-expiry]] |
-| Excluded namespaces (`kube-system`, the engine's own) | 5                  | Keep exclusions minimal, restrict who can create pods there                              |
+| Bypass                                                | Which layers it skips     | Control                                                                                        |
+| ----------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------- |
+| Console or `gcloud` changes                           | 3, 4                      | Layer 1 and 2 backstops; no human holds write roles in production; detection                   |
+| Break-glass service accounts                          | 3, 4, sometimes 2         | Just-in-time access, every use alerts, codify or revert afterwards                             |
+| Org policy admins changing the policy                 | 1                         | Few admins, policies in Terraform, alert on policy changes in audit logs                       |
+| Admission webhook failing open                        | 5 (webhook-based engines) | `failurePolicy` chosen deliberately, engine HA, alert on webhook errors and policy report gaps |
+| Webhook certificate expiry                            | 5                         | Certificate monitoring and the runbook [[runbooks/admission-webhook-certificate-expiry]]       |
+| Excluded namespaces (`kube-system`, the engine's own) | 5                         | Keep exclusions minimal, restrict who can create pods there                                    |
 
 > [!warning] Fail-closed vs fail-open webhooks
 > A webhook with `failurePolicy: Fail` blocks every matching request when the policy engine is down, which can stop deployments and even cluster upgrades. `Ignore` keeps the cluster working and silently skips the policy. Choose per policy: fail closed for the few rules that must never be skipped (image signatures in production), fail open with detection for the rest, and always exclude the engine's own namespace to avoid a deadlock. Built-in mechanisms (Pod Security admission, VAP) do not depend on a webhook.
@@ -199,7 +199,7 @@ Then test each layer with a change that must fail: a Terraform change adding an 
 
 ## Sources
 
-Official documentation to check (not opened while writing this note):
+Official documentation this note was not checked against; verify there:
 
 - [Organization Policy overview](https://cloud.google.com/resource-manager/docs/organization-policy/overview)
 - [Custom constraints](https://cloud.google.com/resource-manager/docs/organization-policy/creating-managing-custom-constraints)
@@ -212,20 +212,10 @@ Official documentation to check (not opened while writing this note):
 ## Related
 
 - [[compliance/gcp-organization-policy-guardrails]]
-- [[adr/0024-gcp-folders-by-policy-boundary]]
 - [[patterns/terraform-plan-policy-checks]]
-- [[adr/0035-terraform-plan-policy-gate-and-ci-only-apply]]
 - [[patterns/conftest-policy-gate-for-manifests]]
-- [[patterns/sonarqube-quality-gates]]
 - [[patterns/image-signing-and-admission-verification]]
 - [[patterns/pod-security-admission]]
-- [[adr/0022-admission-policy-pod-security-vap-and-kyverno]]
-- [[adr/0038-kyverno-verifies-image-signatures-at-admission]]
-- [[adr/0020-default-deny-network-policies]]
-- [[tools/gatekeeper-vs-kyverno]]
 - [[runbooks/policy-rollout-audit-to-enforce]]
-- [[runbooks/admission-webhook-certificate-expiry]]
 - [[compliance/policy-exception-and-waiver-process]]
-- [[architecture/zero-trust-access-iap-and-vpc-service-controls]]
-- [[architecture/threat-detection-and-response-gcp-gke]]
 - [[architecture/infrastructure-delivery-terraform-pipelines-and-drift]]

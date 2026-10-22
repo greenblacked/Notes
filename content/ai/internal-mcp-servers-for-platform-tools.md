@@ -341,6 +341,5 @@ Log a hash of arguments that can hold sensitive data (the query text, free-text 
 - [[gke-workload-identity]]: the server's identity for Google APIs.
 - [[kubernetes-rbac-for-ai-agents]]: the same least-privilege idea inside the cluster.
 - [[llm-api-cost-control]]: the gateway and its audit line.
-- [[structured-logging-conventions]]: audit field names.
 - [[llm-observability-tracing-and-slos]]: tracing tool calls.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

@@ -421,7 +421,4 @@ Exceptions (an internet-facing passthrough backend, a vendor appliance that need
 - [[zero-trust-access-iap-and-vpc-service-controls]]: IAP and service perimeters.
 - [[architecture/policy-guardrail-layers-org-to-admission]]: where firewall policy sits among the organisation-to-admission guardrail layers.
 - [[kubernetes-network-policies]] and [[0020-default-deny-network-policies]]: the in-cluster layer.
-- [[edge-waf-rate-limiting]]: the edge layer in front of the load balancer.
 - [[network-troubleshooting-dns-mtu-tls-load-balancers]]: when a path that should work does not.
-- [[gcp-resource-naming-and-labels-standard]]: naming for the rest of the estate.
-- [[production-change-checklist]] and [[policy-exception-and-waiver-process]]: change and exception process.

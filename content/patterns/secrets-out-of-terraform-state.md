@@ -15,20 +15,20 @@ draft: false
 Terraform state and saved plan files hold every attribute of every resource in plain JSON. A database password set through `google_sql_user.password`, a `random_password` result, the payload of a `google_secret_manager_secret_version`, a service account key: all of them sit readable in the state object, in every old version of it that the bucket keeps, and in every plan artifact a CI job uploaded. `sensitive = true` does not change that; it only hides the value in CLI output. The fix is a design where secrets never pass through Terraform as stored values in the first place, plus a well-protected state bucket for whatever is left.
 
 > [!info] What was checked
-> The Terraform statements (what `sensitive` and `ephemeral` do, version requirements, write-only arguments, the GCS backend options) come from the Terraform documentation read on 2026-10-21. The Google provider's write-only arguments come from the provider's registry pages on the same date, and the OpenTofu encryption details from the OpenTofu docs and changelog. **Not verified**, because the Google Cloud docs could not be read: Secret Manager and Cloud SQL behaviour (role names, IAM database authentication, CMEK for secrets), Cloud Storage public access prevention and the related organization policy, and the minimum Google provider version for each `_wo` argument. Also not verified: the minimum `random` provider version that offers `ephemeral "random_password"` (believed to be 3.7.0), and the attributes of the ephemeral `google_secret_manager_secret_version` (its registry page could not be read: the `secret_data` attribute and passing a numeric `version` from the resource are unconfirmed). The `jq` scans assume the JSON layout of `terraform show -json` and are illustrative: try them on a sample state first. Nothing was applied to a real project.
+> The Terraform statements (what `sensitive` and `ephemeral` do, version requirements, write-only arguments, the GCS backend options) come from the Terraform documentation read on 2026-10-21. The Google provider's write-only arguments come from the provider's registry pages on the same date, and the OpenTofu encryption details from the OpenTofu docs and changelog. **Not verified** against the Google Cloud docs (check there): Secret Manager and Cloud SQL behaviour (role names, IAM database authentication, CMEK for secrets), Cloud Storage public access prevention and the related organization policy, and the minimum Google provider version for each `_wo` argument. Also not verified: the minimum `random` provider version that offers `ephemeral "random_password"` (believed to be 3.7.0), and the attributes of the ephemeral `google_secret_manager_secret_version` (not checked against its registry page: the `secret_data` attribute and passing a numeric `version` from the resource are unconfirmed). The `jq` scans assume the JSON layout of `terraform show -json` and are illustrative: try them on a sample state first. Nothing was applied to a real project.
 
 ## What lands in state
 
-| Source of the value                                          | In state and plan? | Notes                                                                                                                                         |
-| ------------------------------------------------------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| A resource argument (`password`, `secret_data`, a key file)  | Yes                | Even when the provider marks it sensitive. The provider pages for `google_sql_user` and `google_secret_manager_secret_version` say so explicitly. |
-| A computed attribute (`google_service_account_key.private_key`, `random_password.result`, `tls_private_key`) | Yes | The value is created by Terraform or the API and then stored.                                                                 |
-| A data source result (for example a secret read with a data source) | Yes          | Reading a secret "just to pass it on" writes it into state.                                                                                 |
-| A variable or output with `sensitive = true`                 | Yes                | Redacted in CLI output and the HCP Terraform UI only. `terraform output -json` and `-raw` print it in plain text.                             |
-| A variable or child module output with `ephemeral = true`    | No                 | Terraform 1.10 or later. Root module outputs cannot be ephemeral.                                                                             |
-| An `ephemeral` resource block                                | No                 | Terraform 1.10 or later; the provider must offer the ephemeral resource.                                                                      |
-| A write-only argument (`*_wo`)                               | No                 | Terraform 1.11 or later; the provider must offer the argument.                                                                                |
-| Backend credentials passed with `-backend-config`            | In `.terraform/` and plan files | The GCS backend page warns about this; use environment variables or Application Default Credentials.                            |
+| Source of the value                                                                                          | In state and plan?              | Notes                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A resource argument (`password`, `secret_data`, a key file)                                                  | Yes                             | Even when the provider marks it sensitive. The provider pages for `google_sql_user` and `google_secret_manager_secret_version` say so explicitly. |
+| A computed attribute (`google_service_account_key.private_key`, `random_password.result`, `tls_private_key`) | Yes                             | The value is created by Terraform or the API and then stored.                                                                                     |
+| A data source result (for example a secret read with a data source)                                          | Yes                             | Reading a secret "just to pass it on" writes it into state.                                                                                       |
+| A variable or output with `sensitive = true`                                                                 | Yes                             | Redacted in CLI output and the HCP Terraform UI only. `terraform output -json` and `-raw` print it in plain text.                                 |
+| A variable or child module output with `ephemeral = true`                                                    | No                              | Terraform 1.10 or later. Root module outputs cannot be ephemeral.                                                                                 |
+| An `ephemeral` resource block                                                                                | No                              | Terraform 1.10 or later; the provider must offer the ephemeral resource.                                                                          |
+| A write-only argument (`*_wo`)                                                                               | No                              | Terraform 1.11 or later; the provider must offer the argument.                                                                                    |
+| Backend credentials passed with `-backend-config`                                                            | In `.terraform/` and plan files | The GCS backend page warns about this; use environment variables or Application Default Credentials.                                              |
 
 ## Approaches, best first
 
@@ -80,11 +80,11 @@ When Terraform has to set a secret (the initial admin password of a database use
 
 Write-only arguments confirmed in the Google provider's guide on 2026-10-21 (the list may not be complete, so check each resource's registry page):
 
-| Resource                              | Write-only argument                      | Version argument          |
-| ------------------------------------- | ---------------------------------------- | ------------------------- |
+| Resource                               | Write-only argument                             | Version argument         |
+| -------------------------------------- | ----------------------------------------------- | ------------------------ |
 | `google_secret_manager_secret_version` | `secret_data_wo` (exclusive with `secret_data`) | `secret_data_wo_version` |
-| `google_sql_user`                     | `password_wo`                            | `password_wo_version`     |
-| `google_bigquery_data_transfer_config` | `sensitive_params.secret_access_key_wo`  | see the resource page     |
+| `google_sql_user`                      | `password_wo`                                   | `password_wo_version`    |
+| `google_bigquery_data_transfer_config` | `sensitive_params.secret_access_key_wo`         | see the resource page    |
 
 The provider also has an ephemeral `google_secret_manager_secret_version` that reads a secret during the run without storing it.
 
@@ -181,14 +181,14 @@ The OpenTofu docs' warnings, in short: encrypted state is unrecoverable without 
 
 Even with the approaches above, state holds resource IDs, IP ranges and IAM layouts worth protecting. The layout per environment is in [[0032-terraform-state-in-gcs-per-environment]] and [[terraform-module-and-state-layout]].
 
-| Control                         | How                                                                                                                                                                                                                       |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Separate project                | State buckets live in a dedicated project; application teams have no role there.                                                                                                                                          |
-| Least privilege                 | Storage Object Admin on the bucket (the GCS backend page's stated need) only for the CI identity that applies that environment; read access for plan jobs only where required; no humans with standing access.          |
-| Object Versioning               | "Highly recommended" by the GCS backend page, for recovery. Remember that old versions also hold old secrets.                                                                                                             |
-| Encryption with your key (CMEK) | Backend option `kms_encryption_key`. The project's Cloud Storage service agent needs the Cloud KMS CryptoKey Encrypter/Decrypter role on the key; data encrypted with a lost or deleted key is unrecoverable.             |
-| Uniform access, no public access | `gcloud storage buckets update gs://BUCKET --uniform-bucket-level-access --public-access-prevention`; enforce it with organization policy as well (organization policy details **not verified** here).                 |
-| Audit                           | Data access audit logs for the bucket, so every state read is attributable ([[gcp-audit-logs-siem]]).                                                                                                                      |
+| Control                          | How                                                                                                                                                                                                            |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Separate project                 | State buckets live in a dedicated project; application teams have no role there.                                                                                                                               |
+| Least privilege                  | Storage Object Admin on the bucket (the GCS backend page's stated need) only for the CI identity that applies that environment; read access for plan jobs only where required; no humans with standing access. |
+| Object Versioning                | "Highly recommended" by the GCS backend page, for recovery. Remember that old versions also hold old secrets.                                                                                                  |
+| Encryption with your key (CMEK)  | Backend option `kms_encryption_key`. The project's Cloud Storage service agent needs the Cloud KMS CryptoKey Encrypter/Decrypter role on the key; data encrypted with a lost or deleted key is unrecoverable.  |
+| Uniform access, no public access | `gcloud storage buckets update gs://BUCKET --uniform-bucket-level-access --public-access-prevention`; enforce it with organization policy as well (organization policy details **not verified** here).         |
+| Audit                            | Data access audit logs for the bucket, so every state read is attributable ([[gcp-audit-logs-siem]]).                                                                                                          |
 
 ```hcl title="backend.tf"
 terraform {
@@ -283,12 +283,10 @@ From `google_secret_manager_secret_version.secret_data` to `secret_data_wo`, or 
 
 - [[terraform-module-and-state-layout]]
 - [[terraform-plan-policy-checks]]
-- [[secret-rotation-without-downtime]]
 - [[external-secrets-with-secret-manager]]
 - [[cloud-kms-key-management]]
 - [[secrets-architecture-gcp-and-gke]]
 - [[0032-terraform-state-in-gcs-per-environment]]
-- [[terraform-vs-opentofu]]
 - [[vault-vs-gcp-secret-manager]]
 - [[encryption-at-rest-and-in-transit-evidence-gcp]]
 

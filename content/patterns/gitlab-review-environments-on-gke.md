@@ -15,7 +15,7 @@ modified: 2026-10-21
 draft: false
 ---
 
-A review environment is a short-lived copy of the application, deployed from a merge request, with its own URL. Reviewers click a link instead of pulling the branch, product people see the change before it merges, and end-to-end tests run against something real. The cost is a pile of namespaces, DNS names and compute that someone has to clean up, plus a new path from unreviewed code into a cluster. This note gives the full design: one namespace per merge request, the GitLab CI jobs, DNS and TLS, a least-privilege deploy identity, cleanup that does not depend on the happy path, and Spot capacity to keep the bill small.
+A review environment is a short-lived copy of the application, deployed from a merge request, with its own URL. Reviewers click a link instead of pulling the branch, product people see the change before it merges, and end-to-end tests run against something real. The cost is a pile of namespaces, DNS names and compute that someone has to clean up, plus a new path from unreviewed code into a cluster. This note gives the full GitLab CI implementation; the reference design behind it, including the Argo CD pull model and the trade-offs, is in [[architecture/ephemeral-preview-environments-on-gke]]. It covers one namespace per merge request, the GitLab CI jobs, DNS and TLS, a least-privilege deploy identity, cleanup that does not depend on the happy path, and Spot capacity to keep the bill small.
 
 > [!info] Scope and sources
 > GitLab behaviour (environment keywords, predefined variables, stop jobs, fork and protected-variable rules, the Environments API) was checked against the GitLab documentation source on 2026-10-21. Kubernetes naming and quota rules were checked against the Kubernetes documentation source the same day. Nothing was run against a live GitLab instance or cluster.
@@ -65,12 +65,12 @@ Kubernetes namespace names must be RFC 1123 DNS labels: at most 63 characters, l
 
 Use identifiers that are short, unique and known in every job of the merge request pipeline:
 
-| Thing                | Value                                          | Example                         |
-| -------------------- | ---------------------------------------------- | ------------------------------- |
-| GitLab environment   | `review/$CI_COMMIT_REF_SLUG`                   | `review/feature-new-checkout`   |
-| Namespace            | `review-$CI_PROJECT_ID-$CI_MERGE_REQUEST_IID`  | `review-4211-87`                |
-| Hostname             | `mr-$CI_PROJECT_ID-$CI_MERGE_REQUEST_IID.review.example.com` | `mr-4211-87.review.example.com` |
-| Helm release         | `app` (one release per namespace)              | `app`                           |
+| Thing              | Value                                                        | Example                         |
+| ------------------ | ------------------------------------------------------------ | ------------------------------- |
+| GitLab environment | `review/$CI_COMMIT_REF_SLUG`                                 | `review/feature-new-checkout`   |
+| Namespace          | `review-$CI_PROJECT_ID-$CI_MERGE_REQUEST_IID`                | `review-4211-87`                |
+| Hostname           | `mr-$CI_PROJECT_ID-$CI_MERGE_REQUEST_IID.review.example.com` | `mr-4211-87.review.example.com` |
+| Helm release       | `app` (one release per namespace)                            | `app`                           |
 
 The project ID keeps several projects from colliding on one cluster. The hostname stays a single label under `review.example.com`, because a wildcard certificate covers exactly one label. Define these once as job variables and use the same variable in the deploy and stop jobs; never derive the namespace differently in two places.
 
@@ -88,11 +88,11 @@ metadata:
   namespace: ${NAMESPACE}
 spec:
   hard:
-    requests.cpu: "2"            # change: what one review copy really needs
+    requests.cpu: "2" # change: what one review copy really needs
     requests.memory: 4Gi
     limits.memory: 6Gi
     pods: "30"
-    services.loadbalancers: "0"  # traffic enters only through the shared Gateway
+    services.loadbalancers: "0" # traffic enters only through the shared Gateway
     services.nodeports: "0"
     persistentvolumeclaims: "4"
     requests.storage: 20Gi
@@ -167,20 +167,20 @@ The jobs run in merge request pipelines only. Avoid duplicate branch and merge r
 
 ```yaml title=".gitlab-ci.yml (fragment)"
 variables:
-  REVIEW_DOMAIN: review.example.com          # change: the delegated review zone
-  GCP_PROJECT_NUMBER: "123456789012"         # change: project number of the WIF pool
+  REVIEW_DOMAIN: review.example.com # change: the delegated review zone
+  GCP_PROJECT_NUMBER: "123456789012" # change: project number of the WIF pool
   GCP_WIF_POOL: gitlab-ci
   GCP_WIF_PROVIDER: gitlab-oidc
   GCP_SERVICE_ACCOUNT: review-deployer@review-project.iam.gserviceaccount.com # change
-  GKE_CLUSTER: review                        # change
-  GKE_LOCATION: europe-west1                 # change: region of the review cluster
-  GKE_PROJECT: review-project                # change
+  GKE_CLUSTER: review # change
+  GKE_LOCATION: europe-west1 # change: region of the review cluster
+  GKE_PROJECT: review-project # change
 
 .review-auth:
   image: registry.example.com/platform/deploy-tools:2026.10.1 # change: pinned image with gcloud, kubectl, helm, envsubst, jq
   id_tokens:
     GCP_ID_TOKEN:
-      aud: gcp-wif-my-org                    # must match allowed_audiences on the provider
+      aud: gcp-wif-my-org # must match allowed_audiences on the provider
   before_script:
     - umask 077
     - export CRED_DIR="${CI_BUILDS_DIR}/${CI_JOB_ID}"
@@ -241,13 +241,13 @@ deploy-review:
 
 stop-review:
   extends: .review
-  stage: deploy                       # same stage as the deploy job, see Troubleshooting
+  stage: deploy # same stage as the deploy job, see Troubleshooting
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
-  allow_failure: true                 # a manual job in rules must not block the pipeline
+  allow_failure: true # a manual job in rules must not block the pipeline
   variables:
-    GIT_STRATEGY: none                # the branch may already be deleted
+    GIT_STRATEGY: none # the branch may already be deleted
   environment:
     name: review/$CI_COMMIT_REF_SLUG
     action: stop
@@ -302,6 +302,7 @@ spec:
               review.example.com/expose: "true"
 ```
 
+<!-- prettier-ignore -->
 ```yaml title="chart/templates/httproute.yaml"
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -344,7 +345,16 @@ rules:
   - apiGroups: [""]
     resources: ["namespaces"]
     verbs: ["get", "list", "create", "delete", "patch"]
-  - apiGroups: ["", "apps", "batch", "networking.k8s.io", "gateway.networking.k8s.io", "policy", "autoscaling"]
+  - apiGroups:
+      [
+        "",
+        "apps",
+        "batch",
+        "networking.k8s.io",
+        "gateway.networking.k8s.io",
+        "policy",
+        "autoscaling",
+      ]
     resources:
       - configmaps
       - secrets
@@ -363,7 +373,7 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["resourcequotas", "limitranges"]
-    verbs: ["get", "list", "create"]   # create once; no update or delete, so a branch cannot lift its quota
+    verbs: ["get", "list", "create"] # create once; no update or delete, so a branch cannot lift its quota
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -483,7 +493,7 @@ kubectl get namespaces -l review.example.com/managed=true -o json \
 
 ```yaml title=".gitlab-ci.yml (fragment)"
 review-janitor:
-  extends: .review-auth         # authentication only; no environment, no resource_group
+  extends: .review-auth # authentication only; no environment, no resource_group
   stage: deploy
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $JANITOR == "review"
@@ -594,14 +604,12 @@ Check the merge request's latest pipeline for a `stop-review` job; if it is miss
 
 ## Related
 
-- [[gitlab-ci-pipeline-structure]]: workflow rules, stages and where environments fit in the pipeline.
+- [[ephemeral-preview-environments-on-gke]]: the reference design, the push and pull delivery models and their trade-offs.
 - [[gitlab-runners-on-gke]]: the runners these jobs execute on.
 - [[iam-groups-and-ci-workload-identity-federation]]: the keyless authentication used by the deploy job.
 - [[gke-spot-vms-for-workloads]]: Spot node pools and the fallback design.
 - [[kubernetes-network-policies]]: default-deny and the allow rules.
 - [[cert-manager-dns01-cloud-dns]]: issuing the wildcard certificate.
-- [[external-dns-on-gke]]: per-host records when a wildcard is not an option.
-- [[helm-chart-conventions]]: chart layout and per-environment values.
 - [[namespace-stuck-terminating]]: when cleanup hangs.
 - [[adr/0019-namespace-per-team-tenancy]]: the namespace tenancy model this extends.
 

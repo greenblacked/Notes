@@ -36,14 +36,14 @@ PCI DSS, DORA, SOC 2 auditors and enterprise customers all ask for penetration t
 
 ## Test types and what each finds
 
-| Type                                   | Starting point                                             | Typically finds                                                                        | Platform preparation                                        |
-| -------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| External (black or grey box)           | The internet, with hostnames in scope                      | Exposed services, TLS and header issues, auth flaws, web application vulnerabilities   | Allowlist at the WAF, alerting contact, rate-limit awareness |
-| Web application and API                 | Test accounts in the application                           | Authorisation flaws, injection, business logic (see OWASP WSTG)                       | Test tenants and synthetic data                             |
-| Assumed breach in GKE                  | A pod in a namespace, with a limited service account       | Lateral movement, RBAC gaps, metadata and Workload Identity misuse, network policy gaps | A test namespace, limited KSA, logging on                   |
-| Kubernetes configuration review        | Read access to the cluster                                 | RBAC, admission, Pod Security, node configuration; overlaps the CIS benchmark          | Read-only role, [[compliance/cis-benchmarks-with-kube-bench\|kube-bench]] output |
-| Cloud configuration review              | Read-only IAM on the organisation or folders               | IAM sprawl, public buckets, firewall and org policy gaps, key handling                 | Viewer-type roles, time-bound                               |
-| CI/CD and supply chain                  | A developer account, or a runner                          | Secret exposure in jobs, runner escape, pipeline injection, artifact tampering         | A test project and test runners, never shared production runners |
+| Type                            | Starting point                                       | Typically finds                                                                         | Platform preparation                                                             |
+| ------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| External (black or grey box)    | The internet, with hostnames in scope                | Exposed services, TLS and header issues, auth flaws, web application vulnerabilities    | Allowlist at the WAF, alerting contact, rate-limit awareness                     |
+| Web application and API         | Test accounts in the application                     | Authorisation flaws, injection, business logic (see OWASP WSTG)                         | Test tenants and synthetic data                                                  |
+| Assumed breach in GKE           | A pod in a namespace, with a limited service account | Lateral movement, RBAC gaps, metadata and Workload Identity misuse, network policy gaps | A test namespace, limited KSA, logging on                                        |
+| Kubernetes configuration review | Read access to the cluster                           | RBAC, admission, Pod Security, node configuration; overlaps the CIS benchmark           | Read-only role, [[compliance/cis-benchmarks-with-kube-bench\|kube-bench]] output |
+| Cloud configuration review      | Read-only IAM on the organisation or folders         | IAM sprawl, public buckets, firewall and org policy gaps, key handling                  | Viewer-type roles, time-bound                                                    |
+| CI/CD and supply chain          | A developer account, or a runner                     | Secret exposure in jobs, runner escape, pipeline injection, artifact tampering          | A test project and test runners, never shared production runners                 |
 
 Pick the types from the threat model. For most platforms the assumed-breach and CI/CD tests find more than another external scan does.
 
@@ -63,26 +63,26 @@ Keep the rules of engagement in a restricted repository next to the test record.
 
 ```yaml title="pentest/2026-q4/rules-of-engagement.yaml"
 test_id: PT-2026-Q4
-vendor: "Example Security Testing Ltd"          # change: the testing firm
+vendor: "Example Security Testing Ltd" # change: the testing firm
 type: [external, assumed-breach-gke, ci-cd]
 authorised_by:
-  system_owner: "head-of-platform"                # roles, not names, in shared copies
+  system_owner: "head-of-platform" # roles, not names, in shared copies
   security: "security-lead"
 signed_on: 2026-10-21
 window:
-  start: 2026-11-03T08:00:00Z                     # change
-  end: 2026-11-14T18:00:00Z                       # change
+  start: 2026-11-03T08:00:00Z # change
+  end: 2026-11-14T18:00:00Z # change
   hours: "08:00-18:00 UTC on working days"
 scope:
-  projects: [example-pentest-1, example-pentest-ci-1]   # change: project IDs
-  clusters: ["gke example-pentest-1/europe-west1/pt-1"]   # change
+  projects: [example-pentest-1, example-pentest-ci-1] # change: project IDs
+  clusters: ["gke example-pentest-1/europe-west1/pt-1"] # change
   hostnames: [app.pentest.example.com, api.pentest.example.com]
-  source_ips: [198.51.100.10/32, 198.51.100.11/32]       # change: the tester's egress addresses
+  source_ips: [198.51.100.10/32, 198.51.100.11/32] # change: the tester's egress addresses
 out_of_scope:
   - "Google Cloud services themselves, beyond our own configuration"
   - "Production projects and production data"
   - "Third-party SaaS unless listed under providers_permitted"
-providers_permitted: []                            # change: SaaS whose policy allows testing, with ref
+providers_permitted: [] # change: SaaS whose policy allows testing, with ref
 prohibited:
   - "Denial of service or load testing"
   - "Social engineering and phishing"
@@ -177,7 +177,7 @@ kind: ServiceAccount
 metadata:
   name: foothold
   namespace: pentest-foothold
-automountServiceAccountToken: true   # an attacker in a real app pod often has a token
+automountServiceAccountToken: true # an attacker in a real app pod often has a token
 ---
 apiVersion: v1
 kind: Pod
@@ -251,15 +251,15 @@ Ask the testing firm to retest the fixed findings and issue a retest letter or u
 
 ### The evidence package
 
-| Item                                     | Proves                                     |
-| ---------------------------------------- | ------------------------------------------ |
-| Signed rules of engagement and scope     | The test was authorised and what it covered |
-| The tester's qualifications statement    | Independence and competence (if required)  |
-| Final report                             | What was found                             |
-| Tickets with links, dates and owners     | Each finding was triaged and handled       |
-| Exception records for accepted findings  | Accepted risk is owned and time-boxed      |
-| Retest letter                            | Fixes were confirmed independently         |
-| Cleanup record                           | Access was removed                          |
+| Item                                    | Proves                                      |
+| --------------------------------------- | ------------------------------------------- |
+| Signed rules of engagement and scope    | The test was authorised and what it covered |
+| The tester's qualifications statement   | Independence and competence (if required)   |
+| Final report                            | What was found                              |
+| Tickets with links, dates and owners    | Each finding was triaged and handled        |
+| Exception records for accepted findings | Accepted risk is owned and time-boxed       |
+| Retest letter                           | Fixes were confirmed independently          |
+| Cleanup record                          | Access was removed                          |
 
 Store it in the evidence store with restricted access; the report is a map of your weaknesses ([[compliance/audit-evidence-collection-and-retention|audit evidence]]).
 
@@ -314,9 +314,6 @@ Also remove: service account keys created for the test, tester accounts in your 
 - [[compliance/cis-benchmarks-with-kube-bench]]: configuration baseline before the test.
 - [[patterns/edge-waf-rate-limiting]]: the edge testers meet.
 - [[architecture/zero-trust-access-iap-and-vpc-service-controls]]: access paths and perimeters to test.
-- [[runbooks/incident-response]]: when a finding is a live incident.
-- [[compliance/dora-eu-operational-resilience-for-engineers]] and [[compliance/pci-dss-and-gdpr-for-devops-logs-and-data]]: framework drivers.
-- [[compliance/audit-evidence-collection-and-retention]]: storing the evidence package.
 - [[compliance/vendor-soc2-report-review-for-devops-saas]]: reading a vendor's test summary.
 
 ## Sources

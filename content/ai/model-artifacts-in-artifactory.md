@@ -1,6 +1,6 @@
 ---
 title: "Model weights as supply-chain artifacts: Artifactory, safe formats, scanning and provenance"
-description: Proxy model hubs through Artifactory, pin revisions, allow only safe weight formats, scan and review licences before promotion, and serve from internal repositories.
+description: Proxy model hubs through Artifactory, pin revisions, allow only safe weight formats, scan and review licences before promotion, and serve internally.
 type: pattern
 tags:
   - ai
@@ -347,11 +347,9 @@ A model change is a change of the pinned revision in the serving configuration. 
 - [[artifactory-repository-design]]: local, remote and virtual repositories and naming.
 - [[artifact-promotion-artifactory]]: promotion, immutability and retention.
 - [[artifactory-access-tokens-and-oidc-for-ci]]: short-lived tokens for the import and serving jobs.
-- [[jfrog-xray-vs-trivy-vs-grype]]: choosing a scanner.
 - [[slsa-build-provenance]]: provenance for the import job.
 - [[sbom-generation-and-storage]]: where the manifest is indexed.
 - [[open-source-license-compliance]]: the licence review step.
 - [[self-hosted-llm-inference-on-gke]]: the serving side.
 - [[private-gke-and-controlled-egress]]: blocking egress from serving pods.
-- [[securing-ai-agents-in-ci-and-cloud]]: isolation for jobs that handle untrusted files.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

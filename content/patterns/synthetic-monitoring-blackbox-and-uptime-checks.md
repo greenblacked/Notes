@@ -19,15 +19,15 @@ White-box metrics tell you what a service thinks it is doing: request rates, err
 > Blackbox exporter behaviour, configuration keys and metric names were checked against the exporter's README, configuration reference and source on GitHub on 2026-10-21 (master branch: confirm options against the version you run). Prometheus Operator `Probe` fields were checked against its API reference source. Cloud Monitoring uptime check fields were checked against the Terraform provider's resource definition and Google Cloud SDK 570.0.0 help on the same day. Nothing was run.
 
 > [!note] Not verified
-> The Cloud Monitoring uptime check documentation page could not be read. So these are **not verified**: the metric types used to alert on uptime checks (`monitoring.googleapis.com/uptime_check/check_passed` and `.../time_until_ssl_cert_expires` below), how many regions must fail before a check counts as failed, the roles and audience for the `OIDC_TOKEN` authentication mode, the behaviour of `VPC_CHECKERS`, uptime check pricing and per-project limits, and whether Google Cloud Managed Service for Prometheus supports the `Probe` resource. The PromQL rules are this note's own; validate them with `promtool` as shown.
+> This note was not checked against the Cloud Monitoring uptime check documentation page. So these are **not verified**: the metric types used to alert on uptime checks (`monitoring.googleapis.com/uptime_check/check_passed` and `.../time_until_ssl_cert_expires` below), how many regions must fail before a check counts as failed, the roles and audience for the `OIDC_TOKEN` authentication mode, the behaviour of `VPC_CHECKERS`, uptime check pricing and per-project limits, and whether Google Cloud Managed Service for Prometheus supports the `Probe` resource. The PromQL rules are this note's own; validate them with `promtool` as shown.
 
 ## White box, black box and SLOs
 
-| Signal                   | Answers                                              | Misses                                                        |
-| ------------------------ | ---------------------------------------------------- | ------------------------------------------------------------- |
-| White-box (app metrics)  | How many requests failed, how slow, why              | Requests that never arrived: DNS, TLS, edge, load balancer    |
-| Black-box (probes)       | Can a client reach it and get a correct answer now   | Volume: a probe is a handful of requests, not your traffic    |
-| Real-user monitoring     | What users actually experienced                      | Needs traffic; silent at 3 a.m. when nobody is using it       |
+| Signal                  | Answers                                            | Misses                                                     |
+| ----------------------- | -------------------------------------------------- | ---------------------------------------------------------- |
+| White-box (app metrics) | How many requests failed, how slow, why            | Requests that never arrived: DNS, TLS, edge, load balancer |
+| Black-box (probes)      | Can a client reach it and get a correct answer now | Volume: a probe is a handful of requests, not your traffic |
+| Real-user monitoring    | What users actually experienced                    | Needs traffic; silent at 3 a.m. when nobody is using it    |
 
 Probes do not replace SLO alerts. On this site, pages come from SLO burn-rate alerts ([[adr/0045-page-only-on-slo-burn-rate]], [[slo-burn-rate-alerting]]). Probes fit in three ways:
 
@@ -55,11 +55,11 @@ flowchart LR
   BB1 -->|Service DNS| SVC
 ```
 
-| Vantage point                          | Catches                                                             | Blind to                                                             |
-| -------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Inside the cluster, to Service DNS     | Broken Pods and Services, internal dependencies                     | Public DNS, certificates, edge, load balancer, everything users hit first |
-| Another region or cluster, public URL  | Most user-facing failures, including your edge and TLS              | A failure of the region your probes run in; shares your network provider |
-| Outside, Cloud Monitoring uptime checks | Everything a user hits, from several continents; independent of your stack | Internal-only services (unless private checkers fit), detailed debugging |
+| Vantage point                           | Catches                                                                    | Blind to                                                                  |
+| --------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Inside the cluster, to Service DNS      | Broken Pods and Services, internal dependencies                            | Public DNS, certificates, edge, load balancer, everything users hit first |
+| Another region or cluster, public URL   | Most user-facing failures, including your edge and TLS                     | A failure of the region your probes run in; shares your network provider  |
+| Outside, Cloud Monitoring uptime checks | Everything a user hits, from several continents; independent of your stack | Internal-only services (unless private checkers fit), detailed debugging  |
 
 Use at least two: in-cluster probes for internal dependencies and fast debugging, and external checks (uptime checks or a probe in another region) for every public endpoint. An in-cluster probe of a public hostname often resolves and routes differently from a real user (split-horizon DNS, hairpin routing), so it is not a substitute for an outside view.
 
@@ -83,11 +83,11 @@ modules:
       follow_redirects: true
       fail_if_not_ssl: true
       fail_if_body_not_matches_regexp:
-        - "data-page=\"catalog\""      # change: a marker from the real page
+        - 'data-page="catalog"' # change: a marker from the real page
       headers:
         Cache-Control: no-cache
         User-Agent: synthetic-probe
-      preferred_ip_protocol: ip4       # the default is ip6; see Troubleshooting
+      preferred_ip_protocol: ip4 # the default is ip6; see Troubleshooting
       ip_protocol_fallback: false
 
   # JSON health endpoint of an API.
@@ -114,12 +114,12 @@ modules:
     prober: dns
     timeout: 5s
     dns:
-      query_name: www.example.com      # change
+      query_name: www.example.com # change
       query_type: A
       valid_rcodes: [NOERROR]
       validate_answer_rrs:
         fail_if_not_matches_regexp:
-          - ".*\tIN\tA\t.*"            # RR text format; inspect it with debug=true first
+          - ".*\tIN\tA\t.*" # RR text format; inspect it with debug=true first
       preferred_ip_protocol: ip4
 
   # gRPC health checking protocol (grpc.health.v1.Health/Check).
@@ -128,7 +128,7 @@ modules:
     timeout: 5s
     grpc:
       tls: true
-      service: ""                      # empty means overall server health
+      service: "" # empty means overall server health
       preferred_ip_protocol: ip4
 ```
 
@@ -156,8 +156,8 @@ scrape_configs:
       module: [http_2xx_body]
     static_configs:
       - targets:
-          - https://www.example.com/catalog      # change
-          - https://shop.example.com/            # change
+          - https://www.example.com/catalog # change
+          - https://shop.example.com/ # change
         labels:
           team: storefront
     relabel_configs:
@@ -182,10 +182,10 @@ metadata:
 spec:
   jobName: blackbox-public
   interval: 30s
-  scrapeTimeout: 15s          # must not exceed interval, or the operator rejects the resource
+  scrapeTimeout: 15s # must not exceed interval, or the operator rejects the resource
   module: http_2xx_body
   prober:
-    url: blackbox-exporter.monitoring.svc:9115   # address:port, no scheme
+    url: blackbox-exporter.monitoring.svc:9115 # address:port, no scheme
     path: /probe
   targets:
     staticConfig:
@@ -452,7 +452,6 @@ Probes are additive and read-only. To back out:
 - [[cloudflare-access-service-tokens]]: machine access for probes behind Access.
 - [[tls-certificate-renewal]]: what to do when the expiry alert fires.
 - [[alert-and-runbook-standard]]: severity labels and runbook links.
-- [[first-prometheus-alert]]: writing and testing alert rules step by step.
 - [[grpc-load-balancing-on-kubernetes]]: gRPC health checking, which the `grpc` prober uses.
 
 ## Sources

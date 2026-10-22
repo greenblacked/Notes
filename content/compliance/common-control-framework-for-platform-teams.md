@@ -413,7 +413,7 @@ Two published frameworks are often used as a hub between others: NIST Cybersecur
 - [[compliance/pci-dss-and-gdpr-for-devops-logs-and-data]]: card and personal data in tooling.
 - [[compliance/audit-evidence-collection-and-retention]]: where the evidence is stored.
 - [[compliance/continuous-control-monitoring-gcp-and-gke]]: automated evidence for configuration controls.
-- [[compliance/policy-exception-and-waiver-process]]: time-boxed exceptions per control.
+- [[compliance/vendor-soc2-report-review-for-devops-saas]]: reviewing the SOC 2 reports of the SaaS tools these controls depend on.
 
 ## Sources
 

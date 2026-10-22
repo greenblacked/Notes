@@ -16,7 +16,7 @@ draft: false
 [[finops-cost-allocation-and-guardrails]] allocates Google Cloud spend with labels and the BigQuery billing export, and stops at the cluster: a shared GKE cluster is one line on the bill. Teams then ask three questions the bill cannot answer. What does my namespace cost? How much of the cluster is idle? How far are my requests above what I use? Three tools answer them on GKE: GKE cost allocation, which puts namespace and label breakdowns into the billing export; OpenCost, the open-source cost model that reads Prometheus; and Kubecost, the commercial product built on the same origins. This note compares them and recommends an order of adoption.
 
 > [!info] Not checked against current releases
-> Written from the `gcloud` 570.0.0 help text, the Terraform Google provider documentation source, and the OpenCost and Kubecost repositories on 2026-10-21; Google's cost allocation and billing export pages could not be opened. Not verified: the label keys and column names GKE cost allocation writes to the export, its limits, Autopilot behaviour and the delay until data appears; the billing export schema and latency; Kubecost editions, licence, free tier and pricing, and whether Kubecost 3.x needs Prometheus on GKE; OpenCost's CNCF maturity level; how OpenCost connects to Managed Service for Prometheus; how OpenCost handles Autopilot per-pod billing. No prices are quoted.
+> Written from the `gcloud` 570.0.0 help text, the Terraform Google provider documentation source, and the OpenCost and Kubecost repositories on 2026-10-21; not checked against Google's cost allocation and billing export pages, so verify there. Not verified: the label keys and column names GKE cost allocation writes to the export, its limits, Autopilot behaviour and the delay until data appears; the billing export schema and latency; Kubecost editions, licence, free tier and pricing, and whether Kubecost 3.x needs Prometheus on GKE; OpenCost's CNCF maturity level; how OpenCost connects to Managed Service for Prometheus; how OpenCost handles Autopilot per-pod billing. No prices are quoted.
 
 ## Criteria
 
@@ -166,7 +166,7 @@ Comparing requests with usage per container is OpenCost's most useful output for
 
 ## What Kubecost adds
 
-The Kubecost chart README points to official documentation on IBM Docs and an IBM support contact, so the product is now IBM-owned; the old documentation host was unreachable when this note was written. Per that README, Kubecost 3.x replaced its 2.x architecture: a ClickHouse database instead of DuckDB, a "Direct" metrics source instead of Prometheus, and a `finops-agent` that the README credits with ten-minute metric granularity and lower memory use (vendor claims). A 3.x primary re-ingests all data on first start, which the README says can take from 20 minutes to two days.
+The Kubecost chart README points to official documentation on IBM Docs and an IBM support contact, so the product is now IBM-owned; check IBM Docs for the current Kubecost documentation. Per that README, Kubecost 3.x replaced its 2.x architecture: a ClickHouse database instead of DuckDB, a "Direct" metrics source instead of Prometheus, and a `finops-agent` that the README credits with ten-minute metric granularity and lower memory use (vendor claims). A 3.x primary re-ingests all data on first start, which the README says can take from 20 minutes to two days.
 
 What it typically adds over OpenCost is product: saved reports, multi-cluster views, alerts, recommendations, and support. The licence of the application, the free tier and the price were not verified; the chart repository's Apache-2.0 licence says nothing about them. Evaluate it as a purchase ([[build-vs-buy-devops-tools]]), with a data-location and access review, since it holds a detailed map of every workload.
 
@@ -228,8 +228,6 @@ Start with **GKE cost allocation plus a BigQuery view**: it costs no new compone
 - [[0019-namespace-per-team-tenancy]]
 - [[prometheus-vs-cloud-monitoring]]
 - [[0042-managed-prometheus-for-application-metrics]]
-- [[build-vs-buy-devops-tools]]
-- [[thanos-vs-mimir-vs-victoriametrics]]
 
 ## Sources
 

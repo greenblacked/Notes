@@ -385,9 +385,3 @@ An exception is one policy, one workload, one reason, and an expiry, recorded an
 - [[0022-admission-policy-pod-security-vap-and-kyverno]]: the admission layering this note enforces.
 - [[0010-deploy-images-by-digest]]: why digests.
 - [[pod-disruption-budgets-for-stateless-services]], [[topology-spread-constraints-gke]] and [[priority-classes-and-preemption]]: availability details.
-- [[zero-downtime-deployments-kubernetes]]: shutdown and rollout mechanics.
-- [[gke-workload-identity]]: Google Cloud access without keys.
-- [[conftest-policy-gate-for-manifests]] and [[policy-rollout-audit-to-enforce]]: the gate and its rollout.
-- [[kubernetes-labels-and-annotations-standard]], [[helm-chart-standard]] and [[dockerfile-standard]]: the neighbouring standards.
-- [[service-tiering-standard]]: the tiers used in the availability table.
-- [[policy-exception-and-waiver-process]]: how exceptions are granted.

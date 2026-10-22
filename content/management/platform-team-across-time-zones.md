@@ -278,6 +278,6 @@ Google's SRE book notes that night shifts harm health and that a multi-site, fol
 - [[one-on-ones]]: running 1:1s across time zones.
 - [[team-charter]]: where the overlap window and response times are written down.
 - [[rfc-and-design-review-process]]: async review of larger changes.
-- [[production-change-checklist]] and [[change-freezes-and-maintenance-windows]]: change safety rules.
-- [[incident-response]] and [[structured-logging-conventions]]: UTC in incidents and logs.
+- [[change-freezes-and-maintenance-windows]]: change safety rules.
+- [[structured-logging-conventions]]: UTC in logs.
 - [[bus-factor-and-knowledge-transfer]]: spreading knowledge across regions.

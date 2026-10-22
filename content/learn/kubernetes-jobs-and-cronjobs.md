@@ -212,7 +212,7 @@ groups:
           runbook_url: https://runbooks.example.com/batch/cronjob-no-recent-success
 ```
 
-These expressions are a design, not a recipe from the kube-state-metrics docs. Size the window to the schedule plus the longest normal run plus a margin, decide severity per job (a missed backup can be a page; a missed report is a ticket), and give each alert the labels and runbook your [[standards/alert-and-runbook-standard|alert standard]] requires. One gap to close yourself: a CronJob that has **never** succeeded has no `last_successful_time` to compare, so the second rule does not fire for it; cover new CronJobs with an `absent()`-style check or a review step. Unit-test the rules with `promtool test rules` as in [[learn/first-prometheus-alert|Observability 03]], and see [[learn/promql-for-alert-rules-and-recording-rules|Observability 04]] for the vector matching used in the first rule.
+These expressions are a design, not a recipe from the kube-state-metrics docs. Size the window to the schedule plus the longest normal run plus a margin, decide severity per job (a missed backup can be a page; a missed report is a ticket), and give each alert the labels and runbook your [[standards/alert-and-runbook-standard|alert standard]] requires. One gap to close yourself: a CronJob that has **never** succeeded has no `last_successful_time` to compare, so the second rule does not fire for it; cover new CronJobs with an `absent()`-style check or a review step. Unit-test the rules with `promtool test rules` as in [[learn/first-prometheus-alert|Observability 03]], and see [[learn/promql-for-alert-rules-and-recording-rules|Observability 04]] for the vector matching used in the first rule. The production rule set, with a suspended-CronJob alert and `for` clauses, is in [[patterns/kubernetes-jobs-and-cronjobs#Alerting on failed and missed runs|Reliable Kubernetes Jobs and CronJobs]].
 
 ## Hands-on exercises
 
@@ -448,10 +448,13 @@ Do these in the kind cluster `lab`. Names start with `k12-`. Check `kubectl conf
 
 ## Next steps
 
-This is the last lesson in the Kubernetes track for now. Previous lesson: [[learn/kubernetes-network-policies-from-zero|Kubernetes 11: NetworkPolicy from zero]]. A good next stop is [[learn/gitops-with-argo-cd|Delivery 11: GitOps with Argo CD]], where migration Jobs run as sync hooks.
+This is the last lesson in the Kubernetes track for now. Next lesson: [[learn/gcp-keyless-ci-with-workload-identity-federation|GCP 05: Keyless CI to Google Cloud with Workload Identity Federation]]. Previous lesson: [[learn/kubernetes-network-policies-from-zero|Kubernetes 11: NetworkPolicy from zero]]. A good next stop is [[learn/gitops-with-argo-cd|Delivery 11: GitOps with Argo CD]], where migration Jobs run as sync hooks.
 
 To go deeper:
 
+- [[patterns/kubernetes-jobs-and-cronjobs]] for the production baseline: sidecars that let a Job finish, priority and Spot, and the full alert set.
+- [[standards/scheduled-jobs-standard]] for the rules every scheduled job must meet.
+- [[architecture/batch-and-scheduled-workloads-gcp]] for when a CronJob is the right platform and when Cloud Run jobs or Batch fit better.
 - [[patterns/postgres-expand-contract-migrations]] for migrations that run as Jobs without downtime.
 - [[architecture/backup-architecture-gke-cloud-sql-gcs]] and [[adr/0051-backups-proven-by-quarterly-restore-drills]] for backup jobs that count.
 - [[standards/alert-and-runbook-standard]] for the labels, annotations and runbook every batch alert needs.

@@ -13,10 +13,10 @@ modified: 2026-10-21
 draft: false
 ---
 
-This note describes the delivery path for alerts: where rules are evaluated, how a firing alert reaches exactly one owning team through a highly available Alertmanager, how noise is grouped and inhibited, and how the alerting path itself is monitored so it cannot fail silently. It is for the platform team that runs the path. What to page on is decided in [[adr/0045-page-only-on-slo-burn-rate]] and [[patterns/slo-burn-rate-alerting]]; the labels, annotations and runbooks every alert must carry are in [[standards/alert-and-runbook-standard]]; per-tenant metrics storage is in [[architecture/multi-tenant-prometheus-architecture]].
+This note describes the delivery path for alerts: where rules are evaluated, how a firing alert reaches exactly one owning team through a highly available Alertmanager, how noise is grouped and inhibited, and how the alerting path itself is monitored so it cannot fail silently. It is for the platform team that runs the path. What to page on is decided in [[adr/0045-page-only-on-slo-burn-rate]] and [[patterns/slo-burn-rate-alerting]]; the labels, annotations and runbooks every alert must carry are in [[standards/alert-and-runbook-standard]]; per-tenant metrics storage is in [[architecture/multi-tenant-prometheus-architecture]]. The paging product at the end of the path is compared in [[tools/pagerduty-vs-opsgenie-vs-grafana-irm]], and a page that never arrived is traced hop by hop with [[runbooks/alert-fired-but-nobody-was-paged]].
 
 > [!info] Scope and sources
-> Written against the Alertmanager and Prometheus documentation and source (configuration, README, `amtool`, metric definitions), the Prometheus rule unit-testing docs and the open-source Google Cloud Managed Service for Prometheus engine repository, read on 2026-10-21. The Google Cloud product pages could not be opened when this was written.
+> Written against the Alertmanager and Prometheus documentation and source (configuration, README, `amtool`, metric definitions), the Prometheus rule unit-testing docs and the open-source Google Cloud Managed Service for Prometheus engine repository, read on 2026-10-21. Not checked against the Google Cloud product pages; verify there.
 
 > [!note] Not verified
 > Nothing here was run. Check before relying on it: the managed rule evaluation and managed Alertmanager behaviour on Google Cloud (resource names, namespaces, replica count, HA, billing); how Cloud Monitoring alerting policies notify and close incidents; the `*_file` receiver fields and `inhibit_rules` `name` field in your Alertmanager version; the matcher parsing mode your version uses; and any metric name not listed under Meta-monitoring. Metric names were read from source on `main` and can change between releases.
@@ -176,12 +176,12 @@ Design notes:
 
 ## Severity and destination
 
-| `severity` | Destination                                   | When                      | Rule of thumb                                                |
-| ---------- | --------------------------------------------- | ------------------------- | ------------------------------------------------------------ |
-| `page`     | Team pager, plus a copy in the incident chat  | 24x7                      | Only SLO burn-rate alerts, per [[adr/0045-page-only-on-slo-burn-rate]] |
-| `ticket`   | Ticket queue, chat copy in working hours      | Ticket any time           | Needs a human within days, never at night                    |
-| none       | Nowhere (`default-null`)                      | n/a                       | Dashboards and recording only                                |
-| `Watchdog` | External heartbeat                            | Continuously              | Not a severity; routed by `alertname`                        |
+| `severity` | Destination                                  | When            | Rule of thumb                                                          |
+| ---------- | -------------------------------------------- | --------------- | ---------------------------------------------------------------------- |
+| `page`     | Team pager, plus a copy in the incident chat | 24x7            | Only SLO burn-rate alerts, per [[adr/0045-page-only-on-slo-burn-rate]] |
+| `ticket`   | Ticket queue, chat copy in working hours     | Ticket any time | Needs a human within days, never at night                              |
+| none       | Nowhere (`default-null`)                     | n/a             | Dashboards and recording only                                          |
+| `Watchdog` | External heartbeat                           | Continuously    | Not a severity; routed by `alertname`                                  |
 
 Watch the load with [[management/on-call-health]]: if a rota gets more pages than it can act on, tune rules before adding people.
 
@@ -280,14 +280,14 @@ groups:
 
 Further expressions for the same group, with example thresholds to tune:
 
-| Signal                                 | Expression                                                                                                    |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Rule group not evaluating              | `time() - prometheus_rule_group_last_evaluation_timestamp_seconds > 3 * prometheus_rule_group_interval_seconds` |
-| Evaluations skipped                    | `increase(prometheus_rule_group_iterations_missed_total[10m]) > 0`                                            |
-| Alerts dropped before Alertmanager     | `increase(prometheus_notifications_dropped_total[10m]) > 0`                                                   |
-| Fewer Alertmanagers than replicas      | `prometheus_notifications_alertmanagers_discovered < 3`                                                       |
-| Bad config reload                      | `alertmanager_config_last_reload_successful == 0`                                                             |
-| Cluster peers failing                  | `alertmanager_cluster_failed_peers > 0`                                                                       |
+| Signal                             | Expression                                                                                                      |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Rule group not evaluating          | `time() - prometheus_rule_group_last_evaluation_timestamp_seconds > 3 * prometheus_rule_group_interval_seconds` |
+| Evaluations skipped                | `increase(prometheus_rule_group_iterations_missed_total[10m]) > 0`                                              |
+| Alerts dropped before Alertmanager | `increase(prometheus_notifications_dropped_total[10m]) > 0`                                                     |
+| Fewer Alertmanagers than replicas  | `prometheus_notifications_alertmanagers_discovered < 3`                                                         |
+| Bad config reload                  | `alertmanager_config_last_reload_successful == 0`                                                               |
+| Cluster peers failing              | `alertmanager_cluster_failed_peers > 0`                                                                         |
 
 The `prometheus_*` rule and notifier metrics come from the Prometheus code base; check that the managed rule evaluator exposes them before relying on them there. `alertmanager_notifications_failed_total` carries a `reason` label (for example `authError`, `rateLimited`, `serverError`); an `authError` usually means a rotated or revoked integration key.
 
@@ -357,16 +357,16 @@ tests:
 
 ## Failure modes
 
-| Failure                                       | Effect                                                    | Mitigation                                                                    |
-| --------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Evaluator sends to a load-balanced address    | Alerts lost when the receiving replica restarts           | List every replica; test that each one sees each alert                        |
-| Paging integration key revoked                | Pages silently fail                                       | `AlertmanagerNotificationsFailing` to chat as well; heartbeat path            |
-| Config reload fails after a bad merge         | Old config keeps running; new routes never apply          | `amtool check-config` in CI; alert on `alertmanager_config_last_reload_successful` |
-| Gossip port blocked (TCP or UDP)              | Replicas act alone; duplicate notifications               | Open 9094 TCP and UDP; check `cluster.status` and peers in `/api/v2/status`   |
-| Wrong or missing `team` label                 | Page goes to the platform fallback or nowhere             | Lint in CI; fallback receiver; weekly review of fallback pages                |
-| Over-broad silence                            | Real incidents muted                                      | Matchers by service, short durations, weekly silence review                   |
-| Whole cluster down, including Alertmanager    | No alerts at all                                          | External heartbeat pages through its own path                                 |
-| High-cardinality rule overloads the evaluator | Missed evaluations, late alerts                           | Missed-iteration alert; [[runbooks/prometheus-high-cardinality-triage]]       |
+| Failure                                       | Effect                                           | Mitigation                                                                         |
+| --------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Evaluator sends to a load-balanced address    | Alerts lost when the receiving replica restarts  | List every replica; test that each one sees each alert                             |
+| Paging integration key revoked                | Pages silently fail                              | `AlertmanagerNotificationsFailing` to chat as well; heartbeat path                 |
+| Config reload fails after a bad merge         | Old config keeps running; new routes never apply | `amtool check-config` in CI; alert on `alertmanager_config_last_reload_successful` |
+| Gossip port blocked (TCP or UDP)              | Replicas act alone; duplicate notifications      | Open 9094 TCP and UDP; check `cluster.status` and peers in `/api/v2/status`        |
+| Wrong or missing `team` label                 | Page goes to the platform fallback or nowhere    | Lint in CI; fallback receiver; weekly review of fallback pages                     |
+| Over-broad silence                            | Real incidents muted                             | Matchers by service, short durations, weekly silence review                        |
+| Whole cluster down, including Alertmanager    | No alerts at all                                 | External heartbeat pages through its own path                                      |
+| High-cardinality rule overloads the evaluator | Missed evaluations, late alerts                  | Missed-iteration alert; [[runbooks/prometheus-high-cardinality-triage]]            |
 
 ## Pitfalls
 
@@ -422,16 +422,10 @@ Also run a quarterly drill: block the heartbeat route in a non-production Alertm
 ## Related
 
 - [[adr/0045-page-only-on-slo-burn-rate]]
-- [[adr/0046-dashboards-and-alert-rules-as-code]]
 - [[patterns/slo-burn-rate-alerting]]
 - [[standards/alert-and-runbook-standard]]
 - [[architecture/multi-tenant-prometheus-architecture]]
-- [[adr/0042-managed-prometheus-for-application-metrics]]
-- [[tools/prometheus-vs-cloud-monitoring]]
-- [[runbooks/prometheus-high-cardinality-triage]]
 - [[runbooks/incident-response]]
 - [[management/on-call-health]]
-- [[standards/kubernetes-labels-and-annotations-standard]]
-- [[learn/first-prometheus-alert]]
-- [[learn/promql-for-alert-rules-and-recording-rules]]
-- [[ai/llm-log-analysis-and-alert-triage]]
+- [[tools/pagerduty-vs-opsgenie-vs-grafana-irm]]
+- [[runbooks/alert-fired-but-nobody-was-paged]]

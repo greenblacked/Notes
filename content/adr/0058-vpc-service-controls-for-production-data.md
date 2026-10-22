@@ -36,7 +36,7 @@ VPC-SC is also known for breaking things in ways that are hard to diagnose: a de
 
 Proposed: **every production project that holds restricted data is placed in one regular service perimeter per environment, rolled out in dry-run mode first and enforced only after the dry-run logs are clean.**
 
-"Restricted" means the highest data class in [[0059-cmek-where-data-classification-requires-it|the data class table of ADR-0059]]: payment data, personal data in regulatory scope ([[pci-dss-and-gdpr-for-devops-logs-and-data]]), credentials and Terraform state.
+"Restricted" means the highest data class in [[standards/data-classification-and-handling-standard|the data classification standard]]: payment data, personal data in regulatory scope ([[pci-dss-and-gdpr-for-devops-logs-and-data]]), credentials and Terraform state.
 
 - **Owner:** the platform security lead, with the platform team implementing and the owning service teams consulted.
 - **Trigger to close:** the dry-run perimeter has run through one full business cycle with no unexplained violations, and the owners of the CI, backup and logging projects have signed off the ingress and egress rules. "A full business cycle" is our own policy, not a Google recommendation: at least one month-end close, one quarterly restore drill ([[0051-backups-proven-by-quarterly-restore-drills]]) and one planned release. Google's guidance is to analyse, fix and then enforce, without a fixed duration.[^rollout] If the trigger is not met within two quarters, the record is reviewed rather than left open.
@@ -282,6 +282,7 @@ Related notes:
 - [[policy-rollout-audit-to-enforce]]
 - [[gcp-audit-logs-siem]]
 - [[private-gke-and-controlled-egress]]
+- [[vertex-ai-private-access-from-gke]]
 
 Related ADRs:
 

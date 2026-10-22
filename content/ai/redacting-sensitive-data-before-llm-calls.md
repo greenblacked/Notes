@@ -19,7 +19,7 @@ Every useful LLM workflow in operations sends real data: log lines for triage ([
 > A platform team running one internal LLM gateway ([[llm-api-cost-control]]) in front of managed or self-hosted models. The code is a Python standard-library sketch of the gateway hook; port it to your gateway's language. What counts as personal or regulated data, and whether redaction or pseudonymisation is enough for a given purpose, is for your data protection officer and security team to decide; see [[pci-dss-and-gdpr-for-devops-logs-and-data]].
 
 > [!note] Not verified
-> The two Python files below were run locally (Python 3.13, standard library only) and their seven tests pass; nothing else was run. Not confirmed against current documentation: every Sensitive Data Protection API name, field, infoType name, transformation and limit shown below (the pages under Sources were not opened for this note), its latency and quotas for inline use, whether its responses or logs can contain the matched value, and the accuracy of the illustrative secret patterns (take real ones from your secret scanner's maintained rule set). Detection quality of any layer, meaning its false negatives and false positives on your data, is unknown until you measure it with your own corpus.
+> The two Python files below were run locally (Python 3.13, standard library only) and their seven tests pass; nothing else was run. Not confirmed against current documentation: every Sensitive Data Protection API name, field, infoType name, transformation and limit shown below (not checked against the pages under Sources; verify there), its latency and quotas for inline use, whether its responses or logs can contain the matched value, and the accuracy of the illustrative secret patterns (take real ones from your secret scanner's maintained rule set). Detection quality of any layer, meaning its false negatives and false positives on your data, is unknown until you measure it with your own corpus.
 
 ## What must not leave
 
@@ -341,6 +341,5 @@ Rollback is a policy change in Git: a route that breaks goes back to shadow mode
 - [[llm-api-cost-control]]: the gateway this runs in.
 - [[cloud-kms-key-management]]: keys for reversible tokenization.
 - [[structured-logging-conventions]]: field names for the allow-list and the audit line.
-- [[prompt-injection-test-harness-for-ci-agents]]: seeded test inputs for injection.
 - [[llm-observability-tracing-and-slos]]: why prompt content capture stays off in traces.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

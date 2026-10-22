@@ -214,25 +214,26 @@ After any rollback, record the failing plugin and version in the change record a
 
 ## Troubleshooting
 
-| Symptom                                                  | Likely cause and fix                                                                                                                                                  |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Image build fails in `jenkins-plugin-cli`                | Pinned versions cannot be satisfied with `--latest=false`. Read the dependency it names, bump that plugin too, or choose an older target.                             |
-| Controller does not start after the image change         | Java version not supported by the new core, or a broken plugin set. Read the first `SEVERE` line; roll back (option 1) if the fix is not obvious.                     |
-| A plugin fails to load: needs a newer core               | The plugin was bumped past what the core supports. Pin the previous plugin version or move the core first.                                                            |
-| A plugin fails to load: missing or old dependency        | A dependency was not bumped with it. Add the dependency at the required version to `plugins.txt`.                                                                     |
-| Plugins in the UI do not match `plugins.txt`             | A plugin was upgraded manually, so the image skips it, or the home has no marker files. Check `PLUGINS_FORCE_UPGRADE` and `TRY_UPGRADE_IF_NO_MARKER` in the image README, or your chart's install mode. |
-| JCasC check returns issues                               | A plugin renamed or removed a configuration attribute. Update the YAML in Git; validate on staging first.                                                             |
-| UI loads but pages error or look broken                  | Usually a UI or theme plugin mismatch, or a cached page. Check the log for the plugin, then clear the browser cache before rolling back.                              |
-| Agents do not connect                                    | Java on agents older than the new core requires, or a remoting change. Check agent Java with the guide's script and the agent logs.                                   |
-| Credentials missing or unreadable after a restore        | `secrets/master.key` was not restored with the rest of `JENKINS_HOME`. Restore it from its separate backup.                                                           |
-| Queue never drains after the restart                     | Quiet down still active. Run `cancelQuietDown`. Otherwise follow [[jenkins-controller-down-and-queue-stuck]].                                                         |
+| Symptom                                           | Likely cause and fix                                                                                                                                                                                    |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Image build fails in `jenkins-plugin-cli`         | Pinned versions cannot be satisfied with `--latest=false`. Read the dependency it names, bump that plugin too, or choose an older target.                                                               |
+| Controller does not start after the image change  | Java version not supported by the new core, or a broken plugin set. Read the first `SEVERE` line; roll back (option 1) if the fix is not obvious.                                                       |
+| A plugin fails to load: needs a newer core        | The plugin was bumped past what the core supports. Pin the previous plugin version or move the core first.                                                                                              |
+| A plugin fails to load: missing or old dependency | A dependency was not bumped with it. Add the dependency at the required version to `plugins.txt`.                                                                                                       |
+| Plugins in the UI do not match `plugins.txt`      | A plugin was upgraded manually, so the image skips it, or the home has no marker files. Check `PLUGINS_FORCE_UPGRADE` and `TRY_UPGRADE_IF_NO_MARKER` in the image README, or your chart's install mode. |
+| JCasC check returns issues                        | A plugin renamed or removed a configuration attribute. Update the YAML in Git; validate on staging first.                                                                                               |
+| UI loads but pages error or look broken           | Usually a UI or theme plugin mismatch, or a cached page. Check the log for the plugin, then clear the browser cache before rolling back.                                                                |
+| Agents do not connect                             | Java on agents older than the new core requires, or a remoting change. Check agent Java with the guide's script and the agent logs.                                                                     |
+| Credentials missing or unreadable after a restore | `secrets/master.key` was not restored with the rest of `JENKINS_HOME`. Restore it from its separate backup.                                                                                             |
+| Queue never drains after the restart              | Quiet down still active. Run `cancelQuietDown`. Otherwise follow [[jenkins-controller-down-and-queue-stuck]].                                                                                           |
 
 ## Related
 
 - [[jenkins-controller-down-and-queue-stuck]] when the controller is already down or the queue is stuck.
+- [[0061-jenkins-controllers-as-code-with-ephemeral-agents]] for the decision to build controllers from code with pinned plugins.
 - [[jenkins-controller-and-agent-hardening]] for the security baseline and why advisories are urgent.
 - [[jenkins-agents-configuration-as-code-and-shared-libraries]] and [[jenkins-shared-libraries]] for JCasC and shared libraries.
-- [[dependency-update-policy]] and [[end-of-life-tracking-platform-versions]] for how often to upgrade.
+- [[dependency-update-policy]] for how often to upgrade.
 - [[production-change-checklist]] for the change record.
 - [[sonarqube-upgrade-and-db-migration]] for the same pattern on another CI tool.
 

@@ -464,5 +464,3 @@ Checked 2026-10-21 against the documentation sources (the upstream repositories 
 - [[ci-pipeline-standard]]: where the lint and test job sits.
 - [[adr/0007-language-packages-resolve-through-artifactory]]: where pip resolves packages.
 - [[dependency-update-policy]] and [[automated-dependency-updates]]: keeping the lock current.
-- [[secret-scanning-pre-commit-and-ci]]: the backstop for leaked secrets.
-- [[adr/0026-keyless-ci-auth-with-workload-identity-federation]]: keyless credentials for CI.

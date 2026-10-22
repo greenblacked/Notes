@@ -471,7 +471,7 @@ Work in `~/sc-lab` with the registry running. Output is illustrative unless mark
 
 ## Next steps
 
-Next lesson: continue with the Kubernetes and delivery lessons in [[learn/index|the learning path]]. Previous lesson: [[learn/security-basics-for-devops|Security 01: Security basics every DevOps engineer must know]].
+Next lesson: [[learn/promql-for-alert-rules-and-recording-rules|Observability 04: PromQL for alert rules]], or continue with the Kubernetes and delivery lessons in [[learn/index|the learning path]]. Previous lesson: [[learn/security-basics-for-devops|Security 01: Security basics every DevOps engineer must know]].
 
 To go deeper:
 

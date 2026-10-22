@@ -17,7 +17,7 @@ draft: false
 Metrics and logs each have a backend comparison in these notes ([[prometheus-vs-cloud-monitoring]], [[loki-vs-elasticsearch-vs-cloud-logging]]); traces do not. [[0043-opentelemetry-collector-gateway]] sends all telemetry through an OpenTelemetry Collector gateway with tail sampling and leaves the trace backend open, and the pipeline in [[observability-pipeline-opentelemetry]] exports traces to a placeholder. This note fills that gap. It compares three backends that accept OTLP from the gateway: Grafana Tempo (self-hosted, object storage), Jaeger (self-hosted, database storage) and Google Cloud Trace (managed).
 
 > [!info] Not checked against current releases
-> Written from the Tempo and Jaeger documentation source, the OpenTelemetry Collector contrib READMEs and the Tempo changelog on 2026-10-21; Google's Cloud Trace pages could not be opened. Not verified: Cloud Trace quotas, retention, span and attribute limits and prices; Cloud Trace's OTLP ingestion endpoint and the roles it needs; whether the `googlecloud` exporter or OTLP with Google authentication is Google's recommended path today; Cloud Trace span-to-log linking behaviour; Tempo Helm chart names; Kafka sizing and managed Kafka options on Google Cloud; Jaeger adaptive sampling status, index sizing and Helm values; Collector exporter and processor names in the release you run; whether Tempo's deploy page advises against monolithic mode on Kubernetes for production. No prices are quoted.
+> Written from the Tempo and Jaeger documentation source, the OpenTelemetry Collector contrib READMEs and the Tempo changelog on 2026-10-21; not checked against Google's Cloud Trace pages, so verify there. Not verified: Cloud Trace quotas, retention, span and attribute limits and prices; Cloud Trace's OTLP ingestion endpoint and the roles it needs; whether the `googlecloud` exporter or OTLP with Google authentication is Google's recommended path today; Cloud Trace span-to-log linking behaviour; Tempo Helm chart names; Kafka sizing and managed Kafka options on Google Cloud; Jaeger adaptive sampling status, index sizing and Helm values; Collector exporter and processor names in the release you run; whether Tempo's deploy page advises against monolithic mode on Kubernetes for production. No prices are quoted.
 
 ## Criteria
 
@@ -189,8 +189,6 @@ What would change the answer: Cloud Trace limits that reject your attributes or 
 - [[thanos-vs-mimir-vs-victoriametrics]]
 - [[structured-logging-conventions]]
 - [[service-mesh-on-gke]]
-- [[logging-architecture-gke-and-cloud-logging]]
-- [[observability-signals-and-dashboards]]
 
 ## Sources
 

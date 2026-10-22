@@ -528,6 +528,7 @@ To go deeper:
 - [[patterns/priority-classes-and-preemption]] before you create any PriorityClass.
 - [[patterns/gke-node-pool-upgrade-strategies]] and [[runbooks/gke-cluster-upgrade]] for how GKE drains nodes during upgrades.
 - [[runbooks/gke-node-notready-triage]] for the involuntary side: a node that disappears.
+- [[runbooks/pods-stuck-terminating-and-blocked-drains]] when a drain hangs on a PDB or a Pod stuck in `Terminating`.
 - [[learn/kubernetes-pods-and-deployments|Kubernetes 02]] for how Deployments replace evicted Pods.
 - The whole path is mapped in [[learn/index|the learning path]].
 

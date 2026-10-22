@@ -199,7 +199,7 @@ spec:
           digest: sha256:0000000000000000000000000000000000000000000000000000000000000000 # illustrative
 ```
 
-Argo CD uses Helm **only to render** (`helm template`) and then applies the result itself. Helm's release machinery is not used, so `helm ls` does not show the app and `helm rollback` does not apply. Values come from `valueFiles`, `values`, `valuesObject` and `parameters`, with `parameters` winning, then `valuesObject`, `values`, `valueFiles` and the chart's own `values.yaml`. Keep environment differences in values files in Git, not in CLI parameters, so they are reviewed. [[tools/helm-vs-kustomize]] compares the two renderers.
+Argo CD uses Helm **only to render** (`helm template`) and then applies the result itself. Helm's release machinery is not used, so `helm ls` does not show the app and `helm rollback` does not apply. Values come from `valueFiles`, `values`, `valuesObject` and `parameters`, with `parameters` winning, then `valuesObject`, `values`, `valueFiles` and the chart's own `values.yaml`. Keep environment differences in values files in Git, not in CLI parameters, so they are reviewed. [[tools/helm-vs-kustomize]] compares the two renderers, and [[adr/0062-helm-charts-rendered-by-argo-cd|ADR 0062]] records the platform's decision to deploy Helm charts this way.
 
 ## Guard rails: AppProjects
 
@@ -451,7 +451,9 @@ Next lesson: [[learn/spinnaker-basics-applications-pipelines-and-judgment|Delive
 
 To go deeper:
 
-- [[adr/0001-gitops-with-argocd]] and [[tools/argocd-vs-flux]] for why Argo CD.
+- [[adr/0001-gitops-with-argocd]] and [[tools/argocd-vs-flux]] for why Argo CD, and [[tools/cloud-deploy-vs-config-sync-vs-argocd]] for Google's managed alternatives.
+- [[adr/0062-helm-charts-rendered-by-argo-cd]] for how Helm charts are rendered and promoted under Argo CD.
+- [[patterns/crd-lifecycle-with-helm-and-argocd]] for installing and upgrading CRDs safely under Argo CD.
 - [[architecture/gitops-repo-topology-and-promotion]] for repository layout and promotion between environments.
 - [[runbooks/argocd-sync-failure-and-drift]] for sync failures and recurring drift in production.
 - [[patterns/progressive-delivery-argo-rollouts]] for canary and blue-green on top of Argo CD.

@@ -404,7 +404,5 @@ The incident is contained when all of these hold:
 - [[securing-ai-agents-in-ci-and-cloud]]: the rules that limit what an agent can reach.
 - [[gcp-iam-guardrails-for-agent-service-accounts]]: narrow service accounts and audit alerts.
 - [[kubernetes-rbac-for-ai-agents]]: narrow Roles for agent ServiceAccounts.
-- [[prompt-injection-test-harness-for-ci-agents]]: canaries and regression cases.
 - [[sandboxing-coding-agents-on-workstations-and-runners]]: limiting agents on laptops and runners.
-- [[blameless-postmortems]]: the review afterwards.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

@@ -498,7 +498,7 @@ Run everything on the lab VM in `~/disk-lab`, as a user with `sudo`. Keep the va
 
 ## Next steps
 
-Next lesson: move on in [[learn/index|the learning path]]. Previous lesson: [[learn/linux-performance-triage-with-mpstat-pidstat-sar-and-psi|Linux 06: Performance triage with mpstat, pidstat, sar and PSI]].
+Next lesson: [[learn/image-build-speed-cache-mounts-and-measurement|Containers 05: Faster image builds]], or move on in [[learn/index|the learning path]]. Previous lesson: [[learn/linux-performance-triage-with-mpstat-pidstat-sar-and-psi|Linux 06: Performance triage with mpstat, pidstat, sar and PSI]].
 
 To go deeper:
 

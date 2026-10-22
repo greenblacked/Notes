@@ -118,26 +118,26 @@ Build an alert on dropped packets due to exhausted resources once you know the m
 
 Match the fix to what steps 1 to 3 showed.
 
-| Finding                                                        | Fix                                                                                                                                                  |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A few busy VMs at their allocation, static allocation (DPA off) | Raise `minPortsPerVm`, or turn on **dynamic port allocation** so busy VMs grow from `minPortsPerVm` up to `maxPortsPerVm` and idle ones stay small.  |
+| Finding                                                         | Fix                                                                                                                                                                                |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A few busy VMs at their allocation, static allocation (DPA off) | Raise `minPortsPerVm`, or turn on **dynamic port allocation** so busy VMs grow from `minPortsPerVm` up to `maxPortsPerVm` and idle ones stay small.                                |
 | All VMs high, NAT IPs fully allocated                           | Add NAT IPs (manual) or let auto-allocation add them, after updating partner allowlists (step 6). `minExtraNatIpsNeeded` in `get-status` says how many more manual IPs are needed. |
-| Drops tied to endpoint-independent mapping conflicts            | Turn EIM off unless something needs it. EIM and dynamic port allocation are mutually exclusive.                                                       |
-| One destination, many short-lived connections                   | Reuse connections: HTTP keep-alive, connection pools, HTTP/2. This is the lasting fix; port settings only raise the ceiling.                          |
-| Many sockets in `TIME_WAIT` on the NAT side                     | Lower `tcpTimeWaitTimeoutSec` (default 120 seconds per the provider docs) with care: too low risks port reuse while late packets are still in flight. |
-| Long-idle connections held open by clients                      | Close idle connections in the client, or lower `tcpEstablishedIdleTimeoutSec` (default 1200 seconds) so NAT frees ports sooner. Clients must handle the resulting resets. |
+| Drops tied to endpoint-independent mapping conflicts            | Turn EIM off unless something needs it. EIM and dynamic port allocation are mutually exclusive.                                                                                    |
+| One destination, many short-lived connections                   | Reuse connections: HTTP keep-alive, connection pools, HTTP/2. This is the lasting fix; port settings only raise the ceiling.                                                       |
+| Many sockets in `TIME_WAIT` on the NAT side                     | Lower `tcpTimeWaitTimeoutSec` (default 120 seconds per the provider docs) with care: too low risks port reuse while late packets are still in flight.                              |
+| Long-idle connections held open by clients                      | Close idle connections in the client, or lower `tcpEstablishedIdleTimeoutSec` (default 1200 seconds) so NAT frees ports sooner. Clients must handle the resulting resets.          |
 
 Defaults and rules from the `gcloud` help and the API reference (SDK 570.0.0):
 
-| Setting                                    | Default and constraint                                                                                         |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| Dynamic port allocation                    | Off.                                                                                                           |
-| Endpoint-independent mapping               | Off. Cannot be on together with dynamic port allocation.                                                       |
-| `minPortsPerVm`                            | 64 with DPA off, 32 with DPA on. Rounded up to a power of 2 (50 becomes 64). With DPA: a power of 2, at least 32, below max. |
-| `maxPortsPerVm`                            | Only with DPA. Default 65536. A power of 2 greater than `minPortsPerVm`, at most 65536.                        |
-| UDP, ICMP, TCP transitory idle timeouts    | 30 seconds each.                                                                                               |
-| TCP established idle timeout                | 1200 seconds.                                                                                                  |
-| TCP `TIME_WAIT` timeout                    | 120 seconds per the Terraform provider; the API reports the effective value (`effectiveTcpTimeWaitTimeoutSec`). |
+| Setting                                 | Default and constraint                                                                                                       |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Dynamic port allocation                 | Off.                                                                                                                         |
+| Endpoint-independent mapping            | Off. Cannot be on together with dynamic port allocation.                                                                     |
+| `minPortsPerVm`                         | 64 with DPA off, 32 with DPA on. Rounded up to a power of 2 (50 becomes 64). With DPA: a power of 2, at least 32, below max. |
+| `maxPortsPerVm`                         | Only with DPA. Default 65536. A power of 2 greater than `minPortsPerVm`, at most 65536.                                      |
+| UDP, ICMP, TCP transitory idle timeouts | 30 seconds each.                                                                                                             |
+| TCP established idle timeout            | 1200 seconds.                                                                                                                |
+| TCP `TIME_WAIT` timeout                 | 120 seconds per the Terraform provider; the API reports the effective value (`effectiveTcpTimeWaitTimeoutSec`).              |
 
 **Sizing.** Each NAT IP has a fixed number of usable source ports (look the figure up in the Cloud NAT documentation; it is **not verified** here). With static allocation, the number of VMs one NAT IP can serve is that figure divided by `minPortsPerVm`, so raising the minimum on a fixed set of manual IPs can leave new nodes without NAT. `minExtraNatIpsNeeded` in `get-status` is the safe check: with manual IPs, it must stay 0 after the change, including at the node pool's maximum size.
 
@@ -232,24 +232,24 @@ Then from the application side:
 
 ## Troubleshooting
 
-| Symptom                                                         | Likely cause and fix                                                                                                                         |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| No NAT log entries at all                                       | Logging is off, or the filter in the query does not match your log entries. Copy the fields from a real entry in Logs Explorer.              |
-| Drops only from a few nodes                                     | Hot nodes running out of their own ports. Dynamic port allocation, or spread the workload across more nodes.                                 |
-| Drops to one destination only                                   | Connection churn to one IP and port. Fix keep-alive and pooling in the client; see [[timeouts-retries-load-shedding]].                       |
-| New nodes have no internet access after a port increase         | Manual NAT IPs cannot cover all VMs at the new minimum. `minExtraNatIpsNeeded` is above 0: add IPs or lower the minimum.                    |
-| Partner rejects some calls after the change                     | New NAT IPs are not on their allowlist. Get them added; meanwhile, remove the new IPs from the NAT pool only if the old ones can carry the load. |
-| `terraform plan` wants to replace the NAT                       | A force-new field changed (for example the name or router). Change the plan, not the NAT; replacing it drops all translations.               |
-| Calls to Google APIs fail but not to other hosts                | Probably not NAT. Check Private Google Access and DNS for `googleapis.com`; whether that traffic goes through Cloud NAT is **not verified**. |
-| Errors look like NAT but logs show no drops                     | Look at MTU, TLS and DNS; see [[network-troubleshooting-dns-mtu-tls-load-balancers]].                                                       |
+| Symptom                                                 | Likely cause and fix                                                                                                                             |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| No NAT log entries at all                               | Logging is off, or the filter in the query does not match your log entries. Copy the fields from a real entry in Logs Explorer.                  |
+| Drops only from a few nodes                             | Hot nodes running out of their own ports. Dynamic port allocation, or spread the workload across more nodes.                                     |
+| Drops to one destination only                           | Connection churn to one IP and port. Fix keep-alive and pooling in the client; see [[timeouts-retries-load-shedding]].                           |
+| New nodes have no internet access after a port increase | Manual NAT IPs cannot cover all VMs at the new minimum. `minExtraNatIpsNeeded` is above 0: add IPs or lower the minimum.                         |
+| Partner rejects some calls after the change             | New NAT IPs are not on their allowlist. Get them added; meanwhile, remove the new IPs from the NAT pool only if the old ones can carry the load. |
+| `terraform plan` wants to replace the NAT               | A force-new field changed (for example the name or router). Change the plan, not the NAT; replacing it drops all translations.                   |
+| Calls to Google APIs fail but not to other hosts        | Probably not NAT. Check Private Google Access and DNS for `googleapis.com`; whether that traffic goes through Cloud NAT is **not verified**.     |
+| Errors look like NAT but logs show no drops             | Look at MTU, TLS and DNS; see [[network-troubleshooting-dns-mtu-tls-load-balancers]].                                                            |
 
 ## Related
 
 - [[private-gke-and-controlled-egress]] for the egress design this runbook supports.
 - [[network-troubleshooting-dns-mtu-tls-load-balancers]] and [[load-balancers-firewalls-and-network-troubleshooting]] for other network failure modes.
 - [[shared-vpc-hub-and-spoke]] for where routers and NAT live in a Shared VPC.
-- [[gke-image-pull-registry-failures]] and [[gke-dns-failures-kube-dns-and-nodelocal]] for egress-adjacent GKE failures.
-- [[timeouts-retries-load-shedding]] and [[postgres-connection-pooling-gke]] for connection reuse on the client side.
+- [[gke-image-pull-registry-failures]] for an egress-adjacent GKE failure.
+- [[postgres-connection-pooling-gke]] for connection reuse on the client side.
 - [[ip-addressing-and-subnets]] and [[terraform-basics-on-gcp]] for the address plan and the Terraform workflow.
 
 ## Sources

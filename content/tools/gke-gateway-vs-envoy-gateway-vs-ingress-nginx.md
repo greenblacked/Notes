@@ -32,30 +32,30 @@ Both speak Gateway API, so `Gateway`, `HTTPRoute`, `GRPCRoute` and `BackendTLSPo
 
 ## Criteria
 
-| Criterion            | Why it matters                                                                                                 |
-| -------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Data plane location  | Managed load balancer outside the cluster vs proxies you scale, patch and monitor inside it                    |
-| Annotation parity    | ingress-nginx has about a hundred custom annotations without a direct Gateway API mapping (per ingress2gateway) |
-| TLS                  | Certificate source ([[cert-manager-vs-google-managed-certificates]]), minimum versions, mTLS to backends        |
-| WAF and rate limits  | Cloud Armor on Google's edge vs Envoy rate limiting; Envoy Gateway's `SecurityPolicy` has no WAF field          |
-| Client IP            | What the application sees in `X-Forwarded-For` after the change                                                |
-| Upgrade ownership    | Google rolls the GKE controller; you upgrade Envoy Gateway and its CRDs                                        |
-| Portability          | GKE policy CRDs are GKE-only; Envoy Gateway runs on any cluster                                                |
-| Mesh interplay       | East-west traffic and a mesh's own gateway ([[service-mesh-on-gke]])                                            |
-| Cost                 | Load balancer charges vs node capacity for proxies; check current pricing for both                             |
+| Criterion           | Why it matters                                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Data plane location | Managed load balancer outside the cluster vs proxies you scale, patch and monitor inside it                     |
+| Annotation parity   | ingress-nginx has about a hundred custom annotations without a direct Gateway API mapping (per ingress2gateway) |
+| TLS                 | Certificate source ([[cert-manager-vs-google-managed-certificates]]), minimum versions, mTLS to backends        |
+| WAF and rate limits | Cloud Armor on Google's edge vs Envoy rate limiting; Envoy Gateway's `SecurityPolicy` has no WAF field          |
+| Client IP           | What the application sees in `X-Forwarded-For` after the change                                                 |
+| Upgrade ownership   | Google rolls the GKE controller; you upgrade Envoy Gateway and its CRDs                                         |
+| Portability         | GKE policy CRDs are GKE-only; Envoy Gateway runs on any cluster                                                 |
+| Mesh interplay      | East-west traffic and a mesh's own gateway ([[service-mesh-on-gke]])                                            |
+| Cost                | Load balancer charges vs node capacity for proxies; check current pricing for both                              |
 
 ## At a glance
 
-| Concern                | ingress-nginx (today)                         | GKE Gateway controller                                       | Envoy Gateway on GKE                                                  |
-| ---------------------- | --------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------- |
-| Status                 | Retired: no fixes after March 2026 per README | Managed GKE feature                                          | Active open-source project                                            |
-| Data plane             | nginx pods behind a network LB                | Google Cloud application load balancer, pods via NEGs        | Envoy pods behind a network LB                                        |
-| Extension model        | Annotations, ConfigMap, snippets              | `networking.gke.io` policy CRDs                              | `gateway.envoyproxy.io` policy CRDs                                   |
-| WAF                    | ModSecurity annotation                        | Cloud Armor via `GCPBackendPolicy` `securityPolicy`          | No WAF field; check whether Cloud Armor can protect the network LB in front of Envoy, otherwise use the edge WAF ([[edge-waf-rate-limiting]]) |
-| IP allow lists         | `whitelist-source-range`                      | Cloud Armor rules                                            | `SecurityPolicy` authorization with `clientCIDRs`                     |
-| Auth at the edge       | `auth-url`, `auth-signin`                     | Check IAP support for Gateway on GKE                         | `SecurityPolicy` `extAuth`, `oidc`, `jwt`, `basicAuth`, `apiKeyAuth`   |
-| Who patches it         | Nobody now                                    | Google                                                       | You                                                                   |
-| ingress2gateway emitter | n/a                                          | `gce`                                                        | `envoy-gateway`                                                       |
+| Concern                 | ingress-nginx (today)                         | GKE Gateway controller                                | Envoy Gateway on GKE                                                                                                                          |
+| ----------------------- | --------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status                  | Retired: no fixes after March 2026 per README | Managed GKE feature                                   | Active open-source project                                                                                                                    |
+| Data plane              | nginx pods behind a network LB                | Google Cloud application load balancer, pods via NEGs | Envoy pods behind a network LB                                                                                                                |
+| Extension model         | Annotations, ConfigMap, snippets              | `networking.gke.io` policy CRDs                       | `gateway.envoyproxy.io` policy CRDs                                                                                                           |
+| WAF                     | ModSecurity annotation                        | Cloud Armor via `GCPBackendPolicy` `securityPolicy`   | No WAF field; check whether Cloud Armor can protect the network LB in front of Envoy, otherwise use the edge WAF ([[edge-waf-rate-limiting]]) |
+| IP allow lists          | `whitelist-source-range`                      | Cloud Armor rules                                     | `SecurityPolicy` authorization with `clientCIDRs`                                                                                             |
+| Auth at the edge        | `auth-url`, `auth-signin`                     | Check IAP support for Gateway on GKE                  | `SecurityPolicy` `extAuth`, `oidc`, `jwt`, `basicAuth`, `apiKeyAuth`                                                                          |
+| Who patches it          | Nobody now                                    | Google                                                | You                                                                                                                                           |
+| ingress2gateway emitter | n/a                                           | `gce`                                                 | `envoy-gateway`                                                                                                                               |
 
 ## Step 1: inventory what you have
 
@@ -110,29 +110,29 @@ Treat the snippet list as a security finding, not just a migration item. Snippet
 
 The table maps the ingress-nginx annotations that ingress2gateway documents, plus the common ones it does not list. "No converter support listed" means ingress2gateway's provider documentation does not mention it; decide by hand, and do not assume an equivalent exists.
 
-| ingress-nginx annotation                              | Gateway API or extension                                                                                   | ingress2gateway                                           |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `rewrite-target` (plain path)                         | `HTTPRoute` `URLRewrite` filter                                                                            | Converted; capture groups (`$1`) flagged unsupported      |
-| `app-root`                                            | `RequestRedirect` filter on `/`                                                                            | Converted                                                 |
-| `permanent-redirect`, `temporal-redirect` (and `-code`) | `RequestRedirect` filter with a status code                                                              | Converted                                                 |
-| `ssl-redirect`                                        | An HTTP listener route with a `RequestRedirect` to `https`                                                 | `ssl-redirect=false` converted                            |
-| `canary`, `canary-weight`, `canary-weight-total`      | Weighted `backendRefs`                                                                                     | Converted                                                 |
-| `canary-by-header`, `canary-by-header-value`          | Header match in an `HTTPRoute` rule                                                                        | Converted                                                 |
-| `canary-by-header-pattern`, `canary-by-cookie`        | Decide by hand                                                                                             | Recognised, warning only                                  |
-| `upstream-vhost`, `x-forwarded-prefix`, `connection-proxy-header` | Header and rewrite filters                                                                    | Converted                                                 |
-| `custom-headers`                                      | `RequestHeaderModifier` or `ResponseHeaderModifier`                                                        | Recognised, warning only                                  |
-| `proxy-connect-timeout`, `proxy-send-timeout`, `proxy-read-timeout` | `HTTPRoute` timeouts where supported; Envoy `BackendTrafficPolicy` `timeout`; GKE backend policy (verify) | Converted                                |
-| `proxy-body-size`, `client-body-buffer-size`          | Envoy `BackendTrafficPolicy` `requestBuffer`; GKE: check the load balancer limits                          | Converted                                                 |
-| `backend-protocol: GRPC` or `GRPCS`                   | `GRPCRoute`                                                                                                | Converted                                                 |
-| `backend-protocol: HTTPS`, `proxy-ssl-*`              | `BackendTLSPolicy`                                                                                         | Converted; `proxy-ssl-verify-depth`, `proxy-ssl-protocols` warning only |
-| `ssl-passthrough`                                     | `TLSRoute` (check the channel your implementation supports)                                                | Converted                                                 |
-| `use-regex`                                           | `RegularExpression` path match (implementation-specific support)                                           | Converted                                                 |
-| CORS annotations                                      | Envoy `SecurityPolicy` `cors`; GKE: decide by hand                                                         | Converted                                                 |
-| `whitelist-source-range`, `denylist-source-range`     | Envoy `SecurityPolicy` authorization; GKE: Cloud Armor                                                     | Converted                                                 |
-| `configuration-snippet`, `server-snippet`             | None. Rewrite the intent explicitly                                                                        | No converter support listed                               |
-| `auth-url`, `auth-signin`                             | Envoy `SecurityPolicy` `extAuth` or `oidc`; GKE: decide by hand                                            | No converter support listed                               |
-| `limit-rps`, `limit-connections`                      | Envoy `BackendTrafficPolicy` `rateLimit`; GKE: Cloud Armor rate limiting                                   | No converter support listed                               |
-| `enable-modsecurity` and other WAF annotations        | GKE: Cloud Armor; Envoy Gateway: none, use the edge WAF                                                    | No converter support listed                               |
+| ingress-nginx annotation                                            | Gateway API or extension                                                                                  | ingress2gateway                                                         |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `rewrite-target` (plain path)                                       | `HTTPRoute` `URLRewrite` filter                                                                           | Converted; capture groups (`$1`) flagged unsupported                    |
+| `app-root`                                                          | `RequestRedirect` filter on `/`                                                                           | Converted                                                               |
+| `permanent-redirect`, `temporal-redirect` (and `-code`)             | `RequestRedirect` filter with a status code                                                               | Converted                                                               |
+| `ssl-redirect`                                                      | An HTTP listener route with a `RequestRedirect` to `https`                                                | `ssl-redirect=false` converted                                          |
+| `canary`, `canary-weight`, `canary-weight-total`                    | Weighted `backendRefs`                                                                                    | Converted                                                               |
+| `canary-by-header`, `canary-by-header-value`                        | Header match in an `HTTPRoute` rule                                                                       | Converted                                                               |
+| `canary-by-header-pattern`, `canary-by-cookie`                      | Decide by hand                                                                                            | Recognised, warning only                                                |
+| `upstream-vhost`, `x-forwarded-prefix`, `connection-proxy-header`   | Header and rewrite filters                                                                                | Converted                                                               |
+| `custom-headers`                                                    | `RequestHeaderModifier` or `ResponseHeaderModifier`                                                       | Recognised, warning only                                                |
+| `proxy-connect-timeout`, `proxy-send-timeout`, `proxy-read-timeout` | `HTTPRoute` timeouts where supported; Envoy `BackendTrafficPolicy` `timeout`; GKE backend policy (verify) | Converted                                                               |
+| `proxy-body-size`, `client-body-buffer-size`                        | Envoy `BackendTrafficPolicy` `requestBuffer`; GKE: check the load balancer limits                         | Converted                                                               |
+| `backend-protocol: GRPC` or `GRPCS`                                 | `GRPCRoute`                                                                                               | Converted                                                               |
+| `backend-protocol: HTTPS`, `proxy-ssl-*`                            | `BackendTLSPolicy`                                                                                        | Converted; `proxy-ssl-verify-depth`, `proxy-ssl-protocols` warning only |
+| `ssl-passthrough`                                                   | `TLSRoute` (check the channel your implementation supports)                                               | Converted                                                               |
+| `use-regex`                                                         | `RegularExpression` path match (implementation-specific support)                                          | Converted                                                               |
+| CORS annotations                                                    | Envoy `SecurityPolicy` `cors`; GKE: decide by hand                                                        | Converted                                                               |
+| `whitelist-source-range`, `denylist-source-range`                   | Envoy `SecurityPolicy` authorization; GKE: Cloud Armor                                                    | Converted                                                               |
+| `configuration-snippet`, `server-snippet`                           | None. Rewrite the intent explicitly                                                                       | No converter support listed                                             |
+| `auth-url`, `auth-signin`                                           | Envoy `SecurityPolicy` `extAuth` or `oidc`; GKE: decide by hand                                           | No converter support listed                                             |
+| `limit-rps`, `limit-connections`                                    | Envoy `BackendTrafficPolicy` `rateLimit`; GKE: Cloud Armor rate limiting                                  | No converter support listed                                             |
+| `enable-modsecurity` and other WAF annotations                      | GKE: Cloud Armor; Envoy Gateway: none, use the edge WAF                                                   | No converter support listed                                             |
 
 ## Step 3: convert with ingress2gateway, then review by hand
 
@@ -350,15 +350,15 @@ flowchart LR
 
 ## Failure modes to test before cutover
 
-| Area             | What breaks                                                                                         | How to check                                                                                     |
-| ---------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Area             | What breaks                                                                                                                | How to check                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Health checks    | GKE load balancer health checks hit the pods directly; an app that does not answer on the checked path is marked unhealthy | Gateway and backend status, then a `HealthCheckPolicy` that targets the real readiness path |
-| Timeouts         | Long requests or downloads cut off at a different limit than nginx's                                | Time a known slow endpoint through both paths; set explicit timeouts                             |
-| WebSockets, gRPC | Connections dropped at an idle or backend timeout, or the wrong protocol to the backend             | A long-lived WebSocket test and a gRPC health check through the new address                      |
-| Client IP        | The app logs the proxy's address, or rate limits by the wrong IP                                    | Compare `X-Forwarded-For` as seen by the app on both paths                                       |
-| Body size        | Uploads rejected with 413, or accepted when they should be refused                                  | Upload just under and just over the intended limit                                               |
-| Redirects        | HTTP to HTTPS loops when an upstream proxy already terminates TLS                                   | `curl -I http://...` and follow redirects with `-L --max-redirs 5`                               |
-| TLS              | Wrong certificate, missing intermediate, older clients rejected                                     | `openssl s_client -connect` to the new address with `-servername`                                |
+| Timeouts         | Long requests or downloads cut off at a different limit than nginx's                                                       | Time a known slow endpoint through both paths; set explicit timeouts                        |
+| WebSockets, gRPC | Connections dropped at an idle or backend timeout, or the wrong protocol to the backend                                    | A long-lived WebSocket test and a gRPC health check through the new address                 |
+| Client IP        | The app logs the proxy's address, or rate limits by the wrong IP                                                           | Compare `X-Forwarded-For` as seen by the app on both paths                                  |
+| Body size        | Uploads rejected with 413, or accepted when they should be refused                                                         | Upload just under and just over the intended limit                                          |
+| Redirects        | HTTP to HTTPS loops when an upstream proxy already terminates TLS                                                          | `curl -I http://...` and follow redirects with `-L --max-redirs 5`                          |
+| TLS              | Wrong certificate, missing intermediate, older clients rejected                                                            | `openssl s_client -connect` to the new address with `-servername`                           |
 
 The general network debugging path is in [[network-troubleshooting-dns-mtu-tls-load-balancers]].
 
@@ -378,7 +378,6 @@ The general network debugging path is in [[network-troubleshooting-dns-mtu-tls-l
 - [[gke-blue-green-releases]]
 - [[network-troubleshooting-dns-mtu-tls-load-balancers]]
 - [[kubernetes-services-and-ingress]]
-- [[external-dns-on-gke]]
 
 ## Sources
 

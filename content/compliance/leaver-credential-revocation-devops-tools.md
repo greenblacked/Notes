@@ -18,7 +18,7 @@ aliases:
   - offboarding-token-revocation
 ---
 
-Disabling a person in the identity provider ends their single sign-on sessions. It does not end the GitLab personal access token in a script on their laptop, the Jenkins API token in a cron job, the service account key they created last year, or the SSH key in project metadata. This runbook lists, revokes and verifies those credentials tool by tool, and produces an evidence record with a timestamp per system. The quarterly review that catches what this misses is in [[compliance/access-reviews-gcp-and-gke]].
+Disabling a person in the identity provider ends their single sign-on sessions. It does not end the GitLab personal access token in a script on their laptop, the Jenkins API token in a cron job, the service account key they created last year, or the SSH key in project metadata. This runbook lists, revokes and verifies those credentials tool by tool, and produces an evidence record with a timestamp per system. The quarterly review that catches what this misses is in [[compliance/access-reviews-gcp-and-gke]]. The handover plan, the ownership inventory and the people side of a departure are in [[management/offboarding-platform-engineers]].
 
 > [!warning] Not legal or audit advice
 > This is general engineering guidance. Your auditor, assessor or legal counsel decides what satisfies a control or a legal obligation; check control numbers and wording against the current edition of the framework.
@@ -415,6 +415,7 @@ The script does not transfer schedules (that needs the handover identity's token
 
 - [[compliance/access-reviews-gcp-and-gke]]: the quarterly review that checks leavers were fully removed.
 - [[management/onboarding-engineers]]: the joiner side, which should create the username map used here.
+- [[management/offboarding-platform-engineers]]: the handover and ownership plan this runbook runs inside.
 - [[compliance/privileged-access-just-in-time-gcp-gke]]: time-bound elevated access, which leaves less to revoke.
 - [[architecture/iam-groups-and-ci-workload-identity-federation]]: group-based access and keyless CI, which shrink this runbook.
 - [[compliance/gitlab-compliance-frameworks-and-security-policies]]: GitLab group controls and audit events.

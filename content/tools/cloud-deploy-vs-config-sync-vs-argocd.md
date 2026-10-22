@@ -42,34 +42,34 @@ flowchart LR
 
 ## Criteria
 
-| Criterion                | Why it matters here                                                                                        |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| Push or pull             | ADR 0001 keeps cluster credentials out of CI; a push model moves them to a managed service                 |
-| Promotion and approvals  | Production deploys are protected ([[0047-semver-release-tags-and-protected-production-deploys]])           |
-| Rollback                 | ADR 0048 rolls back by reverting to the previous digest in Git                                             |
-| Progressive delivery     | Canary with automated analysis is the default for services that need it                                    |
-| Fleet scale              | Many clusters per environment and region ([[gke-platform-topology-and-tenancy]])                           |
-| Drift                    | Manual changes must be detected or prevented                                                               |
-| Developer UI             | Application teams see their own deployments without cluster credentials                                    |
-| IAM and audit            | Who deployed what, and who approved it ([[separation-of-duties-in-deployments]])                          |
-| Cost and lock-in         | Managed services cost money per use and tie the pipeline to GCP                                            |
+| Criterion               | Why it matters here                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| Push or pull            | ADR 0001 keeps cluster credentials out of CI; a push model moves them to a managed service       |
+| Promotion and approvals | Production deploys are protected ([[0047-semver-release-tags-and-protected-production-deploys]]) |
+| Rollback                | ADR 0048 rolls back by reverting to the previous digest in Git                                   |
+| Progressive delivery    | Canary with automated analysis is the default for services that need it                          |
+| Fleet scale             | Many clusters per environment and region ([[gke-platform-topology-and-tenancy]])                 |
+| Drift                   | Manual changes must be detected or prevented                                                     |
+| Developer UI            | Application teams see their own deployments without cluster credentials                          |
+| IAM and audit           | Who deployed what, and who approved it ([[separation-of-duties-in-deployments]])                 |
+| Cost and lock-in        | Managed services cost money per use and tie the pipeline to GCP                                  |
 
 ## At a glance
 
-| Concern               | Cloud Deploy                                                                  | Config Sync                                                                     | Argo CD plus Rollouts                                                  |
-| --------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Model                 | Push: releases rolled out to targets                                          | Pull: reconciler per cluster                                                    | Pull: central controller, many clusters                                |
-| Source                | Skaffold render of manifests, Helm or Kustomize at release time               | Git, OCI image or Helm chart                                                    | Git (plain, Kustomize, Helm), OCI depending on version                 |
-| Targets               | GKE, Cloud Run and other types (check the docs), custom targets               | The cluster it runs in                                                          | Any registered Kubernetes cluster                                      |
-| Promotion             | `releases promote`, serial pipeline stages                                    | Change the commit, branch or tag the sync points at                             | Git change per environment ([[gitops-repo-topology-and-promotion]])     |
-| Approval              | `requireApproval` on a target; `rollouts approve` or `reject`                 | Git review only                                                                 | Git review; optional sync windows                                      |
-| Rollback              | `targets rollback` to a prior release                                         | Revert the source                                                               | Revert the Git commit (ADR 0048); Rollouts abort for canaries           |
-| Canary                | Built-in canary strategy for GKE (Gateway API or Service networking) and Cloud Run | None                                                                       | Argo Rollouts with analysis ([[progressive-delivery-argo-rollouts]])    |
-| Drift                 | Not its job after the rollout                                                 | Continuous; optional admission webhook to prevent drift                         | Continuous detection, self-heal                                        |
-| UI                    | Cloud console                                                                 | Cloud console for fleets; `kubectl` status                                      | Argo CD UI with SSO and project RBAC                                    |
-| Operated by           | Google                                                                        | Google (fleet feature) or you (open-source manifests)                          | You                                                                    |
-| Lock-in               | High: pipeline, targets and approvals are GCP resources                       | Medium: plain manifests, GKE-specific CRDs and install                          | Low: open source, any cluster                                          |
-| Cost                  | Check the [pricing page](https://cloud.google.com/deploy/pricing)             | Check the current GKE and fleet pricing                                         | Your cluster resources and operating time                               |
+| Concern     | Cloud Deploy                                                                       | Config Sync                                             | Argo CD plus Rollouts                                                |
+| ----------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------- |
+| Model       | Push: releases rolled out to targets                                               | Pull: reconciler per cluster                            | Pull: central controller, many clusters                              |
+| Source      | Skaffold render of manifests, Helm or Kustomize at release time                    | Git, OCI image or Helm chart                            | Git (plain, Kustomize, Helm), OCI depending on version               |
+| Targets     | GKE, Cloud Run and other types (check the docs), custom targets                    | The cluster it runs in                                  | Any registered Kubernetes cluster                                    |
+| Promotion   | `releases promote`, serial pipeline stages                                         | Change the commit, branch or tag the sync points at     | Git change per environment ([[gitops-repo-topology-and-promotion]])  |
+| Approval    | `requireApproval` on a target; `rollouts approve` or `reject`                      | Git review only                                         | Git review; optional sync windows                                    |
+| Rollback    | `targets rollback` to a prior release                                              | Revert the source                                       | Revert the Git commit (ADR 0048); Rollouts abort for canaries        |
+| Canary      | Built-in canary strategy for GKE (Gateway API or Service networking) and Cloud Run | None                                                    | Argo Rollouts with analysis ([[progressive-delivery-argo-rollouts]]) |
+| Drift       | Not its job after the rollout                                                      | Continuous; optional admission webhook to prevent drift | Continuous detection, self-heal                                      |
+| UI          | Cloud console                                                                      | Cloud console for fleets; `kubectl` status              | Argo CD UI with SSO and project RBAC                                 |
+| Operated by | Google                                                                             | Google (fleet feature) or you (open-source manifests)   | You                                                                  |
+| Lock-in     | High: pipeline, targets and approvals are GCP resources                            | Medium: plain manifests, GKE-specific CRDs and install  | Low: open source, any cluster                                        |
+| Cost        | Check the [pricing page](https://cloud.google.com/deploy/pricing)                  | Check the current GKE and fleet pricing                 | Your cluster resources and operating time                            |
 
 ## Cloud Deploy
 
@@ -268,16 +268,16 @@ Argo CD and Rollouts are covered in [[argocd-vs-flux]], [[argo-rollouts-vs-spinn
 
 ## Failure modes and rollback
 
-| Tool         | Failure                                                         | What to do                                                                                       |
-| ------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Cloud Deploy | Render works in staging but fails for production profile        | Render every profile in CI before creating the release                                           |
-| Cloud Deploy | Approval stuck, approver unavailable                            | A second approver group; never grant the author the approver role as a workaround                |
-| Cloud Deploy | Rollback target abandoned                                       | Roll back to an older non-abandoned release, or create a new release from the previous digest   |
-| Cloud Deploy | Canary leaves the `HTTPRoute` split                             | Check the rollout phase, advance or roll back; inspect the route on every associated cluster    |
-| Config Sync  | Source unreachable (Git outage, registry permission)            | The cluster keeps its last applied state; fix access and watch `source.errors`                   |
-| Config Sync  | Bad commit applied to the whole fleet                           | Revert the commit or repoint the sync to the previous tag or digest; roll out by fleet ring      |
-| Config Sync  | Webhook blocks an urgent fix                                    | Make the fix through Git; `stop_syncing` on the feature membership pauses syncing (check its exact effect first) |
-| Argo CD      | Covered in [[argocd-vs-flux]] and [[0048-rollback-by-redeploying-previous-digest]] | Revert in Git; Rollouts abort for a canary                                  |
+| Tool         | Failure                                                                            | What to do                                                                                                       |
+| ------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Cloud Deploy | Render works in staging but fails for production profile                           | Render every profile in CI before creating the release                                                           |
+| Cloud Deploy | Approval stuck, approver unavailable                                               | A second approver group; never grant the author the approver role as a workaround                                |
+| Cloud Deploy | Rollback target abandoned                                                          | Roll back to an older non-abandoned release, or create a new release from the previous digest                    |
+| Cloud Deploy | Canary leaves the `HTTPRoute` split                                                | Check the rollout phase, advance or roll back; inspect the route on every associated cluster                     |
+| Config Sync  | Source unreachable (Git outage, registry permission)                               | The cluster keeps its last applied state; fix access and watch `source.errors`                                   |
+| Config Sync  | Bad commit applied to the whole fleet                                              | Revert the commit or repoint the sync to the previous tag or digest; roll out by fleet ring                      |
+| Config Sync  | Webhook blocks an urgent fix                                                       | Make the fix through Git; `stop_syncing` on the feature membership pauses syncing (check its exact effect first) |
+| Argo CD      | Covered in [[argocd-vs-flux]] and [[0048-rollback-by-redeploying-previous-digest]] | Revert in Git; Rollouts abort for a canary                                                                       |
 
 For Config Sync, point production at an immutable OCI digest or Git tag rather than a branch, so "roll back" is a single field change in Terraform and the fleet converges on known bytes.
 
@@ -295,11 +295,9 @@ For Config Sync, point production at an immutable OCI digest or Git tag rather t
 - [[0047-semver-release-tags-and-protected-production-deploys]]
 - [[0048-rollback-by-redeploying-previous-digest]]
 - [[argocd-vs-flux]]
-- [[argo-rollouts-vs-spinnaker]]
+- [[learn/gitops-with-argo-cd|Delivery 11: GitOps with Argo CD]]
 - [[gitops-repo-topology-and-promotion]]
 - [[progressive-delivery-argo-rollouts]]
-- [[gke-platform-topology-and-tenancy]]
-- [[separation-of-duties-in-deployments]]
 
 ## Sources
 

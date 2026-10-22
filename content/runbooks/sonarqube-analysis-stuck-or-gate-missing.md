@@ -24,7 +24,7 @@ An analysis has three stages, and each fails differently:
 For upgrade problems use [[sonarqube-upgrade-and-db-migration]]; for gate design, [[sonarqube-quality-gates]].
 
 > [!info] Scope and verification
-> The `api/ce/*` and `api/system/health` endpoints, their parameters, statuses and permissions were read in the SonarQube Community Build source on 2026-10-21; the product naming and the editions statement come from the SonarQube README. docs.sonarsource.com could not be opened, so the rest is from experience and is **not verified**:
+> The `api/ce/*` and `api/system/health` endpoints, their parameters, statuses and permissions were read in the SonarQube Community Build source on 2026-10-21; the product naming and the editions statement come from the SonarQube README. The rest is from experience, not checked against the documentation at docs.sonarsource.com, and is **not verified**:
 >
 > - the defaults of `sonar.qualitygate.wait` and `sonar.qualitygate.timeout` (commonly off and 300 seconds);
 > - that Jenkins `waitForQualityGate` needs a SonarQube webhook to Jenkins, and the webhook delivery history UI;
@@ -69,13 +69,13 @@ sq "/api/ce/task?id=$TASK_ID&additionalFields=warnings" | jq '.task | {status, t
 
 Status values are `PENDING` and `IN_PROGRESS` while queued or running, and `SUCCESS`, `FAILED` or `CANCELED` once finished. Then go to the matching step:
 
-| Task status            | Meaning                                                    | Go to  |
-| ---------------------- | ---------------------------------------------------------- | ------ |
-| No task, no ID in log  | The scanner failed before or during upload.                | Step 4 |
-| `PENDING` for long     | The queue is backed up.                                    | Step 2 |
-| `IN_PROGRESS` for long | One task is slow or stuck; the server may be unhealthy.    | Step 2 |
-| `FAILED`               | Background processing failed; read `errorMessage`.         | Step 3 |
-| `SUCCESS`              | The analysis is done; the result was not delivered.        | Step 4 |
+| Task status            | Meaning                                                 | Go to  |
+| ---------------------- | ------------------------------------------------------- | ------ |
+| No task, no ID in log  | The scanner failed before or during upload.             | Step 4 |
+| `PENDING` for long     | The queue is backed up.                                 | Step 2 |
+| `IN_PROGRESS` for long | One task is slow or stuck; the server may be unhealthy. | Step 2 |
+| `FAILED`               | Background processing failed; read `errorMessage`.      | Step 3 |
+| `SUCCESS`              | The analysis is done; the result was not delivered.     | Step 4 |
 
 For a project view of the same thing, `api/ce/component` returns the pending and in-progress tasks and the last executed task of one project (it needs Browse on the project):
 
@@ -182,18 +182,18 @@ This runbook changes little that needs undoing: cancelled tasks are re-created b
 
 ## Troubleshooting
 
-| Symptom                                                   | Likely cause and fix                                                                                                                   |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| CI job times out waiting for the gate                     | Task still queued or running. Step 2; raise the timeout only if tasks are healthy but slow.                                            |
-| Many tasks `PENDING`, none `IN_PROGRESS`                  | CE not processing: CE out of memory, database errors. Read the CE log, fix, restart.                                                   |
-| One task `IN_PROGRESS` for hours                          | A huge or stuck analysis. Read its log lines; cancel it if it is a duplicate, and fix the project's scope (exclusions, generated code). |
-| `api/system/health` returns RED                           | Server, search index or database down. Treat as an outage; step 5 for merges.                                                          |
-| Only the passcode works for health; other calls refused    | Safe mode during a database upgrade. Finish it with [[sonarqube-upgrade-and-db-migration]].                                           |
-| Task `FAILED` on branch or MR analysis                    | The edition has no branch or MR analysis. Analyse only the main branch, or change edition.                                             |
-| Jenkins hangs in `waitForQualityGate`                     | No webhook to Jenkins, webhook cannot reach Jenkins, or a secret mismatch. Step 4b.                                                    |
-| CI job passes, but no MR decoration                       | Branch pipeline instead of MR pipeline, project not bound, or integration token expired. Step 4c.                                      |
-| Gate result is for the wrong code                         | Shallow clone or wrong new code reference. Use full history (`GIT_DEPTH: "0"`), see [[sonarqube-quality-gates]].                       |
-| 401 or 403 from the API                                   | Token expired or lacks the permission each endpoint needs (see Preconditions).                                                         |
+| Symptom                                                 | Likely cause and fix                                                                                                                    |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| CI job times out waiting for the gate                   | Task still queued or running. Step 2; raise the timeout only if tasks are healthy but slow.                                             |
+| Many tasks `PENDING`, none `IN_PROGRESS`                | CE not processing: CE out of memory, database errors. Read the CE log, fix, restart.                                                    |
+| One task `IN_PROGRESS` for hours                        | A huge or stuck analysis. Read its log lines; cancel it if it is a duplicate, and fix the project's scope (exclusions, generated code). |
+| `api/system/health` returns RED                         | Server, search index or database down. Treat as an outage; step 5 for merges.                                                           |
+| Only the passcode works for health; other calls refused | Safe mode during a database upgrade. Finish it with [[sonarqube-upgrade-and-db-migration]].                                             |
+| Task `FAILED` on branch or MR analysis                  | The edition has no branch or MR analysis. Analyse only the main branch, or change edition.                                              |
+| Jenkins hangs in `waitForQualityGate`                   | No webhook to Jenkins, webhook cannot reach Jenkins, or a secret mismatch. Step 4b.                                                     |
+| CI job passes, but no MR decoration                     | Branch pipeline instead of MR pipeline, project not bound, or integration token expired. Step 4c.                                       |
+| Gate result is for the wrong code                       | Shallow clone or wrong new code reference. Use full history (`GIT_DEPTH: "0"`), see [[sonarqube-quality-gates]].                        |
+| 401 or 403 from the API                                 | Token expired or lacks the permission each endpoint needs (see Preconditions).                                                          |
 
 ## Related
 
@@ -201,6 +201,7 @@ This runbook changes little that needs undoing: cancelled tasks are re-created b
 - [[sonarqube-quality-gates]] for gate design and the CI configuration.
 - [[sonarqube-basics-first-scan-and-triage]] for how an analysis works from first principles.
 - [[sonarqube-upgrade-and-db-migration]] for upgrade problems and safe mode.
+- [[sonarqube-platform-architecture]] for how the server, Compute Engine and database are deployed and sized.
 - [[gitlab-pipeline-or-job-did-not-run]] when the MR pipeline itself did not run.
 - [[jenkins-controller-down-and-queue-stuck]] when Jenkins, not SonarQube, is the problem.
 - [[policy-exception-and-waiver-process]] for time-boxed bypasses.

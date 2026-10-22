@@ -46,18 +46,18 @@ Start from the scenarios in the threat model. The usual top five for a GCP and G
 
 ## Signal sources
 
-| Source                         | What it shows                                                        | Notes                                                                                                                   |
-| ------------------------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Admin Activity audit logs      | Configuration changes: IAM, firewall, clusters, keys                  | The backbone of most detections                                                                                         |
-| Data Access audit logs         | Reads and data writes: secret access, IAM policy reads, object reads  | Types `ADMIN_READ`, `DATA_READ`, `DATA_WRITE`, set per service in `auditConfigs`; enable where the risk justifies the volume |
-| Policy Denied audit logs       | Requests blocked by VPC Service Controls or policy                    | Repeated denials from one principal are a probe signal                                                                  |
-| GKE audit logs (`k8s.io`)      | Kubernetes API calls: exec, secrets, RBAC changes                     | See the logging architecture note for what is collected                                                                 |
-| VPC Flow Logs                  | Connections per subnet, sampled                                       | Per subnet; gcloud defaults are a 5-second interval, 0.5 sampling and no metadata. Volume and cost grow fast            |
-| Cloud DNS query logs           | Names resolved by workloads                                           | Enabled by a DNS policy with `--enable-logging`; good for command-and-control and exfiltration lookups                  |
-| Security Command Center        | Findings: threats, vulnerabilities, misconfigurations, posture        | Finding classes include `THREAT`, `VULNERABILITY`, `MISCONFIGURATION`; detectors depend on tier                         |
-| GKE security posture           | Workload configuration and vulnerability findings                     | `--security-posture` and `--workload-vulnerability-scanning` on the cluster                                             |
-| Runtime detection (Falco or SCC) | Process, file and network behaviour inside containers               | Falco is self-managed; SCC Container Threat Detection is managed but tier-dependent                                     |
-| Image and dependency findings  | Known vulnerabilities in what runs                                    | Fed by the supply chain ([[architecture/software-supply-chain-end-to-end]]) and handled under [[standards/vulnerability-management-slas]] |
+| Source                                     | What it shows                                                        | Notes                                                                                                                                                              |
+| ------------------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Admin Activity audit logs                  | Configuration changes: IAM, firewall, clusters, keys                 | The backbone of most detections                                                                                                                                    |
+| Data Access audit logs                     | Reads and data writes: secret access, IAM policy reads, object reads | Types `ADMIN_READ`, `DATA_READ`, `DATA_WRITE`, set per service in `auditConfigs`; enable where the risk justifies the volume                                       |
+| Policy Denied audit logs                   | Requests blocked by VPC Service Controls or policy                   | Repeated denials from one principal are a probe signal                                                                                                             |
+| GKE audit logs (`k8s.io`)                  | Kubernetes API calls: exec, secrets, RBAC changes                    | See the logging architecture note for what is collected                                                                                                            |
+| VPC Flow Logs                              | Connections per subnet, sampled                                      | Per subnet; gcloud defaults are a 5-second interval, 0.5 sampling and no metadata. Volume and cost grow fast                                                       |
+| Cloud DNS query logs                       | Names resolved by workloads                                          | Enabled by a DNS policy with `--enable-logging`; good for command-and-control and exfiltration lookups                                                             |
+| Security Command Center                    | Findings: threats, vulnerabilities, misconfigurations, posture       | Finding classes include `THREAT`, `VULNERABILITY`, `MISCONFIGURATION`; detectors depend on tier                                                                    |
+| GKE security posture                       | Workload configuration and vulnerability findings                    | `--security-posture` and `--workload-vulnerability-scanning` on the cluster                                                                                        |
+| Runtime detection (Falco, Tetragon or SCC) | Process, file and network behaviour inside containers                | Falco and Tetragon are self-managed; SCC Container Threat Detection is managed but tier-dependent. Compared in [[tools/falco-vs-tetragon-vs-gke-threat-detection]] |
+| Image and dependency findings              | Known vulnerabilities in what runs                                   | Fed by the supply chain ([[architecture/software-supply-chain-end-to-end]]) and handled under [[standards/vulnerability-management-slas]]                          |
 
 ## Pipeline
 
@@ -148,14 +148,14 @@ A finding without an owner is noise. Route by the resource, not by the detector:
 - **Owner lookup.** Derive the owner from the project's labels and folder ([[architecture/gcp-resource-hierarchy-and-landing-zone]]) or the namespace's labels in GKE ([[architecture/gke-platform-topology-and-tenancy]]). The SIEM or a small router enriches each finding with `owner_team` before it creates a ticket or page.
 - **Severity mapping.** Map detector severity to the incident scale in [[adr/0050-incident-severity-levels-and-roles]]. A starting point:
 
-| Signal                                                              | Initial severity | Route                                          |
-| ------------------------------------------------------------------- | ---------------- | ---------------------------------------------- |
-| SCC `THREAT` finding with `CRITICAL` or `HIGH` severity in prod     | SEV2, page       | Security on-call and owning team               |
-| Owner grant or key creation by an unexpected principal              | SEV2, page       | Security on-call                               |
-| Audit config removed, sink deleted                                  | SEV2, page       | Security on-call                               |
-| Firewall open to the internet in prod                               | SEV3, ticket (page if unexplained after an hour) | Owning team, security in copy |
-| Exec into a prod pod                                                | SEV4 by default, SEV2 if no matching change or incident | Owning team                |
-| `VULNERABILITY` and `MISCONFIGURATION` findings                     | Ticket with SLA  | Owning team, per [[standards/vulnerability-management-slas]] |
+| Signal                                                          | Initial severity                                        | Route                                                        |
+| --------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
+| SCC `THREAT` finding with `CRITICAL` or `HIGH` severity in prod | SEV2, page                                              | Security on-call and owning team                             |
+| Owner grant or key creation by an unexpected principal          | SEV2, page                                              | Security on-call                                             |
+| Audit config removed, sink deleted                              | SEV2, page                                              | Security on-call                                             |
+| Firewall open to the internet in prod                           | SEV3, ticket (page if unexplained after an hour)        | Owning team, security in copy                                |
+| Exec into a prod pod                                            | SEV4 by default, SEV2 if no matching change or incident | Owning team                                                  |
+| `VULNERABILITY` and `MISCONFIGURATION` findings                 | Ticket with SLA                                         | Owning team, per [[standards/vulnerability-management-slas]] |
 
 Every alert carries a runbook link and the owner, as [[standards/alert-and-runbook-standard]] requires. Mute known-benign patterns with SCC mute configs or SIEM suppressions that expire, never with an open-ended exclusion.
 
@@ -169,14 +169,14 @@ The first 15 minutes for a security alert, before the full process in [[runbooks
 4. Preserve evidence (below) before changing anything that would destroy it.
 5. Contain with the smallest reversible action, then follow [[runbooks/compromised-cloud-cluster-containment]] or [[runbooks/leaked-credential-rotation]].
 
-| Action                                                       | Automate?                          | Why                                                                     |
-| ------------------------------------------------------------ | ---------------------------------- | ----------------------------------------------------------------------- |
-| Enrich, deduplicate, open ticket, page                       | Yes                                | No effect on production                                                 |
-| Disable a newly created service account key                  | Yes, with notification             | Reversible (`keys disable`), and the key should not exist under policy  |
-| Revert a firewall rule open to `0.0.0.0/0` in a non-prod project | Yes, with notification         | Reversible; non-prod                                                    |
-| Cordon a node, isolate a pod with a NetworkPolicy            | Human decides                      | Can cause an outage; keeps evidence if done right                       |
-| Delete a pod, node, VM or key                                | Never automatic                    | Destroys evidence and may be irreversible                               |
-| Disable a user or service account                            | Human decides                      | Can stop production workloads                                           |
+| Action                                                           | Automate?              | Why                                                                    |
+| ---------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| Enrich, deduplicate, open ticket, page                           | Yes                    | No effect on production                                                |
+| Disable a newly created service account key                      | Yes, with notification | Reversible (`keys disable`), and the key should not exist under policy |
+| Revert a firewall rule open to `0.0.0.0/0` in a non-prod project | Yes, with notification | Reversible; non-prod                                                   |
+| Cordon a node, isolate a pod with a NetworkPolicy                | Human decides          | Can cause an outage; keeps evidence if done right                      |
+| Delete a pod, node, VM or key                                    | Never automatic        | Destroys evidence and may be irreversible                              |
+| Disable a user or service account                                | Human decides          | Can stop production workloads                                          |
 
 ## Evidence preservation
 
@@ -193,14 +193,14 @@ The first 15 minutes for a security alert, before the full process in [[runbooks
 
 ## Failure modes
 
-| Failure                                   | Effect                                         | Mitigation                                                                        |
-| ----------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------- |
-| Sink writer identity loses access         | Exports fail silently, the SIEM goes quiet     | Alert on sink errors and on "no events from source X for N minutes" in the SIEM   |
-| Data Access logs never enabled            | Secret reads and data access invisible         | Enable deliberately for sensitive services; verify with a test read               |
-| A new project outside the sink's folder   | Its logs never reach the SIEM                  | Organisation-level sink with include-children; landing zone puts projects in folders |
-| Cost spike from flow or Data Access logs  | Pressure to switch logging off entirely        | Sampling, exclusions with an owner, retention tiers                               |
-| Alert fatigue                             | Real alerts ignored                            | Owner routing, severity discipline, quarterly tuning                              |
-| Automation deletes evidence               | No root cause, no legal record                 | No destructive automation; snapshots first                                        |
+| Failure                                  | Effect                                     | Mitigation                                                                           |
+| ---------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Sink writer identity loses access        | Exports fail silently, the SIEM goes quiet | Alert on sink errors and on "no events from source X for N minutes" in the SIEM      |
+| Data Access logs never enabled           | Secret reads and data access invisible     | Enable deliberately for sensitive services; verify with a test read                  |
+| A new project outside the sink's folder  | Its logs never reach the SIEM              | Organisation-level sink with include-children; landing zone puts projects in folders |
+| Cost spike from flow or Data Access logs | Pressure to switch logging off entirely    | Sampling, exclusions with an owner, retention tiers                                  |
+| Alert fatigue                            | Real alerts ignored                        | Owner routing, severity discipline, quarterly tuning                                 |
+| Automation deletes evidence              | No root cause, no legal record             | No destructive automation; snapshots first                                           |
 
 ## Pitfalls
 
@@ -248,7 +248,7 @@ Expected: the sink exists with `includeChildren` set, the notification config po
 
 ## Sources
 
-Official documentation to check (not opened while writing this note):
+Official documentation this note was not checked against; verify there:
 
 - [Cloud Audit Logs](https://cloud.google.com/logging/docs/audit)
 - [Logging query language](https://cloud.google.com/logging/docs/view/logging-query-language)
@@ -261,16 +261,10 @@ Official documentation to check (not opened while writing this note):
 ## Related
 
 - [[patterns/gcp-audit-logs-siem]]
-- [[architecture/logging-architecture-gke-and-cloud-logging]]
-- [[adr/0044-central-log-sinks-and-retention-tiers]]
-- [[adr/0050-incident-severity-levels-and-roles]]
 - [[runbooks/incident-response]]
 - [[runbooks/compromised-cloud-cluster-containment]]
 - [[runbooks/leaked-credential-rotation]]
-- [[runbooks/kubernetes-packet-capture]]
-- [[standards/platform-threat-modelling]]
-- [[standards/vulnerability-management-slas]]
-- [[compliance/audit-evidence-collection-and-retention]]
 - [[architecture/zero-trust-access-iap-and-vpc-service-controls]]
 - [[architecture/iam-groups-and-ci-workload-identity-federation]]
 - [[architecture/policy-guardrail-layers-org-to-admission]]
+- [[tools/falco-vs-tetragon-vs-gke-threat-detection]]

@@ -559,5 +559,5 @@ To go deeper:
 - Kubernetes documentation, "Namespaces" (https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/), for the `kubernetes.io/metadata.name` label.
 - Kubernetes documentation, "Debugging DNS Resolution" (https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/), for the `k8s-app=kube-dns` label on CoreDNS.
 - kind documentation, "Configuration" (https://kind.sigs.k8s.io/docs/user/configuration/), for `disableDefaultCNI`.
-- Calico documentation, kind quickstart (https://docs.tigera.io/calico/latest/getting-started/kubernetes/kind): not opened for this page; follow it for the current manifest and settings.
+- Calico documentation, kind quickstart (https://docs.tigera.io/calico/latest/getting-started/kubernetes/kind): this page was not checked against it; follow it for the current manifest and settings.
 - Not checked against a running cluster for this page. Not verified: all output and error wording; whether your kind version's default network plugin enforces NetworkPolicy; the Calico steps and `podSubnet` value; GKE Dataplane V2 behaviour, policy logging and NodeLocal DNSCache rules (not checked against the GKE documentation for this page; verify there). Check the current docs.

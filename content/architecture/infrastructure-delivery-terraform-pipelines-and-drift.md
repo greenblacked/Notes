@@ -91,10 +91,10 @@ Rules:
 
 Each stack has two Google service accounts, reached through Workload Identity Federation from the CI job's OIDC token, as in [[architecture/iam-groups-and-ci-workload-identity-federation]]:
 
-| Identity          | Used by                         | Access                                                                                       | Federation condition (example)                                    |
-| ----------------- | ------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `tf-plan-<stack>`  | Plan and drift jobs, any branch | Read the stack's resources and read its state prefix                                         | Project path matches the infrastructure repository                |
-| `tf-apply-<stack>` | Apply job only                  | Change the stack's resources, read and write its state prefix                                | Project path matches and the ref is protected (default branch)    |
+| Identity           | Used by                         | Access                                                        | Federation condition (example)                                 |
+| ------------------ | ------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------- |
+| `tf-plan-<stack>`  | Plan and drift jobs, any branch | Read the stack's resources and read its state prefix          | Project path matches the infrastructure repository             |
+| `tf-apply-<stack>` | Apply job only                  | Change the stack's resources, read and write its state prefix | Project path matches and the ref is protected (default branch) |
 
 Why two: merge request pipelines run code from unreviewed branches. A plan identity that can only read cannot be abused to change anything, while the apply identity is only reachable from protected refs and protected environments. One "god" service account for every stack turns any pipeline compromise into an organisation compromise.
 
@@ -121,13 +121,13 @@ Applying the saved plan rather than re-planning in the apply job is the point: t
 stages: [plan, apply, drift]
 
 variables:
-  STACK: "network/prod-spoke"                       # change: generated per stack
-  STACK_ID: "network-prod-spoke"                    # change: generated per stack
+  STACK: "network/prod-spoke" # change: generated per stack
+  STACK_ID: "network-prod-spoke" # change: generated per stack
   TF_IN_AUTOMATION: "true"
-  GCP_PROJECT_NUMBER: "123456789012"                # change: project that hosts the WIF pool
-  GCP_WIF_POOL: "gitlab"                            # change
-  GCP_WIF_PROVIDER: "gitlab-com"                    # change
-  SA_DOMAIN: "infra-ci.iam.gserviceaccount.com"     # change: project of the stack SAs
+  GCP_PROJECT_NUMBER: "123456789012" # change: project that hosts the WIF pool
+  GCP_WIF_POOL: "gitlab" # change
+  GCP_WIF_PROVIDER: "gitlab-com" # change
+  SA_DOMAIN: "infra-ci.iam.gserviceaccount.com" # change: project of the stack SAs
 
 default:
   image: registry.example.com/platform/terraform-gcloud:1.0.0 # change: your pinned image with terraform and gcloud
@@ -180,7 +180,7 @@ apply:
   needs: ["plan"]
   resource_group: "terraform-${STACK_ID}"
   environment:
-    name: "infra/${STACK_ID}"       # protect this environment: owner group only, approval required
+    name: "infra/${STACK_ID}" # protect this environment: owner group only, approval required
     action: start
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
@@ -222,13 +222,13 @@ Notes on the sketch:
 
 Run the drift job daily per stack, and more often for foundations. When it reports drift, the owner decides within a set time (for example two working days):
 
-| Drift cause                                      | Action                                                                       |
-| ------------------------------------------------ | ---------------------------------------------------------------------------- |
-| Unwanted manual change                           | Revert: run the normal pipeline, which applies the code's version            |
-| Wanted change made by hand (incident, break-glass) | Codify: change the code to match, plan shows no change, merge               |
-| Resource created outside Terraform               | Import it into the right stack, or delete it if nobody owns it               |
-| Provider or API default changed                  | Pin or set the value explicitly in code                                      |
-| Another stack or a controller manages the field  | Use `lifecycle { ignore_changes = [...] }` with a comment naming the owner  |
+| Drift cause                                        | Action                                                                     |
+| -------------------------------------------------- | -------------------------------------------------------------------------- |
+| Unwanted manual change                             | Revert: run the normal pipeline, which applies the code's version          |
+| Wanted change made by hand (incident, break-glass) | Codify: change the code to match, plan shows no change, merge              |
+| Resource created outside Terraform                 | Import it into the right stack, or delete it if nobody owns it             |
+| Provider or API default changed                    | Pin or set the value explicitly in code                                    |
+| Another stack or a controller manages the field    | Use `lifecycle { ignore_changes = [...] }` with a comment naming the owner |
 
 `terraform plan -refresh-only` shows what reality changed without proposing changes to infrastructure, which helps triage. Do not run `apply -refresh-only` to make drift disappear: it writes the unwanted change into state as truth ([[runbooks/terraform-state-recovery]]).
 
@@ -251,14 +251,14 @@ When the pipeline cannot run (CI down during an incident, a broken provider), an
 
 ## Failure modes
 
-| Failure                                   | Effect                                                    | Mitigation                                                               |
-| ----------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Two applies on one stack                  | Lock contention or interleaved changes                    | `resource_group` per stack, plus backend locking                         |
-| Stale plan applied                        | Changes based on an old view of state                     | Apply only the saved plan; Terraform rejects stale plans; re-plan on failure |
-| Plan identity can write                   | MR pipeline from a branch changes production              | Read-only plan SA, apply SA bound to protected refs only                 |
-| Drift job silently broken                 | Drift accumulates unseen                                  | Alert when the scheduled pipeline has not succeeded for two days         |
-| Laptop apply                              | Unreviewed change, local state, no evidence               | No human holds apply roles; org policy and IAM deny where possible       |
-| Module upgrade applied everywhere at once | One bug breaks every stack                                | Pinned versions, upgrade stack by stack, non-prod first                  |
+| Failure                                   | Effect                                       | Mitigation                                                                   |
+| ----------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------- |
+| Two applies on one stack                  | Lock contention or interleaved changes       | `resource_group` per stack, plus backend locking                             |
+| Stale plan applied                        | Changes based on an old view of state        | Apply only the saved plan; Terraform rejects stale plans; re-plan on failure |
+| Plan identity can write                   | MR pipeline from a branch changes production | Read-only plan SA, apply SA bound to protected refs only                     |
+| Drift job silently broken                 | Drift accumulates unseen                     | Alert when the scheduled pipeline has not succeeded for two days             |
+| Laptop apply                              | Unreviewed change, local state, no evidence  | No human holds apply roles; org policy and IAM deny where possible           |
+| Module upgrade applied everywhere at once | One bug breaks every stack                   | Pinned versions, upgrade stack by stack, non-prod first                      |
 
 ## Pitfalls
 
@@ -306,7 +306,7 @@ Then prove the controls: open a merge request that changes a stack and confirm t
 
 ## Sources
 
-Official documentation to check (not opened while writing this note):
+Official documentation this note was not checked against; verify there:
 
 - [terraform plan command](https://developer.hashicorp.com/terraform/cli/commands/plan)
 - [GCS backend](https://developer.hashicorp.com/terraform/language/backend/gcs)
@@ -321,18 +321,8 @@ Official documentation to check (not opened while writing this note):
 - [[patterns/terraform-module-and-state-layout]]
 - [[patterns/terraform-plan-policy-checks]]
 - [[patterns/terraform-testing]]
-- [[patterns/terraform-module-versioning]]
-- [[standards/terraform-module-standard]]
-- [[adr/0030-terraform-manages-gcp-infrastructure]]
-- [[adr/0032-terraform-state-in-gcs-per-environment]]
-- [[adr/0033-plain-root-modules-no-terragrunt]]
 - [[adr/0035-terraform-plan-policy-gate-and-ci-only-apply]]
-- [[adr/0026-keyless-ci-auth-with-workload-identity-federation]]
-- [[architecture/iam-groups-and-ci-workload-identity-federation]]
-- [[architecture/gcp-resource-hierarchy-and-landing-zone]]
 - [[architecture/policy-guardrail-layers-org-to-admission]]
-- [[compliance/privileged-access-just-in-time-gcp-gke]]
 - [[compliance/change-management-controls-and-pipeline-evidence]]
 - [[runbooks/terraform-state-recovery]]
 - [[tools/atlantis-vs-spacelift-vs-hcp-terraform]]
-- [[ai/llm-assisted-terraform-plan-review]]

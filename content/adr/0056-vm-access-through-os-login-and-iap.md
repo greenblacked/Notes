@@ -141,7 +141,7 @@ gcloud compute ssh build-01 --project "${PROJECT_ID}" --zone europe-west1-b \
 Always pass `--source-ranges`: without it, `firewall-rules create` defaults the source to `0.0.0.0/0`. New VMs are created with `--no-address` and the `iap-ssh` tag in their instance template.
 
 > [!info] Claims not checked against current docs
-> The `gcloud` flags were read from `gcloud --help` (Google Cloud SDK 570.0.0); the role names, the IAP source range `35.235.240.0/20` and the policy shapes come from Google-maintained Terraform modules and the Google provider's resource documentation. Google's online documentation could not be opened when this record was written. Check before relying on: the current IAP TCP forwarding source range and required permissions; the OS Login 2-step verification setting and which users and platforms it covers; whether OS Login ignores metadata SSH keys on every image or a `block-project-ssh-keys` setting is still needed; how serial console access is granted and logged; which IAP and OS Login events appear in Cloud Audit Logs; and the current flow for Windows VMs.
+> The `gcloud` flags were read from `gcloud --help` (Google Cloud SDK 570.0.0); the role names, the IAP source range `35.235.240.0/20` and the policy shapes come from Google-maintained Terraform modules and the Google provider's resource documentation. The record was not checked against Google's online documentation; verify there. Check before relying on: the current IAP TCP forwarding source range and required permissions; the OS Login 2-step verification setting and which users and platforms it covers; whether OS Login ignores metadata SSH keys on every image or a `block-project-ssh-keys` setting is still needed; how serial console access is granted and logged; which IAP and OS Login events appear in Cloud Audit Logs; and the current flow for Windows VMs.
 
 ## Consequences
 
@@ -216,6 +216,6 @@ Troubleshooting: a tunnel that fails before authentication usually means the fir
 - Google's Terraform example foundation (organization policies): https://github.com/terraform-google-modules/terraform-example-foundation
 - Google's bastion host module, IAP tunnelling submodule: https://github.com/terraform-google-modules/terraform-google-bastion-host
 
-Related notes: [[linux-users-permissions-sudo-and-ssh]], [[linux-host-hardening-with-chef-and-inspec]], [[zero-trust-access-iap-and-vpc-service-controls]], [[gcp-organization-policy-guardrails]], [[gcp-audit-logs-siem]]
+Related notes: [[gce-vm-ssh-access-recovery]], [[linux-users-permissions-sudo-and-ssh]], [[linux-host-hardening-with-chef-and-inspec]], [[zero-trust-access-iap-and-vpc-service-controls]], [[gcp-organization-policy-guardrails]], [[gcp-audit-logs-siem]]
 
 Related ADRs: [[0025-shared-vpc-host-project-no-default-networks]], [[0041-retire-chef-for-immutable-images]], [[0044-central-log-sinks-and-retention-tiers]], [[0055-private-gke-control-plane-and-egress]], [[0057-just-in-time-production-access]]

@@ -26,13 +26,13 @@ Regulators, DORA and NIS2 assessments and enterprise customers ask two questions
 
 ## Short answer
 
-| Question an auditor asks                                    | Control                                         | What it gives you                                                                                       |
-| ----------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Do we see when the provider's staff access our content?     | Access Transparency                             | Logs of provider personnel access, with a justification (check the scope and prerequisites)            |
-| Can we stop provider staff access unless we approve?        | Access Approval                                 | Requests that wait for your approval, with exclusions (check the list) and an SLA impact               |
-| Can we refuse key use for some reasons?                     | Key Access Justifications                       | A per-key list of allowed justification reasons for Cloud KMS operations (check supported services)    |
-| Is our data only in approved locations?                     | `gcp.resourceLocations` org policy, inventory   | Prevention at create time, plus an inventory by location                                                |
-| Do we have a packaged set of controls for a regime?         | Assured Workloads                               | A folder with a compliance regime's controls applied (check what each package enforces)                 |
+| Question an auditor asks                                | Control                                       | What it gives you                                                                                   |
+| ------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Do we see when the provider's staff access our content? | Access Transparency                           | Logs of provider personnel access, with a justification (check the scope and prerequisites)         |
+| Can we stop provider staff access unless we approve?    | Access Approval                               | Requests that wait for your approval, with exclusions (check the list) and an SLA impact            |
+| Can we refuse key use for some reasons?                 | Key Access Justifications                     | A per-key list of allowed justification reasons for Cloud KMS operations (check supported services) |
+| Is our data only in approved locations?                 | `gcp.resourceLocations` org policy, inventory | Prevention at create time, plus an inventory by location                                            |
+| Do we have a packaged set of controls for a regime?     | Assured Workloads                             | A folder with a compliance regime's controls applied (check what each package enforces)             |
 
 None of them is a replacement for encryption under your own keys, your own IAM, and a contract that says what the provider may do. They are evidence that the contract and the configuration line up.
 
@@ -202,7 +202,7 @@ gcloud asset search-all-resources --scope="organizations/${ORG_ID}" \
 `global` is the hard part. Some services and resources have no region, and for a `global` log bucket the Logging API says it is unspecified where entries are stored; a bucket's location also cannot be changed after creation. Create the central audit log bucket in a regional or EU location from the start. Keep a reviewed exception list for global resources:
 
 ```yaml title="residency/global-exceptions.yaml"
-- asset_type: "iam.googleapis.com/ServiceAccount"   # example: identities are global
+- asset_type: "iam.googleapis.com/ServiceAccount" # example: identities are global
   reason: "Identity metadata, no customer content"
   accepted_by: security-lead
   review_on: 2027-04-21
@@ -217,14 +217,14 @@ Schedule the inventory and send `outside.csv` to owners ([[compliance/continuous
 
 ## What each control proves, and what it costs
 
-| Control                    | Prerequisite (check)                                  | Evidence it produces                                     | Operational cost                                                |
-| -------------------------- | ----------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
-| Location org policy        | Org policy admin                                      | Policy as code, dry-run and denial logs                  | Some services blocked; exceptions to manage                     |
-| Asset inventory by location | Cloud Asset API, viewer access                       | Dated inventory, exception list                          | A scheduled job and a review                                    |
-| Access Transparency        | Check support or tier requirements                    | Log entries of provider access with justifications        | Alert triage                                                     |
-| Access Approval            | Check requirements and pricing                         | Approval requests and decisions                          | Slower support; SLAs may not apply; an approver rota            |
-| Key Access Justifications  | CMEK; check EKM or other requirements                  | Key policy, KMS audit logs of refused requests            | Risk of refusing a reason a service needs                       |
-| Assured Workloads          | Check package availability and pricing                 | Workload configuration, violation reports                 | Limited services, new folder structure, package-specific limits |
+| Control                     | Prerequisite (check)                   | Evidence it produces                               | Operational cost                                                |
+| --------------------------- | -------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------- |
+| Location org policy         | Org policy admin                       | Policy as code, dry-run and denial logs            | Some services blocked; exceptions to manage                     |
+| Asset inventory by location | Cloud Asset API, viewer access         | Dated inventory, exception list                    | A scheduled job and a review                                    |
+| Access Transparency         | Check support or tier requirements     | Log entries of provider access with justifications | Alert triage                                                    |
+| Access Approval             | Check requirements and pricing         | Approval requests and decisions                    | Slower support; SLAs may not apply; an approver rota            |
+| Key Access Justifications   | CMEK; check EKM or other requirements  | Key policy, KMS audit logs of refused requests     | Risk of refusing a reason a service needs                       |
+| Assured Workloads           | Check package availability and pricing | Workload configuration, violation reports          | Limited services, new folder structure, package-specific limits |
 
 ## What none of these proves
 
@@ -256,11 +256,8 @@ Both regimes ask regulated entities to manage the risk of their ICT providers, i
 - [[compliance/encryption-at-rest-and-in-transit-evidence-gcp]] and [[patterns/cloud-kms-key-management]]: keys under your control.
 - [[compliance/data-classification-tags-gcp-and-kubernetes]]: deciding which folders get which controls.
 - [[compliance/data-deletion-and-crypto-shredding-gcp]]: deletion with customer-managed keys.
-- [[patterns/gcp-audit-logs-siem]] and [[adr/0044-central-log-sinks-and-retention-tiers]]: where Access Transparency logs go.
 - [[adr/0028-primary-and-dr-regions-per-environment]]: approved regions.
 - [[compliance/continuous-control-monitoring-gcp-and-gke]]: scheduling the inventory.
-- [[compliance/audit-evidence-collection-and-retention]]: storing the evidence.
-- [[compliance/dora-eu-operational-resilience-for-engineers]] and [[compliance/nis2-basics-for-engineering-teams]]: the regulatory drivers.
 - [[compliance/vendor-soc2-report-review-for-devops-saas]]: assurance over the provider's own processes.
 
 ## Sources

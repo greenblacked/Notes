@@ -16,7 +16,7 @@ draft: false
 How to rotate a GKE cluster's credentials (its cluster certificate authority and the credentials derived from it) together with the control plane IP address. The rotation runs in two phases. Starting it gives the cluster a new IP and new credentials while the old IP keeps serving; completing it stops the old IP and invalidates the old credentials. Everything outside the cluster that pinned the old CA or the old address (CI pipelines, Argo CD, Terraform providers, kubeconfigs on laptops, firewall allowlists) breaks at the moment of completion unless it was refreshed in between. The work in this runbook is mostly that inventory and refresh, not the two commands.
 
 > [!info] Scope and verification
-> The commands were not run against a live cluster and the note is not marked `verified`. The rotation flags, their one-line effects and the `describe` fields were checked against the `gcloud` help (SDK 570.0.0) and the GKE API reference on 2026-10-21. The GKE credential rotation documentation page could not be read. Its details (CA lifetime, exactly which nodes are recreated, whether old credentials stay valid during the rotation, automatic completion and any way to abort) are marked **not verified** below; read the current page before you start.
+> The commands were not run against a live cluster and the note is not marked `verified`. The rotation flags, their one-line effects and the `describe` fields were checked against the `gcloud` help (SDK 570.0.0) and the GKE API reference on 2026-10-21. The note was not checked against the GKE credential rotation documentation page. Its details (CA lifetime, exactly which nodes are recreated, whether old credentials stay valid during the rotation, automatic completion and any way to abort) are marked **not verified** below; read the current page before you start.
 
 ## When to use
 
@@ -84,16 +84,16 @@ Note which endpoints exist:
 
 This is reasoning about your estate, not something GKE tells you. Search for both the old endpoint IP and the CA, and list each client with its owner and how it refreshes.
 
-| Client                                            | What it pins                                                        | How to refresh                                                                                                                  |
-| ------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| People's kubeconfigs                              | Server address and `certificate-authority-data`                     | `gcloud container clusters get-credentials` after start. Announce it before the window.                                         |
-| CI jobs that run `get-credentials` at job start   | Nothing long-lived                                                  | Nothing. This is the pattern to aim for; see [[iam-groups-and-ci-workload-identity-federation]].                                 |
-| CI jobs with a stored kubeconfig variable          | Server and CA inside the stored file                                 | Replace the variable after start, or better, switch the job to `get-credentials` with workload identity federation.              |
-| Argo CD managing this cluster as an external cluster | `server` and, inside the `config` field's JSON, `tlsClientConfig.caData` in the cluster Secret | Update the Secret (declaratively, in Git) after start; see [[argocd-sync-failure-and-drift]] and [[gitops-repo-topology-and-promotion]]. |
-| Terraform `kubernetes` and `helm` providers       | Host and CA, usually read from the `google_container_cluster` resource or data source | A refresh or plan after start picks up the new values if the provider reads them from the resource; hard-coded values must be edited. |
-| Firewall rules, proxies and allowlists            | The control plane IP, as an egress destination                      | Add the new IP after start; remove the old one after completion.                                                                 |
-| Monitoring and probes that hit the API server      | Address and CA                                                      | Update and confirm they still report.                                                                                           |
-| Other clusters or tools (service meshes, backup tools, policy engines registered against this cluster) | Varies | Check each product's docs for how it stores cluster credentials.                                                                |
+| Client                                                                                                 | What it pins                                                                                   | How to refresh                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| People's kubeconfigs                                                                                   | Server address and `certificate-authority-data`                                                | `gcloud container clusters get-credentials` after start. Announce it before the window.                                                  |
+| CI jobs that run `get-credentials` at job start                                                        | Nothing long-lived                                                                             | Nothing. This is the pattern to aim for; see [[iam-groups-and-ci-workload-identity-federation]].                                         |
+| CI jobs with a stored kubeconfig variable                                                              | Server and CA inside the stored file                                                           | Replace the variable after start, or better, switch the job to `get-credentials` with workload identity federation.                      |
+| Argo CD managing this cluster as an external cluster                                                   | `server` and, inside the `config` field's JSON, `tlsClientConfig.caData` in the cluster Secret | Update the Secret (declaratively, in Git) after start; see [[argocd-sync-failure-and-drift]] and [[gitops-repo-topology-and-promotion]]. |
+| Terraform `kubernetes` and `helm` providers                                                            | Host and CA, usually read from the `google_container_cluster` resource or data source          | A refresh or plan after start picks up the new values if the provider reads them from the resource; hard-coded values must be edited.    |
+| Firewall rules, proxies and allowlists                                                                 | The control plane IP, as an egress destination                                                 | Add the new IP after start; remove the old one after completion.                                                                         |
+| Monitoring and probes that hit the API server                                                          | Address and CA                                                                                 | Update and confirm they still report.                                                                                                    |
+| Other clusters or tools (service meshes, backup tools, policy engines registered against this cluster) | Varies                                                                                         | Check each product's docs for how it stores cluster credentials.                                                                         |
 
 Useful searches, run in your infrastructure repositories (not in public places):
 
@@ -192,24 +192,24 @@ Set a reminder well ahead of the new CA's expiry date.
 
 ## Troubleshooting
 
-| Symptom                                                               | Likely cause and fix                                                                                                                         |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `x509: certificate signed by unknown authority`                       | The client still has the old CA. Re-run `get-credentials`, or update the CA in the Secret or variable.                                       |
-| Timeouts or `connection refused` to the API server after completion    | The client still uses the old IP, or a firewall or proxy allowlist does not include the new IP.                                              |
-| Argo CD cluster shows a connection error or `Unknown` status           | The cluster Secret has the old `server` or `caData`. Update it in Git and resync; see [[argocd-sync-failure-and-drift]].                     |
-| Terraform `kubernetes` provider fails with x509 or timeout             | Hard-coded host or CA, or a plan using stale data. Read both from the cluster resource or data source and re-plan.                           |
-| Node upgrade during start stalls on one node                          | A PDB with no allowed disruptions. See [[pods-stuck-terminating-and-blocked-drains]].                                                         |
-| Cluster stays `RECONCILING` for a long time                            | Node upgrade in progress. Follow `gcloud container operations list`; do not start other cluster operations meanwhile.                        |
-| `get-credentials` works but `kubectl` still hits the old address       | Several kubeconfig contexts for the same cluster. Check `kubectl config get-contexts` and delete the stale one.                                |
+| Symptom                                                             | Likely cause and fix                                                                                                     |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `x509: certificate signed by unknown authority`                     | The client still has the old CA. Re-run `get-credentials`, or update the CA in the Secret or variable.                   |
+| Timeouts or `connection refused` to the API server after completion | The client still uses the old IP, or a firewall or proxy allowlist does not include the new IP.                          |
+| Argo CD cluster shows a connection error or `Unknown` status        | The cluster Secret has the old `server` or `caData`. Update it in Git and resync; see [[argocd-sync-failure-and-drift]]. |
+| Terraform `kubernetes` provider fails with x509 or timeout          | Hard-coded host or CA, or a plan using stale data. Read both from the cluster resource or data source and re-plan.       |
+| Node upgrade during start stalls on one node                        | A PDB with no allowed disruptions. See [[pods-stuck-terminating-and-blocked-drains]].                                    |
+| Cluster stays `RECONCILING` for a long time                         | Node upgrade in progress. Follow `gcloud container operations list`; do not start other cluster operations meanwhile.    |
+| `get-credentials` works but `kubectl` still hits the old address    | Several kubeconfig contexts for the same cluster. Check `kubectl config get-contexts` and delete the stale one.          |
 
 ## Related
 
 - [[gke-control-plane-unavailable]] for API server reachability problems.
-- [[compromised-cloud-cluster-containment]] and [[leaked-credential-rotation]] for when the rotation is part of incident response.
+- [[compromised-cloud-cluster-containment]] for when the rotation is part of incident response.
 - [[argocd-sync-failure-and-drift]] and [[gitops-repo-topology-and-promotion]] for refreshing GitOps cluster registrations.
 - [[iam-groups-and-ci-workload-identity-federation]] for CI that fetches credentials per job instead of storing them.
 - [[tls-certificate-renewal]] for certificate expiry checks in general.
-- [[production-change-checklist]] and [[change-freezes-and-maintenance-windows]] for running it as a planned change.
+- [[production-change-checklist]] for running it as a planned change.
 - [[private-gke-and-controlled-egress]] for private control plane endpoints and allowlists.
 
 ## Sources

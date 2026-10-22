@@ -16,7 +16,7 @@ draft: false
 Once Argo CD manages everything inside the clusters, someone always asks why Google Cloud resources are not Kubernetes objects too. Config Connector and Crossplane make that possible: a bucket, a Pub/Sub topic or a Cloud SQL instance becomes a custom resource that a controller keeps in line with the cloud. [[0030-terraform-manages-gcp-infrastructure]] rejects both in one line each and keeps Terraform for Google Cloud, with [[0001-gitops-with-argocd]] for workloads. This note is the evidence behind that line. It compares the three on what goes wrong in production: what a reviewer can see before a change, what happens on delete, which identity acts, and how each fails.
 
 > [!info] Not checked against current releases
-> Written from the projects' documentation source and the `gcloud` 570.0.0 help text on 2026-10-21; the published documentation pages could not be opened. Not verified: Config Connector's current support status and whether the GKE add-on is the recommended install, its behaviour on Autopilot and its resource coverage; the accepted values of the `deletion-policy` annotation beyond `abandon`; the readiness condition names; a Crossplane ProviderConfig for GKE Workload Identity; the current Crossplane provider package versions and apiVersions. Confirm them in the current documentation before you build on them.
+> Written from the projects' documentation source and the `gcloud` 570.0.0 help text on 2026-10-21; not checked against the published documentation pages, so verify there. Not verified: Config Connector's current support status and whether the GKE add-on is the recommended install, its behaviour on Autopilot and its resource coverage; the accepted values of the `deletion-policy` annotation beyond `abandon`; the readiness condition names; a Crossplane ProviderConfig for GKE Workload Identity; the current Crossplane provider package versions and apiVersions. Confirm them in the current documentation before you build on them.
 
 ## Criteria
 
@@ -271,11 +271,6 @@ Revisit when a controller can show a cloud-side plan before merge, or when Confi
 - [[terraform-module-and-state-layout]]
 - [[gke-workload-identity]]
 - [[0026-keyless-ci-auth-with-workload-identity-federation]]
-- [[namespace-stuck-terminating]]
-- [[gitops-repo-topology-and-promotion]]
-- [[argocd-vs-flux]]
-- [[argocd-sync-failure-and-drift]]
-- [[0019-namespace-per-team-tenancy]]
 
 ## Sources
 

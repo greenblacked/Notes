@@ -19,12 +19,12 @@ Every merge request was green, and the default branch is red. Merge request A re
 
 ## Pipeline types compared
 
-| Pipeline                         | What commit it tests                                                                                     | `CI_PIPELINE_SOURCE`  | `CI_MERGE_REQUEST_EVENT_TYPE` |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------- | ----------------------------- |
-| Branch pipeline                  | The branch head, alone                                                                                   | `push` (and others)   | not set                       |
-| Merge request pipeline           | The source branch head, alone (often called detached)                                                    | `merge_request_event` | `detached`                    |
-| Merged results pipeline          | A temporary merge commit of source and target, which exists in neither branch                            | `merge_request_event` | `merged_result`               |
-| Merge train pipeline             | The target plus every merge request ahead in the train plus this one                                     | `merge_request_event` | `merge_train`                 |
+| Pipeline                | What commit it tests                                                          | `CI_PIPELINE_SOURCE`  | `CI_MERGE_REQUEST_EVENT_TYPE` |
+| ----------------------- | ----------------------------------------------------------------------------- | --------------------- | ----------------------------- |
+| Branch pipeline         | The branch head, alone                                                        | `push` (and others)   | not set                       |
+| Merge request pipeline  | The source branch head, alone (often called detached)                         | `merge_request_event` | `detached`                    |
+| Merged results pipeline | A temporary merge commit of source and target, which exists in neither branch | `merge_request_event` | `merged_result`               |
+| Merge train pipeline    | The target plus every merge request ahead in the train plus this one          | `merge_request_event` | `merge_train`                 |
 
 Notes from the docs:
 
@@ -55,13 +55,13 @@ The trade-off in one line: the default branch stays green, and you pay for it wi
 
 ## When to use which
 
-| Situation                                                                    | Recommendation                                                         |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| A few merges a day, rarely at the same time                                  | Merged results pipelines are enough                                    |
-| Many merges a day, several merge requests often ready together               | Merge trains                                                           |
-| A rule that the default branch must always pass (it deploys on every merge)  | Merge trains, with enforcement where your version supports it          |
-| Pipelines longer than about 30 minutes, or flaky                             | Fix speed and flakiness first; a train amplifies both (see below)      |
-| Free tier                                                                    | Not available; require "branch is up to date" with fast-forward merges instead, and accept the serialisation |
+| Situation                                                                   | Recommendation                                                                                               |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| A few merges a day, rarely at the same time                                 | Merged results pipelines are enough                                                                          |
+| Many merges a day, several merge requests often ready together              | Merge trains                                                                                                 |
+| A rule that the default branch must always pass (it deploys on every merge) | Merge trains, with enforcement where your version supports it                                                |
+| Pipelines longer than about 30 minutes, or flaky                            | Fix speed and flakiness first; a train amplifies both (see below)                                            |
+| Free tier                                                                   | Not available; require "branch is up to date" with fast-forward merges instead, and accept the serialisation |
 
 ## Prerequisites and enabling
 
@@ -215,16 +215,16 @@ Expected: a merge request pipeline logs `event=merged_result` once merged result
 
 ## Troubleshooting
 
-| Symptom                                                         | Likely cause                                                                                                            | Fix                                                                                                                                                                  |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No merge request pipeline is created; the merge request is stuck | No rule matches `merge_request_event`, or the only matching rules come from an `include:component`                    | Add the `workflow:rules` above to the project's own `.gitlab-ci.yml`.                                                                                                 |
-| Two pipelines for every push                                    | Both a branch pipeline and a merge request pipeline run                                                                  | The `CI_OPEN_MERGE_REQUESTS` rule above.                                                                                                                             |
-| Merge request dropped from the train                            | Pipeline failed, draft, closed, source branch updated, merge checks failed, could not combine with earlier merge requests, merge timed out | Read the system note in the merge request's **Activity**. For "could not be prepared ... conflicting files", rebase on the target and add it again. |
-| "Retry" is not offered for the failed train pipeline            | Train pipelines cannot be retried once the merge request is dropped                                                    | Add the merge request to the train again; use `retry` only for infrastructure failures.                                                                             |
-| Cannot add to the train                                          | "Pipelines must succeed" is on and the latest pipeline failed                                                          | Retry the failed job or push a fix so a pipeline passes, then add it.                                                                                               |
-| Bot merges fail with 405                                        | Train enforcement is on and the bot merges directly                                                                    | Call the merge endpoint with `auto_merge=true`; Renovate: `platformAutomerge`.                                                                                       |
-| Jobs with `rules:changes:compare_to` run unexpectedly            | The merged results commit contains changes from both branches                                                           | Remove `compare_to` or narrow the paths, as the docs suggest.                                                                                                        |
-| Train is slow and restarts constantly                            | Flaky tests or long pipelines                                                                                           | Quarantine flaky tests, move slow jobs off the train, lower the parallel limit if runners saturate.                                                                 |
+| Symptom                                                          | Likely cause                                                                                                                               | Fix                                                                                                                                                 |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No merge request pipeline is created; the merge request is stuck | No rule matches `merge_request_event`, or the only matching rules come from an `include:component`                                         | Add the `workflow:rules` above to the project's own `.gitlab-ci.yml`.                                                                               |
+| Two pipelines for every push                                     | Both a branch pipeline and a merge request pipeline run                                                                                    | The `CI_OPEN_MERGE_REQUESTS` rule above.                                                                                                            |
+| Merge request dropped from the train                             | Pipeline failed, draft, closed, source branch updated, merge checks failed, could not combine with earlier merge requests, merge timed out | Read the system note in the merge request's **Activity**. For "could not be prepared ... conflicting files", rebase on the target and add it again. |
+| "Retry" is not offered for the failed train pipeline             | Train pipelines cannot be retried once the merge request is dropped                                                                        | Add the merge request to the train again; use `retry` only for infrastructure failures.                                                             |
+| Cannot add to the train                                          | "Pipelines must succeed" is on and the latest pipeline failed                                                                              | Retry the failed job or push a fix so a pipeline passes, then add it.                                                                               |
+| Bot merges fail with 405                                         | Train enforcement is on and the bot merges directly                                                                                        | Call the merge endpoint with `auto_merge=true`; Renovate: `platformAutomerge`.                                                                      |
+| Jobs with `rules:changes:compare_to` run unexpectedly            | The merged results commit contains changes from both branches                                                                              | Remove `compare_to` or narrow the paths, as the docs suggest.                                                                                       |
+| Train is slow and restarts constantly                            | Flaky tests or long pipelines                                                                                                              | Quarantine flaky tests, move slow jobs off the train, lower the parallel limit if runners saturate.                                                 |
 
 ## Rollback
 
@@ -238,13 +238,12 @@ Branch protection, review and merge-method rules stay as defined in [[branching-
 ## Related
 
 - [[gitlab-ci-pipeline-structure]]
-- [[gitlab-ci-components-and-includes]]
 - [[test-sharding-flaky-tests]]
 - [[branching-and-merge-standard]]
-- [[ci-pipeline-standard]]
 - [[gitlab-ci-rules-dag-matrix-and-includes]]
 - [[automated-dependency-updates]]
 - [[gitlab-runner-jobs-stuck-pending]]
+- [[gitlab-pipeline-or-job-did-not-run]]
 - [[change-management-controls-and-pipeline-evidence]]
 
 ## Sources

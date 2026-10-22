@@ -20,13 +20,13 @@ Batch workloads fail quietly. A Deployment that crashes shows up in every dashbo
 
 ## Job, CronJob or a worker Deployment
 
-| Workload shape                                                         | Use                                                                                       |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Runs to completion, triggered by a deploy or a human (migration, backfill) | A `Job`                                                                                   |
-| Runs to completion on a schedule (report, cleanup, export)             | A `CronJob`                                                                               |
-| Works through a fixed set of N shards                                  | An Indexed `Job` (`completionMode: Indexed`)                                              |
-| Consumes a queue continuously, latency matters                         | A `Deployment` worker with autoscaling, see [[kubernetes-autoscaling]]                    |
-| Runs every minute or more often, keeps state between runs               | Usually a `Deployment` with an internal loop: CronJob scheduling has seconds of jitter and per-run Pod start cost |
+| Workload shape                                                             | Use                                                                                                               |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Runs to completion, triggered by a deploy or a human (migration, backfill) | A `Job`                                                                                                           |
+| Runs to completion on a schedule (report, cleanup, export)                 | A `CronJob`                                                                                                       |
+| Works through a fixed set of N shards                                      | An Indexed `Job` (`completionMode: Indexed`)                                                                      |
+| Consumes a queue continuously, latency matters                             | A `Deployment` worker with autoscaling, see [[kubernetes-autoscaling]]                                            |
+| Runs every minute or more often, keeps state between runs                  | Usually a `Deployment` with an internal loop: CronJob scheduling has seconds of jitter and per-run Pod start cost |
 
 Two semantics drive every design decision below:
 
@@ -57,29 +57,29 @@ spec:
       restartPolicy: Never # required by podFailurePolicy
 ```
 
-| Field                     | Default and behaviour (Kubernetes docs, 2026-10-21)                                                                                                                                                       | Recommendation                                                                                                            |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `backoffLimit`            | 6. Failed Pods are recreated with exponential back-off (10s, 20s, 40s and so on), capped at ten minutes. Defaults to MaxInt32 when `backoffLimitPerIndex` is set.                                         | 2 to 4 for most work. Six retries with back-off can hide a broken run for well over half an hour.                          |
-| `activeDeadlineSeconds`   | Unset. When reached, running Pods are terminated and the Job fails with reason `DeadlineExceeded`. Takes precedence over `backoffLimit`. The field also exists on the Pod spec: set it on the Job spec. | Always set it, to about two to three times the normal run time. It is the guard against a hung run blocking the next one. |
-| `podFailurePolicy`        | Unset. Needs `restartPolicy: Never`. Rules are evaluated in order, first match wins. Actions: `FailJob`, `Ignore`, `Count`, `FailIndex`. Stable since Kubernetes v1.31.                                    | Fail fast on exit codes that mean "bad input, retrying will not help"; `Ignore` the `DisruptionTarget` condition.         |
-| `ttlSecondsAfterFinished` | Unset means the TTL controller never deletes the Job. `0` deletes it right after it finishes. Deletion cascades to the Pods. Stable since v1.23.                                                          | Set it on standalone Jobs. On CronJobs the history limits already clean up; a TTL shorter than your debugging window destroys the evidence. |
-| `restartPolicy`           | `Never` or `OnFailure` for Jobs. With `OnFailure` the Pod is terminated once the back-off limit is reached, which can hide the logs of the last attempt.                                                | `Never`: every attempt is its own Pod with its own logs, and `podFailurePolicy` works.                                   |
-| `completions`, `parallelism` | One completion, one Pod by default.                                                                                                                                                                   | Raise `parallelism` only when the work is safe to run concurrently.                                                      |
-| `completionMode: Indexed` | Each Pod gets `JOB_COMPLETION_INDEX` (0 to completions minus 1) as an environment variable and an annotation. Stable since v1.24.                                                                         | Static sharding: index N processes shard N. Combine with `backoffLimitPerIndex` (stable since v1.33) so one bad shard does not fail the rest. |
+| Field                        | Default and behaviour (Kubernetes docs, 2026-10-21)                                                                                                                                                     | Recommendation                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backoffLimit`               | 6. Failed Pods are recreated with exponential back-off (10s, 20s, 40s and so on), capped at ten minutes. Defaults to MaxInt32 when `backoffLimitPerIndex` is set.                                       | 2 to 4 for most work. Six retries with back-off can hide a broken run for well over half an hour.                                             |
+| `activeDeadlineSeconds`      | Unset. When reached, running Pods are terminated and the Job fails with reason `DeadlineExceeded`. Takes precedence over `backoffLimit`. The field also exists on the Pod spec: set it on the Job spec. | Always set it, to about two to three times the normal run time. It is the guard against a hung run blocking the next one.                     |
+| `podFailurePolicy`           | Unset. Needs `restartPolicy: Never`. Rules are evaluated in order, first match wins. Actions: `FailJob`, `Ignore`, `Count`, `FailIndex`. Stable since Kubernetes v1.31.                                 | Fail fast on exit codes that mean "bad input, retrying will not help"; `Ignore` the `DisruptionTarget` condition.                             |
+| `ttlSecondsAfterFinished`    | Unset means the TTL controller never deletes the Job. `0` deletes it right after it finishes. Deletion cascades to the Pods. Stable since v1.23.                                                        | Set it on standalone Jobs. On CronJobs the history limits already clean up; a TTL shorter than your debugging window destroys the evidence.   |
+| `restartPolicy`              | `Never` or `OnFailure` for Jobs. With `OnFailure` the Pod is terminated once the back-off limit is reached, which can hide the logs of the last attempt.                                                | `Never`: every attempt is its own Pod with its own logs, and `podFailurePolicy` works.                                                        |
+| `completions`, `parallelism` | One completion, one Pod by default.                                                                                                                                                                     | Raise `parallelism` only when the work is safe to run concurrently.                                                                           |
+| `completionMode: Indexed`    | Each Pod gets `JOB_COMPLETION_INDEX` (0 to completions minus 1) as an environment variable and an annotation. Stable since v1.24.                                                                       | Static sharding: index N processes shard N. Combine with `backoffLimitPerIndex` (stable since v1.33) so one bad shard does not fail the rest. |
 
 Exit codes are a contract between the job code and the Job spec. Pick one code (42 in the docs' example) that means "permanent failure, do not retry", document it next to the job, and keep everything else retriable.
 
 ## CronJob fields that matter
 
-| Field                        | Default and behaviour (Kubernetes docs, 2026-10-21)                                                                                                                                                                                  | Recommendation                                                                                                     |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `schedule`                   | Five-field cron, step values, `?` equals `*`, and macros such as `@daily`.                                                                                                                                                            | Avoid the top of the hour if many jobs share a cluster or a database; spread them.                                 |
-| `timeZone`                   | An IANA name such as `Etc/UTC` or `Europe/Kyiv`. Without it the schedule follows the kube-controller-manager's local time zone. `CRON_TZ=` or `TZ=` inside `schedule` fails validation. Stable since v1.27.                            | Always set it. Never depend on the control plane's time zone, which you do not control on a managed cluster.       |
-| `concurrencyPolicy`          | `Allow` (default), `Forbid` or `Replace`. With `Forbid` a run that is skipped because the previous one is still running counts as missed. Applies only between Jobs of the same CronJob.                                               | `Forbid` for almost everything. `Replace` only when the newest run makes the older one useless.                   |
-| `startingDeadlineSeconds`    | Unset. A Job that cannot start within this many seconds of its scheduled time is skipped. Values under 10 may stop the CronJob from scheduling at all, because the controller checks every 10 seconds.                                | Set it, for example to 10 to 30 percent of the interval. Without it, a long outage counts missed runs from the last schedule time (see below). |
-| `successfulJobsHistoryLimit` | 3                                                                                                                                                                                                                                      | Keep the default or lower.                                                                                         |
-| `failedJobsHistoryLimit`     | 1                                                                                                                                                                                                                                      | Raise to 3 to 5, so a failing streak keeps its Pods and logs for comparison.                                       |
-| `suspend`                    | `false`. Suspending does not affect Jobs that are already running. Runs skipped while suspended count as missed; unsuspending a CronJob **without** a starting deadline starts the missed runs immediately.                              | Set `startingDeadlineSeconds` before you ever suspend in production.                                               |
+| Field                        | Default and behaviour (Kubernetes docs, 2026-10-21)                                                                                                                                                         | Recommendation                                                                                                                                 |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schedule`                   | Five-field cron, step values, `?` equals `*`, and macros such as `@daily`.                                                                                                                                  | Avoid the top of the hour if many jobs share a cluster or a database; spread them.                                                             |
+| `timeZone`                   | An IANA name such as `Etc/UTC` or `Europe/Kyiv`. Without it the schedule follows the kube-controller-manager's local time zone. `CRON_TZ=` or `TZ=` inside `schedule` fails validation. Stable since v1.27. | Always set it. Never depend on the control plane's time zone, which you do not control on a managed cluster.                                   |
+| `concurrencyPolicy`          | `Allow` (default), `Forbid` or `Replace`. With `Forbid` a run that is skipped because the previous one is still running counts as missed. Applies only between Jobs of the same CronJob.                    | `Forbid` for almost everything. `Replace` only when the newest run makes the older one useless.                                                |
+| `startingDeadlineSeconds`    | Unset. A Job that cannot start within this many seconds of its scheduled time is skipped. Values under 10 may stop the CronJob from scheduling at all, because the controller checks every 10 seconds.      | Set it, for example to 10 to 30 percent of the interval. Without it, a long outage counts missed runs from the last schedule time (see below). |
+| `successfulJobsHistoryLimit` | 3                                                                                                                                                                                                           | Keep the default or lower.                                                                                                                     |
+| `failedJobsHistoryLimit`     | 1                                                                                                                                                                                                           | Raise to 3 to 5, so a failing streak keeps its Pods and logs for comparison.                                                                   |
+| `suspend`                    | `false`. Suspending does not affect Jobs that are already running. Runs skipped while suspended count as missed; unsuspending a CronJob **without** a starting deadline starts the missed runs immediately. | Set `startingDeadlineSeconds` before you ever suspend in production.                                                                           |
 
 Two more rules from the CronJob docs:
 
@@ -222,15 +222,15 @@ What to change, and why:
 
 kube-state-metrics exposes what you need. Metric names below are from its documentation on 2026-10-21 and are marked stable there; the names can change between releases, so check them against the version you run.
 
-| Metric                                       | Labels                              | Use                                                         |
-| -------------------------------------------- | ----------------------------------- | ----------------------------------------------------------- |
-| `kube_cronjob_status_last_successful_time`   | `namespace`, `cronjob`              | Staleness: the last run that succeeded.                     |
-| `kube_cronjob_status_last_schedule_time`     | `namespace`, `cronjob`              | The controller is still scheduling.                         |
-| `kube_cronjob_spec_suspend`                  | `namespace`, `cronjob`              | Someone suspended it and forgot.                            |
-| `kube_cronjob_next_schedule_time`            | `namespace`, `cronjob`              | Expected next run.                                          |
-| `kube_job_failed`                            | `namespace`, `job_name`, `condition` | A Job reached the Failed condition (`condition="true"`).    |
-| `kube_job_status_active`                     | `namespace`, `job_name`             | Pods still running, for "running too long" alerts.          |
-| `kube_job_owner`                             | `job_name`, `owner_kind`, `owner_name` | Maps a Job back to its CronJob.                          |
+| Metric                                     | Labels                                 | Use                                                      |
+| ------------------------------------------ | -------------------------------------- | -------------------------------------------------------- |
+| `kube_cronjob_status_last_successful_time` | `namespace`, `cronjob`                 | Staleness: the last run that succeeded.                  |
+| `kube_cronjob_status_last_schedule_time`   | `namespace`, `cronjob`                 | The controller is still scheduling.                      |
+| `kube_cronjob_spec_suspend`                | `namespace`, `cronjob`                 | Someone suspended it and forgot.                         |
+| `kube_cronjob_next_schedule_time`          | `namespace`, `cronjob`                 | Expected next run.                                       |
+| `kube_job_failed`                          | `namespace`, `job_name`, `condition`   | A Job reached the Failed condition (`condition="true"`). |
+| `kube_job_status_active`                   | `namespace`, `job_name`                | Pods still running, for "running too long" alerts.       |
+| `kube_job_owner`                           | `job_name`, `owner_kind`, `owner_name` | Maps a Job back to its CronJob.                          |
 
 ```yaml title="prometheus-rules-batch.yaml (derived, test before use)"
 groups:
@@ -299,16 +299,16 @@ Expected: the Job reaches `Complete`, the Pod shows the `export` container `Comp
 
 ## Troubleshooting
 
-| Symptom                                                         | Likely cause                                                                                    | Check and fix                                                                                                                                                   |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Job stays `Running` after the work finished                     | A classic sidecar that never exits                                                              | `kubectl get pod -o jsonpath='{.status.containerStatuses}'`: main terminated, proxy running. Move the proxy to a native sidecar.                               |
-| Job fails with `DeadlineExceeded`                               | Hung run, slow dependency, or the deadline is too tight                                         | Read the logs of the last attempt; compare with normal run time; check database locks.                                                                         |
-| Job fails with `BackoffLimitExceeded` after a node upgrade       | Evictions counted as failures                                                                   | Add the `DisruptionTarget` `Ignore` rule; check `kubectl get events --field-selector reason=Preempted`.                                                         |
-| CronJob stopped creating Jobs, no failures                       | More than 100 missed schedules without `startingDeadlineSeconds`, or `suspend: true`           | Search the kube-controller-manager logs (on GKE, Cloud Logging for the control plane, if enabled) for `too many missed start times`; set the deadline. Check `.spec.suspend`. |
-| Two runs for one schedule, or overlapping runs                  | `concurrencyPolicy: Allow` with a run longer than the interval, or the documented at-least-once behaviour | `Forbid`, a run-key lock, and idempotent writes.                                                                                                       |
-| Runs at the wrong hour                                          | No `timeZone`; control plane time zone or daylight saving                                       | Set `timeZone`. A zone with daylight saving changes may skip or repeat a run at the switch (behaviour not verified here); use `Etc/UTC` when that matters.                        |
-| Pods stuck `Pending`                                            | No capacity for a non-preempting class, quota, or the Spot pool is empty                        | `kubectl describe pod` events; see [[kubernetes-pod-troubleshooting]].                                                                                          |
-| Job deleted before anyone could read the logs                   | `ttlSecondsAfterFinished` too short, or history limit 0                                         | Raise them, and ship logs to central logging so retention does not depend on Pod objects.                                                                      |
+| Symptom                                                    | Likely cause                                                                                              | Check and fix                                                                                                                                                                 |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Job stays `Running` after the work finished                | A classic sidecar that never exits                                                                        | `kubectl get pod -o jsonpath='{.status.containerStatuses}'`: main terminated, proxy running. Move the proxy to a native sidecar.                                              |
+| Job fails with `DeadlineExceeded`                          | Hung run, slow dependency, or the deadline is too tight                                                   | Read the logs of the last attempt; compare with normal run time; check database locks.                                                                                        |
+| Job fails with `BackoffLimitExceeded` after a node upgrade | Evictions counted as failures                                                                             | Add the `DisruptionTarget` `Ignore` rule; check `kubectl get events --field-selector reason=Preempted`.                                                                       |
+| CronJob stopped creating Jobs, no failures                 | More than 100 missed schedules without `startingDeadlineSeconds`, or `suspend: true`                      | Search the kube-controller-manager logs (on GKE, Cloud Logging for the control plane, if enabled) for `too many missed start times`; set the deadline. Check `.spec.suspend`. |
+| Two runs for one schedule, or overlapping runs             | `concurrencyPolicy: Allow` with a run longer than the interval, or the documented at-least-once behaviour | `Forbid`, a run-key lock, and idempotent writes.                                                                                                                              |
+| Runs at the wrong hour                                     | No `timeZone`; control plane time zone or daylight saving                                                 | Set `timeZone`. A zone with daylight saving changes may skip or repeat a run at the switch (behaviour not verified here); use `Etc/UTC` when that matters.                    |
+| Pods stuck `Pending`                                       | No capacity for a non-preempting class, quota, or the Spot pool is empty                                  | `kubectl describe pod` events; see [[kubernetes-pod-troubleshooting]].                                                                                                        |
+| Job deleted before anyone could read the logs              | `ttlSecondsAfterFinished` too short, or history limit 0                                                   | Raise them, and ship logs to central logging so retention does not depend on Pod objects.                                                                                     |
 
 ## Rollback
 
@@ -323,14 +323,13 @@ Stopping a misbehaving CronJob safely:
 ## Related
 
 - [[priority-classes-and-preemption]]
-- [[kubernetes-resource-requests-and-limits]]
-- [[postgres-connection-pooling-gke]]
-- [[gke-workload-identity]]
 - [[kubernetes-pod-troubleshooting]]
-- [[slo-burn-rate-alerting]]
 - [[pod-disruption-budgets-for-stateless-services]]
 - [[timeouts-retries-load-shedding]]
 - [[linux-services-packages-and-scheduled-jobs]] for host cron and systemd timers
+- [[learn/kubernetes-jobs-and-cronjobs|Kubernetes 12: Jobs and CronJobs]] for the beginner lesson with hands-on exercises
+- [[scheduled-jobs-standard]] for the rules every scheduled job must meet
+- [[batch-and-scheduled-workloads-gcp]] for choosing between GKE CronJobs, Cloud Run jobs and Batch
 
 ## Sources
 

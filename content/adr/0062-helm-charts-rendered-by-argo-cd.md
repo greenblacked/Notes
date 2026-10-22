@@ -261,6 +261,8 @@ Related notes:
 - [[argocd-sync-failure-and-drift]]
 - [[helm-release-rollback]]
 - [[conftest-policy-gate-for-manifests]]
+- [[crd-lifecycle-with-helm-and-argocd]]
+- [[learn/gitops-with-argo-cd|Delivery 11: GitOps with Argo CD]]
 
 Related ADRs:
 

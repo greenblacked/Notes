@@ -27,7 +27,7 @@ PCI DSS and GDPR scope, customer-managed keys, data residency, retention and del
 
 ## Short answer
 
-- Define a small scheme (for example **public, internal, confidential, restricted**) and write down what each class requires: encryption, location, retention, access and logging.
+- Define a small scheme (for example **public, internal, confidential, restricted**) and write down what each class requires: encryption, location, retention, access and logging. Here the classes and their handling rules are set by [[standards/data-classification-and-handling-standard]]; this note makes them machine-readable.
 - On GCP, create one **tag key** (`data-class`) at the organisation with one **tag value** per class, and bind values to **folders and projects**. Tags are inherited by descendants and can be referenced in **conditional org policies** and IAM conditions; labels cannot.
 - Control **who may bind** tags with IAM on the tag values, so that classification is a reviewed change, not something any project owner can flip.
 - In Kubernetes, require a **data-class label on every namespace** with an admission policy, and keep restricted namespaces on dedicated node pools.
@@ -35,27 +35,27 @@ PCI DSS and GDPR scope, customer-managed keys, data residency, retention and del
 
 ## An example scheme
 
-Adapt the names and the requirements to your own policy; four classes are usually enough. More classes are rarely applied consistently.
+Four classes are usually enough; more classes are rarely applied consistently. The classes, their definitions and their handling rules (encryption, location, retention, access and logging) are set in [[standards/data-classification-and-handling-standard]], and this note does not restate them. The tag values below are the class names, as a summary:
 
-| Class          | Examples                                                 | Encryption                                     | Location                        | Retention                           | Access                                        | Logging                                          |
-| -------------- | -------------------------------------------------------- | ---------------------------------------------- | ------------------------------- | ----------------------------------- | --------------------------------------------- | ------------------------------------------------ |
-| `public`       | Public docs, open-source artifacts                        | Google default                                 | Any                             | Per artifact policy                 | Anyone may read                               | Admin Activity only                              |
-| `internal`     | Build logs, internal dashboards, non-personal metrics    | Google default                                 | Approved regions                | Per standard tiers                  | Staff by group                                | Admin Activity                                   |
-| `confidential` | Customer configuration, pseudonymised personal data      | Google default or CMEK per risk                | Approved regions                | Defined per data set                | Need-to-know groups, reviewed quarterly       | Admin Activity and Data Access on key services   |
-| `restricted`   | Personal data, card data, secrets, credentials            | CMEK required                                  | Named region set only           | Defined, with documented deletion    | Named groups, JIT for admin, reviewed quarterly | Data Access on, sent to the central SIEM         |
+| Class          | Examples                                                  |
+| -------------- | --------------------------------------------------------- |
+| `public`       | Public docs, open-source artifacts                        |
+| `internal`     | Build logs, internal dashboards, non-personal metrics     |
+| `confidential` | Customer configuration, pseudonymised personal data       |
+| `restricted`   | Personal data in regulatory scope, card data, credentials |
 
-The requirement columns are what policies enforce. Encryption evidence is described in [[compliance/encryption-at-rest-and-in-transit-evidence-gcp|encryption evidence]], deletion in [[compliance/data-deletion-and-crypto-shredding-gcp|proving data deletion]] and logging scope in [[compliance/pci-dss-and-gdpr-for-devops-logs-and-data|PCI DSS and GDPR for DevOps]].
+The standard's handling matrix is what policies enforce. Encryption evidence is described in [[compliance/encryption-at-rest-and-in-transit-evidence-gcp|encryption evidence]], deletion in [[compliance/data-deletion-and-crypto-shredding-gcp|proving data deletion]] and logging scope in [[compliance/pci-dss-and-gdpr-for-devops-logs-and-data|PCI DSS and GDPR for DevOps]].
 
 ## Labels and tags are different things on GCP
 
-| Property                         | Labels                                         | Resource Manager tags                                                             |
-| -------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------- |
-| Defined where                    | Free-form on each resource                     | Keys and values are resources of their own, under the organisation or a project   |
-| Who can set them                 | Anyone who can update the resource             | Controlled by IAM on the tag key and value                                        |
-| Inheritance                      | None                                           | A binding on a folder or project applies to its descendants                       |
-| Usable in org policy conditions   | No (general knowledge; check)                  | Yes, with `resource.matchTag` or `resource.matchTagId`                             |
-| Usable in IAM conditions          | No (general knowledge; check)                  | Yes (check the IAM tag documentation for the supported form)                       |
-| Typical use                      | Cost allocation, ownership, search             | Policy: classification, environment, firewall targeting                           |
+| Property                        | Labels                             | Resource Manager tags                                                           |
+| ------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------- |
+| Defined where                   | Free-form on each resource         | Keys and values are resources of their own, under the organisation or a project |
+| Who can set them                | Anyone who can update the resource | Controlled by IAM on the tag key and value                                      |
+| Inheritance                     | None                               | A binding on a folder or project applies to its descendants                     |
+| Usable in org policy conditions | No (general knowledge; check)      | Yes, with `resource.matchTag` or `resource.matchTagId`                          |
+| Usable in IAM conditions        | No (general knowledge; check)      | Yes (check the IAM tag documentation for the supported form)                    |
+| Typical use                     | Cost allocation, ownership, search | Policy: classification, environment, firewall targeting                         |
 
 The Terraform documentation describes tags as key-value pairs that "you can use ... to conditionally allow or deny policies based on whether a resource has a specific tag". Keep using labels for cost and ownership ([[standards/kubernetes-labels-and-annotations-standard|labels standard]]); use tags where a policy must act on the value. It is fine to have both on the same project, as long as the tag is the source of truth for the class.
 
@@ -430,14 +430,12 @@ kubectl --context "${CONTEXT}" get namespaces -L example.com/data-class
 ## Related
 
 - [[compliance/gcp-organization-policy-guardrails]]: org policy as code, dry run and exceptions.
-- [[architecture/gcp-resource-hierarchy-and-landing-zone]] and [[adr/0024-gcp-folders-by-policy-boundary]]: folders as policy boundaries.
-- [[architecture/environment-separation-on-gcp]]: separating environments and data.
-- [[compliance/encryption-at-rest-and-in-transit-evidence-gcp]] and [[patterns/cloud-kms-key-management]]: CMEK for the classes that need it.
 - [[compliance/pci-dss-and-gdpr-for-devops-logs-and-data]]: scoping card and personal data.
 - [[compliance/data-deletion-and-crypto-shredding-gcp]]: deletion per class.
 - [[compliance/gcp-provider-access-controls-and-data-residency]]: provider access and residency for restricted data.
-- [[adr/0022-admission-policy-pod-security-vap-and-kyverno]]: the admission policy split.
+- [[standards/data-classification-and-handling-standard]]: the classes, their handling rules and where each label or tag goes.
 - [[standards/kubernetes-labels-and-annotations-standard]]: label naming.
+- [[standards/gcp-resource-naming-and-labels-standard]]: the `data-classification` resource label next to the tag.
 - [[compliance/continuous-control-monitoring-gcp-and-gke]]: scheduled inventory and alerting.
 
 ## Sources

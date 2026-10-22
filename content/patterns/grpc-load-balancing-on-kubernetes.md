@@ -19,7 +19,7 @@ A gRPC service behind a normal Kubernetes Service often shows a strange load pic
 > gRPC behaviour (load-balancing policies, name resolution, keepalive, health checking) was checked against the gRPC documentation in the grpc/grpc and grpc/grpc-go repositories and the grpc-go package documentation on 2026-10-21. Kubernetes probe behaviour and Gateway API `GRPCRoute` status were checked against the Kubernetes and Gateway API documentation sources the same day. Nothing was run.
 
 > [!warning] Not verified: GKE load balancers and tools
-> The GKE Gateway and load balancer pages could not be read. So these are **not verified**: whether the GKE Gateway controller supports `GRPCRoute` (Gateway API's own conformance reports for GKE show only the HTTP profile), the annotation or `appProtocol` value GKE needs to talk HTTP/2 or h2c to Pods, health check requirements for HTTP/2 backends, and every idle or request timeout on Google Cloud load balancers and Cloud NAT. Also not verified: how often each gRPC language's DNS resolver re-resolves, the Prometheus metric names of gRPC middleware, the `ghz` flags, and Cloud Service Mesh proxyless gRPC setup. Values for `MaxConnectionAge` and keepalive below are examples to tune, not defaults.
+> This note was not checked against the GKE Gateway and load balancer pages. So these are **not verified**: whether the GKE Gateway controller supports `GRPCRoute` (Gateway API's own conformance reports for GKE show only the HTTP profile), the annotation or `appProtocol` value GKE needs to talk HTTP/2 or h2c to Pods, health check requirements for HTTP/2 backends, and every idle or request timeout on Google Cloud load balancers and Cloud NAT. Also not verified: how often each gRPC language's DNS resolver re-resolves, the Prometheus metric names of gRPC middleware, the `ghz` flags, and Cloud Service Mesh proxyless gRPC setup. Values for `MaxConnectionAge` and keepalive below are examples to tune, not defaults.
 
 ## Why L4 balancing fails for HTTP/2
 
@@ -45,13 +45,13 @@ There is nothing to tune in the Service to fix this. The fix is one of: make con
 
 ## The options
 
-| Option                                         | Effort                     | Balances                        | Costs and limits                                                          |
-| ---------------------------------------------- | -------------------------- | ------------------------------- | ------------------------------------------------------------------------- |
-| Server `MaxConnectionAge`                      | Server config only         | Over time, by reconnects        | Coarse; long streams are cut at the age plus grace                         |
-| Client-side `round_robin` with headless Service | Client config, DNS change  | Per call, across all Pods       | Every client connects to every Pod; resolver refresh behaviour varies      |
-| L7 proxy: mesh sidecar, ambient waypoint, Envoy | Platform component         | Per call, with retries, outlier detection | Extra hop, extra component to run; see [[service-mesh-on-gke]]  |
-| Gateway API route through an L7 load balancer   | Gateway config             | Per call for north-south traffic | Only for traffic entering through the gateway; GKE specifics not verified |
-| Proxyless gRPC with xDS (Cloud Service Mesh)    | Client libraries, control plane | Per call, centrally managed policy | Not verified here; language support varies                         |
+| Option                                          | Effort                          | Balances                                  | Costs and limits                                                          |
+| ----------------------------------------------- | ------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------- |
+| Server `MaxConnectionAge`                       | Server config only              | Over time, by reconnects                  | Coarse; long streams are cut at the age plus grace                        |
+| Client-side `round_robin` with headless Service | Client config, DNS change       | Per call, across all Pods                 | Every client connects to every Pod; resolver refresh behaviour varies     |
+| L7 proxy: mesh sidecar, ambient waypoint, Envoy | Platform component              | Per call, with retries, outlier detection | Extra hop, extra component to run; see [[service-mesh-on-gke]]            |
+| Gateway API route through an L7 load balancer   | Gateway config                  | Per call for north-south traffic          | Only for traffic entering through the gateway; GKE specifics not verified |
+| Proxyless gRPC with xDS (Cloud Service Mesh)    | Client libraries, control plane | Per call, centrally managed policy        | Not verified here; language support varies                                |
 
 For most teams: start with `MaxConnectionAge` on every gRPC server (it helps every client, including ones you do not control), add `round_robin` with a headless Service for your own clients, and adopt a mesh only when you also want its mTLS, retries and telemetry.
 
@@ -143,7 +143,7 @@ metadata:
   name: catalog-grpc
   namespace: shop
 spec:
-  clusterIP: None              # headless: DNS returns Pod IPs
+  clusterIP: None # headless: DNS returns Pod IPs
   selector:
     app.kubernetes.io/name: catalog
   ports:
@@ -235,7 +235,7 @@ spec:
         - method:
             service: shop.catalog.v1.Catalog
       backendRefs:
-        - name: catalog-grpc-lb   # a ClusterIP Service: the gateway balances per call
+        - name: catalog-grpc-lb # a ClusterIP Service: the gateway balances per call
           port: 50051
 ```
 
@@ -245,14 +245,14 @@ On GKE, check that your GatewayClass supports `GRPCRoute` before you depend on i
 
 Keepalive pings detect dead connections and keep idle connections from being dropped silently by NAT, firewalls or load balancers with idle timeouts ([[kubernetes-node-sysctls]] describes that failure). They have to be agreed between client and server:
 
-| Setting (grpc-go)                     | Side   | Default                                   | Meaning                                                     |
-| ------------------------------------- | ------ | ----------------------------------------- | ----------------------------------------------------------- |
-| `ClientParameters.Time`               | client | keepalive off unless set; minimum 10 s    | Ping after this much inactivity                             |
-| `ClientParameters.Timeout`            | client | 20 s when keepalive is on                 | Close if the ping is not acknowledged                       |
-| `ClientParameters.PermitWithoutStream`| client | false                                     | Ping even with no active RPC                                |
-| `EnforcementPolicy.MinTime`           | server | 5 minutes                                 | Minimum interval between client pings the server accepts    |
-| `EnforcementPolicy.PermitWithoutStream` | server | false                                   | Accept pings with no active RPC                             |
-| `ServerParameters.MaxConnectionAge`   | server | infinity                                  | Send GOAWAY after this age (with jitter)                    |
+| Setting (grpc-go)                       | Side   | Default                                | Meaning                                                  |
+| --------------------------------------- | ------ | -------------------------------------- | -------------------------------------------------------- |
+| `ClientParameters.Time`                 | client | keepalive off unless set; minimum 10 s | Ping after this much inactivity                          |
+| `ClientParameters.Timeout`              | client | 20 s when keepalive is on              | Close if the ping is not acknowledged                    |
+| `ClientParameters.PermitWithoutStream`  | client | false                                  | Ping even with no active RPC                             |
+| `EnforcementPolicy.MinTime`             | server | 5 minutes                              | Minimum interval between client pings the server accepts |
+| `EnforcementPolicy.PermitWithoutStream` | server | false                                  | Accept pings with no active RPC                          |
+| `ServerParameters.MaxConnectionAge`     | server | infinity                               | Send GOAWAY after this age (with jitter)                 |
 
 If a client pings more often than the server accepts, or pings without active calls when the server does not permit it, the server closes the connection with a GOAWAY whose debug data is `too_many_pings` (HTTP/2 error `ENHANCE_YOUR_CALM`), and grpc-go clients double their ping interval afterwards. The rule: client `Time` at least the server's `MinTime`, and client `PermitWithoutStream: true` only if the server sets `PermitWithoutStream: true`. Other languages use channel arguments with the same meaning (`GRPC_ARG_KEEPALIVE_TIME_MS`, `GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS`, `GRPC_ARG_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS` and others).
 
@@ -272,7 +272,7 @@ containers:
         containerPort: 50051
     readinessProbe:
       grpc:
-        port: 50051          # a number: named ports are not supported for grpc probes
+        port: 50051 # a number: named ports are not supported for grpc probes
       periodSeconds: 5
       failureThreshold: 2
     livenessProbe:
@@ -283,7 +283,7 @@ containers:
     lifecycle:
       preStop:
         sleep:
-          seconds: 5         # extra time for endpoint removal; or sleep in the app as above
+          seconds: 5 # extra time for endpoint removal; or sleep in the app as above
 terminationGracePeriodSeconds: 45 # above readiness delay + GracefulStop limit + margin
 ```
 

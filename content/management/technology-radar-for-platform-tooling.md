@@ -378,8 +378,7 @@ radar:hold-check:
 
 - [[adr/index|The ADR index]]: where radar decisions are recorded.
 - [[build-vs-buy-devops-tools]]: deciding whether to adopt a product or build.
-- [[decommissioning-platform-services]] and [[end-of-life-tracking-platform-versions]]: what hold leads to.
-- [[devops-vendor-and-licence-management]]: the cost side of adopt.
+- [[decommissioning-platform-services]]: what hold leads to.
 - [[rfc-and-design-review-process]]: how a move is proposed and decided.
-- [[0012-gitlab-ci-for-new-pipelines]], [[0017-argo-cd-and-rollouts-not-spinnaker]], [[0041-retire-chef-for-immutable-images]] and [[0031-terraform-or-opentofu]]: the decisions behind the example entries.
+- [[0012-gitlab-ci-for-new-pipelines]], [[0017-argo-cd-and-rollouts-not-spinnaker]] and [[0041-retire-chef-for-immutable-images]]: the decisions behind the example entries.
 - [[platform-team-operating-model]]: the paved road that adopt promises.

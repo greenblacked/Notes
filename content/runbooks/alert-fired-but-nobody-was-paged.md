@@ -212,31 +212,30 @@ Alerting configuration is code ([[0046-dashboards-and-alert-rules-as-code]]): re
 
 ## Troubleshooting
 
-| Symptom                                                   | Likely cause and fix                                                                                                         |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `ALERTS` shows only `pending`                             | The condition never held for the full `for`. Shorten `for`, add `keep_firing_for`, or fix a flapping expression.             |
-| `ALERTS` empty, expression returns data now               | Rule not evaluated (evaluation failures, missed iterations) or the metric was renamed during the incident.                   |
-| `prometheus_notifications_alertmanagers_discovered` is 0  | Alertmanager discovery broken: Service name, namespace, RBAC or `alert_relabel_configs`.                                     |
-| Notification errors or drops in Prometheus                | Network, TLS or auth between Prometheus and Alertmanager, or Alertmanager down.                                              |
-| Alert in Alertmanager, routes to the root receiver        | Wrong or missing `severity` or `team` label. Fix the rule; add a routing test.                                               |
-| Alert routes to a chat receiver, not the pager            | An earlier sibling route matched; `continue` is false by default. Reorder or narrow.                                         |
-| Page arrives minutes late                                 | Alert joined an existing group and waited for `group_interval`, or large `group_wait`. Tune the paging route.                |
-| `notifications_suppressed_total` rose                     | A silence, an inhibition or a time interval muted it. Step 4.                                                                |
-| `notifications_failed_total` rose for the pager           | Revoked or rotated integration key, or TLS/proxy egress. Step 5.                                                             |
-| Duplicate or missing pages with HA Alertmanager           | Gossip port blocked (TCP and UDP needed), or Prometheus not sending to every replica.                                        |
-| Provider received it, nobody was notified                 | Escalation policy or rota problem outside Alertmanager. Check the provider's log and the rota.                               |
+| Symptom                                                  | Likely cause and fix                                                                                             |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `ALERTS` shows only `pending`                            | The condition never held for the full `for`. Shorten `for`, add `keep_firing_for`, or fix a flapping expression. |
+| `ALERTS` empty, expression returns data now              | Rule not evaluated (evaluation failures, missed iterations) or the metric was renamed during the incident.       |
+| `prometheus_notifications_alertmanagers_discovered` is 0 | Alertmanager discovery broken: Service name, namespace, RBAC or `alert_relabel_configs`.                         |
+| Notification errors or drops in Prometheus               | Network, TLS or auth between Prometheus and Alertmanager, or Alertmanager down.                                  |
+| Alert in Alertmanager, routes to the root receiver       | Wrong or missing `severity` or `team` label. Fix the rule; add a routing test.                                   |
+| Alert routes to a chat receiver, not the pager           | An earlier sibling route matched; `continue` is false by default. Reorder or narrow.                             |
+| Page arrives minutes late                                | Alert joined an existing group and waited for `group_interval`, or large `group_wait`. Tune the paging route.    |
+| `notifications_suppressed_total` rose                    | A silence, an inhibition or a time interval muted it. Step 4.                                                    |
+| `notifications_failed_total` rose for the pager          | Revoked or rotated integration key, or TLS/proxy egress. Step 5.                                                 |
+| Duplicate or missing pages with HA Alertmanager          | Gossip port blocked (TCP and UDP needed), or Prometheus not sending to every replica.                            |
+| Provider received it, nobody was notified                | Escalation policy or rota problem outside Alertmanager. Check the provider's log and the rota.                   |
 
 ## Related
 
 - [[architecture/alerting-and-paging-pipeline]] for the target design this runbook checks against: routing tree, HA Alertmanager and meta-monitoring.
 - [[tools/pagerduty-vs-opsgenie-vs-grafana-irm]] for the receiver side: choosing, configuring and testing the paging tool.
-- [[slo-burn-rate-alerting]] and [[0045-page-only-on-slo-burn-rate]] for which alerts page.
+- [[slo-burn-rate-alerting]] for which alerts page.
 - [[alert-and-runbook-standard]] for required labels, severity routing and the inhibition layout used above.
-- [[0046-dashboards-and-alert-rules-as-code]] for how alerting changes are reviewed and deployed.
-- [[0042-managed-prometheus-for-application-metrics]] and [[multi-tenant-prometheus-architecture]] for where rules are evaluated.
-- [[first-prometheus-alert]] and [[promql-for-alert-rules-and-recording-rules]] for writing and testing rules.
+- [[multi-tenant-prometheus-architecture]] for where rules are evaluated.
+- [[promql-for-alert-rules-and-recording-rules]] for writing and testing rules.
 - [[prometheus-high-cardinality-triage]] when series limits drop the data a rule needs.
-- [[on-call-health]] and [[incident-response]] for the human side of the page.
+- [[incident-response]] for the human side of the page.
 
 ## Sources
 

@@ -288,10 +288,7 @@ done
 
 - [[adr/index|ADR index]] and [[adr/template|ADR template]]: where decisions end up.
 - [[stakeholder-communication]]: announcing the decision to the people it affects.
-- [[managing-conflict]]: when the disagreement is between people, not designs.
 - [[platform-threat-modelling]] and [[production-readiness-review]]: the security and operability follow-ups.
 - [[api-deprecation-policy]]: rules for changes that remove or change interfaces.
-- [[code-review]]: review norms that apply to RFC merge requests too.
 - [[cross-team-dependencies]]: rollouts that need other teams.
-- [[platform-product-discovery]]: finding the consumers who should review.
 - [[security-champions-programme]]: champions as reviewers for their teams.

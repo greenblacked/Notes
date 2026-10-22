@@ -37,23 +37,23 @@ Crypto-shredding is the strongest option when it was designed in from the start:
 
 Every duration below is a setting or a documented default you must check for your own resources. "Check" means it was not confirmed for this note.
 
-| Store                        | Copy that survives a delete                                  | How long (verify for your resources)                                                                                                                                                       |
-| ---------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Cloud Storage                | Soft-deleted objects                                         | Bucket soft delete duration. Terraform documents a default of 7 days, a range of 7 to 90 days, and 0 to disable                                                                             |
-| Cloud Storage                | Noncurrent object versions (versioning on)                   | Until deleted explicitly or by a lifecycle rule (check your lifecycle rules)                                                                                                               |
-| BigQuery                     | Time travel                                                   | Dataset `max_time_travel_hours`: 48 to 168 hours, default 168                                                                                                                              |
-| BigQuery                     | Fail-safe after time travel                                  | Believed to be 7 days, recoverable only through Google support (check)                                                                                                                     |
-| Cloud SQL                    | Automated backups                                            | `--retained-backups-count`: 1 to 365; default 7 (Enterprise) or 15 (Enterprise Plus)                                                                                                       |
-| Cloud SQL                    | Point-in-time recovery logs                                  | `--retained-transaction-log-days`: 1 to 35 with PITR on; Enterprise default and maximum 7, Enterprise Plus default 14, maximum 35                                                           |
-| Cloud SQL                    | Backups after instance deletion, on-demand and final backups | Check the current Cloud SQL backup docs                                                                                                                                                    |
-| Cloud Logging                | Entries in log buckets                                       | Bucket `retention_days`, minimum 1 day; 30 days if set to 0 at creation. A locked bucket's retention cannot be changed                                                                     |
-| Cloud Logging                | Exports from sinks (GCS, BigQuery, Pub/Sub)                  | The destination's own retention                                                                                                                                                            |
-| Backup for GKE               | Backups of cluster state and volumes                          | Plan `backup_retain_days` 0 to 365 (0 means no automatic deletion); `backup_delete_lock_days` 0 to 90 blocks deletion; a locked policy cannot be changed                                    |
-| Pub/Sub                      | Retained messages                                            | `message_retention_duration` 10 minutes to 31 days; subscription default 7 days; acknowledged messages only with `--retain-acked-messages`                                                  |
-| Compute Engine               | Disk snapshots and images                                    | Until deleted, or by snapshot schedule retention                                                                                                                                           |
-| Artifactory                  | Trash can, replicas, remote caches                            | Check the current JFrog documentation for trash can and garbage collection                                                                                                                 |
-| CI (GitLab, Jenkins)         | Job artifacts, logs, caches, runner disks                    | Per-project expiry settings ([[standards/artifact-retention-policy\|artifact retention policy]])                                                                                           |
-| Everything else              | Spreadsheets, tickets, laptops, support cases, data shared with vendors | Not covered by any GCP control; list them explicitly                                                                                                                              |
+| Store                | Copy that survives a delete                                             | How long (verify for your resources)                                                                                                                     |
+| -------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloud Storage        | Soft-deleted objects                                                    | Bucket soft delete duration. Terraform documents a default of 7 days, a range of 7 to 90 days, and 0 to disable                                          |
+| Cloud Storage        | Noncurrent object versions (versioning on)                              | Until deleted explicitly or by a lifecycle rule (check your lifecycle rules)                                                                             |
+| BigQuery             | Time travel                                                             | Dataset `max_time_travel_hours`: 48 to 168 hours, default 168                                                                                            |
+| BigQuery             | Fail-safe after time travel                                             | Believed to be 7 days, recoverable only through Google support (check)                                                                                   |
+| Cloud SQL            | Automated backups                                                       | `--retained-backups-count`: 1 to 365; default 7 (Enterprise) or 15 (Enterprise Plus)                                                                     |
+| Cloud SQL            | Point-in-time recovery logs                                             | `--retained-transaction-log-days`: 1 to 35 with PITR on; Enterprise default and maximum 7, Enterprise Plus default 14, maximum 35                        |
+| Cloud SQL            | Backups after instance deletion, on-demand and final backups            | Check the current Cloud SQL backup docs                                                                                                                  |
+| Cloud Logging        | Entries in log buckets                                                  | Bucket `retention_days`, minimum 1 day; 30 days if set to 0 at creation. A locked bucket's retention cannot be changed                                   |
+| Cloud Logging        | Exports from sinks (GCS, BigQuery, Pub/Sub)                             | The destination's own retention                                                                                                                          |
+| Backup for GKE       | Backups of cluster state and volumes                                    | Plan `backup_retain_days` 0 to 365 (0 means no automatic deletion); `backup_delete_lock_days` 0 to 90 blocks deletion; a locked policy cannot be changed |
+| Pub/Sub              | Retained messages                                                       | `message_retention_duration` 10 minutes to 31 days; subscription default 7 days; acknowledged messages only with `--retain-acked-messages`               |
+| Compute Engine       | Disk snapshots and images                                               | Until deleted, or by snapshot schedule retention                                                                                                         |
+| Artifactory          | Trash can, replicas, remote caches                                      | Check the current JFrog documentation for trash can and garbage collection                                                                               |
+| CI (GitLab, Jenkins) | Job artifacts, logs, caches, runner disks                               | Per-project expiry settings ([[standards/artifact-retention-policy\|artifact retention policy]])                                                         |
+| Everything else      | Spreadsheets, tickets, laptops, support cases, data shared with vendors | Not covered by any GCP control; list them explicitly                                                                                                     |
 
 Sources for the confirmed values: `gcloud` and `bq` help text, Terraform provider documentation and Google's API definitions, read on 2026-10-21. Google also publishes a whitepaper on how it deletes data from its own infrastructure after you delete it; read it for the provider-side part of the story, because that part is outside your control and your evidence.
 
@@ -249,15 +249,15 @@ How quickly each service stops serving data after its key version is disabled or
 
 Every step has a window in which it can be undone. Write the window into the deletion record, and do not issue a "deleted" statement until the last one has closed.
 
-| Step                                    | Undo                                                                                 | Window                                                    |
-| --------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| GCS object delete                       | `gcloud storage restore gs://BUCKET/OBJECT[#GENERATION]`                             | The bucket's soft delete duration                         |
-| GCS bucket delete                       | `gcloud storage restore gs://BUCKET#GENERATION` (the `gcloud` help shows bucket restore) | Check the soft delete docs for deleted buckets            |
-| BigQuery row or table delete            | Time travel, then fail-safe through support (check)                                  | `max_time_travel_hours`, then fail-safe                   |
-| KMS version disable                     | `gcloud kms keys versions enable`                                                    | Any time                                                  |
-| KMS version destroy                     | `gcloud kms keys versions restore`, then `enable` (restore leaves it Disabled)        | Until `destroy_time`                                      |
-| Cloud SQL backup delete, snapshot delete | None                                                                                | None                                                      |
-| Log entries (`gcloud logging logs delete`) | None                                                                              | None                                                      |
+| Step                                       | Undo                                                                                     | Window                                         |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| GCS object delete                          | `gcloud storage restore gs://BUCKET/OBJECT[#GENERATION]`                                 | The bucket's soft delete duration              |
+| GCS bucket delete                          | `gcloud storage restore gs://BUCKET#GENERATION` (the `gcloud` help shows bucket restore) | Check the soft delete docs for deleted buckets |
+| BigQuery row or table delete               | Time travel, then fail-safe through support (check)                                      | `max_time_travel_hours`, then fail-safe        |
+| KMS version disable                        | `gcloud kms keys versions enable`                                                        | Any time                                       |
+| KMS version destroy                        | `gcloud kms keys versions restore`, then `enable` (restore leaves it Disabled)           | Until `destroy_time`                           |
+| Cloud SQL backup delete, snapshot delete   | None                                                                                     | None                                           |
+| Log entries (`gcloud logging logs delete`) | None                                                                                     | None                                           |
 
 ```bash title="scripts/undo-shred.sh"
 set -euo pipefail
@@ -307,33 +307,33 @@ Keep one record per request in the evidence store ([[compliance/audit-evidence-c
 
 ```yaml title="deletions/DEL-2026-0042.yaml"
 id: DEL-2026-0042
-request_ref: "privacy-request-2026-117"     # change: ID in the privacy team's system
-subject: "tenant t-0042"                    # an identifier, not personal data
+request_ref: "privacy-request-2026-117" # change: ID in the privacy team's system
+subject: "tenant t-0042" # an identifier, not personal data
 legal_hold_check: { checked_at: 2026-10-21, result: "no active hold" }
-method: crypto-shred                        # delete | crypto-shred | both
+method: crypto-shred # delete | crypto-shred | both
 stores:
   - store: "gs://example-prod-1-tenant-data/tenants/t-0042/"
     action: "rm --all-versions"
     executed_at: 2026-10-21T10:05:00Z
-    unrecoverable_after: 2026-10-28         # change: soft delete duration from the bucket
+    unrecoverable_after: 2026-10-28 # change: soft delete duration from the bucket
   - store: "BigQuery example-prod-1:analytics"
     action: "DELETE rows; time travel 48h"
     executed_at: 2026-10-21T10:20:00Z
     unrecoverable_after: "2026-10-23 plus fail-safe (check)"
   - store: "Cloud SQL example-prod-1-pg backups and PITR logs"
     action: "rows deleted; ages out of backups"
-    unrecoverable_after: 2026-11-05         # change: oldest backup expiry from settings
+    unrecoverable_after: 2026-11-05 # change: oldest backup expiry from settings
   - store: "KMS key tenant-t-0042 versions 1-3"
     action: "destroy scheduled"
     executed_at: 2026-10-21T11:00:00Z
-    unrecoverable_after: 2026-10-28         # change: destroy_time from the version list
+    unrecoverable_after: 2026-10-28 # change: destroy_time from the version list
 not_covered:
   - "Support tickets in the vendor helpdesk: deleted by support team, ref SUP-881"
 evidence:
   - "before.txt, soft-deleted.txt, KMS version list, audit log export"
 executed_by: platform-oncall
 approved_by: data-protection-lead
-fully_deleted_on: 2026-11-05                 # the latest unrecoverable_after above
+fully_deleted_on: 2026-11-05 # the latest unrecoverable_after above
 ```
 
 ## Pitfalls
@@ -355,13 +355,11 @@ Decommissioning a service ([[management/decommissioning-platform-services|decomm
 
 - [[compliance/pci-dss-and-gdpr-for-devops-logs-and-data]]: where personal data leaks into logs and backups.
 - [[compliance/legal-hold-for-logs-and-artifacts]]: holds that override deletion.
-- [[compliance/encryption-at-rest-and-in-transit-evidence-gcp]]: CMEK coverage per service.
 - [[patterns/cloud-kms-key-management]]: key hierarchy, disable and destroy, org policy for destruction delays.
 - [[architecture/backup-architecture-gke-cloud-sql-gcs]]: where backups live.
-- [[standards/artifact-retention-policy]] and [[adr/0006-artifact-retention-by-cleanup-policies]]: routine cleanup.
-- [[adr/0044-central-log-sinks-and-retention-tiers]]: log retention tiers.
-- [[management/decommissioning-platform-services]]: retiring a service.
 - [[compliance/data-classification-tags-gcp-and-kubernetes]]: finding where each data class lives.
+- [[standards/data-classification-and-handling-standard]]: retention and deletion rules per class.
+- [[runbooks/gcs-deleted-object-recovery]]: the opposite case, getting deleted objects back from soft delete and versioning.
 - [[compliance/audit-evidence-collection-and-retention]]: storing the deletion record.
 
 ## Sources

@@ -270,8 +270,4 @@ A metric that needs more cardinality than the budget (for example per-tenant met
 - [[multi-tenant-prometheus-architecture]]: limits per tenant at the platform level.
 - [[0042-managed-prometheus-for-application-metrics]] and [[0043-opentelemetry-collector-gateway]]: where metrics go.
 - [[observability-pipeline-opentelemetry]]: the OpenTelemetry pipeline.
-- [[promql-for-alert-rules-and-recording-rules]]: writing the queries.
 - [[alert-and-runbook-standard]] and [[slo-burn-rate-alerting]]: alerts built on these metrics.
-- [[0046-dashboards-and-alert-rules-as-code]]: where rules live.
-- [[slo-definition-standard]]: SLIs that depend on these names and buckets.
-- [[scheduled-jobs-standard]]: metrics for jobs that do not live long enough to be scraped.

@@ -16,7 +16,7 @@ draft: false
 Several decisions in these notes work at the registry level, not the Docker daemon level: deploy by digest ([[0010-deploy-images-by-digest]]), Helm charts as OCI artifacts ([[0008-helm-charts-as-oci-artifacts]]), promotion between repositories ([[artifact-promotion-artifactory]]), SBOMs and signatures stored next to images ([[sbom-generation-and-storage]], [[cosign-vs-notation]]), and a cache fallback when Artifactory is down ([[artifactory-outage-cache-fallback]]). Three small, daemonless tools do that work: **crane** for reading and copying images, **skopeo** for copying and mirroring between registries and formats, and **ORAS** for arbitrary OCI artifacts and their referrers. This note is a working kit in the style of [[k9s-kubectx-stern-toolbox]]: what each is for, the recipes that come up, and the habits that keep them from changing a digest by accident.
 
 > [!info] Flags and versions not checked against current releases
-> Written from each project's command documentation in its repository on 2026-10-21; the published sites could not be opened. Run `--help` for your installed version before scripting. Not verified: Artifact Registry's access-token login flow and IAM role names; Artifact Registry and Artifactory support for the OCI Referrers API and sparse indexes; how cleanup policies treat referrers; ORAS `login` flags; registry rate limits.
+> Written from each project's command documentation in its repository on 2026-10-21; not checked against the published sites, so verify there. Run `--help` for your installed version before scripting. Not verified: Artifact Registry's access-token login flow and IAM role names; Artifact Registry and Artifactory support for the OCI Referrers API and sparse indexes; how cleanup policies treat referrers; ORAS `login` flags; registry rate limits.
 
 ## Why daemonless tools
 
@@ -267,12 +267,9 @@ A chart pushed by `helm push` has a Helm-specific config media type; an image ta
 - [[0015-no-privileged-image-builds-in-ci]]
 - [[artifact-promotion-artifactory]]
 - [[artifactory-repository-design]]
-- [[artifactory-outage-cache-fallback]]
 - [[gke-image-pull-registry-failures]]
 - [[sbom-generation-and-storage]]
 - [[cosign-vs-notation]]
-- [[artifactory-vs-nexus-vs-artifact-registry]]
-- [[k9s-kubectx-stern-toolbox]]
 
 ## Sources
 

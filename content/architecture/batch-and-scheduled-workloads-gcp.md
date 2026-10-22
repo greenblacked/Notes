@@ -14,37 +14,37 @@ modified: 2026-10-21
 draft: false
 ---
 
-This note describes how to run scheduled and batch work on GCP: which of the three common platforms to choose, how to configure each so runs neither overlap nor go missing silently, how to make re-runs safe, and how to monitor freshness rather than only failures. It is for platform and service teams that own nightly exports, reconciliations, report builds, clean-ups and fan-out processing. Event-triggered work is in [[architecture/pubsub-event-driven-messaging]]; how alerts reach the on-call team is in [[architecture/alerting-and-paging-pipeline]]; host-level cron and systemd timers are taught in [[learn/linux-services-packages-and-scheduled-jobs]].
+This note describes how to run scheduled and batch work on GCP: which of the three common platforms to choose, how to configure each so runs neither overlap nor go missing silently, how to make re-runs safe, and how to monitor freshness rather than only failures. It is for platform and service teams that own nightly exports, reconciliations, report builds, clean-ups and fan-out processing. Event-triggered work is in [[architecture/pubsub-event-driven-messaging]]; how alerts reach the on-call team is in [[architecture/alerting-and-paging-pipeline]]; host-level cron and systemd timers are taught in [[learn/linux-services-packages-and-scheduled-jobs]]. The field-by-field Job and CronJob baseline is in [[patterns/kubernetes-jobs-and-cronjobs]], and the rules every scheduled job must meet are in [[standards/scheduled-jobs-standard]].
 
 > [!info] Scope and sources
-> Written against the Kubernetes CronJob and Job documentation, the kube-state-metrics metric reference and the Google API definitions (protos) for Cloud Run jobs, Cloud Scheduler and Batch, read on 2026-10-21. The Google Cloud product pages and `gcloud` reference could not be opened, so behaviour documented only there is hedged.
+> Written against the Kubernetes CronJob and Job documentation, the kube-state-metrics metric reference and the Google API definitions (protos) for Cloud Run jobs, Cloud Scheduler and Batch, read on 2026-10-21. Not checked against the Google Cloud product pages and the `gcloud` reference, so behaviour documented only there is hedged; verify there.
 
 > [!note] Not verified
 > Nothing here was run. Check before relying on it: every quota and maximum (task timeout, task count, parallelism, job duration) for Cloud Run jobs and Batch; pricing and scale-to-zero claims; all `gcloud` flags shown (use `--help`); the IAM roles that let Cloud Scheduler run a Cloud Run job and that Batch needs; GKE Spot node labels and taints and Autopilot behaviour for Jobs; how cluster autoscaling evicts Job pods; the feature state of `podFailurePolicy` on your Kubernetes version; daylight saving behaviour of `.spec.timeZone`; and the Batch JSON field spellings.
 
 ## Workload classes
 
-| Class                      | Example                                       | Shape                                      |
-| -------------------------- | --------------------------------------------- | ------------------------------------------ |
-| Short periodic task        | Expire sessions, refresh a cache every 15 min | Seconds to minutes, one container          |
-| Nightly or hourly job      | Export invoices, reconcile ledgers            | Minutes to an hour, must run once per slot |
-| Fan-out batch              | Re-render 50,000 documents                    | Many independent tasks, parallel           |
-| Heavy compute              | Simulations, large media processing           | Hours, large or special machines           |
-| Data pipelines             | Multi-step ETL with dependencies              | Out of scope: use a workflow orchestrator  |
+| Class                 | Example                                       | Shape                                      |
+| --------------------- | --------------------------------------------- | ------------------------------------------ |
+| Short periodic task   | Expire sessions, refresh a cache every 15 min | Seconds to minutes, one container          |
+| Nightly or hourly job | Export invoices, reconcile ledgers            | Minutes to an hour, must run once per slot |
+| Fan-out batch         | Re-render 50,000 documents                    | Many independent tasks, parallel           |
+| Heavy compute         | Simulations, large media processing           | Hours, large or special machines           |
+| Data pipelines        | Multi-step ETL with dependencies              | Out of scope: use a workflow orchestrator  |
 
 ## Decision
 
-| Aspect             | GKE CronJob / Job                                     | Cloud Scheduler + Cloud Run jobs                                  | Batch                                                       |
-| ------------------ | ----------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------- |
-| Runs on            | Your GKE nodes                                        | Managed containers                                                | Compute Engine VMs it provisions per job                    |
-| Trigger            | In-cluster controller                                 | Cloud Scheduler calls the Run Jobs API                            | An API call, from Cloud Scheduler or a pipeline             |
-| Identity           | Kubernetes SA with [[patterns/gke-workload-identity]] | Job's service account                                             | Job's service account (Compute default if unset)            |
-| Retries            | `backoffLimit`, `podFailurePolicy`                    | Per task `max_retries` (default 3) plus Scheduler retries         | Per task `max_retry_count` (0 to 10) and lifecycle policies |
-| Timeout            | `activeDeadlineSeconds` for the whole Job             | Per attempt task `timeout` (default 600s)                         | Per task `max_run_duration`                                 |
-| Parallelism        | `parallelism`, Indexed Jobs                           | `task_count`, `parallelism`                                       | `task_count`, `parallelism`                                 |
-| Idle cost          | Cluster capacity you already pay for                  | Nothing between runs (check pricing)                              | VMs only while the job runs (check pricing)                 |
-| Ops load           | Lowest if you already run GKE                         | Low                                                               | Low for compute, more design for networking and images      |
-| Best for           | Jobs that need cluster services or private networking | Independent periodic tasks, teams without GKE                     | Large fan-out, long runs, special machines, Spot VMs        |
+| Aspect      | GKE CronJob / Job                                     | Cloud Scheduler + Cloud Run jobs                          | Batch                                                       |
+| ----------- | ----------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------- |
+| Runs on     | Your GKE nodes                                        | Managed containers                                        | Compute Engine VMs it provisions per job                    |
+| Trigger     | In-cluster controller                                 | Cloud Scheduler calls the Run Jobs API                    | An API call, from Cloud Scheduler or a pipeline             |
+| Identity    | Kubernetes SA with [[patterns/gke-workload-identity]] | Job's service account                                     | Job's service account (Compute default if unset)            |
+| Retries     | `backoffLimit`, `podFailurePolicy`                    | Per task `max_retries` (default 3) plus Scheduler retries | Per task `max_retry_count` (0 to 10) and lifecycle policies |
+| Timeout     | `activeDeadlineSeconds` for the whole Job             | Per attempt task `timeout` (default 600s)                 | Per task `max_run_duration`                                 |
+| Parallelism | `parallelism`, Indexed Jobs                           | `task_count`, `parallelism`                               | `task_count`, `parallelism`                                 |
+| Idle cost   | Cluster capacity you already pay for                  | Nothing between runs (check pricing)                      | VMs only while the job runs (check pricing)                 |
+| Ops load    | Lowest if you already run GKE                         | Low                                                       | Low for compute, more design for networking and images      |
+| Best for    | Jobs that need cluster services or private networking | Independent periodic tasks, teams without GKE             | Large fan-out, long runs, special machines, Spot VMs        |
 
 Limits (maximum timeouts, task counts, parallelism) exist for both managed products but are not quoted here; check the current quotas pages. Default rule: if the job talks to services inside the cluster, use a CronJob; if it is a standalone container calling Google APIs, use a Cloud Run job; if it needs many machines or hours of compute, use Batch.
 
@@ -77,11 +77,11 @@ metadata:
     team: team-billing
 spec:
   schedule: "15 2 * * *"
-  timeZone: "Etc/UTC"           # CRON_TZ or TZ inside schedule is rejected
-  concurrencyPolicy: Forbid     # never two runs at once
-  startingDeadlineSeconds: 900  # at least 10; a run missed by more is skipped
+  timeZone: "Etc/UTC" # CRON_TZ or TZ inside schedule is rejected
+  concurrencyPolicy: Forbid # never two runs at once
+  startingDeadlineSeconds: 900 # at least 10; a run missed by more is skipped
   successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3     # default is 1; keep a few for debugging
+  failedJobsHistoryLimit: 3 # default is 1; keep a few for debugging
   jobTemplate:
     spec:
       backoffLimit: 3
@@ -107,7 +107,7 @@ spec:
         spec:
           serviceAccountName: invoice-export
           restartPolicy: Never # required by podFailurePolicy
-          priorityClassName: batch-low
+          priorityClassName: batch
           nodeSelector:
             cloud.google.com/gke-spot: "true" # change: check the Spot label for your cluster mode
           tolerations: # change: match the taint on your Spot nodes, if any
@@ -118,7 +118,8 @@ spec:
           containers:
             - name: export
               image: registry.example.com/billing/invoice-export@sha256:0000000000000000000000000000000000000000000000000000000000000000 # placeholder
-              args: ["--date=yesterday", "--checkpoint=gs://team-billing-prod-batch/invoice-export/"]
+              args:
+                ["--date=yesterday", "--checkpoint=gs://team-billing-prod-batch/invoice-export/"]
               resources:
                 requests:
                   cpu: 500m
@@ -129,11 +130,7 @@ spec:
 
 Why each setting:
 
-- **`concurrencyPolicy: Forbid`.** The default `Allow` starts a new run while the previous one is still going. `Replace` kills the running one, which rarely suits jobs with side effects.
-- **`startingDeadlineSeconds`.** Without it there is no deadline. The controller checks about every 10 seconds, so values below 10 may never schedule. If more than 100 schedules were missed in the counting window, the controller does not start the Job and logs an error, so a deadline also prevents that state after a long outage.
-- **`activeDeadlineSeconds`** caps the whole Job, takes precedence over `backoffLimit`, and fails it with reason `DeadlineExceeded`. A stuck job then becomes a visible failure instead of blocking the next run under `Forbid`.
-- **`backoffLimit`** (default 6) counts failed Pods; retries back off exponentially (10s, 20s, 40s and so on, capped at ten minutes). Keep it small: with `activeDeadlineSeconds`, a high limit mostly adds waiting.
-- **`podFailurePolicy`** keeps Spot preemption from consuming `backoffLimit` (`DisruptionTarget` with `Ignore`) and fails fast on errors that retries cannot fix. It requires `restartPolicy: Never`. Check its feature state for your cluster version.
+- **`concurrencyPolicy: Forbid`** so runs never overlap, **`startingDeadlineSeconds`** so a long outage cannot leave the CronJob stuck behind the 100 missed schedules rule, **`activeDeadlineSeconds`** so a hung run becomes a visible `DeadlineExceeded` failure instead of blocking the next run, a small **`backoffLimit`**, and a **`podFailurePolicy`** that keeps Spot preemption from using up retries. The defaults and caveats of each field are in [[patterns/kubernetes-jobs-and-cronjobs#Job fields that matter|Job fields that matter]] and [[patterns/kubernetes-jobs-and-cronjobs#CronJob fields that matter|CronJob fields that matter]].
 - **`ttlSecondsAfterFinished`** removes finished Jobs created by hand with `kubectl create job --from`, which history limits do not cover.
 - **Priority and capacity.** A low priority class lets batch yield to serving workloads ([[patterns/priority-classes-and-preemption]]); requests are honest so the scheduler and autoscaler size correctly ([[patterns/kubernetes-resource-requests-and-limits]]).
 
@@ -186,14 +183,16 @@ Batch provisions VMs per job, runs tasks in containers or scripts, and deletes t
       "parallelism": 50,
       "taskSpec": {
         "runnables": [
-          { "container": { "imageUri": "registry.example.com/docs/rerender@sha256:0000000000000000000000000000000000000000000000000000000000000000" } }
+          {
+            "container": {
+              "imageUri": "registry.example.com/docs/rerender@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
         ],
         "computeResource": { "cpuMilli": 2000, "memoryMib": 4096 },
         "maxRetryCount": 3,
         "maxRunDuration": "3600s",
-        "lifecyclePolicies": [
-          { "action": "FAIL_TASK", "actionCondition": { "exitCodes": [42] } }
-        ]
+        "lifecyclePolicies": [{ "action": "FAIL_TASK", "actionCondition": { "exitCodes": [42] } }]
       }
     }
   ],
@@ -270,15 +269,15 @@ These use kube-state-metrics series marked stable in its reference; confirm `kub
 
 ## Failure modes
 
-| Failure                                  | Symptom                                   | Mitigation                                                       |
-| ---------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
-| Controller or cluster down at run time   | Run skipped after the starting deadline   | Freshness alert; manual run with `kubectl create job --from`     |
-| Overlapping runs                         | Duplicate output, lock contention         | `Forbid`, `activeDeadlineSeconds`, a lease lock                  |
-| Stuck run under `Forbid`                 | Every later run skipped                   | `activeDeadlineSeconds`; freshness alert                         |
-| Spot preemption mid-run                  | Restarts, retries used up                 | `podFailurePolicy` ignore on `DisruptionTarget`; checkpoints     |
-| Retry layers multiply                    | Two executions of a non-idempotent job    | Scheduler retries 0; idempotent design                           |
-| Image or secret missing at 02:15         | Job fails every run until morning         | Pin by digest; deploy-time smoke run with `--from`               |
-| IAM binding removed                      | Silent: Scheduler call fails, no execution | Freshness alert; Scheduler `last_attempt_time` and status        |
+| Failure                                | Symptom                                    | Mitigation                                                   |
+| -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
+| Controller or cluster down at run time | Run skipped after the starting deadline    | Freshness alert; manual run with `kubectl create job --from` |
+| Overlapping runs                       | Duplicate output, lock contention          | `Forbid`, `activeDeadlineSeconds`, a lease lock              |
+| Stuck run under `Forbid`               | Every later run skipped                    | `activeDeadlineSeconds`; freshness alert                     |
+| Spot preemption mid-run                | Restarts, retries used up                  | `podFailurePolicy` ignore on `DisruptionTarget`; checkpoints |
+| Retry layers multiply                  | Two executions of a non-idempotent job     | Scheduler retries 0; idempotent design                       |
+| Image or secret missing at 02:15       | Job fails every run until morning          | Pin by digest; deploy-time smoke run with `--from`           |
+| IAM binding removed                    | Silent: Scheduler call fails, no execution | Freshness alert; Scheduler `last_attempt_time` and status    |
 
 ## Pitfalls
 
@@ -340,11 +339,6 @@ Expected: the manual Job completes and `lastSuccessfulTime` moves; the Cloud Run
 - [[architecture/gke-platform-topology-and-tenancy]]
 - [[adr/0018-gke-autopilot-for-new-clusters]]
 - [[patterns/priority-classes-and-preemption]]
-- [[patterns/kubernetes-resource-requests-and-limits]]
 - [[patterns/kubernetes-autoscaling]]
-- [[patterns/pod-disruption-budgets-for-stateless-services]]
-- [[patterns/gke-workload-identity]]
-- [[patterns/slo-burn-rate-alerting]]
-- [[standards/alert-and-runbook-standard]]
-- [[architecture/finops-cost-allocation-and-guardrails]]
-- [[learn/linux-services-packages-and-scheduled-jobs]]
+- [[patterns/kubernetes-jobs-and-cronjobs]]
+- [[standards/scheduled-jobs-standard]]

@@ -16,7 +16,7 @@ draft: false
 This note describes how to secure traffic between services inside GKE clusters, in layers: L3/L4 network policy, transport identity with mTLS, request authorization by caller identity, and authorization in the application. It gives the options for each layer, a recommended starting point, a safe rollout from permissive to strict, and example manifests. Whether to adopt a mesh at all, and which one, is in [[tools/service-mesh-on-gke]]; the NetworkPolicy mechanics are in [[patterns/kubernetes-network-policies]]; access from people and the internet (north-south) is in [[architecture/zero-trust-access-iap-and-vpc-service-controls]].
 
 > [!info] Scope and sources
-> Written against the Kubernetes NetworkPolicy, service account token and TokenReview documentation and the Istio PeerAuthentication, AuthorizationPolicy, mTLS migration, health check and ambient documentation, read from their documentation sources on 2026-10-21. The Google Cloud pages for Cloud Service Mesh and GKE network policy could not be opened.
+> Written against the Kubernetes NetworkPolicy, service account token and TokenReview documentation and the Istio PeerAuthentication, AuthorizationPolicy, mTLS migration, health check and ambient documentation, read from their documentation sources on 2026-10-21. Not checked against the Google Cloud pages for Cloud Service Mesh and GKE network policy; verify there.
 
 > [!note] Not verified
 > Nothing here was run. Check before relying on it: the Cloud Service Mesh product name, supported modes (sidecar, ambient), trust domain and supported GKE versions; GKE network policy enforcement (Dataplane V2 or Calico) and its logging; the GKE metadata server and DNS addresses for egress rules; the support status of Istio ambient on your versions; the Istio API version for the examples (`kubectl api-resources | grep security.istio.io`); Istio metric and label names; and the RBAC binding a TokenReview-calling service needs. No performance overhead numbers are given; measure your own.
@@ -45,13 +45,13 @@ Each layer covers what the previous one cannot. The Kubernetes docs list what Ne
 
 ## Options
 
-| Option                                      | Identity strength                                | Encryption | Operational cost                                                | Notes                                                                                     |
-| ------------------------------------------- | ------------------------------------------------ | ---------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| NetworkPolicy only                          | None; IP and labels                              | No         | Low                                                             | Baseline for every namespace, per [[adr/0020-default-deny-network-policies]]              |
-| Application TLS with cert-manager certs     | Per workload certificate, if clients verify it   | Yes        | High: every app loads, rotates and verifies certificates        | Workable for a few services; easy to get verification wrong                               |
-| Mesh mTLS (Istio or Cloud Service Mesh)     | Workload principal from the service account      | Yes        | Medium to high: control plane, proxies, upgrades                | Sidecar or ambient data plane; see [[tools/service-mesh-on-gke]]                          |
-| Projected service account token + TokenReview | Pod-bound, audience-scoped, short-lived token   | No (add TLS) | Medium: callee calls TokenReview or validates the JWT         | No mesh needed; works for a few high-value callees                                        |
-| Google-signed ID tokens                     | Google service account via Workload Identity     | No (add TLS) | Medium                                                        | Fits callees that already validate Google tokens; check the GKE docs for audiences        |
+| Option                                        | Identity strength                              | Encryption   | Operational cost                                         | Notes                                                                              |
+| --------------------------------------------- | ---------------------------------------------- | ------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| NetworkPolicy only                            | None; IP and labels                            | No           | Low                                                      | Baseline for every namespace, per [[adr/0020-default-deny-network-policies]]       |
+| Application TLS with cert-manager certs       | Per workload certificate, if clients verify it | Yes          | High: every app loads, rotates and verifies certificates | Workable for a few services; easy to get verification wrong                        |
+| Mesh mTLS (Istio or Cloud Service Mesh)       | Workload principal from the service account    | Yes          | Medium to high: control plane, proxies, upgrades         | Sidecar or ambient data plane; see [[tools/service-mesh-on-gke]]                   |
+| Projected service account token + TokenReview | Pod-bound, audience-scoped, short-lived token  | No (add TLS) | Medium: callee calls TokenReview or validates the JWT    | No mesh needed; works for a few high-value callees                                 |
+| Google-signed ID tokens                       | Google service account via Workload Identity   | No (add TLS) | Medium                                                   | Fits callees that already validate Google tokens; check the GKE docs for audiences |
 
 ## Recommended starting point
 
@@ -219,16 +219,16 @@ The kubelet rotates the token when it is older than 80% of its lifetime or older
 
 ## Failure modes
 
-| Failure                                        | Effect                                           | Mitigation                                                                   |
-| ---------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------- |
-| AND/OR mistake in a NetworkPolicy              | Too open (OR) or everything blocked              | Policy tests in CI; curl tests from allowed and denied pods                   |
-| Default-deny egress without DNS or metadata    | Name resolution and Workload Identity fail       | Ship the DNS and metadata allows with the default deny                        |
-| STRICT before clients are meshed               | Connection resets for CronJobs, scrapers, tools  | PERMISSIVE first; find plaintext clients; canary namespace                   |
-| Typo in a principal or trust domain            | Allowed caller gets 403                          | Canary namespace; read the caller's principal from mesh telemetry first      |
-| L7 rule enforced only by ztunnel (ambient)     | Policy turns into a deny for everyone            | Waypoint before L7 rules                                                      |
-| Control plane down                             | New workloads cannot get certificates; existing ones run until certificates expire | Managed control plane or HA; alert on certificate issuance |
-| Token file not re-read                         | Calls fail after rotation                        | Reload on a timer; test with a short `expirationSeconds` in staging          |
-| New pod before policies apply                  | A brief window without isolation                 | Do not rely on policy timing for secrets at startup                           |
+| Failure                                     | Effect                                                                             | Mitigation                                                              |
+| ------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| AND/OR mistake in a NetworkPolicy           | Too open (OR) or everything blocked                                                | Policy tests in CI; curl tests from allowed and denied pods             |
+| Default-deny egress without DNS or metadata | Name resolution and Workload Identity fail                                         | Ship the DNS and metadata allows with the default deny                  |
+| STRICT before clients are meshed            | Connection resets for CronJobs, scrapers, tools                                    | PERMISSIVE first; find plaintext clients; canary namespace              |
+| Typo in a principal or trust domain         | Allowed caller gets 403                                                            | Canary namespace; read the caller's principal from mesh telemetry first |
+| L7 rule enforced only by ztunnel (ambient)  | Policy turns into a deny for everyone                                              | Waypoint before L7 rules                                                |
+| Control plane down                          | New workloads cannot get certificates; existing ones run until certificates expire | Managed control plane or HA; alert on certificate issuance              |
+| Token file not re-read                      | Calls fail after rotation                                                          | Reload on a timer; test with a short `expirationSeconds` in staging     |
+| New pod before policies apply               | A brief window without isolation                                                   | Do not rely on policy timing for secrets at startup                     |
 
 ## Pitfalls
 
@@ -309,9 +309,4 @@ Run step 2 from a namespace that should be denied, and step 3 only where a non-m
 - [[patterns/cert-manager-dns01-cloud-dns]]
 - [[architecture/gke-platform-topology-and-tenancy]]
 - [[architecture/secrets-architecture-gcp-and-gke]]
-- [[architecture/zero-trust-access-iap-and-vpc-service-controls]]
 - [[architecture/ephemeral-preview-environments-on-gke]]
-- [[standards/platform-threat-modelling]]
-- [[compliance/encryption-at-rest-and-in-transit-evidence-gcp]]
-- [[runbooks/kubernetes-packet-capture]]
-- [[patterns/timeouts-retries-load-shedding]]

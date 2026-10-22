@@ -204,7 +204,7 @@ resource "google_monitoring_slo" "orders_api_availability" {
 
   user_labels = {
     team = "team-orders"
-    tier = "1"
+    tier = "tier-1"
   }
 }
 ```
@@ -273,5 +273,4 @@ Exclusions are decided **before** the window, never after an incident.
 - [[production-readiness-review]]: where the first SLO is agreed.
 - [[metrics-naming-and-cardinality-standard]]: the metrics the SLIs are built from.
 - [[service-tiering-standard]]: the tiers behind the targets.
-- [[promql-for-alert-rules-and-recording-rules]]: writing the queries.
-- [[timeouts-retries-load-shedding]]: designing for a target above your dependencies.
+- [[learn/slis-slos-and-error-budgets|Observability 05: SLIs, SLOs and error budgets]]: the concepts, taught from first principles with a tested lab.

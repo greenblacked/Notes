@@ -325,11 +325,9 @@ The REST path above follows the documented `generateContent` pattern for publish
 - [[llm-api-cost-control]]: the gateway that is the only caller.
 - [[gke-workload-identity]]: the principal form and the GSA fallback.
 - [[zero-trust-access-iap-and-vpc-service-controls]]: perimeter design and access levels.
+- [[0058-vpc-service-controls-for-production-data]]: the proposed decision to put production data projects inside a perimeter.
 - [[gcp-iam-guardrails-for-agent-service-accounts]]: deny policies and outer fences for agent identities.
 - [[private-gke-and-controlled-egress]]: removing public egress from the cluster.
-- [[cloud-kms-key-management]]: keys for CMEK.
-- [[gcp-audit-logs-siem]]: shipping and alerting on the audit trail.
-- [[timeouts-retries-load-shedding]]: retry budgets and circuit breakers.
 - [[redacting-sensitive-data-before-llm-calls]]: sending less in the first place.
 - [[self-hosted-llm-inference-on-gke]]: the self-hosted alternative.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

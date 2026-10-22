@@ -41,12 +41,12 @@ This note describes how to connect an on-prem network (or another cloud) to a GC
 
 ## Options
 
-| Option                     | What it is                                                                                     | Encryption                                      | Lead time and cost drivers                                         | Fits                                                                 |
-| -------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| HA VPN                     | Regional IPsec gateway with two interfaces, tunnels over the internet, BGP through Cloud Router | IPsec, always                                   | Minutes to create; egress and tunnel charges                       | First link, low to moderate bandwidth, backup path for Interconnect  |
-| Partner Interconnect       | VLAN attachments through a service provider that already connects to Google                    | None on the attachment; add it at another layer | Depends on the provider; attachment bandwidth set by the partner   | No presence in a Google colocation facility                          |
-| Dedicated Interconnect     | Your own physical links in a colocation facility, VLAN attachments on top                      | None by default; MACsec exists as a feature     | Weeks (cross-connects, LOA); port and attachment charges           | High, steady bandwidth, presence in a supported facility            |
-| HA VPN over Interconnect   | HA VPN gateways whose tunnels run over encrypted-only VLAN attachments                          | IPsec over the private link                     | Both of the above                                                  | Policy requires encryption in transit over the private link          |
+| Option                   | What it is                                                                                      | Encryption                                      | Lead time and cost drivers                                       | Fits                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------- |
+| HA VPN                   | Regional IPsec gateway with two interfaces, tunnels over the internet, BGP through Cloud Router | IPsec, always                                   | Minutes to create; egress and tunnel charges                     | First link, low to moderate bandwidth, backup path for Interconnect |
+| Partner Interconnect     | VLAN attachments through a service provider that already connects to Google                     | None on the attachment; add it at another layer | Depends on the provider; attachment bandwidth set by the partner | No presence in a Google colocation facility                         |
+| Dedicated Interconnect   | Your own physical links in a colocation facility, VLAN attachments on top                       | None by default; MACsec exists as a feature     | Weeks (cross-connects, LOA); port and attachment charges         | High, steady bandwidth, presence in a supported facility            |
+| HA VPN over Interconnect | HA VPN gateways whose tunnels run over encrypted-only VLAN attachments                          | IPsec over the private link                     | Both of the above                                                | Policy requires encryption in transit over the private link         |
 
 Bandwidth options in the `gcloud compute interconnects attachments dedicated create --bandwidth` help range from `50m` to `400g`; Dedicated link types in the API are 10G, 100G and 400G per link. Throughput limits for HA VPN, and prices for all options, must come from the current documentation, not from this table.
 
@@ -241,13 +241,13 @@ Pick the router, VPN and attachment metrics from the Metrics Explorer list for y
 
 ## Failure modes and drills
 
-| Failure                               | Expected behaviour                                         | What breaks the expectation                                           |
-| ------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------- |
-| One tunnel or on-prem router down     | BGP on the other tunnel carries all traffic                | Both tunnels terminate on one device; backup path never tested        |
-| One edge availability domain in maintenance | Attachment in the other domain carries traffic       | Both attachments in the same domain                                   |
-| Interconnect fully down               | HA VPN backup takes over with lower bandwidth              | VPN not sized for the load; priorities wrong, so VPN was never preferred |
-| Cloud Router region failure           | Other region's link serves traffic if routing mode is global | Regional mode; no link in the DR region                            |
-| Route leak from on-prem (e.g. default route) | Filters drop it                                     | No import filtering; Google egress silently shifts to on-prem         |
+| Failure                                      | Expected behaviour                                           | What breaks the expectation                                              |
+| -------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| One tunnel or on-prem router down            | BGP on the other tunnel carries all traffic                  | Both tunnels terminate on one device; backup path never tested           |
+| One edge availability domain in maintenance  | Attachment in the other domain carries traffic               | Both attachments in the same domain                                      |
+| Interconnect fully down                      | HA VPN backup takes over with lower bandwidth                | VPN not sized for the load; priorities wrong, so VPN was never preferred |
+| Cloud Router region failure                  | Other region's link serves traffic if routing mode is global | Regional mode; no link in the DR region                                  |
+| Route leak from on-prem (e.g. default route) | Filters drop it                                              | No import filtering; Google egress silently shifts to on-prem            |
 
 Drill once per quarter in a change window, starting with non-prod:
 
@@ -314,7 +314,7 @@ Expected: every peer `UP`, outbound routes are exactly the aggregates you meant 
 
 ## Sources
 
-Official documentation to check (not opened while writing this note):
+Official documentation this note was not checked against; verify there:
 
 - [HA VPN topologies](https://cloud.google.com/network-connectivity/docs/vpn/concepts/topologies)
 - [Cloud Interconnect overview](https://cloud.google.com/network-connectivity/docs/interconnect/concepts/overview)
@@ -332,8 +332,6 @@ Official documentation to check (not opened while writing this note):
 - [[architecture/cloud-dns-hybrid-and-multi-project]]: DNS forwarding over the link.
 - [[runbooks/hybrid-connectivity-bgp-troubleshooting]]: layer-by-layer diagnosis when the link breaks.
 - [[runbooks/network-troubleshooting-dns-mtu-tls-load-balancers]]: MTU, DNS and TLS symptoms.
-- [[learn/ip-addressing-and-subnets]]: address planning basics.
 - [[architecture/private-gke-and-controlled-egress]]: egress design that must not be bypassed by a leaked default route.
 - [[architecture/disaster-recovery-tiers-rpo-rto]]: the tier that decides whether you need links in two regions.
 - [[architecture/zero-trust-access-iap-and-vpc-service-controls]]: access to Google APIs and perimeters from on-prem.
-- [[learn/load-balancers-firewalls-and-network-troubleshooting]]: firewalls and load balancers on the path.

@@ -14,7 +14,7 @@ modified: 2026-10-21
 draft: false
 ---
 
-This note describes how to give every merge request its own short-lived environment on GKE: one namespace per merge request in a dedicated non-production cluster, reached at `mr-<iid>.preview.example.com` behind access control, and removed when the merge request closes or goes stale. It covers the two delivery models (CI pushes with Helm, or Argo CD pulls with an ApplicationSet), the namespace kit, DNS and TLS, data, secrets, lifecycle, cost and the credential problem that merge request pipelines create. Pipeline structure is in [[patterns/gitlab-ci-pipeline-structure]], CI trust zones in [[architecture/ci-platform-gitlab-runners-and-jenkins-agents-on-gke]], and the edge in [[architecture/edge-and-ingress-cloudflare-gclb-gateway-api]].
+This note describes how to give every merge request its own short-lived environment on GKE: one namespace per merge request in a dedicated non-production cluster, reached at `mr-<iid>.preview.example.com` behind access control, and removed when the merge request closes or goes stale. It covers the two delivery models (CI pushes with Helm, or Argo CD pulls with an ApplicationSet), the namespace kit, DNS and TLS, data, secrets, lifecycle, cost and the credential problem that merge request pipelines create. The GitLab CI implementation of the push model, with complete jobs and a janitor, is in [[patterns/gitlab-review-environments-on-gke]]. Pipeline structure is in [[patterns/gitlab-ci-pipeline-structure]], CI trust zones in [[architecture/ci-platform-gitlab-runners-and-jenkins-agents-on-gke]], and the edge in [[architecture/edge-and-ingress-cloudflare-gclb-gateway-api]].
 
 > [!info] Scope and sources
 > Written against the GitLab environments, review apps, variables and merge request pipeline docs, the Argo CD ApplicationSet pull request generator docs, the Kubernetes ResourceQuota, LimitRange and NetworkPolicy docs, cert-manager DNS-01 and the Let's Encrypt challenge types, read from their documentation sources on 2026-10-21.
@@ -60,14 +60,14 @@ flowchart LR
 
 ## Delivery: push or pull
 
-| Aspect              | CI push with Helm                                               | Argo CD ApplicationSet pull request generator                                  |
-| ------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Credential in CI    | The merge request job needs a credential for the preview cluster | None; Argo CD polls the GitLab API with its own token                           |
-| Latency             | Deploys when the job runs                                       | Poll default is 1800 seconds; set up the ApplicationSet webhook for minutes     |
-| Lifecycle           | GitLab environment `on_stop` and `auto_stop_in`                 | Application follows the merge request state the generator sees                 |
-| Status on the MR    | Environment link and job status native in GitLab                | Needs a notification or commit status integration                              |
-| Fits                | Teams without Argo CD, or charts that already deploy from CI    | Platforms on GitOps, per [[adr/0001-gitops-with-argocd]]                        |
-| Main risk           | Merge request code runs next to a deploy credential             | A templated `project` or untrusted ApplicationSet authors can escalate         |
+| Aspect           | CI push with Helm                                                | Argo CD ApplicationSet pull request generator                               |
+| ---------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Credential in CI | The merge request job needs a credential for the preview cluster | None; Argo CD polls the GitLab API with its own token                       |
+| Latency          | Deploys when the job runs                                        | Poll default is 1800 seconds; set up the ApplicationSet webhook for minutes |
+| Lifecycle        | GitLab environment `on_stop` and `auto_stop_in`                  | Application follows the merge request state the generator sees              |
+| Status on the MR | Environment link and job status native in GitLab                 | Needs a notification or commit status integration                           |
+| Fits             | Teams without Argo CD, or charts that already deploy from CI     | Platforms on GitOps, per [[adr/0001-gitops-with-argocd]]                    |
+| Main risk        | Merge request code runs next to a deploy credential              | A templated `project` or untrusted ApplicationSet authors can escalate      |
 
 The pull model fits the trust zones in [[architecture/ci-platform-gitlab-runners-and-jenkins-agents-on-gke]] better: merge request pipelines stay in the untrusted zone with no cluster credential, and only Argo CD writes to the cluster. Choose push only when you accept a dedicated preview zone (below). Promotion and repository layout for the GitOps side are in [[architecture/gitops-repo-topology-and-promotion]].
 
@@ -195,7 +195,7 @@ The quota values are examples sized for one small service; derive yours from the
 
 - **Certificate.** A wildcard certificate needs the DNS-01 challenge; HTTP-01 and TLS-ALPN-01 cannot validate wildcards. Issue one `*.preview.example.com` certificate with cert-manager and the Cloud DNS solver, as in [[patterns/cert-manager-dns01-cloud-dns]]. One certificate for all previews also avoids issuing per merge request and running into the CA's rate limits.
 - **One label deep.** A TLS wildcard covers exactly one label, so `mr-123.preview.example.com` is covered and `api.mr-123.preview.example.com` is not, even though a Gateway hostname `*.preview.example.com` would route both. Keep preview hostnames one label deep.
-- **DNS.** One wildcard record pointing at the Gateway address is enough and creates nothing per preview. If you prefer per-preview records with [[patterns/external-dns-on-gke]], use a dedicated `--txt-owner-id` for the preview instance and start with `--policy=upsert-only`, because `sync` with a shared owner ID can delete other owners' records.
+- **DNS.** One wildcard record pointing at the Gateway address is enough and creates nothing per preview. If you prefer per-preview records with [[patterns/external-dns-on-gke]], give the preview instance its own `--txt-owner-id` and `--domain-filter`, because `sync` with a shared owner ID can delete other owners' records; the trade-off between `upsert-only` (records are never removed) and `sync` (records follow the previews) is in [[patterns/gitlab-review-environments-on-gke#DNS and TLS|the review environments pattern]].
 
 ```yaml title="gateway-system/preview-gateway.yaml"
 apiVersion: cert-manager.io/v1
@@ -261,7 +261,7 @@ Rules for this design:
 
 1. **Pull model first**: the merge request job holds no cluster credential at all.
 2. **If you push**, create a dedicated preview trust zone: runners tagged `preview-deployer`, an identity obtained keyless through Workload Identity Federation ([[architecture/iam-groups-and-ci-workload-identity-federation]]) that can only deploy to the preview cluster, and a rule that runs the deploy only for merge requests from branches in the same project.
-3. **Never for forks.** The rules below skip fork merge requests; a maintainer can push the branch into the project after reading it.
+3. **Never for forks.** The deploy and stop jobs skip fork merge requests (see Lifecycle); a maintainer can push the branch into the project after reading it.
 
 The same rule applies to any other token in merge request jobs, such as a scanner token for code analysis.
 
@@ -273,61 +273,7 @@ The same rule applies to any other token in merge request jobs, such as a scanne
 - **Janitor.** A CronJob in the preview cluster deletes namespaces whose `preview-expires-at` label is in the past. It catches stops that never ran, environments stuck in `stopping` after a deleted branch, and ApplicationSet leftovers.
 - **Stuck namespaces.** A namespace that hangs in `Terminating` usually has a finalizer waiting on a controller; follow [[runbooks/namespace-stuck-terminating]].
 
-```yaml title=".gitlab-ci.yml (preview jobs)"
-variables:
-  PREVIEW_DOMAIN: preview.example.com # change: your preview zone
-  PREVIEW_TTL_SECONDS: "259200"       # 3 days, matches auto_stop_in
-
-.preview_rules:
-  rules:
-    # Same-project merge requests only; fork merge requests get no preview
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_PATH == $CI_MERGE_REQUEST_PROJECT_PATH
-
-deploy_review:
-  stage: review
-  extends: .preview_rules
-  image: registry.example.com/ci/deploy-tools:1.0.0 # change: pin your helm+kubectl image by digest
-  tags: [preview-deployer]
-  needs: [build_image] # writes IMAGE_DIGEST to a dotenv report
-  variables:
-    NS: mr-$CI_MERGE_REQUEST_IID
-  environment:
-    name: review/mr-$CI_MERGE_REQUEST_IID
-    url: https://mr-$CI_MERGE_REQUEST_IID.$PREVIEW_DOMAIN
-    on_stop: stop_review
-    auto_stop_in: 3 days
-  script:
-    - set -o pipefail # the image's shell must support it (bash, or a recent busybox ash)
-    - EXPIRES=$(( $(date +%s) + PREVIEW_TTL_SECONDS ))
-    - >
-      sed -e "s/__NS__/$NS/g" -e "s/__MR__/$CI_MERGE_REQUEST_IID/g" -e "s/__EXPIRES__/$EXPIRES/g"
-      deploy/preview/namespace-kit.yaml | kubectl apply -f -
-    - >
-      helm upgrade --install "app-$CI_MERGE_REQUEST_IID" deploy/chart
-      --namespace "$NS"
-      --set image.digest="$IMAGE_DIGEST"
-      --set host="mr-$CI_MERGE_REQUEST_IID.$PREVIEW_DOMAIN"
-      --values deploy/chart/values-preview.yaml
-      --wait --timeout 10m
-
-stop_review:
-  stage: review
-  image: registry.example.com/ci/deploy-tools:1.0.0
-  tags: [preview-deployer]
-  variables:
-    GIT_STRATEGY: none
-    NS: mr-$CI_MERGE_REQUEST_IID
-  environment:
-    name: review/mr-$CI_MERGE_REQUEST_IID
-    action: stop
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_PATH == $CI_MERGE_REQUEST_PROJECT_PATH
-      when: manual
-      allow_failure: true
-  script:
-    - helm uninstall "app-$CI_MERGE_REQUEST_IID" --namespace "$NS" || true
-    - kubectl delete namespace "$NS" --ignore-not-found --wait=false
-```
+The complete push-model jobs (keyless authentication, `resource_group`, the namespace baseline and the Helm flags) are in [[patterns/gitlab-review-environments-on-gke#The CI jobs|Review environments per merge request on GKE]]. For this design, two additions: the deploy job renders the namespace kit above with the namespace, the merge request IID and an expiry of the current time plus the TTL (`__EXPIRES__`, the same three days as `auto_stop_in`), so the janitor below can find expired previews; and the deploy and stop jobs share the rule `if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_PATH == $CI_MERGE_REQUEST_PROJECT_PATH`, which skips fork merge requests. The pattern names namespaces `review-<project ID>-<IID>` so that several projects can share one cluster; pick one scheme and use it in the kit, the jobs and the janitor's name filter.
 
 The janitor, in the preview cluster only, with a ClusterRole limited to listing and deleting namespaces:
 
@@ -382,14 +328,14 @@ spec:
 
 ## Failure modes
 
-| Failure                                   | Symptom                                         | Mitigation                                                                 |
-| ----------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------- |
-| Stop job never runs (branch deleted)      | Environment stuck in `stopping`, namespace left | Janitor by TTL label; force stop the environment in GitLab                  |
-| Namespace stuck `Terminating`             | Name reused by a reopened MR fails              | [[runbooks/namespace-stuck-terminating]]; check finalizers                  |
-| Quota exhausted                           | Deployment exists, Pods missing                 | `kubectl describe` the ReplicaSet; raise the quota only with a reason       |
-| Wildcard certificate renewal fails        | Every preview shows TLS errors at once          | Alert on certificate expiry and on cert-manager `Ready=False`               |
-| Preview cluster full                      | Pods pending, deploy job times out              | Concurrency cap, cluster autoscaler limits, janitor health                  |
-| ApplicationSet slow to notice a new MR    | Preview appears up to the poll interval late    | Configure the ApplicationSet webhook for merge request events               |
+| Failure                                | Symptom                                         | Mitigation                                                            |
+| -------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------- |
+| Stop job never runs (branch deleted)   | Environment stuck in `stopping`, namespace left | Janitor by TTL label; force stop the environment in GitLab            |
+| Namespace stuck `Terminating`          | Name reused by a reopened MR fails              | [[runbooks/namespace-stuck-terminating]]; check finalizers            |
+| Quota exhausted                        | Deployment exists, Pods missing                 | `kubectl describe` the ReplicaSet; raise the quota only with a reason |
+| Wildcard certificate renewal fails     | Every preview shows TLS errors at once          | Alert on certificate expiry and on cert-manager `Ready=False`         |
+| Preview cluster full                   | Pods pending, deploy job times out              | Concurrency cap, cluster autoscaler limits, janitor health            |
+| ApplicationSet slow to notice a new MR | Preview appears up to the poll interval late    | Configure the ApplicationSet webhook for merge request events         |
 
 ## Pitfalls
 
@@ -426,7 +372,7 @@ Check the GitLab Environments page too: one `review/mr-<iid>` per open merge req
 
 1. Pick one service, create the preview cluster or node pool, the wildcard certificate, DNS record and access policy.
 2. Ship the namespace kit and the janitor before the first preview, so cleanup exists from day one.
-3. Start with the pull model if you already run Argo CD; otherwise the push jobs above in a dedicated preview zone.
+3. Start with the pull model if you already run Argo CD; otherwise the push jobs from [[patterns/gitlab-review-environments-on-gke]] in a dedicated preview zone.
 4. Add opt-in by label, the concurrency cap and Spot capacity.
 5. Add fixtures and service-token based smoke tests, then offer the template to other teams through [[learn/gitlab-ci-rules-dag-matrix-and-includes|shared CI includes]].
 
@@ -447,19 +393,11 @@ Check the GitLab Environments page too: one `review/mr-<iid>` per open merge req
 
 ## Related
 
-- [[patterns/gitlab-ci-pipeline-structure]]
-- [[learn/gitlab-ci-rules-dag-matrix-and-includes]]
+- [[patterns/gitlab-review-environments-on-gke]]
 - [[architecture/ci-platform-gitlab-runners-and-jenkins-agents-on-gke]]
 - [[architecture/gitops-repo-topology-and-promotion]]
-- [[adr/0001-gitops-with-argocd]]
 - [[adr/0019-namespace-per-team-tenancy]]
-- [[adr/0020-default-deny-network-policies]]
 - [[architecture/east-west-service-security-gke]]
 - [[patterns/external-dns-on-gke]]
-- [[patterns/cert-manager-dns01-cloud-dns]]
-- [[architecture/edge-and-ingress-cloudflare-gclb-gateway-api]]
-- [[patterns/cloudflare-access-service-tokens]]
-- [[patterns/external-secrets-with-secret-manager]]
-- [[patterns/kubernetes-resource-requests-and-limits]]
 - [[architecture/finops-cost-allocation-and-guardrails]]
 - [[runbooks/namespace-stuck-terminating]]

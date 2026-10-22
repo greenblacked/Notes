@@ -512,5 +512,5 @@ Any metric that becomes a target gets gamed. The common forms:
 - [[dora-metrics]]: delivery performance metrics, with different definitions.
 - [[stakeholder-communication]]: reporting ranges and risks.
 - [[quarterly-engineering-review]] and [[platform-roadmap-multi-quarter]]: where forecasts are reviewed.
-- [[toil-budget]] and [[tech-debt-management]]: what to do about interrupt load.
+- [[toil-budget]]: what to do about interrupt load.
 - [[on-call-health]]: keeping the pager separate from the shield.

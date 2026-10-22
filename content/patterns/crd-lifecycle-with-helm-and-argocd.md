@@ -30,11 +30,11 @@ Most platform add-ons are operators that ship CustomResourceDefinitions: cert-ma
 
 ## Shipping CRDs with Helm: three options
 
-| Option                                            | Install                | Upgrade                      | Delete on uninstall                         | Use when                                                         |
-| ------------------------------------------------- | ---------------------- | ---------------------------- | ------------------------------------------- | ---------------------------------------------------------------- |
-| `crds/` directory in the operator chart           | Yes, first install only | Never                        | Never                                       | Small, rarely changing CRDs; you upgrade them by hand            |
-| CRDs as templates in `templates/`, behind a value | Yes                    | Yes, with the release        | Yes, unless `helm.sh/resource-policy: keep` | Chart vendors offer it; you want CRDs to follow the chart version |
-| A separate CRD chart (or plain manifests)         | Yes                    | Yes, as its own release      | Under your control                          | Recommended for shared operators in GitOps                       |
+| Option                                            | Install                 | Upgrade                 | Delete on uninstall                         | Use when                                                          |
+| ------------------------------------------------- | ----------------------- | ----------------------- | ------------------------------------------- | ----------------------------------------------------------------- |
+| `crds/` directory in the operator chart           | Yes, first install only | Never                   | Never                                       | Small, rarely changing CRDs; you upgrade them by hand             |
+| CRDs as templates in `templates/`, behind a value | Yes                     | Yes, with the release   | Yes, unless `helm.sh/resource-policy: keep` | Chart vendors offer it; you want CRDs to follow the chart version |
+| A separate CRD chart (or plain manifests)         | Yes                     | Yes, as its own release | Under your control                          | Recommended for shared operators in GitOps                        |
 
 What Helm documents about the `crds/` directory:
 
@@ -84,12 +84,12 @@ spec:
   source:
     repoURL: https://git.example.com/platform/gitops.git # change: your GitOps repository
     targetRevision: main
-    path: platform/cert-manager/crds/v1.0.0              # change: one directory per CRD version
+    path: platform/cert-manager/crds/v1.0.0 # change: one directory per CRD version
   destination:
     server: https://kubernetes.default.svc
   syncPolicy:
     automated:
-      prune: false          # never delete a CRD because a file moved
+      prune: false # never delete a CRD because a file moved
       selfHeal: true
     syncOptions:
       - ServerSideApply=true
@@ -108,9 +108,9 @@ metadata:
 spec:
   project: platform
   source:
-    repoURL: https://charts.example.com/platform     # change: your chart repository or OCI registry
+    repoURL: https://charts.example.com/platform # change: your chart repository or OCI registry
     chart: cert-manager
-    targetRevision: 1.0.0                              # change: the chart version that matches the CRDs above
+    targetRevision: 1.0.0 # change: the chart version that matches the CRDs above
     helm:
       skipCrds: true
   destination:
@@ -231,13 +231,13 @@ Never combine "new CRD version", "new controller" and "drop old version" in one 
 
 Layer several controls; each covers a different mistake:
 
-| Control                                                        | Stops                                                                       |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| CRDs in `crds/` or in a separate release                       | `helm uninstall` of the operator deleting CRDs                              |
-| `helm.sh/resource-policy: keep` on templated CRDs              | Upgrade, rollback or uninstall deleting them                                |
-| Argo CD `Prune=false` and `Delete=false` (or `confirm`)        | A moved file or a deleted Application pruning CRDs                          |
+| Control                                                            | Stops                                                                         |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| CRDs in `crds/` or in a separate release                           | `helm uninstall` of the operator deleting CRDs                                |
+| `helm.sh/resource-policy: keep` on templated CRDs                  | Upgrade, rollback or uninstall deleting them                                  |
+| Argo CD `Prune=false` and `Delete=false` (or `confirm`)            | A moved file or a deleted Application pruning CRDs                            |
 | RBAC: no `delete` on `customresourcedefinitions` for humans and CI | A hand-typed `kubectl delete crd`, and a compromised pipeline (design advice) |
-| Backups of custom resources before each operator upgrade        | Everything else; the only real recovery                                     |
+| Backups of custom resources before each operator upgrade           | Everything else; the only real recovery                                       |
 
 A ClusterRole that grants CRD management without delete, bound to the GitOps controller or the platform pipeline, is plain RBAC; keep `delete` for a break-glass role. Cluster-wide backup tooling choices are in [[velero-vs-backup-for-gke]].
 
@@ -296,12 +296,11 @@ The general release rollback procedure, including its CRD caveats, is [[helm-rel
 - [[helm-release-rollback]]: rollback steps and why CRDs do not follow.
 - [[argocd-sync-failure-and-drift]]: diagnosing failed syncs, including CRD ordering.
 - [[gitops-repo-topology-and-promotion]]: where the CRD and operator Applications live.
-- [[helm-chart-conventions]]: chart layout rules.
-- [[helm-library-and-umbrella-charts]]: operators pulled in as dependencies.
 - [[admission-webhook-certificate-expiry]]: the same failure mode for webhooks.
 - [[helm-chart-standard]]: approval rules for cluster-scoped charts.
 - [[cert-manager-dns01-cloud-dns]]: an operator whose CRDs hold every certificate.
-- [[helm-vs-kustomize]] and [[argocd-vs-flux]]: the tooling choices behind this.
+- [[helm-vs-kustomize]]: the tooling choice behind this.
+- [[0062-helm-charts-rendered-by-argo-cd]]: the decision that Argo CD renders Helm charts, which is why the Helm `crds/` rules above do not carry over one to one.
 
 ## Sources
 

@@ -16,7 +16,7 @@ draft: false
 This note describes SonarQube as a platform service that every merge request depends on: its components, how editions change the architecture, where to host it, the database and host requirements, how scanners in GitLab CI and Jenkins connect to it, where throughput runs out, how it is accessed, upgraded and recovered. It is the platform counterpart of [[architecture/artifact-management-architecture-artifactory-ha]]. How the quality gate is configured is in [[patterns/sonarqube-quality-gates]], the decision that the gate blocks merges is [[adr/0016-sonarqube-new-code-gate-blocks-merge]], upgrades are in [[runbooks/sonarqube-upgrade-and-db-migration]], and a first scan is taught in [[learn/sonarqube-basics-first-scan-and-triage]].
 
 > [!info] Scope and sources
-> Written against SonarSource's public repositories, read on 2026-10-21: the SonarQube Helm chart README and values, the Docker image documentation, the server's default `sonar.properties`, and the Web API source. docs.sonarsource.com could not be opened. Chart facts are version-bound; check the chart README for your chart version.
+> Written against SonarSource's public repositories, read on 2026-10-21: the SonarQube Helm chart README and values, the Docker image documentation, the server's default `sonar.properties`, and the Web API source. Not checked against the documentation at docs.sonarsource.com; verify there. Chart facts are version-bound; check the chart README for your chart version.
 
 > [!note] Not verified
 > Nothing here was run. Check before relying on it: which edition includes branch and merge request analysis, merge request decoration, SSO and Data Center (HA) deployment; Compute Engine worker counts by edition; supported PostgreSQL versions and database requirements; Elasticsearch heap and disk guidance and whether indexes rebuild after a database restore; the scanner parameters `sonar.qualitygate.wait`, `sonar.qualitygate.timeout` and `sonar.token`; the Jenkins plugin steps and webhook setup; scanner image names; token types and expiry; the LTA release cadence; and whether `/api/monitoring/metrics` needs the passcode.
@@ -70,11 +70,11 @@ Licences and seat or lines-of-code counting change; manage them with [[managemen
 
 ## Hosting options
 
-| Option                     | Fits                                                     | You operate                                       | Watch out for                                                      |
-| -------------------------- | -------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------ |
-| VM (Compute Engine)        | Teams without GKE operations, or strict host tuning      | OS, sysctls, JVM, upgrades, backups of volumes    | Snowflake hosts; automate with images and config management        |
-| GKE with the official chart| Platforms already on GKE; declarative upgrades           | Chart values, node sysctls, PVC, probes           | Privileged init container by default; one replica per database     |
-| SonarQube Cloud (SaaS)     | No appetite to operate it; code may leave your network   | Organisation settings, tokens, CI integration     | Data residency, network access to CI, cost model                   |
+| Option                      | Fits                                                   | You operate                                    | Watch out for                                                  |
+| --------------------------- | ------------------------------------------------------ | ---------------------------------------------- | -------------------------------------------------------------- |
+| VM (Compute Engine)         | Teams without GKE operations, or strict host tuning    | OS, sysctls, JVM, upgrades, backups of volumes | Snowflake hosts; automate with images and config management    |
+| GKE with the official chart | Platforms already on GKE; declarative upgrades         | Chart values, node sysctls, PVC, probes        | Privileged init container by default; one replica per database |
+| SonarQube Cloud (SaaS)      | No appetite to operate it; code may leave your network | Organisation settings, tokens, CI integration  | Data residency, network access to CI, cost model               |
 
 One rule applies everywhere: **one instance per database schema**, and volumes are never shared between instances.
 
@@ -100,19 +100,19 @@ jdbcOverwrite:
   enabled: true
   jdbcUrl: "jdbc:postgresql://10.20.0.5:5432/sonarqube" # change: Cloud SQL private IP
   jdbcUsername: sonarqube
-  jdbcSecretName: sonarqube-db         # synced from Secret Manager
+  jdbcSecretName: sonarqube-db # synced from Secret Manager
   jdbcSecretPasswordKey: password
 monitoringPasscodeSecretName: sonarqube-monitoring
-monitoringPasscodeSecretKey: passcode   # without a passcode the pod never becomes ready
+monitoringPasscodeSecretKey: passcode # without a passcode the pod never becomes ready
 initSysctl:
-  enabled: false                        # sysctls set on the dedicated node pool instead
+  enabled: false # sysctls set on the dedicated node pool instead
 initFs:
   enabled: false
 persistence:
-  enabled: true                         # default is false: data lost when the pod is recreated
-  size: 50Gi                            # example; size from your index growth
+  enabled: true # default is false: data lost when the pod is recreated
+  size: 50Gi # example; size from your index growth
 nodeSelector:
-  workload: sonarqube                   # change: your dedicated node pool label
+  workload: sonarqube # change: your dedicated node pool label
 ```
 
 The chart's default resources request 400m CPU and 4096M memory with a 10240M memory limit; treat those as a floor and size from measured heap use. Ingress is off by default and the chart recommends Gateway API through `httproute.enabled`; route through the internal edge described below.
@@ -175,15 +175,15 @@ Images are published per version and as LTA tags (`<version>-lta-<edition>`). Pi
 
 ## Failure modes
 
-| Failure                                  | Symptom                                          | Mitigation                                                           |
-| ---------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
-| Compute Engine backlog                   | Gate waits time out, merges blocked              | Queue alert, fewer analyses, module split; outage path from ADR 0016 |
-| Database outage or failover              | Server unhealthy, uploads fail                   | Cloud SQL HA, CI retry of the job, health alert                      |
-| Elasticsearch disk full or watermarks    | Server stuck in `STARTING` or search errors      | Volume headroom alert; check the docs for watermark behaviour        |
-| `vm.max_map_count` too low on a new node | Elasticsearch fails to start                     | Dedicated node pool with sysctls; node startup check                 |
-| Pending database migration after upgrade | Status `DB_MIGRATION_NEEDED`                      | Upgrade runbook; backup first                                         |
-| Token leaked from CI                     | Analyses pushed or results read by an attacker   | Project-scoped tokens with expiry; rotation; no tokens in fork runs  |
-| Passcode missing in the chart            | Pod never becomes ready                          | Passcode Secret in values; check probes                              |
+| Failure                                  | Symptom                                        | Mitigation                                                           |
+| ---------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------- |
+| Compute Engine backlog                   | Gate waits time out, merges blocked            | Queue alert, fewer analyses, module split; outage path from ADR 0016 |
+| Database outage or failover              | Server unhealthy, uploads fail                 | Cloud SQL HA, CI retry of the job, health alert                      |
+| Elasticsearch disk full or watermarks    | Server stuck in `STARTING` or search errors    | Volume headroom alert; check the docs for watermark behaviour        |
+| `vm.max_map_count` too low on a new node | Elasticsearch fails to start                   | Dedicated node pool with sysctls; node startup check                 |
+| Pending database migration after upgrade | Status `DB_MIGRATION_NEEDED`                   | Upgrade runbook; backup first                                        |
+| Token leaked from CI                     | Analyses pushed or results read by an attacker | Project-scoped tokens with expiry; rotation; no tokens in fork runs  |
+| Passcode missing in the chart            | Pod never becomes ready                        | Passcode Secret in values; check probes                              |
 
 ## Pitfalls
 
@@ -245,16 +245,8 @@ The JSON field names in the `jq` filters are assumptions; check the response of 
 - [[patterns/sonarqube-quality-gates]]
 - [[adr/0016-sonarqube-new-code-gate-blocks-merge]]
 - [[runbooks/sonarqube-upgrade-and-db-migration]]
+- [[runbooks/sonarqube-analysis-stuck-or-gate-missing]]
 - [[learn/sonarqube-basics-first-scan-and-triage]]
 - [[tools/sonarqube-vs-semgrep-vs-codeql]]
-- [[management/devops-vendor-and-licence-management]]
 - [[architecture/ci-platform-gitlab-runners-and-jenkins-agents-on-gke]]
-- [[architecture/artifact-management-architecture-artifactory-ha]]
-- [[adr/0027-cloud-sql-for-production-postgres]]
 - [[architecture/cloud-sql-postgres-platform-architecture]]
-- [[architecture/backup-architecture-gke-cloud-sql-gcs]]
-- [[patterns/gitlab-ci-components-and-includes]]
-- [[patterns/jenkins-shared-libraries]]
-- [[patterns/artifactory-remote-repo-caching-for-ci]]
-- [[patterns/kubernetes-node-sysctls]]
-- [[architecture/zero-trust-access-iap-and-vpc-service-controls]]

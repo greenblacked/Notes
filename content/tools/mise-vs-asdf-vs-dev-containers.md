@@ -46,30 +46,30 @@ git add .terraform.lock.hcl
 
 ## Criteria
 
-| Criterion           | Why it matters                                                                                      |
-| ------------------- | --------------------------------------------------------------------------------------------------- |
-| Declaration file    | One reviewed file that says which versions this repository needs                                    |
-| Download integrity  | Checksums or signatures checked on install, so a tampered download fails                            |
-| Plugin trust        | Who wrote the code that downloads and installs each tool, and whether it runs on your machine        |
-| CI reuse            | The same file drives CI, or CI proves it matches                                                    |
-| OS support          | Linux runners, macOS (Intel and Apple Silicon) and Windows laptops                                  |
-| Speed               | Install time on a cold runner and switching cost between repositories                               |
-| Corporate network   | Works behind a proxy, and through an internal mirror ([[artifactory-remote-repo-caching-for-ci]])   |
-| Update automation   | A bot can bump versions in a reviewed merge request ([[renovate-vs-dependabot]])                    |
+| Criterion          | Why it matters                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| Declaration file   | One reviewed file that says which versions this repository needs                                  |
+| Download integrity | Checksums or signatures checked on install, so a tampered download fails                          |
+| Plugin trust       | Who wrote the code that downloads and installs each tool, and whether it runs on your machine     |
+| CI reuse           | The same file drives CI, or CI proves it matches                                                  |
+| OS support         | Linux runners, macOS (Intel and Apple Silicon) and Windows laptops                                |
+| Speed              | Install time on a cold runner and switching cost between repositories                             |
+| Corporate network  | Works behind a proxy, and through an internal mirror ([[artifactory-remote-repo-caching-for-ci]]) |
+| Update automation  | A bot can bump versions in a reviewed merge request ([[renovate-vs-dependabot]])                  |
 
 ## At a glance
 
-| Concern             | mise                                                                                     | asdf                                                                 | Dev container                                                                  |
-| ------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| What it is          | Single binary tool manager with several backends                                         | Tool manager driven by per-tool plugins (rewritten in Go in 0.16.0)  | A container image plus `devcontainer.json`, opened by an editor or CLI         |
-| Declaration         | `mise.toml` (also reads `.tool-versions`)                                                | `.tool-versions` (also `.node-version`, `.nvmrc`, `.ruby-version`)   | `devcontainer.json`: `image` or `build`, plus `features`                       |
-| Lockfile            | `mise.lock`: resolved versions, URLs and checksums where the backend provides them      | None                                                                 | The image digest is the lock                                                   |
-| Integrity checks    | Checksums, Cosign or Minisign signatures, SLSA provenance, GitHub attestations, per backend; on by default | Up to each plugin                                   | Whatever the image build did; Features are OCI artefacts                        |
-| Plugin model        | Prefers aqua and GitHub release backends; remaining asdf plugins live in a separate org  | Shell-script plugins cloned from Git                                 | Features: OCI-published install scripts                                         |
-| CI                  | `mise install --locked`, then `mise exec -- <cmd>`                                       | Install plugins and versions in the job                              | Run CI in the same image                                                        |
-| Windows             | Documented (winget, Scoop, Chocolatey)                                                   | Not verified                                                         | Through a container runtime; not verified                                       |
-| Isolation           | None: tools run on the host                                                              | None                                                                 | Tools run in a container                                                        |
-| Best for            | Most laptops and CI jobs                                                                 | Existing asdf users who have not migrated                            | Teams that want the CI image on the laptop, or Windows users                    |
+| Concern          | mise                                                                                                       | asdf                                                                | Dev container                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| What it is       | Single binary tool manager with several backends                                                           | Tool manager driven by per-tool plugins (rewritten in Go in 0.16.0) | A container image plus `devcontainer.json`, opened by an editor or CLI |
+| Declaration      | `mise.toml` (also reads `.tool-versions`)                                                                  | `.tool-versions` (also `.node-version`, `.nvmrc`, `.ruby-version`)  | `devcontainer.json`: `image` or `build`, plus `features`               |
+| Lockfile         | `mise.lock`: resolved versions, URLs and checksums where the backend provides them                         | None                                                                | The image digest is the lock                                           |
+| Integrity checks | Checksums, Cosign or Minisign signatures, SLSA provenance, GitHub attestations, per backend; on by default | Up to each plugin                                                   | Whatever the image build did; Features are OCI artefacts               |
+| Plugin model     | Prefers aqua and GitHub release backends; remaining asdf plugins live in a separate org                    | Shell-script plugins cloned from Git                                | Features: OCI-published install scripts                                |
+| CI               | `mise install --locked`, then `mise exec -- <cmd>`                                                         | Install plugins and versions in the job                             | Run CI in the same image                                               |
+| Windows          | Documented (winget, Scoop, Chocolatey)                                                                     | Not verified                                                        | Through a container runtime; not verified                              |
+| Isolation        | None: tools run on the host                                                                                | None                                                                | Tools run in a container                                               |
+| Best for         | Most laptops and CI jobs                                                                                   | Existing asdf users who have not migrated                           | Teams that want the CI image on the laptop, or Windows users           |
 
 ## mise
 
@@ -268,15 +268,15 @@ In CI, the `toolchain-drift` job must be required for merge. Test it once by cha
 
 ## Failure modes
 
-| Failure                       | Symptom                                                                 | Fix                                                                                                    |
-| ----------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| PATH order                    | `terraform version` shows a Homebrew or system binary, not the pin       | `command -v terraform`; put mise activation after other PATH changes in the shell profile; `mise doctor` |
-| Two managers                  | asdf and mise shims both on PATH, versions flip between shells          | Pick one; remove the other's shims from the profile                                                    |
-| Local or global override      | A `mise.local.toml` or global config pins a different version           | `mise config` lists loaded files; remove the override                                                  |
-| Blocked downloads             | Install fails behind the corporate proxy or firewall                     | Use the toolbox image or dev container; a locked install still needs the network                       |
-| Restored cache                | CI uses a tool from a stale cache that no longer matches the lock       | Cache downloads, not installs; key caches on `mise.lock`                                               |
-| Apple Silicon                 | No arm64 build of an older tool version, or a lock without `macos-arm64` | Lock every platform you use; check the tool's release assets                                          |
-| Unpinned plugin or Feature    | An upstream change alters what installs, without a commit in your repo  | Prefer aqua or GitHub release backends; pin plugins and Features; review bumps                         |
+| Failure                    | Symptom                                                                  | Fix                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| PATH order                 | `terraform version` shows a Homebrew or system binary, not the pin       | `command -v terraform`; put mise activation after other PATH changes in the shell profile; `mise doctor` |
+| Two managers               | asdf and mise shims both on PATH, versions flip between shells           | Pick one; remove the other's shims from the profile                                                      |
+| Local or global override   | A `mise.local.toml` or global config pins a different version            | `mise config` lists loaded files; remove the override                                                    |
+| Blocked downloads          | Install fails behind the corporate proxy or firewall                     | Use the toolbox image or dev container; a locked install still needs the network                         |
+| Restored cache             | CI uses a tool from a stale cache that no longer matches the lock        | Cache downloads, not installs; key caches on `mise.lock`                                                 |
+| Apple Silicon              | No arm64 build of an older tool version, or a lock without `macos-arm64` | Lock every platform you use; check the tool's release assets                                             |
+| Unpinned plugin or Feature | An upstream change alters what installs, without a commit in your repo   | Prefer aqua or GitHub release backends; pin plugins and Features; review bumps                           |
 
 Rollback is a revert of the bump merge request: the previous image digest and the previous version file come back together, and the drift check confirms they agree.
 
@@ -288,8 +288,6 @@ Rollback is a revert of the bump merge request: the previous image digest and th
 - [[terraform-module-standard]]
 - [[ci-pipeline-standard]]
 - [[dependency-update-policy]]
-- [[artifactory-remote-repo-caching-for-ci]]
-- [[0013-versioned-central-ci-templates]]
 - [[lab-setup]]
 - [[k9s-kubectx-stern-toolbox]]
 

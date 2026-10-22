@@ -332,7 +332,5 @@ The steps mirror the leaver process for employees in [[offboarding-platform-engi
 - [[access-reviews-gcp-and-gke]] and [[privileged-access-just-in-time-gcp-gke]]: reviewing and elevating access.
 - [[separation-of-duties-in-deployments]]: author, approver and deployer.
 - [[iam-groups-and-ci-workload-identity-federation]]: groups and keyless CI.
-- [[devops-vendor-and-licence-management]] and [[build-vs-buy-devops-tools]]: the tool side of vendors.
-- [[engineering-budget-planning]]: where the engagement's budget line lives.
-- [[open-source-license-compliance]] and [[audit-evidence-collection-and-retention]]: compliance obligations.
+- [[audit-evidence-collection-and-retention]]: compliance evidence.
 - [[dora-eu-operational-resilience-for-engineers]]: the EU regulation's engineering side.

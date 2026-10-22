@@ -84,10 +84,10 @@ Read the `FailedScheduling` message from the scheduler. It sums up why each exis
 
 The cluster autoscaler writes events on the Pod. The upstream FAQ documents these:
 
-| Event on the Pod    | Meaning                                                                                    |
-| ------------------- | ------------------------------------------------------------------------------------------ |
-| `TriggeredScaleUp`  | The autoscaler decided to scale up a node group for this Pod. Go to step 4 if no node joins. |
-| `NotTriggerScaleUp` | No node group could be scaled up to make this Pod schedulable. The message says why.       |
+| Event on the Pod    | Meaning                                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `TriggeredScaleUp`  | The autoscaler decided to scale up a node group for this Pod. Go to step 4 if no node joins.                |
+| `NotTriggerScaleUp` | No node group could be scaled up to make this Pod schedulable. The message says why.                        |
 | (no event)          | Autoscaling is off for every fitting pool, the Pod's priority is too low, or the decision is still pending. |
 
 ```bash
@@ -237,12 +237,12 @@ gcloud compute regions describe "$REGION" --flatten=quotas \
 
 Mitigations, roughly in order of speed:
 
-| Cause                    | Short term                                                                                                   | Lasting fix                                                                            |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| Stockout in one zone     | Let a regional pool grow in the other zones (raise the per-zone max or use total limits); move non-zonal Pods. | Spread pools across three zones; keep a second machine family as a fallback pool.       |
-| Stockout of a family     | Add a node pool with a different machine family that fits the requests (Terraform, then apply).               | Reservations for baseline capacity; with `ANY` location policy, unused reservations are preferred. |
-| Spot capacity gone       | Let a standard (on-demand) pool take the work, if its taints and priorities allow it.                         | A mixed Spot and on-demand design with a priority cut-off.                              |
-| Quota exceeded           | Free unused resources in the same region (idle pools, orphaned disks and addresses).                          | Request a quota increase through the Google Cloud quota process before the next peak.  |
+| Cause                | Short term                                                                                                     | Lasting fix                                                                                        |
+| -------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Stockout in one zone | Let a regional pool grow in the other zones (raise the per-zone max or use total limits); move non-zonal Pods. | Spread pools across three zones; keep a second machine family as a fallback pool.                  |
+| Stockout of a family | Add a node pool with a different machine family that fits the requests (Terraform, then apply).                | Reservations for baseline capacity; with `ANY` location policy, unused reservations are preferred. |
+| Spot capacity gone   | Let a standard (on-demand) pool take the work, if its taints and priorities allow it.                          | A mixed Spot and on-demand design with a priority cut-off.                                         |
+| Quota exceeded       | Free unused resources in the same region (idle pools, orphaned disks and addresses).                           | Request a quota increase through the Google Cloud quota process before the next peak.              |
 
 How quota increase requests are made and how fast they are granted change over time and are **not verified** here; check the current Cloud Quotas documentation.
 
@@ -317,14 +317,14 @@ kubectl -n "$NS" get pod "$POD" -o json | jq '{
 kubectl get nodes -o custom-columns='NODE:.metadata.name,POOL:.metadata.labels.cloud\.google\.com/gke-nodepool,TYPE:.metadata.labels.node\.kubernetes\.io/instance-type,CPU:.status.allocatable.cpu,MEM:.status.allocatable.memory,TAINTS:.spec.taints[*].key'
 ```
 
-| Blocker                                   | How to see it                                                                                       | Fix                                                                                                           |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Requests larger than any node             | Requests exceed the allocatable of the largest machine type in any pool, after DaemonSet overhead.  | Right-size the request ([[0021-mandatory-resource-requests]]) or add a pool with a larger machine type.      |
-| Node selector or required node affinity   | Labels that no pool's node template carries (a typo, or a pool that was renamed).                   | Fix the selector, or add the label to the pool's Terraform `node_config.labels`.                             |
-| Taints without tolerations                | Every pool that could fit is tainted (GPU, Spot, dedicated tenant pools).                           | Add the right toleration, or let a general pool take the Pod.                                                 |
-| Zonal volume                              | The Pod's PVC is bound to a zonal disk, and the pool cannot grow in that zone (max, stockout).      | Allow growth in that zone; for StatefulSets in multi-zone pools, the upstream FAQ recommends one pool per zone. See [[stateful-workloads-gke]]. |
-| Topology spread or anti-affinity          | `DoNotSchedule` spread constraints or required anti-affinity that new nodes cannot satisfy.         | Relax to `ScheduleAnyway` or preferred anti-affinity, or allow the pool in more zones.                       |
-| Low priority                              | Upstream, Pods below a priority cut-off do not trigger scale-up. The cut-off on GKE is **not verified**. | Give real workloads a normal PriorityClass; see [[priority-classes-and-preemption]].                       |
+| Blocker                                 | How to see it                                                                                            | Fix                                                                                                                                             |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requests larger than any node           | Requests exceed the allocatable of the largest machine type in any pool, after DaemonSet overhead.       | Right-size the request ([[0021-mandatory-resource-requests]]) or add a pool with a larger machine type.                                         |
+| Node selector or required node affinity | Labels that no pool's node template carries (a typo, or a pool that was renamed).                        | Fix the selector, or add the label to the pool's Terraform `node_config.labels`.                                                                |
+| Taints without tolerations              | Every pool that could fit is tainted (GPU, Spot, dedicated tenant pools).                                | Add the right toleration, or let a general pool take the Pod.                                                                                   |
+| Zonal volume                            | The Pod's PVC is bound to a zonal disk, and the pool cannot grow in that zone (max, stockout).           | Allow growth in that zone; for StatefulSets in multi-zone pools, the upstream FAQ recommends one pool per zone. See [[stateful-workloads-gke]]. |
+| Topology spread or anti-affinity        | `DoNotSchedule` spread constraints or required anti-affinity that new nodes cannot satisfy.              | Relax to `ScheduleAnyway` or preferred anti-affinity, or allow the pool in more zones.                                                          |
+| Low priority                            | Upstream, Pods below a priority cut-off do not trigger scale-up. The cut-off on GKE is **not verified**. | Give real workloads a normal PriorityClass; see [[priority-classes-and-preemption]].                                                            |
 
 Remember that a new node must fit the Pod **plus** every DaemonSet that will land on it. A Pod that fits the machine type on paper can still fail to fit once logging, monitoring and security agents take their share.
 
@@ -365,25 +365,24 @@ Then watch the next real peak: the Pending count should return to near zero with
 
 ## Troubleshooting
 
-| Symptom                                                             | Likely cause and fix                                                                                                   |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| No autoscaler event at all on the Pod                               | Autoscaling disabled on the fitting pools, or the Pod's priority is below the cut-off. Check step 3 and step 6.        |
-| `TriggeredScaleUp`, then nothing for 15 minutes or more              | MIG errors: stockout or quota (step 4), or a node that is created but never registers (check its serial output and [[gke-node-notready-triage]]). |
-| `NotTriggerScaleUp` mentioning max size                             | Per-zone maximum reached in the zone the Pod needs, or the NAP cluster limit. Step 3.                                  |
-| `NotTriggerScaleUp`: would not fit even on a new node                | Requests, selectors, taints or affinity. Step 6.                                                                       |
-| Scale-up works in two zones, never in the third                     | Stockout or a zonal disk constraint in that zone. Step 4 and the zonal volume row in step 6.                           |
-| New nodes appear, Pods still Pending                                | DaemonSet overhead or a spread constraint; or the Pods want another pool. Compare node allocatable with requests.      |
-| Many Pods Pending after an upgrade or pool migration                | Surge capacity or quota consumed by the upgrade; see [[gke-cluster-upgrade]].                                          |
-| Pods Pending only during peaks, cleared later                       | Scale-up latency, not a fault. Consider over-provisioning with low-priority placeholder Pods; see [[kubernetes-autoscaling]]. |
+| Symptom                                                 | Likely cause and fix                                                                                                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No autoscaler event at all on the Pod                   | Autoscaling disabled on the fitting pools, or the Pod's priority is below the cut-off. Check step 3 and step 6.                                   |
+| `TriggeredScaleUp`, then nothing for 15 minutes or more | MIG errors: stockout or quota (step 4), or a node that is created but never registers (check its serial output and [[gke-node-notready-triage]]). |
+| `NotTriggerScaleUp` mentioning max size                 | Per-zone maximum reached in the zone the Pod needs, or the NAP cluster limit. Step 3.                                                             |
+| `NotTriggerScaleUp`: would not fit even on a new node   | Requests, selectors, taints or affinity. Step 6.                                                                                                  |
+| Scale-up works in two zones, never in the third         | Stockout or a zonal disk constraint in that zone. Step 4 and the zonal volume row in step 6.                                                      |
+| New nodes appear, Pods still Pending                    | DaemonSet overhead or a spread constraint; or the Pods want another pool. Compare node allocatable with requests.                                 |
+| Many Pods Pending after an upgrade or pool migration    | Surge capacity or quota consumed by the upgrade; see [[gke-cluster-upgrade]].                                                                     |
+| Pods Pending only during peaks, cleared later           | Scale-up latency, not a fault. Consider over-provisioning with low-priority placeholder Pods; see [[kubernetes-autoscaling]].                     |
 
 ## Related
 
 - [[kubernetes-pod-troubleshooting]] for Pods that are scheduled but do not start.
 - [[kubernetes-autoscaling]] for how HPA, VPA and the cluster autoscaler fit together.
 - [[priority-classes-and-preemption]] for priority, preemption and placeholder Pods.
+- [[gke-spot-vms-for-workloads]] for Spot pools with an on-demand fallback, the design that makes a Spot stockout survivable.
 - [[0018-gke-autopilot-for-new-clusters]] and [[0021-mandatory-resource-requests]] for the decisions behind cluster mode and requests.
-- [[gke-platform-topology-and-tenancy]] for node pool and address planning.
-- [[finops-cost-allocation-and-guardrails]] for the cost side of raising limits.
 - [[gitlab-runner-jobs-stuck-pending]] for CI job Pods waiting on capacity.
 - [[pods-stuck-terminating-and-blocked-drains]] for the opposite problem: nodes that will not drain.
 

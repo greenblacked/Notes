@@ -37,7 +37,7 @@ CMEK everywhere would multiply keys, cost and outage paths for data that gains n
 
 ### When CMEK is required
 
-There is no organisation-wide data classification note yet, so this table is the classification used for encryption decisions until one exists.
+The classes are those of [[standards/data-classification-and-handling-standard]]; this table repeats only what matters for encryption.
 
 | Data class   | Examples                                                                                                     | Key requirement                                                      |
 | ------------ | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
@@ -275,6 +275,7 @@ gcloud logging metrics describe kms-key-state-changes --project="${KMS_PROJECT}"
 Related notes:
 
 - [[cloud-kms-key-management]]
+- [[data-classification-and-handling-standard]]
 - [[encryption-at-rest-and-in-transit-evidence-gcp]]
 - [[gcp-organization-policy-guardrails]]
 - [[secrets-architecture-gcp-and-gke]]

@@ -39,7 +39,7 @@ Every TLS endpoint we operate or depend on:
 
 TLS 1.0 and 1.1 MUST be disabled everywhere. TLS 1.3 MUST be enabled wherever the platform supports it.
 
-The profiles are from [TLSRef's server-side TLS guidelines](https://docs.tlsref.org/server-side-tls.html), the community continuation of Mozilla's Server Side TLS recommendations, which moved out of Mozilla (the archived Mozilla configurator repository now redirects to TLSRef; both read on 2026-10-21). Intermediate is "the recommended configuration for the vast majority of services": TLS 1.2 and 1.3, AEAD cipher suites only (AES-GCM and ChaCha20-Poly1305 with ECDHE), ECDSA P-256 or RSA 2048 certificates. Modern is TLS 1.3 only. Generate server configuration with the [TLSRef configurator](https://configurator.tlsref.org/) (formerly Mozilla's SSL Configuration Generator) rather than copying cipher strings from an old note; the lists change. US federal guidance is [NIST SP 800-52 Rev. 2](https://csrc.nist.gov/pubs/sp/800/52/r2/final), which was not re-read for this note.
+The profiles are from [TLSRef's server-side TLS guidelines](https://docs.tlsref.org/server-side-tls.html), the community continuation of Mozilla's Server Side TLS recommendations, which moved out of Mozilla: the archived Mozilla configurator repository says `ssl-config.mozilla.org` now redirects to the TLSRef configurator (read 2026-10-21). The guideline text below was read 2026-10-21 from the [tlsref/docs source](https://github.com/tlsref/docs), not checked against the published page; verify there. Intermediate is "the recommended configuration for the vast majority of services": TLS 1.2 and 1.3, AEAD cipher suites only (AES-GCM and ChaCha20-Poly1305 with ECDHE), ECDSA P-256 or RSA 2048 certificates. Modern is TLS 1.3 only. Generate server configuration with the [TLSRef configurator](https://configurator.tlsref.org/) (formerly Mozilla's SSL Configuration Generator) rather than copying cipher strings from an old note; the lists change. US federal guidance is [NIST SP 800-52 Rev. 2](https://csrc.nist.gov/pubs/sp/800/52/r2/final), which was not re-read for this note.
 
 ### Google Cloud load balancers
 
@@ -312,8 +312,5 @@ Exceptions follow [[policy-exception-and-waiver-process]]. Typical cases: a part
 - [[admission-webhook-certificate-expiry]]: when a webhook certificate has already expired.
 - [[encryption-at-rest-and-in-transit-evidence-gcp]]: evidence for auditors.
 - [[http-and-tls]]: the protocol basics.
-- [[cloud-kms-key-management]] and [[external-secrets-with-secret-manager]]: where keys and secrets live.
-- [[edge-waf-rate-limiting]]: the edge in front of the load balancer.
-- [[alert-and-runbook-standard]]: alert labels, routing and tests.
 - [[network-troubleshooting-dns-mtu-tls-load-balancers]]: TLS failures in the network path.
 - [[patterns/private-ca-and-egress-proxy-trust]]: private CAs, trust-manager bundles and egress proxy trust.

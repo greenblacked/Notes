@@ -18,7 +18,7 @@ Objects in a Cloud Storage bucket can disappear in three ways: someone or someth
 The backup design that should make this a routine job is in [[backup-architecture-gke-cloud-sql-gcs]]; the drill that proves it is [[0051-backups-proven-by-quarterly-restore-drills]].
 
 > [!info] Scope and verification
-> The `gcloud storage` commands and flags below were checked with `--help` in Google Cloud SDK 570.0.0 on 2026-10-21, but were not run against a real bucket, so the note is not marked `verified`. Statements about soft delete retention limits, billing, IAM permissions and deleted buckets were checked only from search excerpts of the Cloud Storage documentation (the pages could not be opened directly). **Not verified:**
+> The `gcloud storage` commands and flags below were checked with `--help` in Google Cloud SDK 570.0.0 on 2026-10-21, but were not run against a real bucket, so the note is not marked `verified`. Statements about soft delete retention limits, billing, IAM permissions and deleted buckets were checked only from search excerpts of the Cloud Storage documentation, not against the full pages; verify there. **Not verified:**
 >
 > - whether Object Versioning and a retention policy can be enabled together (the [[backup-architecture-gke-cloud-sql-gcs|backup architecture note]] says they cannot; confirm on the Object Versioning page);
 > - how soft delete treats noncurrent versions, and whether objects deleted by a lifecycle rule go through soft delete;
@@ -95,13 +95,13 @@ gcloud storage buckets describe "gs://$BUCKET" --format="value(versioning.enable
 
 Read the full `describe` output for the soft delete policy (retention duration), versioning, the retention policy and whether it is locked, default event-based holds, and the encryption key. The field names for soft delete in this output were not verified; use `--raw` to see the API field names if the default output is unclear.
 
-| What the bucket had                | Recovery path                                                                              |
-| ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| Soft delete, versioning off        | Step 3: restore soft-deleted objects. Overwritten objects also become soft-deleted.        |
-| Versioning on                      | Step 4 for overwrites (copy a noncurrent generation back); step 3 for deleted versions.    |
-| Both                               | Try step 4 first for overwrites, step 3 for anything that no longer shows as noncurrent.   |
-| Neither, or retention has expired  | No recovery from Cloud Storage. Restore from your backup copy or rebuild the data.          |
-| Retention policy or holds          | They block deletion of protected objects, so check what was actually deleted before acting. |
+| What the bucket had               | Recovery path                                                                               |
+| --------------------------------- | ------------------------------------------------------------------------------------------- |
+| Soft delete, versioning off       | Step 3: restore soft-deleted objects. Overwritten objects also become soft-deleted.         |
+| Versioning on                     | Step 4 for overwrites (copy a noncurrent generation back); step 3 for deleted versions.     |
+| Both                              | Try step 4 first for overwrites, step 3 for anything that no longer shows as noncurrent.    |
+| Neither, or retention has expired | No recovery from Cloud Storage. Restore from your backup copy or rebuild the data.          |
+| Retention policy or holds         | They block deletion of protected objects, so check what was actually deleted before acting. |
 
 Soft delete facts, per search excerpts of the soft delete page (check it for your bucket): new buckets get a soft delete policy by default with a 7-day retention (the CLI help also documents 7 days as the default); retention can be set between 7 and 90 days, and `0` turns soft delete off. Soft-deleted objects cannot be purged before their retention ends. Bucket Lock and object retention lock are listed as compatible with soft delete. A deleted **project** cannot be recovered through soft delete.
 
@@ -213,17 +213,17 @@ gcloud storage hash "gs://$BUCKET/reports/2026/q3.csv"                          
 
 ## Troubleshooting
 
-| Symptom                                                    | Likely cause and fix                                                                                                                                                                           |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ls --soft-deleted` prints nothing                         | Soft delete was off, retention has passed, or the listing returned empty pages. Retry with `--exhaustive`. If the policy was off, restore from backup.                                         |
-| Restore returns a permission error                         | The caller lacks `storage.objects.restore` or `storage.objects.create` (or `storage.buckets.restore` for bulk). Grant temporarily; check the permission table on the soft-deleted objects page. |
-| Restore fails with a precondition error                    | A live object with that name changed, or your `--if-generation-match` value is stale. Re-read the generation and retry.                                                                       |
-| Restore fails on a CMEK-encrypted object (not verified)    | The Cloud KMS key version may be disabled or destroyed. Re-enable a disabled version first, see [[cloud-kms-key-management]]; a destroyed version cannot be brought back.                      |
-| Objects reappear, then disappear again                     | The cause is still active: a lifecycle rule, a sync job with delete, or a credential. Go back to step 1.                                                                                       |
-| Restored objects are wrong content                         | The wrong generation or time window. Use `ls --all-versions` or the soft-deleted listing with `--long`, pick by time, and restore that generation.                                             |
-| Delete was blocked, but the app still lost data            | A retention policy or hold protected the objects; the data loss is elsewhere (an overwrite in another bucket, a cache). Check what the app actually reads.                                    |
-| Bulk restore is slow or still running                      | Bulk restore is a long-running operation. Track it with `operations describe`, and do not start a second overlapping restore.                                                                  |
-| The bucket or project is gone and soft delete does not help | A deleted project's buckets cannot be restored this way. Restore from the backup copy described in [[backup-architecture-gke-cloud-sql-gcs]].                                                 |
+| Symptom                                                     | Likely cause and fix                                                                                                                                                                            |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ls --soft-deleted` prints nothing                          | Soft delete was off, retention has passed, or the listing returned empty pages. Retry with `--exhaustive`. If the policy was off, restore from backup.                                          |
+| Restore returns a permission error                          | The caller lacks `storage.objects.restore` or `storage.objects.create` (or `storage.buckets.restore` for bulk). Grant temporarily; check the permission table on the soft-deleted objects page. |
+| Restore fails with a precondition error                     | A live object with that name changed, or your `--if-generation-match` value is stale. Re-read the generation and retry.                                                                         |
+| Restore fails on a CMEK-encrypted object (not verified)     | The Cloud KMS key version may be disabled or destroyed. Re-enable a disabled version first, see [[cloud-kms-key-management]]; a destroyed version cannot be brought back.                       |
+| Objects reappear, then disappear again                      | The cause is still active: a lifecycle rule, a sync job with delete, or a credential. Go back to step 1.                                                                                        |
+| Restored objects are wrong content                          | The wrong generation or time window. Use `ls --all-versions` or the soft-deleted listing with `--long`, pick by time, and restore that generation.                                              |
+| Delete was blocked, but the app still lost data             | A retention policy or hold protected the objects; the data loss is elsewhere (an overwrite in another bucket, a cache). Check what the app actually reads.                                      |
+| Bulk restore is slow or still running                       | Bulk restore is a long-running operation. Track it with `operations describe`, and do not start a second overlapping restore.                                                                   |
+| The bucket or project is gone and soft delete does not help | A deleted project's buckets cannot be restored this way. Restore from the backup copy described in [[backup-architecture-gke-cloud-sql-gcs]].                                                   |
 
 ## Prevention
 
@@ -237,8 +237,9 @@ gcloud storage hash "gs://$BUCKET/reports/2026/q3.csv"                          
 - [[backup-architecture-gke-cloud-sql-gcs]] for the backup design, versioning and retention policy trade-offs.
 - [[0051-backups-proven-by-quarterly-restore-drills]] for the drill this runbook feeds.
 - [[terraform-state-recovery]] for the same versioned-object method applied to Terraform state.
-- [[compromised-cloud-cluster-containment]] and [[leaked-credential-rotation]] when the deletion was malicious.
+- [[compromised-cloud-cluster-containment]] when the deletion was malicious.
 - [[legal-hold-for-logs-and-artifacts]] when evidence must be kept.
+- [[data-deletion-and-crypto-shredding-gcp]] for the opposite case: deleting data for good, including soft-deleted copies and noncurrent versions.
 - [[gcp-audit-logs-siem]] for audit log coverage.
 - [[incident-response]] for running the incident.
 

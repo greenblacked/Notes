@@ -185,6 +185,7 @@ Points that matter in production:
 - **The API key is not enough.** vLLM's newer documentation says `--api-key` (or `VLLM_API_KEY`) protects only the `/v1`, `/v2` and `/inference` paths; other endpoints are unauthenticated. Keep the server reachable only from the gateway.
 - **`/dev/shm`.** A memory-backed `emptyDir` gives the server shared memory beyond the container default; it counts against the pod's memory.
 - **Pin everything.** The image by digest, the model by a versioned `gs://` prefix, and the vLLM flags in the manifest. vLLM metric names and flags have changed between releases; an unpinned `latest` breaks dashboards and HPAs on its own.
+- **Baseline exceptions.** The Deployment sets no `securityContext`, so the server runs as the image's default user with a writable root filesystem, and it uses the `llm-serving` PriorityClass defined below rather than one of the classes in [[priority-classes-and-preemption]]. Both depart from [[kubernetes-workload-baseline-standard]]: record them as exceptions with a reason and an expiry, or add the security context once you have confirmed which user and writable paths your vLLM image needs.
 
 ### Weights through Workload Identity
 
@@ -439,10 +440,7 @@ For general pod failures see [[kubernetes-pod-troubleshooting]]; for nodes under
 - [[kubernetes-autoscaling]]: HPA and cluster autoscaler behaviour.
 - [[gke-workload-identity]]: keyless access to the weights bucket.
 - [[priority-classes-and-preemption]]: keeping guaranteed replicas ahead of burst.
-- [[gke-node-pool-upgrade-strategies]]: upgrading GPU pools.
-- [[kubernetes-resource-requests-and-limits]]: CPU and memory sizing next to the GPU.
 - [[private-gke-and-controlled-egress]]: egress for the serving namespace.
-- [[finops-cost-allocation-and-guardrails]]: GPU-hours in showback.
 - [[model-artifacts-in-artifactory]]: storing and promoting model weights.
 - [[llm-observability-tracing-and-slos]]: latency, queue and token signals.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

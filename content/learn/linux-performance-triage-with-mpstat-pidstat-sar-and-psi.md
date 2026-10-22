@@ -441,7 +441,7 @@ Clean up: `pkill stress-ng 2>/dev/null; rm -rf ~/psi`. Disable `sysstat` collect
 
 ## Next steps
 
-Next lesson: [[learn/linux-services-packages-and-scheduled-jobs|Linux 05: Services, packages and scheduled jobs]] if you have not done it (it explains the timers that drive `sysstat`). Previous lesson: [[learn/linux-processes-memory-and-disk|Linux 04: Processes, memory and disk]].
+Next lesson: [[learn/linux-disks-filesystems-and-lvm|Linux 07: Disks, partitions, filesystems and LVM]]. If you have not done [[learn/linux-services-packages-and-scheduled-jobs|Linux 05: Services, packages and scheduled jobs]], do it first (it explains the timers that drive `sysstat`). Previous lesson: [[learn/linux-processes-memory-and-disk|Linux 04: Processes, memory and disk]].
 
 To go deeper:
 

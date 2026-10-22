@@ -14,7 +14,7 @@ modified: 2026-10-21
 draft: false
 ---
 
-A platform engineer who leaves takes two risks out of the door with them. The first is access: they usually hold more privilege than anyone else in the company, spread across an identity provider, cloud IAM, cluster RBAC, CI, the artifact registry and a few systems nobody remembers. The second is ownership: pipeline schedules, trigger tokens, Jenkins jobs and service-account keys that quietly run as that person and stop, or keep running unseen, the day the account is closed. Onboarding has its own guide ([[onboarding-engineers]]); this one covers the other end, for planned departures and for the ones that happen the same day.
+A platform engineer who leaves takes two risks out of the door with them. The first is access: they usually hold more privilege than anyone else in the company, spread across an identity provider, cloud IAM, cluster RBAC, CI, the artifact registry and a few systems nobody remembers. The second is ownership: pipeline schedules, trigger tokens, Jenkins jobs and service-account keys that quietly run as that person and stop, or keep running unseen, the day the account is closed. Onboarding has its own guide ([[onboarding-engineers]]); this one covers the other end, for planned departures and for the ones that happen the same day. It is the people and ownership side; the per-system revocation steps, with a timestamp per system for the audit record, are in the runbook [[leaver-credential-revocation-devops-tools]].
 
 > [!info] Scope and what is not verified
 > The GitLab, gcloud, Kubernetes and Google Admin SDK calls below follow the official documentation as read on 2026-10-21; nothing was run against a live GitLab, GCP organisation, cluster, Jenkins or Artifactory. The GitLab inventory script and the jq filters were tested against a local mock API and sample JSON only. **Not verified**: whether suspending a Google identity revokes existing gcloud refresh tokens and how quickly; the exact audit-log `methodName` for service-account key creation; how a GitLab pipeline trigger token behaves after its owner is blocked; whether a Jenkins API token keeps working when the person is disabled only in an external SSO realm; and the Artifactory endpoints for listing a user's tokens. Each is marked where it appears. GitLab features change by version and tier: check the docs for yours.
@@ -202,7 +202,7 @@ GitLab reads `CODEOWNERS` from the repository root, `docs/` and `.gitlab/`, so t
 
 ## Access removal checklist
 
-Do it in this order: the identity provider first, because it cuts off every federated system at once; then the systems that hold their own credentials.
+Do it in this order: the identity provider first, because it cuts off every federated system at once; then the systems that hold their own credentials. The commands for each step, including SonarQube and Chef, are in [[leaver-credential-revocation-devops-tools]].
 
 | #   | Step                                                                            | How                                                                                                                                                                                                                                                                                                                                | Rollback                              |
 | --- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
@@ -278,6 +278,7 @@ The offboarding is done when the evidence says so, not when the checklist is tic
    ```
 
    Expected: no entries, or only failed (permission denied) attempts. Any successful call is an incident.
+
 4. In GitLab, `GET /users?blocked=true` lists the person. Confirm that the schedules taken over in week -2 ran successfully at least once since.
 5. Re-run steps 1 and 3 on day +7 and attach the output to the ticket.
 
@@ -331,11 +332,10 @@ Most people leave on good terms, and the process should treat them that way.
 ## Related
 
 - [[onboarding-engineers]]: the joiner side of the same process.
+- [[leaver-credential-revocation-devops-tools]]: the tool-by-tool revocation runbook and its evidence record.
 - [[access-reviews-gcp-and-gke]]: the quarterly review whose inventories this reuses.
 - [[bus-factor-and-knowledge-transfer]]: running the knowledge sessions.
-- [[team-reorg-runbook]]: internal moves and ownership changes.
-- [[leaked-credential-rotation]] and [[service-account-key-expiry-recovery]]: rotation and key recovery.
+- [[leaked-credential-rotation]]: credential rotation.
 - [[privileged-access-just-in-time-gcp-gke]]: why standing privilege should be rare to begin with.
-- [[iam-groups-and-ci-workload-identity-federation]]: group-based access that makes leaving cheap.
-- [[artifactory-access-tokens-and-oidc-for-ci]] and [[jenkins-controller-and-agent-hardening]]: token models for the two systems outside the identity provider.
+- [[artifactory-access-tokens-and-oidc-for-ci]]: the token model for a system outside the identity provider.
 - [[audit-evidence-collection-and-retention]]: keeping the evidence.

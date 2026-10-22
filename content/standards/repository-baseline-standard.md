@@ -399,7 +399,4 @@ Checked 2026-10-21 against the documentation sources (the upstream repositories 
 - [[secret-scanning-pre-commit-and-ci]]: the pre-commit and CI secret scans.
 - [[architecture/golden-path-templates-architecture]]: where new repositories come from.
 - [[architecture/internal-developer-platform-architecture]]: the catalog descriptor.
-- [[service-tiering-standard]]: the tier recorded in the descriptor and README.
-- [[compliance/open-source-license-compliance]]: licences for public repositories.
-- [[management/inner-source-platform]]: contribution rules for shared repositories.
 - [[bash-scripts]]: the rules the audit scripts follow.

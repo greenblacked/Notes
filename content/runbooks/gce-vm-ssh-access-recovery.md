@@ -118,12 +118,12 @@ Instance-level values normally take precedence over project-level ones (check th
 
 What the SDK's permission check expects (from the `gcloud` SDK source):
 
-| Need                               | Permission or role                                                                                                         |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Log in through OS Login            | `roles/compute.osLogin`, or `roles/compute.osAdminLogin` for sudo                                                          |
-| Use the IAP tunnel                 | `iap.tunnelInstances.accessViaIAP`, which the IAP-Secured Tunnel User role (`roles/iap.tunnelResourceAccessor`) grants |
-| VM runs as a service account       | `iam.serviceAccounts.actAs` on that service account, for example through `roles/iam.serviceAccountUser`                    |
-| Find and use the instance          | `compute.instances.get` and `compute.instances.use`                                                                        |
+| Need                         | Permission or role                                                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Log in through OS Login      | `roles/compute.osLogin`, or `roles/compute.osAdminLogin` for sudo                                                      |
+| Use the IAP tunnel           | `iap.tunnelInstances.accessViaIAP`, which the IAP-Secured Tunnel User role (`roles/iap.tunnelResourceAccessor`) grants |
+| VM runs as a service account | `iam.serviceAccounts.actAs` on that service account, for example through `roles/iam.serviceAccountUser`                |
+| Find and use the instance    | `compute.instances.get` and `compute.instances.use`                                                                    |
 
 Check what the affected user actually has, then grant the missing role through your access process, time-boxed, rather than adding a broad role:
 
@@ -143,13 +143,13 @@ gcloud compute instances get-serial-port-output "$VM" --zone "$ZONE" --port 1 > 
 grep -nEi 'no space left|read-only file system|sshd|ssh\.service|guest-agent|google_guest|oslogin|emergency|fsck|out of memory|killed process' serial-1.log | tail -50
 ```
 
-| What the serial output shows                         | Cause                                                                    | Fix                                                                                     |
-| ---------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `No space left on device`                            | Full root disk; the guest cannot create users, keys or logs              | Resize the disk and grow the file system (below), or free space from a rescue VM.       |
-| `sshd` failed to start, a config error line          | A bad `sshd_config` from a hardening run                                 | Fix the file via serial console (step 5) or rescue disk (step 6); fix the hardening code. |
-| Guest agent errors, or no guest agent lines at all   | The guest environment that creates users and installs keys is not running | Restart it from the serial console, or reinstall it from a rescue VM.                   |
-| Read-only file system, `fsck` prompts, emergency mode | File system errors or a bad `/etc/fstab` entry                           | Rescue disk (step 6): run `fsck`, fix `fstab`.                                          |
-| Out of memory, processes killed                       | Memory pressure kills `sshd` or the agent                                | Stop the VM, change the machine type, start it, then fix the leak.                      |
+| What the serial output shows                          | Cause                                                                     | Fix                                                                                       |
+| ----------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `No space left on device`                             | Full root disk; the guest cannot create users, keys or logs               | Resize the disk and grow the file system (below), or free space from a rescue VM.         |
+| `sshd` failed to start, a config error line           | A bad `sshd_config` from a hardening run                                  | Fix the file via serial console (step 5) or rescue disk (step 6); fix the hardening code. |
+| Guest agent errors, or no guest agent lines at all    | The guest environment that creates users and installs keys is not running | Restart it from the serial console, or reinstall it from a rescue VM.                     |
+| Read-only file system, `fsck` prompts, emergency mode | File system errors or a bad `/etc/fstab` entry                            | Rescue disk (step 6): run `fsck`, fix `fstab`.                                            |
+| Out of memory, processes killed                       | Memory pressure kills `sshd` or the agent                                 | Stop the VM, change the machine type, start it, then fix the leak.                        |
 
 The guest agent's service and file names differ by image and version and are **not verified** here; check the guest environment documentation for your image.
 
@@ -295,25 +295,26 @@ gcloud compute project-info describe --format="yaml(commonInstanceMetadata.items
 
 ## Troubleshooting
 
-| Symptom                                                      | Likely cause and fix                                                                                                       |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| IAP tunnel error about connecting to the backend              | No firewall rule from the IAP range to the SSH port, or a deny rule with higher priority. Step 2.                         |
-| IAP error about missing permission                            | The user lacks `iap.tunnelInstances.accessViaIAP`. Step 3.                                                                 |
-| `Permission denied (publickey)` with OS Login on              | Missing `osLogin` role, a 2FA requirement not met, or the guest agent is not running. Steps 3 and 4.                      |
-| `Permission denied (publickey)` with metadata keys            | `block-project-ssh-keys` is set, the key expired, or `authorized_keys` permissions on the guest are wrong. Steps 3 and 6. |
-| Serial console refuses the connection                          | `serial-port-enable` not set on the instance, or blocked by `compute.disableSerialPortAccess`. Step 5.                    |
-| Serial console prompt, but no account can log in              | No local password, by design. Use the startup script or the rescue disk.                                                   |
-| VM is recreated while you work on it                          | It belongs to a managed instance group with autohealing. Remove the health check with `gcloud compute instance-groups managed update GROUP --clear-autohealing` and restore it afterwards, or replace the VM from its template instead. |
-| `mount: wrong fs type` or a duplicate UUID error on the rescue VM | XFS with the same UUID; mount with `-o nouuid`, or use a rescue VM from a different image.                              |
+| Symptom                                                           | Likely cause and fix                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IAP tunnel error about connecting to the backend                  | No firewall rule from the IAP range to the SSH port, or a deny rule with higher priority. Step 2.                                                                                                                                       |
+| IAP error about missing permission                                | The user lacks `iap.tunnelInstances.accessViaIAP`. Step 3.                                                                                                                                                                              |
+| `Permission denied (publickey)` with OS Login on                  | Missing `osLogin` role, a 2FA requirement not met, or the guest agent is not running. Steps 3 and 4.                                                                                                                                    |
+| `Permission denied (publickey)` with metadata keys                | `block-project-ssh-keys` is set, the key expired, or `authorized_keys` permissions on the guest are wrong. Steps 3 and 6.                                                                                                               |
+| Serial console refuses the connection                             | `serial-port-enable` not set on the instance, or blocked by `compute.disableSerialPortAccess`. Step 5.                                                                                                                                  |
+| Serial console prompt, but no account can log in                  | No local password, by design. Use the startup script or the rescue disk.                                                                                                                                                                |
+| VM is recreated while you work on it                              | It belongs to a managed instance group with autohealing. Remove the health check with `gcloud compute instance-groups managed update GROUP --clear-autohealing` and restore it afterwards, or replace the VM from its template instead. |
+| `mount: wrong fs type` or a duplicate UUID error on the rescue VM | XFS with the same UUID; mount with `-o nouuid`, or use a rescue VM from a different image.                                                                                                                                              |
 
 ## Related
 
 - [[linux-users-permissions-sudo-and-ssh]] for users, keys and sudo on the host.
+- [[0056-vm-access-through-os-login-and-iap]] for the decision that VM access goes through OS Login and IAP.
 - [[zero-trust-access-iap-and-vpc-service-controls]] for the access model that IAP TCP forwarding belongs to.
 - [[gcp-organization-policy-guardrails]] for the serial port and OS Login constraints.
 - [[privileged-access-just-in-time-gcp-gke]] for time-boxed grants during the incident.
 - [[linux-host-hardening-with-chef-and-inspec]] for hardening that does not lock you out.
-- [[node-resource-pressure-triage]] and [[gke-node-notready-triage]] for the GKE node equivalents.
+- [[gke-node-notready-triage]] for the GKE node equivalent.
 - [[backup-architecture-gke-cloud-sql-gcs]] for snapshot policies.
 
 ## Sources

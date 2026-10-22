@@ -36,30 +36,37 @@ Write one page before anything is announced. It is the link in every merge reque
 ```markdown title="campaign-brief.md"
 # Campaign PLAT-123: platform-lib 3.x in every service chart
 
-Owner: @handle (one person)   Sponsor: @eng-manager   Status: running
+Owner: @handle (one person) Sponsor: @eng-manager Status: running
 Deadline: 2027-01-31 (why: platform-lib 2.x stops receiving fixes on that date)
 
 ## What changes and why
+
 One paragraph a product engineer understands. Link the RFC or ADR.
 
 ## What teams must do
+
 - Merge the bot merge request, or apply the change by hand (guide below).
 - Run your pipeline to staging and check the rendered manifests.
-Expected effort per repository: about 30 minutes (measured on the pilot repositories).
+  Expected effort per repository: about 30 minutes (measured on the pilot repositories).
 
 ## Upgrade guide
+
 Before/after snippets, breaking changes, how to test, how to roll back.
 
 ## Scope
+
 Inventory query, number of repositories, owners. Out of scope: ...
 
 ## Timeline
+
 Pilot -> announcement -> bot MRs -> nudges -> warn in CI -> deadline -> enforce -> clean-up.
 
 ## Exceptions
+
 How to ask, who approves, maximum length.
 
 ## Help
+
 Office hours (time), channel, FAQ.
 ```
 
@@ -247,7 +254,9 @@ If Renovate already runs across the fleet ([[renovate-vs-dependabot]], [[0060-re
       "matchUpdateTypes": ["major"],
       "groupName": "platform-lib 3.x (PLAT-123)",
       "addLabels": ["campaign::PLAT-123"],
-      "prBodyNotes": ["Campaign PLAT-123: see the campaign brief for the upgrade guide and deadline."]
+      "prBodyNotes": [
+        "Campaign PLAT-123: see the campaign brief for the upgrade guide and deadline."
+      ]
     }
   ]
 }
@@ -578,10 +587,9 @@ The shared library chart from [[helm-library-and-umbrella-charts]] gets a new ma
 
 ## Related
 
-- [[automated-dependency-updates]], [[renovate-vs-dependabot]] and [[0060-renovate-for-automated-dependency-updates]]: the update tooling campaigns build on.
-- [[terraform-module-versioning]] and [[helm-library-and-umbrella-charts]]: versioned shared code that campaigns move.
-- [[gitlab-ci-components-and-includes]] and [[0013-versioned-central-ci-templates]]: pinned central templates.
-- [[policy-rollout-audit-to-enforce]], [[conftest-policy-gate-for-manifests]] and [[policy-exception-and-waiver-process]]: enforcement and exceptions.
-- [[jenkins-to-gitlab-migration-programme]]: a campaign at programme scale.
+- [[automated-dependency-updates]] and [[0060-renovate-for-automated-dependency-updates]]: the update tooling campaigns build on.
+- [[terraform-module-versioning]]: versioned shared code that campaigns move.
+- [[gitlab-ci-components-and-includes]]: pinned central templates.
+- [[policy-rollout-audit-to-enforce]] and [[policy-exception-and-waiver-process]]: enforcement and exceptions.
 - [[end-of-life-tracking-platform-versions]]: the dates that start most campaigns.
-- [[cross-team-dependencies]] and [[api-deprecation-policy]]: working with other teams' roadmaps and interfaces.
+- [[cross-team-dependencies]]: working with other teams' roadmaps.

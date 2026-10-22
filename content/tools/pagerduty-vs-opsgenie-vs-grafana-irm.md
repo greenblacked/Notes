@@ -18,6 +18,7 @@ draft: false
 The choice is more urgent than it looks, because two of the three options changed status in 2025.
 
 > [!warning] Product status changed in 2025: check before you commit
+>
 > - **Opsgenie:** Atlassian announced the end of sale and end of support of standalone Opsgenie. The dates reported for the announcement are end of sale on 2025-06-04 and end of support on 2027-04-05, after which access stops and data not moved is deleted, with Jira Service Management or Compass as the migration targets. These dates come from a secondary summary of Atlassian's pages, not from the pages themselves: confirm them on the [Opsgenie product page](https://www.atlassian.com/software/opsgenie) before planning around them.
 > - **Grafana OnCall OSS:** the [project README](https://github.com/grafana/oncall) states that Grafana OnCall (OSS) entered maintenance mode on 2025-03-11 and is scheduled to be archived on 2026-03-24, with only critical bugs and CVEs rated CVSS 7.0 or higher fixed until then. It recommends Grafana Cloud IRM instead. Check the repository state today; whether self-hosted installs keep any cloud connectivity after the archive was not verified.
 > - Neither of these is a reason to panic-migrate, but neither should be the target of a **new** rollout.
@@ -29,36 +30,36 @@ The choice is more urgent than it looks, because two of the three options change
 
 The monitoring stack decides that something is wrong. The paging tool decides **who** hears about it, **how**, and **what happens if they do not answer**. Judge candidates on these criteria, in roughly this order of weight:
 
-| Criterion                     | What to check                                                                                                                       |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Ingestion                     | A native Alertmanager receiver or a documented webhook, and a Cloud Monitoring notification channel or webhook path                 |
-| Deduplication and grouping    | Repeated notifications for the same alert group update one incident instead of paging again                                          |
-| Escalation                    | Multi-step policies with delays, loops and fallbacks to a secondary and to a manager                                                 |
-| Schedules and overrides       | Layered rotations, time zones, holiday overrides and swaps without an admin                                                          |
-| Delivery                      | Push, SMS and voice, delivery receipts, and behaviour when the phone is in do-not-disturb                                            |
-| Incident workflow             | Acknowledge, reassign, add responders, link to the severity and roles of ADR 0050, postmortem export                                 |
-| Configuration as code         | A maintained Terraform provider for services, schedules, escalation policies and integrations                                       |
-| Identity                      | SSO, SCIM provisioning and deprovisioning, and role scoping per team                                                                 |
-| Data residency and retention  | Where incident data and phone numbers live, and how long                                                                             |
-| Exit cost                     | Export of schedules and incident history, and how much routing would need to change to swap tools                                   |
+| Criterion                    | What to check                                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Ingestion                    | A native Alertmanager receiver or a documented webhook, and a Cloud Monitoring notification channel or webhook path |
+| Deduplication and grouping   | Repeated notifications for the same alert group update one incident instead of paging again                         |
+| Escalation                   | Multi-step policies with delays, loops and fallbacks to a secondary and to a manager                                |
+| Schedules and overrides      | Layered rotations, time zones, holiday overrides and swaps without an admin                                         |
+| Delivery                     | Push, SMS and voice, delivery receipts, and behaviour when the phone is in do-not-disturb                           |
+| Incident workflow            | Acknowledge, reassign, add responders, link to the severity and roles of ADR 0050, postmortem export                |
+| Configuration as code        | A maintained Terraform provider for services, schedules, escalation policies and integrations                       |
+| Identity                     | SSO, SCIM provisioning and deprovisioning, and role scoping per team                                                |
+| Data residency and retention | Where incident data and phone numbers live, and how long                                                            |
+| Exit cost                    | Export of schedules and incident history, and how much routing would need to change to swap tools                   |
 
 The last row matters more than it used to. A paging tool is a vendor dependency like any other: record it in [[devops-vendor-and-licence-management]] and track its lifecycle in [[end-of-life-tracking-platform-versions]], with an owner and a review date.
 
 ## At a glance
 
-| Concern                  | PagerDuty                                              | Opsgenie                                                            | Grafana IRM (Cloud)                                                         |
-| ------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Status at time of writing | Active commercial product                             | End of sale announced; end of support reported for 2027-04-05       | Active; OnCall OSS in maintenance and scheduled for archive                 |
-| Alertmanager integration | Native `pagerduty_configs` (Events API v2 routing key) | Native `opsgenie_configs`                                           | `webhook_configs` to an Alertmanager integration (no native receiver)       |
-| Cloud Monitoring         | Native PagerDuty channel with a service key            | Not verified as a native channel; webhook path                      | Webhook path; check the current channel list                                |
-| Terraform provider       | `pagerduty/pagerduty`: teams, users, schedules, escalation policies | `opsgenie/opsgenie`: teams, schedules; maintenance after end of sale not verified | `grafana/grafana`: `grafana_oncall_*` schedules, escalation chains, integrations, routes |
-| Schedules                | Layered schedules with overrides                       | Schedules with rotations                                            | Schedules and on-call shifts                                                |
-| Fits best                | Large or multi-tool estates that want the most mature paging product | Existing users only, while planning the exit                       | Teams already on Grafana Cloud for metrics, logs and dashboards              |
-| Pricing                  | Check the vendor pricing page                          | Check your contract; no new sales                                   | Check the vendor pricing page                                               |
+| Concern                   | PagerDuty                                                            | Opsgenie                                                                          | Grafana IRM (Cloud)                                                                      |
+| ------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Status at time of writing | Active commercial product                                            | End of sale announced; end of support reported for 2027-04-05                     | Active; OnCall OSS in maintenance and scheduled for archive                              |
+| Alertmanager integration  | Native `pagerduty_configs` (Events API v2 routing key)               | Native `opsgenie_configs`                                                         | `webhook_configs` to an Alertmanager integration (no native receiver)                    |
+| Cloud Monitoring          | Native PagerDuty channel with a service key                          | Not verified as a native channel; webhook path                                    | Webhook path; check the current channel list                                             |
+| Terraform provider        | `pagerduty/pagerduty`: teams, users, schedules, escalation policies  | `opsgenie/opsgenie`: teams, schedules; maintenance after end of sale not verified | `grafana/grafana`: `grafana_oncall_*` schedules, escalation chains, integrations, routes |
+| Schedules                 | Layered schedules with overrides                                     | Schedules with rotations                                                          | Schedules and on-call shifts                                                             |
+| Fits best                 | Large or multi-tool estates that want the most mature paging product | Existing users only, while planning the exit                                      | Teams already on Grafana Cloud for metrics, logs and dashboards                          |
+| Pricing                   | Check the vendor pricing page                                        | Check your contract; no new sales                                                 | Check the vendor pricing page                                                            |
 
 ## Alertmanager routing to each tool
 
-The routing tree stays the same whatever the tool: `severity="page"` goes to the paging receiver, `severity="ticket"` to the team queue, and anything without a severity goes nowhere that interrupts a person ([[alert-and-runbook-standard]]). Only the receiver changes.
+The routing tree stays the same whatever the tool: `severity="page"` goes to the paging receiver, `severity="ticket"` to the team queue, and anything without a severity goes nowhere that interrupts a person ([[alert-and-runbook-standard]]). Only the receiver changes. The full routing tree, with ownership routing, inhibition and high availability, is in [[alerting-and-paging-pipeline]].
 
 Keep every secret out of the YAML. Alertmanager has `*_file` variants for each of these receivers, and they are mutually exclusive with the inline field: `routing_key` or `routing_key_file`, `api_key` or `api_key_file`, `url` or `url_file`. Mount the files from a Kubernetes Secret that is synced from your secret store, so the configuration can live in Git ([[0046-dashboards-and-alert-rules-as-code]]).
 
@@ -98,14 +99,14 @@ receivers:
     pagerduty_configs:
       - routing_key_file: /etc/alertmanager/secrets/pagerduty-payments-routing-key
         severity: critical
-        description: '{{ .CommonLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        description: "{{ .CommonLabels.alertname }}: {{ .CommonAnnotations.summary }}"
         client: Alertmanager
-        client_url: '{{ .ExternalURL }}'
+        client_url: "{{ .ExternalURL }}"
         # Setting details replaces the default map (firing, resolved, num_firing, num_resolved).
         details:
-          runbook: '{{ .CommonAnnotations.runbook_url }}'
-          service: '{{ .CommonLabels.service }}'
-          num_firing: '{{ .Alerts.Firing | len }}'
+          runbook: "{{ .CommonAnnotations.runbook_url }}"
+          service: "{{ .CommonLabels.service }}"
+          num_firing: "{{ .Alerts.Firing | len }}"
 
   - name: payments-ticket
     webhook_configs:
@@ -114,7 +115,7 @@ receivers:
   - name: platform-page
     pagerduty_configs:
       - routing_key_file: /etc/alertmanager/secrets/pagerduty-platform-routing-key
-        description: 'UNROUTED page {{ .CommonLabels.alertname }} (team={{ .CommonLabels.team }})'
+        description: "UNROUTED page {{ .CommonLabels.alertname }} (team={{ .CommonLabels.team }})"
 ```
 
 The PagerDuty receiver posts to `https://events.pagerduty.com/v2/enqueue` unless `url` or `global.pagerduty_url` overrides it. `severity` defaults to `error`. Use `routing_key` (or its file) for an Events API v2 integration; the older `service_key` belongs to the legacy "Prometheus" integration type, and the two cannot be combined.
@@ -126,8 +127,8 @@ receivers:
   - name: payments-page
     opsgenie_configs:
       - api_key_file: /etc/alertmanager/secrets/opsgenie-api-key
-        message: '{{ .CommonLabels.alertname }} on {{ .CommonLabels.service }}'
-        description: '{{ .CommonAnnotations.summary }} Runbook: {{ .CommonAnnotations.runbook_url }}'
+        message: "{{ .CommonLabels.alertname }} on {{ .CommonLabels.service }}"
+        description: "{{ .CommonAnnotations.summary }} Runbook: {{ .CommonAnnotations.runbook_url }}"
         # Exactly one of id, name or username; type is team, teams, user, escalation or schedule.
         responders:
           - type: team
@@ -295,32 +296,20 @@ A paging path that has never been tested end to end is a hypothesis. Test three 
 2. **Continuously:** a dead man's switch. An alert rule that always fires (often named `Watchdog`, a convention rather than something the Alertmanager docs define) is routed to a heartbeat endpoint that expects it every few minutes. If the heartbeat stops, the monitoring pipeline itself is broken (Prometheus down, Alertmanager down, network to the paging tool cut), and the receiving side pages through a path that does not depend on your cluster. Paging products commonly offer such a heartbeat or check-in endpoint; whether each of these three does, and how it behaves, was not verified, so read the docs of the one you pick. Any external uptime or heartbeat service that can page works too.
 3. **Monthly, in working hours:** send a real test page to the on-call phone and time it from alert to acknowledgement. Tell the on-call engineer it is coming.
 
-```yaml title="watchdog-rule.yaml"
-groups:
-  - name: meta
-    rules:
-      - alert: Watchdog
-        expr: vector(1)
-        labels:
-          severity: heartbeat
-        annotations:
-          summary: "Always firing. If the heartbeat receiver stops seeing this, alerting is broken."
-```
+The `Watchdog` rule, one heartbeat check per cluster and the internal alerts on failed notifications are in [[alerting-and-paging-pipeline#Meta-monitoring|the alerting pipeline's meta-monitoring]]; the `heartbeat` route in the Alertmanager example above matches the rule by `alertname`. Keep its `repeat_interval` well below the heartbeat timeout configured on the receiving side, otherwise the heartbeat expires between repeats and pages for nothing.
 
-The `heartbeat` route in the Alertmanager example above matches it by name. Keep its `repeat_interval` well below the heartbeat timeout configured on the receiving side, otherwise the heartbeat expires between repeats and pages for nothing.
-
-For the monthly test, a short-lived alert pushed with `amtool alert add` exercises the real receiver. Its flags (labels, annotations, end time) were not confirmed for this note, so run `amtool alert add --help` first, and use `severity=page` with an obviously test-only `alertname` and `team` so nobody mistakes it for an incident.
+For the monthly test, a short-lived alert pushed with `amtool alert add` exercises the real receiver. Its flags (labels, annotations, end time) were not confirmed for this note, so run `amtool alert add --help` first, and use `severity=page` with an obviously test-only `alertname` and `team` so nobody mistakes it for an incident. The step-by-step test, sent to a test-only route so the live rota is not paged, is in [[alert-fired-but-nobody-was-paged#Validation|the missed-page runbook]].
 
 ## Failure modes
 
-| Failure                                  | What happens                                                         | Mitigation                                                                                                     |
-| ---------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Paging tool outage                       | Alerts fire, nobody is told                                          | Dead man's switch from outside; a documented fallback (team chat plus phone tree) in [[incident-response]]     |
-| Alert storm                              | Dozens of pages for one cause                                        | `group_by` on `alertname`, `service`, `team`; inhibition rules; the tool's own grouping                        |
-| Unrouted alert                           | A page-worthy alert lands on the default route                       | A catch-all `severity="page"` route after the team routes, to a platform-owned receiver; a routing test for it |
-| Stale schedule                           | The policy pages someone who left or is on leave                     | Schedules in Terraform, deprovisioning through SCIM where available, a monthly schedule review                 |
-| Expired or rotated key                   | Notifications fail silently                                          | Alert on Alertmanager notification failures; rotate keys through the secret store and the `*_file` mounts      |
-| Phone settings                           | The page arrives but makes no sound                                  | Each engineer runs the tool's own test notification after phone or OS updates                                  |
+| Failure                | What happens                                     | Mitigation                                                                                                     |
+| ---------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Paging tool outage     | Alerts fire, nobody is told                      | Dead man's switch from outside; a documented fallback (team chat plus phone tree) in [[incident-response]]     |
+| Alert storm            | Dozens of pages for one cause                    | `group_by` on `alertname`, `service`, `team`; inhibition rules; the tool's own grouping                        |
+| Unrouted alert         | A page-worthy alert lands on the default route   | A catch-all `severity="page"` route after the team routes, to a platform-owned receiver; a routing test for it |
+| Stale schedule         | The policy pages someone who left or is on leave | Schedules in Terraform, deprovisioning through SCIM where available, a monthly schedule review                 |
+| Expired or rotated key | Notifications fail silently                      | Alert on Alertmanager notification failures; rotate keys through the secret store and the `*_file` mounts      |
+| Phone settings         | The page arrives but makes no sound              | Each engineer runs the tool's own test notification after phone or OS updates                                  |
 
 Alertmanager exports metrics on failed notifications. Alert on them (as a ticket, not a page) so a broken integration is seen before an incident finds it.
 
@@ -351,12 +340,10 @@ Revisit when the vendor's status changes again, when your monitoring stack chang
 - [[0050-incident-severity-levels-and-roles]]
 - [[slo-burn-rate-alerting]]
 - [[alert-and-runbook-standard]]
+- [[alerting-and-paging-pipeline]]
+- [[alert-fired-but-nobody-was-paged]]
 - [[incident-response]]
 - [[on-call-health]]
-- [[on-call-compensation-and-recovery]]
-- [[prometheus-vs-cloud-monitoring]]
-- [[devops-vendor-and-licence-management]]
-- [[end-of-life-tracking-platform-versions]]
 
 ## Sources
 

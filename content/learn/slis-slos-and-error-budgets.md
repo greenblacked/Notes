@@ -354,7 +354,7 @@ The point is that the conversation happens once, calmly, instead of during every
 
 ## The SLO document
 
-Write each SLO on one page, next to the code that implements it, and review it at least yearly:
+Write each SLO on one page, next to the code that implements it, and review it at least yearly. The lab version below is plain Markdown; here the required fields, the YAML format and the review rules are set by [[standards/slo-definition-standard]].
 
 ```markdown title="slo-api.md"
 # SLO: api availability
@@ -453,6 +453,7 @@ To go deeper:
 
 - [[patterns/slo-burn-rate-alerting]] for the production rules, Cloud Monitoring SLOs and Grafana panels.
 - [[adr/0045-page-only-on-slo-burn-rate]] and [[standards/error-budget-policy]] for how paging and budgets are governed here.
+- [[standards/slo-definition-standard]] for what makes a valid SLO here: SLIs per service type, targets by tier and the SLO document format.
 - [[standards/production-readiness-review]] for where the SLO document is required.
 - [[management/on-call-health]] for measuring whether paging is sustainable.
 - [[runbooks/prometheus-high-cardinality-triage]] if long-window recording rules make your Prometheus slow.

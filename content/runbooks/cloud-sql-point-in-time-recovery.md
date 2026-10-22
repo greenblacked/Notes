@@ -264,27 +264,26 @@ If the clone inherited deletion protection, turn it off with `gcloud sql instanc
 
 ## Troubleshooting
 
-| Symptom                                                    | Likely cause and fix                                                                                                                             |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Clone fails immediately, error about PITR or logs           | PITR off on the source, or the target time is outside the retained window. Check step 2; fall back to a backup restore to a new instance.      |
-| Clone fails on the timestamp format                         | Use RFC 3339 in UTC with a trailing `Z`, quoted, as in the `gcloud` help example.                                                              |
-| Clone still contains the damage                             | Target time too late, or the bad transaction committed earlier than logged. Clone again to an earlier time with a new name.                   |
-| Clone takes a long time                                     | Large database or a long log replay. Nothing to tune mid-operation; communicate the expected wait and track the operation.                     |
-| Destination name rejected                                   | The name is in use, or was used recently by a deleted instance (reuse rules **not verified**). Choose another name.                           |
-| Cannot log in to the clone with IAM database authentication | IAM users and their grants may not behave as on the source; use a built-in recovery user, and check the docs for IAM users on clones.          |
-| Extension functions missing or failing on the clone         | Check `SELECT * FROM pg_extension;` on both; extensions and flags may differ. Compare settings from step 4.                                   |
-| Merge fails on a foreign key or unique constraint           | Restore parent rows first, or include them in the export; check the conflict target matches the real unique key.                               |
-| New inserts fail with duplicate keys after the repair       | Sequence behind restored IDs. `SELECT setval('public.invoices_id_seq', (SELECT max(id) FROM public.invoices));`                                  |
+| Symptom                                                     | Likely cause and fix                                                                                                                      |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Clone fails immediately, error about PITR or logs           | PITR off on the source, or the target time is outside the retained window. Check step 2; fall back to a backup restore to a new instance. |
+| Clone fails on the timestamp format                         | Use RFC 3339 in UTC with a trailing `Z`, quoted, as in the `gcloud` help example.                                                         |
+| Clone still contains the damage                             | Target time too late, or the bad transaction committed earlier than logged. Clone again to an earlier time with a new name.               |
+| Clone takes a long time                                     | Large database or a long log replay. Nothing to tune mid-operation; communicate the expected wait and track the operation.                |
+| Destination name rejected                                   | The name is in use, or was used recently by a deleted instance (reuse rules **not verified**). Choose another name.                       |
+| Cannot log in to the clone with IAM database authentication | IAM users and their grants may not behave as on the source; use a built-in recovery user, and check the docs for IAM users on clones.     |
+| Extension functions missing or failing on the clone         | Check `SELECT * FROM pg_extension;` on both; extensions and flags may differ. Compare settings from step 4.                               |
+| Merge fails on a foreign key or unique constraint           | Restore parent rows first, or include them in the export; check the conflict target matches the real unique key.                          |
+| New inserts fail with duplicate keys after the repair       | Sequence behind restored IDs. `SELECT setval('public.invoices_id_seq', (SELECT max(id) FROM public.invoices));`                           |
 
 ## Related
 
 - [[cloud-sql-ha-failover-recovery]] for availability incidents, where PITR is the wrong tool.
 - [[backup-architecture-gke-cloud-sql-gcs]] for how backups, PITR and exports fit together.
+- [[cloud-sql-postgres-platform-architecture]] for the instance, HA and backup configuration this runbook restores.
 - [[0027-cloud-sql-for-production-postgres]] and [[0051-backups-proven-by-quarterly-restore-drills]] for the decisions this runbook supports.
-- [[postgres-expand-contract-migrations]] for migrations that do not need this runbook.
 - [[postgres-connection-pooling-gke]] for reconnecting applications after a cut-over.
 - [[disaster-recovery-tiers-rpo-rto]] for the recovery objectives the drill measures.
-- [[incident-response]] for running the incident around it.
 - [[gcp-vpc-compute-and-cloud-sql]] for the networking of Cloud SQL instances.
 
 ## Sources

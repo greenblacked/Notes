@@ -254,6 +254,7 @@ Related notes:
 - [[jenkins-agents-configuration-as-code-and-shared-libraries]]
 - [[ci-platform-gitlab-runners-and-jenkins-agents-on-gke]]
 - [[jenkins-controller-down-and-queue-stuck]]
+- [[jenkins-core-and-plugin-upgrade-rollback]]
 - [[jenkins-to-gitlab-migration-programme]]
 - [[gitlab-ci-vs-jenkins]]
 - [[gke-workload-identity]]

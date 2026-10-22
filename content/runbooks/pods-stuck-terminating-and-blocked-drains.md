@@ -83,13 +83,13 @@ kubectl get pods -A -o json | jq -r '
   | sort
 ```
 
-| What you see                                                       | Case                                         | Go to   |
-| ------------------------------------------------------------------ | -------------------------------------------- | ------- |
-| `finalizers` not empty                                             | A controller has not finished its cleanup    | Step 2  |
-| No finalizers, node `Ready` is `Unknown` or `False`, or node gone  | Kubelet cannot confirm the containers stopped | Step 3  |
-| No finalizers, node `Ready`, deletion within the grace period      | Normal shutdown still running                | Step 5  |
-| No finalizers, node `Ready`, deletion long past the grace period   | Kubelet or runtime stuck on that node        | Step 5  |
-| `deletionTimestamp` empty and the drain loops                      | The eviction was refused, usually by a PDB    | Step 6  |
+| What you see                                                      | Case                                          | Go to  |
+| ----------------------------------------------------------------- | --------------------------------------------- | ------ |
+| `finalizers` not empty                                            | A controller has not finished its cleanup     | Step 2 |
+| No finalizers, node `Ready` is `Unknown` or `False`, or node gone | Kubelet cannot confirm the containers stopped | Step 3 |
+| No finalizers, node `Ready`, deletion within the grace period     | Normal shutdown still running                 | Step 5 |
+| No finalizers, node `Ready`, deletion long past the grace period  | Kubelet or runtime stuck on that node         | Step 5 |
+| `deletionTimestamp` empty and the drain loops                     | The eviction was refused, usually by a PDB    | Step 6 |
 
 ### 2. Pod finalizers: fix the owner, not the symptom
 
@@ -187,13 +187,13 @@ kubectl get pods -A --field-selector spec.nodeName="$NODE" -o wide
 
 Common reasons for `ALLOWED DISRUPTIONS` of 0:
 
-| Cause                                                                                   | Fix                                                                                                                                       |
-| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `minAvailable` equals the replica count, or `maxUnavailable: 0`                         | A PDB that allows no disruption can never be drained. Change it in Git to allow at least one; see [[pod-disruption-budgets-for-stateless-services]]. |
-| A single-replica Deployment with `minAvailable: 1`                                      | Run at least two replicas, or accept a short outage and change the PDB for the window.                                                    |
-| Some selected Pods are not Ready (crash-looping, failing probes)                        | With the default `IfHealthyBudget`, unhealthy running Pods count against the budget. Fix the app, or set `unhealthyPodEvictionPolicy: AlwaysAllow`. |
-| The PDB selects Pods from two workloads, or two PDBs select the same Pod                | Overlapping PDBs make the Eviction API refuse with an error (HTTP 500 for more than one PDB). Make selectors unique.                      |
-| All replicas sit on the nodes being drained                                             | Add replicas elsewhere first, or spread them with topology spread constraints.                                                             |
+| Cause                                                                    | Fix                                                                                                                                                  |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `minAvailable` equals the replica count, or `maxUnavailable: 0`          | A PDB that allows no disruption can never be drained. Change it in Git to allow at least one; see [[pod-disruption-budgets-for-stateless-services]]. |
+| A single-replica Deployment with `minAvailable: 1`                       | Run at least two replicas, or accept a short outage and change the PDB for the window.                                                               |
+| Some selected Pods are not Ready (crash-looping, failing probes)         | With the default `IfHealthyBudget`, unhealthy running Pods count against the budget. Fix the app, or set `unhealthyPodEvictionPolicy: AlwaysAllow`.  |
+| The PDB selects Pods from two workloads, or two PDBs select the same Pod | Overlapping PDBs make the Eviction API refuse with an error (HTTP 500 for more than one PDB). Make selectors unique.                                 |
+| All replicas sit on the nodes being drained                              | Add replicas elsewhere first, or spread them with topology spread constraints.                                                                       |
 
 `unhealthyPodEvictionPolicy: AlwaysAllow` lets running but not-Ready Pods be evicted regardless of the budget. The Kubernetes documentation recommends it to keep misbehaving applications from blocking node drains. The field is stable since Kubernetes 1.31 (beta and on by default since 1.27).
 
@@ -275,26 +275,26 @@ For a StatefulSet, also check from the application that each member has exactly 
 
 ## Troubleshooting
 
-| Symptom                                                                | Likely cause and fix                                                                                                         |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Drain prints `will retry after 5s` forever                             | A PDB with no allowed disruptions. Step 6. Add `--timeout` so automation fails visibly instead of hanging.                   |
-| Eviction fails with HTTP 500 mentioning more than one PDB             | Two PDBs select the Pod. Make the selectors unique.                                                                          |
-| Drain refuses Pods without a controller                                | Bare Pods. `--force` lets drain delete them; they are not recreated, so confirm nobody needs them.                            |
-| Drain refuses because of local storage                                 | `emptyDir` data. Add `--delete-emptydir-data` after confirming the data is disposable.                                        |
-| Pod `Terminating` with finalizers after an operator was uninstalled    | Reinstall the operator long enough to clean up, or remove the finalizer knowing what it skips (step 2).                      |
-| Many Pods `Terminating` on one node, node `NotReady`                   | Unreachable node. Step 3, then [[gke-node-notready-triage]].                                                                  |
-| Force-deleted StatefulSet Pod comes back and the app reports two leaders | Split brain. Stop one member at once, fence the old node, then follow the application's recovery procedure.                  |
-| GKE upgrade stuck on one node for a long time                          | PDB blocking the drain until the GKE timeout. Fix the PDB (step 6); see [[gke-cluster-upgrade]].                              |
-| Namespace or PVC also stuck after the Pods are gone                    | Finalizers at that level; see [[namespace-stuck-terminating]] and [[pvc-stuck-terminating]].                                   |
+| Symptom                                                                  | Likely cause and fix                                                                                        |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Drain prints `will retry after 5s` forever                               | A PDB with no allowed disruptions. Step 6. Add `--timeout` so automation fails visibly instead of hanging.  |
+| Eviction fails with HTTP 500 mentioning more than one PDB                | Two PDBs select the Pod. Make the selectors unique.                                                         |
+| Drain refuses Pods without a controller                                  | Bare Pods. `--force` lets drain delete them; they are not recreated, so confirm nobody needs them.          |
+| Drain refuses because of local storage                                   | `emptyDir` data. Add `--delete-emptydir-data` after confirming the data is disposable.                      |
+| Pod `Terminating` with finalizers after an operator was uninstalled      | Reinstall the operator long enough to clean up, or remove the finalizer knowing what it skips (step 2).     |
+| Many Pods `Terminating` on one node, node `NotReady`                     | Unreachable node. Step 3, then [[gke-node-notready-triage]].                                                |
+| Force-deleted StatefulSet Pod comes back and the app reports two leaders | Split brain. Stop one member at once, fence the old node, then follow the application's recovery procedure. |
+| GKE upgrade stuck on one node for a long time                            | PDB blocking the drain until the GKE timeout. Fix the PDB (step 6); see [[gke-cluster-upgrade]].            |
+| Namespace or PVC also stuck after the Pods are gone                      | Finalizers at that level; see [[namespace-stuck-terminating]] and [[pvc-stuck-terminating]].                |
 
 ## Related
 
 - [[namespace-stuck-terminating]] and [[pvc-stuck-terminating]] for finalizers at namespace and volume scope.
 - [[kubernetes-pod-troubleshooting]] for the wider Pod lifecycle.
-- [[gke-cluster-upgrade]] and [[gke-node-pool-upgrade-strategies]] for upgrade planning, where blocked drains usually surface.
+- [[gke-node-pool-upgrade-strategies]] for upgrade planning, where blocked drains usually surface.
 - [[pod-disruption-budgets-for-stateless-services]] for designing PDBs that allow drains.
-- [[stateful-workloads-gke]] for StatefulSet identity and storage behaviour.
-- [[gke-node-notready-triage]] and [[node-resource-pressure-triage]] for the node side.
+- [[learn/kubernetes-scheduling-affinity-taints-and-draining|Kubernetes 10: Scheduling]] for how cordon, drain, taints and PDBs work, from first principles.
+- [[gke-node-notready-triage]] for the node side.
 - [[kubernetes-autoscaling]] for scale-down, which is also blocked by PDBs.
 
 ## Sources

@@ -16,7 +16,7 @@ draft: false
 [[kubernetes-autoscaling]] covers the HPA on CPU and memory and ends with "use a custom or external metric" for workloads where CPU is the wrong signal. Queue consumers are the common case: a worker that reads a Pub/Sub subscription should scale on backlog, not on CPU, and an idle one should ideally run zero pods ([[pubsub-event-driven-messaging]] describes the messaging side). There are two ways to do that on GKE. The plain HPA reads an external metric through a metrics adapter you install. KEDA installs its own operator and metrics server, creates the HPA for you, and adds scale to zero, fallback and pause controls. This note compares them and gives working manifests for both.
 
 > [!info] Not checked against current releases
-> Written from the Kubernetes, KEDA and Custom Metrics Stackdriver Adapter documentation source on 2026-10-21; the published pages could not be opened. Not verified: the GKE tutorial for Pub/Sub autoscaling and its exact HPA manifest; the Managed Service for Prometheus HPA page; whether the Custom Metrics Stackdriver Adapter is actively maintained or offered as a GKE add-on; the label key used to select a Pub/Sub subscription in the external metric; the Pub/Sub metric delay in Cloud Monitoring; the Kubernetes version on which `HPAScaleToZero` is on by default in GKE; KEDA on Autopilot; the PromQL form of the Pub/Sub backlog metric used in the KEDA example.
+> Written from the Kubernetes, KEDA and Custom Metrics Stackdriver Adapter documentation source on 2026-10-21; not checked against the published pages, so verify there. Not verified: the GKE tutorial for Pub/Sub autoscaling and its exact HPA manifest; the Managed Service for Prometheus HPA page; whether the Custom Metrics Stackdriver Adapter is actively maintained or offered as a GKE add-on; the label key used to select a Pub/Sub subscription in the external metric; the Pub/Sub metric delay in Cloud Monitoring; the Kubernetes version on which `HPAScaleToZero` is on by default in GKE; KEDA on Autopilot; the PromQL form of the Pub/Sub backlog metric used in the KEDA example.
 
 > [!warning] KEDA's Google Cloud scalers are deprecated
 > At the time of writing (2026-10-21), the KEDA scaler pages for `gcp-pubsub`, `gcp-stackdriver` and `gcp-cloudtasks` say the scaler is deprecated and will not receive changes. KEDA's "Google Cloud deprecations" post (2025-09-15) explains that they depend on Monitoring Query Language, says KEDA does not plan to remove them while Google supports MQL, and strongly encourages moving to the `prometheus` scaler against Managed Service for Prometheus. Only `gcp-storage` is stated as still supported. The KEDA examples below use the Prometheus scaler.
@@ -126,7 +126,7 @@ How it behaves:
 
 ### HPA on a Managed Prometheus metric
 
-[[0042-managed-prometheus-for-application-metrics]] puts application metrics in Managed Service for Prometheus. Driving a plain HPA from a PromQL query needs something that serves the External or Custom Metrics API from PromQL. The usual route is the GMP query frontend (its README describes it as a thin proxy that re-exposes the Prometheus HTTP API and authenticates to GMP itself) plus a Prometheus metrics adapter in front of it. That is two extra components to run. Google's Managed Prometheus HPA page could not be read for this note, so no manifest is given; follow that page. KEDA's Prometheus scaler talks to the GMP API directly and needs neither.
+[[0042-managed-prometheus-for-application-metrics]] puts application metrics in Managed Service for Prometheus. Driving a plain HPA from a PromQL query needs something that serves the External or Custom Metrics API from PromQL. The usual route is the GMP query frontend (its README describes it as a thin proxy that re-exposes the Prometheus HTTP API and authenticates to GMP itself) plus a Prometheus metrics adapter in front of it. That is two extra components to run. This note was not checked against Google's Managed Prometheus HPA page, so no manifest is given; follow that page. KEDA's Prometheus scaler talks to the GMP API directly and needs neither.
 
 ### Scale to zero with the HPA
 
@@ -306,8 +306,6 @@ Use **KEDA with the Prometheus scaler against Managed Service for Prometheus** f
 - [[load-and-performance-testing]]
 - [[gke-workload-identity]]
 - [[0042-managed-prometheus-for-application-metrics]]
-- [[prometheus-vs-cloud-monitoring]]
-- [[argocd-sync-failure-and-drift]]
 
 ## Sources
 

@@ -328,6 +328,5 @@ Rollback is configuration only: engineers can run the agent outside the sandbox 
 - [[private-gke-and-controlled-egress]]: network-level egress allowlists.
 - [[gcp-iam-guardrails-for-agent-service-accounts]]: narrow service accounts to impersonate.
 - [[kubernetes-rbac-for-ai-agents]]: read-only Roles for agent ServiceAccounts.
-- [[linux-users-permissions-sudo-and-ssh]]: users, permissions and the SSH agent.
 - [[runaway-or-compromised-ai-agent-response]]: what to do when an agent misbehaves anyway.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

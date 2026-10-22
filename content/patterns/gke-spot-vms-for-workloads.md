@@ -19,19 +19,19 @@ Spot VMs are spare Compute Engine capacity at a discount that Google can reclaim
 > Kubernetes behaviour (disruptions, PodDisruptionBudgets, graceful node shutdown, node affinity, taints) was checked against the Kubernetes documentation source on 2026-10-21. The Terraform fields were checked against the Google provider's documentation source and the `gcloud` flags against Google Cloud SDK 570.0.0 help on the same day. Nothing was run on a cluster.
 
 > [!warning] Not verified: Google Cloud Spot pages
-> The GKE Spot VMs, Autopilot Spot Pods and Compute Engine Spot pages could not be read when this note was written. So the following are **not verified**: the length of the preemption notice and the signal the VM receives; whether GKE enables kubelet graceful node shutdown on Spot nodes by default and with which period; whether Standard Spot nodes carry an automatic taint; the exact Autopilot Spot Pod syntax and any required toleration; maximum Spot VM lifetime; eligible machine types and GPUs; quota behaviour; how the cluster autoscaler reacts to a Spot stockout; and every price or discount. Read those pages before you rely on any of it. This note gives no prices on purpose.
+> This note was not checked against the GKE Spot VMs, Autopilot Spot Pods and Compute Engine Spot pages. So the following are **not verified**: the length of the preemption notice and the signal the VM receives; whether GKE enables kubelet graceful node shutdown on Spot nodes by default and with which period; whether Standard Spot nodes carry an automatic taint; the exact Autopilot Spot Pod syntax and any required toleration; maximum Spot VM lifetime; eligible machine types and GPUs; quota behaviour; how the cluster autoscaler reacts to a Spot stockout; and every price or discount. Read those pages before you rely on any of it. This note gives no prices on purpose.
 
 ## What fits on Spot and what never does
 
 The test is simple: if every node in the pool vanished at once, would users notice, and would anything be lost?
 
-| Fits well                                                                                   | Fits with care                                                                  | Never on Spot                                                                           |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Stateless replicas behind a Service, with enough replicas on on-demand nodes to carry load | Queue workers that ack only after the work is durable                           | Quorum stores: etcd, ZooKeeper, Kafka brokers, database primaries and replicas          |
-| Batch Jobs that checkpoint and are idempotent ([[patterns/kubernetes-jobs-and-cronjobs]])           | Long batch runs without checkpoints (only with short work units)                | Singleton controllers and operators (one leader, slow re-election hurts)               |
-| CI job Pods ([[gitlab-runners-on-gke]])                                                     | Caches that can be rebuilt (Redis as a pure cache)                              | Ingress controllers and Gateway data planes that hold every user connection            |
-| Review and preview environments ([[gitlab-review-environments-on-gke]])                    | ML training with frequent checkpoints to Cloud Storage                          | Anything with a local PersistentVolume, or a zonal disk that must reattach fast        |
-| Dev and test namespaces                                                                     | Services with long-lived connections (WebSockets, gRPC streams), with a drain plan | Cluster add-ons that everything depends on (DNS, policy webhooks, cert-manager)       |
+| Fits well                                                                                  | Fits with care                                                                     | Never on Spot                                                                   |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Stateless replicas behind a Service, with enough replicas on on-demand nodes to carry load | Queue workers that ack only after the work is durable                              | Quorum stores: etcd, ZooKeeper, Kafka brokers, database primaries and replicas  |
+| Batch Jobs that checkpoint and are idempotent ([[patterns/kubernetes-jobs-and-cronjobs]])  | Long batch runs without checkpoints (only with short work units)                   | Singleton controllers and operators (one leader, slow re-election hurts)        |
+| CI job Pods ([[gitlab-runners-on-gke]])                                                    | Caches that can be rebuilt (Redis as a pure cache)                                 | Ingress controllers and Gateway data planes that hold every user connection     |
+| Review and preview environments ([[gitlab-review-environments-on-gke]])                    | ML training with frequent checkpoints to Cloud Storage                             | Anything with a local PersistentVolume, or a zonal disk that must reattach fast |
+| Dev and test namespaces                                                                    | Services with long-lived connections (WebSockets, gRPC streams), with a drain plan | Cluster add-ons that everything depends on (DNS, policy webhooks, cert-manager) |
 
 Two rules sit behind the "never" column:
 
@@ -306,7 +306,7 @@ spec:
   backoffLimit: 6
   podFailurePolicy:
     rules:
-      - action: Ignore           # node loss does not count against backoffLimit
+      - action: Ignore # node loss does not count against backoffLimit
         onPodConditions:
           - type: DisruptionTarget
   template:
@@ -484,8 +484,7 @@ gcloud container node-pools delete "$POOL" --cluster "$CLUSTER" --location "$LOC
 ## Related
 
 - [[gitlab-runners-on-gke]]: the CI case, with its own tainted Spot pool.
-- [[kubernetes-autoscaling]]: HPA and the cluster autoscaler that grows the pools.
-- [[topology-spread-constraints-gke]]: zone and node spread for the replicas.
+- [[gke-cluster-autoscaler-not-scaling-up]]: when a Spot or fallback pool does not grow.
 - [[pod-disruption-budgets-for-stateless-services]]: what PDBs do and do not cover.
 - [[priority-classes-and-preemption]]: who wins when on-demand capacity is short.
 - [[patterns/kubernetes-jobs-and-cronjobs]]: retry policy for batch work that may be preempted.

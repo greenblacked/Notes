@@ -16,7 +16,7 @@ draft: false
 The supply chain notes stop at the cluster door: images are scanned, signed and admitted ([[software-supply-chain-end-to-end]]), admission policy rejects risky pod specs ([[gatekeeper-vs-kyverno]], [[pod-security-admission]]), and [[cis-benchmarks-with-kube-bench]] checks node and control-plane posture. None of that sees what a container does after it starts: a shell spawned in a web pod, a write under `/etc`, an unexpected outbound connection, a binary that was not in the image. [[compromised-cloud-cluster-containment]] describes what to do once you suspect a compromise but needs a detection source to start from. [[threat-detection-and-response-gcp-gke]] places runtime detection in the detection and response pipeline; this note picks the tool. It compares three: Falco, Tetragon, and Google's Security Command Center (SCC) Container Threat Detection.
 
 > [!info] Not checked against current releases
-> Written from the Falco and Tetragon documentation source, the Falco chart README and the `gcloud` 570.0.0 help text on 2026-10-21; the published documentation pages could not be opened. Not verified: the SCC tier that includes Container Threat Detection, its supported GKE versions and node images, its detection list and price; the current scope of the GKE security posture dashboard and any deprecations; whether Falco or Tetragon run on GKE Autopilot (Google's Autopilot partner allowlist); kernel and BTF availability per GKE node image; how Cloud Logging maps Falco's JSON fields to severity; the Falco Operator's install steps. No CPU overhead figures are given because none were found in the sources.
+> Written from the Falco and Tetragon documentation source, the Falco chart README and the `gcloud` 570.0.0 help text on 2026-10-21; not checked against the published documentation pages, so verify there. Not verified: the SCC tier that includes Container Threat Detection, its supported GKE versions and node images, its detection list and price; the current scope of the GKE security posture dashboard and any deprecations; whether Falco or Tetragon run on GKE Autopilot (Google's Autopilot partner allowlist); kernel and BTF availability per GKE node image; how Cloud Logging maps Falco's JSON fields to severity; the Falco Operator's install steps. No CPU overhead figures are given because none were found in the sources.
 
 ## Criteria
 
@@ -193,7 +193,7 @@ The GKE security posture dashboard is a separate feature. The CLI exposes `--sec
 
 ## Routing findings and paging
 
-Send everything to the SIEM; page on very little.
+Send everything to the SIEM; page on very little. Owner lookup and the severity map for all finding sources, not only runtime ones, are in [[threat-detection-and-response-gcp-gke#Routing and severity|the detection and response design]].
 
 ```mermaid
 flowchart LR
@@ -269,11 +269,7 @@ Enable SCC Container Threat Detection wherever its tier is available, because it
 - [[cis-benchmarks-with-kube-bench]]
 - [[gcp-audit-logs-siem]]
 - [[platform-threat-modelling]]
-- [[policy-rollout-audit-to-enforce]]
 - [[threat-detection-and-response-gcp-gke]]
-- [[alert-and-runbook-standard]]
-- [[0018-gke-autopilot-for-new-clusters]]
-- [[kubernetes-network-policies]]
 
 ## Sources
 

@@ -47,13 +47,13 @@ Ask for the report through the vendor's account team or trust portal. Most vendo
 
 The usual order is below (general practice; check the AICPA guidance for the current form). Read it in this order, not front to back.
 
-| Section                               | What it tells you                                                                 | Read for                                                   |
-| ------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Independent service auditor's report  | The opinion, the period, the criteria covered, any modification                   | Type, period, opinion, which Trust Services Criteria apply |
-| Management's assertion                | What the vendor's management claims about the system and controls                 | That it matches the scope you expect                       |
-| System description                    | Services in scope, infrastructure, people, processes, subservice organisations    | Scope, carve-outs, CUECs, data flows, regions              |
-| Controls, tests and results           | Each control, the auditor's test and the result, including exceptions             | Exceptions and management responses                        |
-| Other information (if present)        | Information the auditor did not test, such as future plans or responses           | Context only; it carries no assurance                      |
+| Section                              | What it tells you                                                              | Read for                                                   |
+| ------------------------------------ | ------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| Independent service auditor's report | The opinion, the period, the criteria covered, any modification                | Type, period, opinion, which Trust Services Criteria apply |
+| Management's assertion               | What the vendor's management claims about the system and controls              | That it matches the scope you expect                       |
+| System description                   | Services in scope, infrastructure, people, processes, subservice organisations | Scope, carve-outs, CUECs, data flows, regions              |
+| Controls, tests and results          | Each control, the auditor's test and the result, including exceptions          | Exceptions and management responses                        |
+| Other information (if present)       | Information the auditor did not test, such as future plans or responses        | Context only; it carries no assurance                      |
 
 The Trust Services Criteria are security, availability, processing integrity, confidentiality and privacy.[^google-soc2] Security is always in a SOC 2 report; the others are optional. If you rely on the vendor for uptime, check that availability is in scope; if they hold your source code or secrets, confidentiality matters.
 
@@ -61,18 +61,18 @@ The Trust Services Criteria are security, availability, processing integrity, co
 
 Use this as the working sheet. Every "no" needs a written explanation or an escalation.
 
-| Check                                                                                         | Why it matters                                                                       |
-| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Type II, not Type I (or Type I only for a first-year vendor, with a plan for Type II)          | Type I shows design, not that controls actually ran                                  |
-| Period ended recently enough that the gap to today is covered (bridge letter if needed)        | An old report says nothing about this year                                           |
-| The product, edition and hosting model you use are in the system description                  | Out-of-scope services carry no assurance                                             |
-| The region or data location you use is in scope                                               | Some vendors run separate stacks per region                                          |
-| Opinion is unqualified, or every modification is understood and accepted                       | A modified opinion means the auditor could not conclude on part of the system        |
-| The criteria you rely on (security, plus availability or confidentiality) are covered          | Missing criteria mean missing assurance                                              |
-| Each exception has a management response and the risk to you is assessed                      | An exception in access removal is a different risk from one in a reporting control   |
-| Every CUEC is mapped to an owned control on your side                                           | Unmet CUECs mean the vendor's controls may not work for you                          |
-| Every subservice organisation is listed, with carve-out or inclusive noted                     | Carved-out providers need their own assurance                                        |
-| Controls you care about most are present: access, change, encryption, logging, incident, backup | A report can be clean and still not cover what you care about                        |
+| Check                                                                                           | Why it matters                                                                     |
+| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Type II, not Type I (or Type I only for a first-year vendor, with a plan for Type II)           | Type I shows design, not that controls actually ran                                |
+| Period ended recently enough that the gap to today is covered (bridge letter if needed)         | An old report says nothing about this year                                         |
+| The product, edition and hosting model you use are in the system description                    | Out-of-scope services carry no assurance                                           |
+| The region or data location you use is in scope                                                 | Some vendors run separate stacks per region                                        |
+| Opinion is unqualified, or every modification is understood and accepted                        | A modified opinion means the auditor could not conclude on part of the system      |
+| The criteria you rely on (security, plus availability or confidentiality) are covered           | Missing criteria mean missing assurance                                            |
+| Each exception has a management response and the risk to you is assessed                        | An exception in access removal is a different risk from one in a reporting control |
+| Every CUEC is mapped to an owned control on your side                                           | Unmet CUECs mean the vendor's controls may not work for you                        |
+| Every subservice organisation is listed, with carve-out or inclusive noted                      | Carved-out providers need their own assurance                                      |
+| Controls you care about most are present: access, change, encryption, logging, incident, backup | A report can be clean and still not cover what you care about                      |
 
 ## Exceptions: reading the test results
 
@@ -89,15 +89,15 @@ For each exception, write down:
 
 Complementary user entity controls are the controls the vendor says its customers must run for the vendor's controls to achieve their objectives (general practice; check the AICPA definition). They are the most useful part of the report for a platform team, because they are your to-do list. Typical CUECs for a DevOps SaaS, and the control on your side that meets each one:
 
-| Typical CUEC (paraphrased, generic)                                   | Your control                                                                                                            |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Customers configure SSO and MFA for their users                       | SSO enforced through your IdP, local accounts disabled or break-glass only                                              |
-| Customers review user access in their tenant periodically             | Your quarterly access review ([[compliance/access-reviews-gcp-and-gke\|access reviews]]) extended to the SaaS tenant    |
-| Customers remove access for leavers promptly                          | Leaver offboarding ([[compliance/leaver-credential-revocation-devops-tools\|leaver credential revocation]])              |
-| Customers protect API tokens and credentials they create              | Token inventory, short-lived tokens, secret scanning, rotation                                                          |
-| Customers configure retention, backup or export of their own data     | An export or backup job and a restore test, owned by a named team                                                       |
-| Customers notify the vendor of security incidents involving the tenant | An entry in your incident runbook with the vendor's security contact                                                   |
-| Customers are responsible for the content and permissions of their data | Classification and least-privilege project or repository permissions                                                   |
+| Typical CUEC (paraphrased, generic)                                     | Your control                                                                                                         |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Customers configure SSO and MFA for their users                         | SSO enforced through your IdP, local accounts disabled or break-glass only                                           |
+| Customers review user access in their tenant periodically               | Your quarterly access review ([[compliance/access-reviews-gcp-and-gke\|access reviews]]) extended to the SaaS tenant |
+| Customers remove access for leavers promptly                            | Leaver offboarding ([[compliance/leaver-credential-revocation-devops-tools\|leaver credential revocation]])          |
+| Customers protect API tokens and credentials they create                | Token inventory, short-lived tokens, secret scanning, rotation                                                       |
+| Customers configure retention, backup or export of their own data       | An export or backup job and a restore test, owned by a named team                                                    |
+| Customers notify the vendor of security incidents involving the tenant  | An entry in your incident runbook with the vendor's security contact                                                 |
+| Customers are responsible for the content and permissions of their data | Classification and least-privilege project or repository permissions                                                 |
 
 Put each CUEC in your control register next to the control that meets it. If you run a common control set across frameworks ([[compliance/common-control-framework-for-platform-teams|common control framework]]), the CUEC becomes one more requirement mapped onto an existing control, not a new process.
 
@@ -130,14 +130,14 @@ Typical Type II periods and how long a gap is acceptable are matters of practice
 
 ## SOC 2 compared with other assurance
 
-| Artefact                     | What it is (hedged where not verified)                                                                                                              | How much it tells you                                                                                     |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| SOC 2 Type II                | An independent auditor's opinion on design and operating effectiveness over a period, with tests and results                                       | Most: you see the controls, the tests and the exceptions                                                  |
-| SOC 2 Type I                 | The same, for design at a point in time                                                                                                             | Design only; no evidence the controls ran                                                                 |
-| SOC 3                        | A general-use summary report without the detailed tests and results (general practice, check the AICPA description)                               | Useful for marketing and a first screen; not enough to map CUECs or read exceptions                       |
-| ISO/IEC 27001 certificate     | A certificate that an information security management system was certified for a scope, with a Statement of Applicability (check the ISO page)    | Shows a managed ISMS for a scope; does not show that specific controls operated well. Ask for scope and SoA |
-| CSA STAR entry               | A Cloud Security Alliance registry entry, from self-assessment to third-party levels (check the current programme description)                       | Depends on the level; a self-assessment is the vendor's own answers                                        |
-| Penetration test summary     | A letter or summary from a testing firm                                                                                                             | Point-in-time, narrow; see [[compliance/penetration-testing-gcp-and-gke\|penetration tests]] for what to look for |
+| Artefact                  | What it is (hedged where not verified)                                                                                                         | How much it tells you                                                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| SOC 2 Type II             | An independent auditor's opinion on design and operating effectiveness over a period, with tests and results                                   | Most: you see the controls, the tests and the exceptions                                                          |
+| SOC 2 Type I              | The same, for design at a point in time                                                                                                        | Design only; no evidence the controls ran                                                                         |
+| SOC 3                     | A general-use summary report without the detailed tests and results (general practice, check the AICPA description)                            | Useful for marketing and a first screen; not enough to map CUECs or read exceptions                               |
+| ISO/IEC 27001 certificate | A certificate that an information security management system was certified for a scope, with a Statement of Applicability (check the ISO page) | Shows a managed ISMS for a scope; does not show that specific controls operated well. Ask for scope and SoA       |
+| CSA STAR entry            | A Cloud Security Alliance registry entry, from self-assessment to third-party levels (check the current programme description)                 | Depends on the level; a self-assessment is the vendor's own answers                                               |
+| Penetration test summary  | A letter or summary from a testing firm                                                                                                        | Point-in-time, narrow; see [[compliance/penetration-testing-gcp-and-gke\|penetration tests]] for what to look for |
 
 Ask for the ISO certificate's scope statement and the Statement of Applicability, not just the certificate. For how ISO controls map to platform work, see [[compliance/iso-27001-annex-a-for-platform-teams|ISO 27001 Annex A for platform teams]].
 
@@ -153,23 +153,23 @@ A vendor review record is the engineering input to both: it shows which assuranc
 Keep one record per vendor and service, in a restricted repository or the evidence store, and re-review at least once a year or when a new report arrives. Do not paste report contents into it: reference the document and summarise your conclusions.
 
 ```yaml title="vendor-reviews/example-ci-saas.yaml"
-vendor: "Example CI SaaS"                  # change: vendor name
-service_in_use: "Hosted CI runners, EU region, enterprise tier"   # change: exactly what you use
-data_classes: [internal, confidential]     # change: the classes the service holds
-criticality: high                          # change: your own scheme
+vendor: "Example CI SaaS" # change: vendor name
+service_in_use: "Hosted CI runners, EU region, enterprise tier" # change: exactly what you use
+data_classes: [internal, confidential] # change: the classes the service holds
+criticality: high # change: your own scheme
 report:
   type: "SOC 2 Type II"
   criteria: [security, availability, confidentiality]
-  period_start: 2025-10-01                 # change: from the report
-  period_end: 2026-09-30                   # change: from the report
+  period_start: 2025-10-01 # change: from the report
+  period_end: 2026-09-30 # change: from the report
   received: 2026-10-20
-  stored_at: "evidence/vendors/example-ci-saas/2026/"   # change: restricted location
+  stored_at: "evidence/vendors/example-ci-saas/2026/" # change: restricted location
   opinion: unqualified
   scope_covers_our_service: true
   bridge_letter: { needed: false, received: null }
 exceptions:
   - control: "Logical access removal for terminated vendor staff"
-    deviations: "1 of 25 samples"          # change: from the report
+    deviations: "1 of 25 samples" # change: from the report
     relevance_to_us: medium
     vendor_response: "Fixed process; automated removal since period month 7"
     our_action: "Accept; review our own tenant audit log export quarterly"
@@ -190,9 +190,9 @@ cuecs:
     our_control: "Leaver runbook step for the CI SaaS"
     owner: platform-team
     evidence: "Leaver tickets"
-decision: accepted                          # accepted | accepted-with-conditions | rejected | escalated
+decision: accepted # accepted | accepted-with-conditions | rejected | escalated
 conditions: []
-reviewer: "platform-security-reviewer"      # a role, not a person's name
+reviewer: "platform-security-reviewer" # a role, not a person's name
 reviewed_on: 2026-10-21
 next_review: 2027-10-21
 ```
@@ -263,8 +263,6 @@ None of these means "reject" by itself. Each means escalate, ask the vendor, add
 - [[compliance/iso-27001-annex-a-for-platform-teams]]: ISO controls and certificates.
 - [[compliance/nis2-basics-for-engineering-teams]] and [[compliance/dora-eu-operational-resilience-for-engineers]]: why third-party assurance is required.
 - [[compliance/gcp-provider-access-controls-and-data-residency]]: controls on your cloud provider's own access.
-- [[management/devops-vendor-and-licence-management]] and [[management/build-vs-buy-devops-tools]]: buying and renewing the tools.
-- [[compliance/audit-evidence-collection-and-retention]]: where review records and reports are stored.
 
 ## Sources
 

@@ -373,6 +373,4 @@ The upgrade is one commit that changes a route's `model`. Rollback is `git rever
 - [[production-change-checklist]]: the change process an upgrade follows.
 - [[rag-over-runbooks-for-on-call]]: re-indexing when the embedding model changes.
 - [[prompt-injection-test-harness-for-ci-agents]]: the safety suite in the upgrade eval.
-- [[agent-skills-and-shared-workflows]]: versioned prompts and workflows.
-- [[ai-generated-code-policy-and-provenance]]: provenance for AI output.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

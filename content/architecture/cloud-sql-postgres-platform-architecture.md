@@ -1,6 +1,6 @@
 ---
 title: "Cloud SQL for PostgreSQL as a platform service: connectivity, HA, replicas and access"
-description: Reference design for Cloud SQL for PostgreSQL behind GKE workloads, covering private connectivity, the Auth Proxy, IAM database auth, HA, and read and DR replicas.
+description: Reference design for Cloud SQL for PostgreSQL behind GKE, covering private connectivity, the Auth Proxy, IAM database auth, HA, and read and DR replicas.
 type: reference
 tags:
   - architecture
@@ -42,11 +42,11 @@ This note describes how a platform team offers Cloud SQL for PostgreSQL to appli
 
 ## Instance layout
 
-| Layout                               | Strengths                                                | Costs                                                                    | Use when                                                         |
-| ------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| One instance per service             | Isolation of load, maintenance, versions and blast radius | More instances to pay for and patch; idle capacity                       | Production services with their own SLO or data classification   |
-| Shared instance, database per service | Cheaper, fewer instances                                 | Noisy neighbours, shared `max_connections`, one maintenance window for all | Non-production, small internal tools                             |
-| Shared instance, schema per service  | Cheapest                                                  | No real isolation; one bad migration affects everyone                    | Avoid outside sandboxes                                          |
+| Layout                                | Strengths                                                 | Costs                                                                      | Use when                                                      |
+| ------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| One instance per service              | Isolation of load, maintenance, versions and blast radius | More instances to pay for and patch; idle capacity                         | Production services with their own SLO or data classification |
+| Shared instance, database per service | Cheaper, fewer instances                                  | Noisy neighbours, shared `max_connections`, one maintenance window for all | Non-production, small internal tools                          |
+| Shared instance, schema per service   | Cheapest                                                  | No real isolation; one bad migration affects everyone                      | Avoid outside sandboxes                                       |
 
 Rules: an instance lives in the service project of the team that owns it (or in a platform data project per environment), never in a project that spans environments ([[architecture/environment-separation-on-gcp]]). Production instances are `REGIONAL`; non-production is `ZONAL` unless you are testing HA behaviour.
 
@@ -64,11 +64,11 @@ flowchart LR
   primary -->|"async, other region"| dr[("DR replica")]
 ```
 
-| Option                                  | How it works                                                                                                   | Notes                                                                                                                                         |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Private IP (private services access)    | The instance gets an address in a range allocated to Google's service producer network, peered with your VPC   | `--network` takes the full URL for Shared VPC (`projects/HOST/global/networks/NAME`). The API text says the private network cannot be removed once set. Peering is not transitive. |
-| Private Service Connect                 | The instance publishes a service attachment; consumers create an endpoint in their own VPC                     | `--enable-private-service-connect` with `--allowed-psc-projects`; `--psc-auto-connections` can create consumer endpoints automatically. DNS behaviour: check the PSC page. Avoids range allocation and peering. |
-| Public IP with authorised networks      | Instance reachable on the internet, filtered by CIDR                                                           | Avoid. Block it with the `sql.restrictPublicIp` and `sql.restrictAuthorizedNetworks` constraints ([[compliance/gcp-organization-policy-guardrails]]). |
+| Option                               | How it works                                                                                                 | Notes                                                                                                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Private IP (private services access) | The instance gets an address in a range allocated to Google's service producer network, peered with your VPC | `--network` takes the full URL for Shared VPC (`projects/HOST/global/networks/NAME`). The API text says the private network cannot be removed once set. Peering is not transitive.                              |
+| Private Service Connect              | The instance publishes a service attachment; consumers create an endpoint in their own VPC                   | `--enable-private-service-connect` with `--allowed-psc-projects`; `--psc-auto-connections` can create consumer endpoints automatically. DNS behaviour: check the PSC page. Avoids range allocation and peering. |
+| Public IP with authorised networks   | Instance reachable on the internet, filtered by CIDR                                                         | Avoid. Block it with the `sql.restrictPublicIp` and `sql.restrictAuthorizedNetworks` constraints ([[compliance/gcp-organization-policy-guardrails]]).                                                           |
 
 Pick one connectivity model per environment and stick to it; mixing PSA and PSC makes DNS and firewall rules hard to reason about. PSA fits a single Shared VPC ([[architecture/shared-vpc-hub-and-spoke]]); PSC fits consumers in many VPCs or projects.
 
@@ -183,15 +183,15 @@ resource "google_sql_user" "orders_app" {
 
 ## Failure modes
 
-| Failure                        | Effect                                                  | Mitigation                                                                    |
-| ------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Zonal failure, HA instance     | Automatic failover; connections drop                    | Client reconnect and retry; drill failover each quarter                       |
-| Regional failure               | Primary and standby gone                                | DR replica, switchover or promotion runbook, clients re-pointed               |
-| Connection exhaustion          | New connections refused, cascading timeouts             | Pooler, budget per service, HPA max replicas bounded                          |
-| Disk full                      | Instance can go offline                                 | Auto-increase on, disk alerts, cleanup of bloat and logs                      |
-| Maintenance at a bad time      | Short outage in peak traffic                            | Window, release channel, deny periods for freezes                             |
-| Replica lag                    | Stale reads, higher RPO for DR                          | Lag alert, route only tolerant reads, size the replica like the primary       |
-| Proxy sidecar not ready        | App starts before the proxy and crashes                 | Native sidecar or startup ordering, readiness that checks the database path   |
+| Failure                    | Effect                                      | Mitigation                                                                  |
+| -------------------------- | ------------------------------------------- | --------------------------------------------------------------------------- |
+| Zonal failure, HA instance | Automatic failover; connections drop        | Client reconnect and retry; drill failover each quarter                     |
+| Regional failure           | Primary and standby gone                    | DR replica, switchover or promotion runbook, clients re-pointed             |
+| Connection exhaustion      | New connections refused, cascading timeouts | Pooler, budget per service, HPA max replicas bounded                        |
+| Disk full                  | Instance can go offline                     | Auto-increase on, disk alerts, cleanup of bloat and logs                    |
+| Maintenance at a bad time  | Short outage in peak traffic                | Window, release channel, deny periods for freezes                           |
+| Replica lag                | Stale reads, higher RPO for DR              | Lag alert, route only tolerant reads, size the replica like the primary     |
+| Proxy sidecar not ready    | App starts before the proxy and crashes     | Native sidecar or startup ordering, readiness that checks the database path |
 
 ## Pitfalls
 
@@ -238,7 +238,7 @@ Then, from a pod in the namespace (or locally with the proxy), connect as the wo
 
 ## Sources
 
-Official documentation to check (not opened while writing this note):
+Official documentation this note was not checked against; verify there:
 
 - [Configure private IP](https://cloud.google.com/sql/docs/postgres/configure-private-ip)
 - [Private Service Connect](https://cloud.google.com/sql/docs/postgres/configure-private-service-connect)
@@ -258,12 +258,6 @@ Official documentation to check (not opened while writing this note):
 - [[adr/0051-backups-proven-by-quarterly-restore-drills]]
 - [[patterns/postgres-connection-pooling-gke]]
 - [[patterns/postgres-expand-contract-migrations]]
-- [[patterns/gke-workload-identity]]
-- [[patterns/secret-rotation-without-downtime]]
-- [[patterns/cloud-kms-key-management]]
 - [[runbooks/cloud-sql-ha-failover-recovery]]
+- [[runbooks/cloud-sql-point-in-time-recovery]]
 - [[architecture/backup-architecture-gke-cloud-sql-gcs]]
-- [[architecture/disaster-recovery-tiers-rpo-rto]]
-- [[architecture/secrets-architecture-gcp-and-gke]]
-- [[compliance/encryption-at-rest-and-in-transit-evidence-gcp]]
-- [[learn/gcp-vpc-compute-and-cloud-sql]]

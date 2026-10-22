@@ -186,12 +186,11 @@ Put the quarterly numbers in the [[quarterly-engineering-review]] next to the vu
 
 ## Related
 
-- [[sonarqube-quality-gates]] and [[0016-sonarqube-new-code-gate-blocks-merge]]: the gate champions triage against.
-- [[secret-scanning-pre-commit-and-ci]] and [[leaked-credential-rotation]]: secret findings and the response.
-- [[dependency-update-policy]] and [[vulnerability-management-slas]]: the deadlines champions follow.
+- [[sonarqube-quality-gates]]: the gate champions triage against.
+- [[secret-scanning-pre-commit-and-ci]]: secret findings and the response.
+- [[vulnerability-management-slas]]: the deadlines champions follow.
 - [[platform-threat-modelling]]: the design-time process champions join.
 - [[security-basics-for-devops]]: the first lesson for a new champion.
-- [[career-ladder-devops]] and [[performance-feedback]]: recognising champion work.
+- [[career-ladder-devops]]: recognising champion work.
 - [[rfc-and-design-review-process]]: where champions review design changes.
-- [[inner-source-platform]]: how teams improve the shared defaults.
 - [[sonarqube-vs-semgrep-vs-codeql]]: background on static analysis tools.

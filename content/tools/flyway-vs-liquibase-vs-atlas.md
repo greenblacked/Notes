@@ -19,35 +19,35 @@ draft: false
 > As of 2026-10-21, per each project's repository: the **Flyway** engine is open source under Apache-2.0, and Redgate's Flyway Community and Enterprise editions are separate products, "not part of the Flyway open source project". **Liquibase** Community is under the Functional Source License (FSL-1.1-ALv2), with a commercial edition called Liquibase Secure; it was under Apache-2.0 before, so the licence depends on the version. **Atlas**'s repository is Apache-2.0, but the terms of the distributed binary and which features need a login or a paid plan were not verified. Licence terms are a procurement question: record the decision in [[devops-vendor-and-licence-management]].
 
 > [!info] Not checked against current releases
-> The tools' own documentation sites were not reachable when this note was written; facts were taken from their repositories, the PostgreSQL documentation source and the Cloud SQL Auth Proxy README on 2026-10-21. Not verified: Flyway command names and settings (`info`, `validate`, `migrate`, `baseline`, `repair`, `clean`, `cleanDisabled`, `validateOnMigrate`, the `flyway_schema_history` table) and which features need a paid edition; Liquibase's `update-sql`, `status`, `release-locks`, its `DATABASECHANGELOG` and `DATABASECHANGELOGLOCK` tables and which commands are paid; Atlas's `atlas.sum` file, any dry-run flag, and which analyzers need a login; each tool's switch for running a migration outside a transaction; GitLab CI keyword details; and Cloud SQL IAM database user setup. Run each tool's `--help` and read its docs before relying on a flag.
+> Not checked against the tools' own documentation sites; verify there. Facts were taken from their repositories, the PostgreSQL documentation source and the Cloud SQL Auth Proxy README on 2026-10-21. Not verified: Flyway command names and settings (`info`, `validate`, `migrate`, `baseline`, `repair`, `clean`, `cleanDisabled`, `validateOnMigrate`, the `flyway_schema_history` table) and which features need a paid edition; Liquibase's `update-sql`, `status`, `release-locks`, its `DATABASECHANGELOG` and `DATABASECHANGELOGLOCK` tables and which commands are paid; Atlas's `atlas.sum` file, any dry-run flag, and which analyzers need a login; each tool's switch for running a migration outside a transaction; GitLab CI keyword details; and Cloud SQL IAM database user setup. Run each tool's `--help` and read its docs before relying on a flag.
 
 ## Criteria
 
-| Criterion                | What to look for                                                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| Model                    | Versioned SQL files (apply in order), changelogs (abstract change sets), or declarative (desired schema, tool computes the diff) |
-| Locking                  | Two pipelines must not migrate the same database at once                                                                 |
-| Integrity                | Checksums of applied migrations, so an edited file is caught instead of silently skipped                                  |
-| Preview                  | The exact SQL that will run, reviewable before it runs                                                                   |
-| Undo                     | Down migrations or roll forward; [[0048-rollback-by-redeploying-previous-digest]] says forward only                       |
-| Destructive-change lint  | Catch `DROP COLUMN`, type changes and table-rewriting statements before review                                            |
-| PostgreSQL specifics     | `CREATE INDEX CONCURRENTLY` outside a transaction, `lock_timeout`, `statement_timeout`                                    |
-| CI fit                   | A single binary or image, non-interactive, clear exit codes                                                              |
-| Licence                  | See the warning above                                                                                                    |
+| Criterion               | What to look for                                                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Model                   | Versioned SQL files (apply in order), changelogs (abstract change sets), or declarative (desired schema, tool computes the diff) |
+| Locking                 | Two pipelines must not migrate the same database at once                                                                         |
+| Integrity               | Checksums of applied migrations, so an edited file is caught instead of silently skipped                                         |
+| Preview                 | The exact SQL that will run, reviewable before it runs                                                                           |
+| Undo                    | Down migrations or roll forward; [[0048-rollback-by-redeploying-previous-digest]] says forward only                              |
+| Destructive-change lint | Catch `DROP COLUMN`, type changes and table-rewriting statements before review                                                   |
+| PostgreSQL specifics    | `CREATE INDEX CONCURRENTLY` outside a transaction, `lock_timeout`, `statement_timeout`                                           |
+| CI fit                  | A single binary or image, non-interactive, clear exit codes                                                                      |
+| Licence                 | See the warning above                                                                                                            |
 
 ## At a glance
 
-| Concern               | Flyway                                              | Liquibase                                                  | Atlas                                                               |
-| --------------------- | --------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------- |
-| Licence (repo)        | Apache-2.0 engine; Redgate editions separate        | FSL-1.1-ALv2 Community; commercial Secure edition          | Apache-2.0 repository; binary terms not verified                    |
-| Model                 | Versioned SQL (and Java) migrations                 | Changelogs (XML, YAML, JSON or SQL) of change sets         | Versioned (`migrate`) or declarative (`schema apply`)               |
-| Author writes         | Plain SQL                                           | Change sets, or SQL wrapped as change sets                 | SQL, or an HCL/SQL desired schema that Atlas diffs                  |
-| Preview               | Check the docs for a dry-run in your edition        | `update-sql` (not verified)                                | `schema apply` prints planned changes and asks to apply or abort    |
-| Lint                  | Check the edition table                             | Not verified                                               | `migrate lint` with 50+ analyzers (destructive, data-dependent, locks) |
-| Drift detection       | Check the edition table                             | Check the docs                                             | Advertised in the README                                            |
-| Databases             | 50+ per its README, PostgreSQL included             | Many; check the docs                                       | Many, PostgreSQL included                                           |
-| Release cadence       | Check the release notes                             | Quarterly Community releases from 5.0.2, plus nightlies    | Only the two latest minor CLI versions are supported                |
-| Fits best             | Teams who want plain SQL and minimal abstraction    | Estates with existing changelogs or many database engines | Teams who want lint or declarative schemas and accept the terms     |
+| Concern         | Flyway                                           | Liquibase                                                 | Atlas                                                                  |
+| --------------- | ------------------------------------------------ | --------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Licence (repo)  | Apache-2.0 engine; Redgate editions separate     | FSL-1.1-ALv2 Community; commercial Secure edition         | Apache-2.0 repository; binary terms not verified                       |
+| Model           | Versioned SQL (and Java) migrations              | Changelogs (XML, YAML, JSON or SQL) of change sets        | Versioned (`migrate`) or declarative (`schema apply`)                  |
+| Author writes   | Plain SQL                                        | Change sets, or SQL wrapped as change sets                | SQL, or an HCL/SQL desired schema that Atlas diffs                     |
+| Preview         | Check the docs for a dry-run in your edition     | `update-sql` (not verified)                               | `schema apply` prints planned changes and asks to apply or abort       |
+| Lint            | Check the edition table                          | Not verified                                              | `migrate lint` with 50+ analyzers (destructive, data-dependent, locks) |
+| Drift detection | Check the edition table                          | Check the docs                                            | Advertised in the README                                               |
+| Databases       | 50+ per its README, PostgreSQL included          | Many; check the docs                                      | Many, PostgreSQL included                                              |
+| Release cadence | Check the release notes                          | Quarterly Community releases from 5.0.2, plus nightlies   | Only the two latest minor CLI versions are supported                   |
+| Fits best       | Teams who want plain SQL and minimal abstraction | Estates with existing changelogs or many database engines | Teams who want lint or declarative schemas and accept the terms        |
 
 ## The three tools
 
@@ -179,11 +179,11 @@ It was tested on 2026-10-21 with GNU grep against sample files: a plain expand s
 
 ## Where migrations run
 
-| Option                                  | For                                                                                   | Against                                                                                   |
-| --------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| CI job before the deploy                | Visible in the pipeline, easy to gate on approval, logs next to the change             | The runner needs a network path to the instance and a database identity                  |
-| Kubernetes Job (or Argo CD `PreSync` hook) | Runs inside the VPC with Workload Identity; tied to the release that needs it        | Hook failures are less visible; retries can re-run a half-applied migration; ordering with the app needs care |
-| Application start-up                    | No extra moving parts                                                                 | Every replica races to migrate; a failure becomes a crash loop. Avoid it in production     |
+| Option                                     | For                                                                           | Against                                                                                                       |
+| ------------------------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| CI job before the deploy                   | Visible in the pipeline, easy to gate on approval, logs next to the change    | The runner needs a network path to the instance and a database identity                                       |
+| Kubernetes Job (or Argo CD `PreSync` hook) | Runs inside the VPC with Workload Identity; tied to the release that needs it | Hook failures are less visible; retries can re-run a half-applied migration; ordering with the app needs care |
+| Application start-up                       | No extra moving parts                                                         | Every replica races to migrate; a failure becomes a crash loop. Avoid it in production                        |
 
 Either of the first two is fine. What matters is that exactly one runner migrates a given database at a time, that it uses a short-lived identity, and that the app version being deployed works with the schema both before and after the migration (the expand and contract rule in [[zero-downtime-deployments-kubernetes]]).
 
@@ -236,7 +236,7 @@ check-migrations:
 migrate:production:
   stage: migrate
   image: ${MIGRATE_IMAGE}
-  resource_group: db-orders-production   # one migration job at a time for this database
+  resource_group: db-orders-production # one migration job at a time for this database
   environment:
     name: production
   id_tokens:
@@ -291,16 +291,16 @@ Also check the tool's own status (`flyway info`, Liquibase `history`, `atlas mig
 
 ## Failure modes
 
-| Failure                                   | Symptom                                                         | Prevention and fix                                                                                   |
-| ----------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Lock queue                                | Every query on a table stalls behind a waiting `ALTER`          | `lock_timeout` in the session; retry in a quieter window; find the blocking transaction first         |
-| Half-applied migration                    | A multi-statement migration failed after some statements without a transaction | Keep migrations small; transactional unless they must not be; fix forward with a new version   |
-| Concurrent index inside a transaction     | `CREATE INDEX CONCURRENTLY cannot run inside a transaction block` | Own file, non-transactional setting                                                                 |
-| Invalid index                             | Index exists but is `INVALID`; retries with `IF NOT EXISTS` do nothing | Drop it concurrently and re-run, or `REINDEX INDEX CONCURRENTLY`                               |
-| Checksum mismatch                         | Validation fails on a file that was edited after it was applied | Never edit applied files (the CI check above); if it really was a no-op change, use the tool's repair command after review |
-| Racing pipelines                          | Two jobs migrate the same database                              | `resource_group` in GitLab and the tool's own lock; never migrate from application start-up           |
-| Stale lock                                | Every run waits on a lock row after a crashed job               | Confirm nothing is running, then release it (see the Liquibase warning)                              |
-| Proxy cannot connect                      | Timeouts on `127.0.0.1:5432`                                    | Check `proxy.log`, the Cloud SQL Client role, IAM authentication on the instance, and the network path to the private IP |
+| Failure                               | Symptom                                                                        | Prevention and fix                                                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Lock queue                            | Every query on a table stalls behind a waiting `ALTER`                         | `lock_timeout` in the session; retry in a quieter window; find the blocking transaction first                              |
+| Half-applied migration                | A multi-statement migration failed after some statements without a transaction | Keep migrations small; transactional unless they must not be; fix forward with a new version                               |
+| Concurrent index inside a transaction | `CREATE INDEX CONCURRENTLY cannot run inside a transaction block`              | Own file, non-transactional setting                                                                                        |
+| Invalid index                         | Index exists but is `INVALID`; retries with `IF NOT EXISTS` do nothing         | Drop it concurrently and re-run, or `REINDEX INDEX CONCURRENTLY`                                                           |
+| Checksum mismatch                     | Validation fails on a file that was edited after it was applied                | Never edit applied files (the CI check above); if it really was a no-op change, use the tool's repair command after review |
+| Racing pipelines                      | Two jobs migrate the same database                                             | `resource_group` in GitLab and the tool's own lock; never migrate from application start-up                                |
+| Stale lock                            | Every run waits on a lock row after a crashed job                              | Confirm nothing is running, then release it (see the Liquibase warning)                                                    |
+| Proxy cannot connect                  | Timeouts on `127.0.0.1:5432`                                                   | Check `proxy.log`, the Cloud SQL Client role, IAM authentication on the instance, and the network path to the private IP   |
 
 ## Rollback: forward fix or point-in-time recovery
 
@@ -331,8 +331,6 @@ Every production migration is a production change: apply [[production-change-che
 - [[postgres-connection-pooling-gke]]
 - [[cloud-sql-ha-failover-recovery]]
 - [[backup-architecture-gke-cloud-sql-gcs]]
-- [[gitlab-ci-pipeline-structure]]
-- [[production-change-checklist]]
 
 ## Sources
 
