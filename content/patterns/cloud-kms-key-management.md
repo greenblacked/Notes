@@ -333,6 +333,7 @@ The loop lists every key ring in one location; repeat it per location. Run the c
 - [[terraform-module-and-state-layout]]
 - [[gcp-organization-policy-guardrails]]
 - [[backup-architecture-gke-cloud-sql-gcs]]
+- [[0059-cmek-where-data-classification-requires-it]]
 - [[gcp-audit-logs-siem]]
 - [[policy-rollout-audit-to-enforce]]
 - [[access-reviews-gcp-and-gke]]

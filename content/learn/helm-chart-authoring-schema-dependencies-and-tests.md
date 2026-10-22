@@ -456,7 +456,7 @@ Clean up: `helm uninstall web -n helm-lab; helm uninstall web2 -n helm-lab2; kin
 
 ## Next steps
 
-Next lesson: continue the delivery track with [[learn/gitlab-ci-rules-dag-matrix-and-includes|Delivery 06: GitLab CI beyond the first pipeline]], where a pipeline can lint, test and publish a chart like this one, or return to [[learn/index|the learning path]]. Previous lesson: [[learn/rbac-roles-bindings-and-least-privilege|Kubernetes 07: RBAC and least privilege]].
+Next lesson: [[learn/kubernetes-storage-volumes-pvcs-and-statefulsets|Kubernetes 09: Storage]], or return to [[learn/index|the learning path]]. Later, in [[learn/gitlab-ci-rules-dag-matrix-and-includes|Delivery 06: GitLab CI beyond the first pipeline]], a pipeline can lint, test and publish a chart like this one. Previous lesson: [[learn/rbac-roles-bindings-and-least-privilege|Kubernetes 07: RBAC and least privilege]].
 
 To go deeper:
 

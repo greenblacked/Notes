@@ -14,7 +14,10 @@
         "linux-processes-memory-and-disk",
         "linux-services-packages-and-scheduled-jobs"
       ],
-      "deeper": ["linux-performance-triage-with-mpstat-pidstat-sar-and-psi"]
+      "deeper": [
+        "linux-performance-triage-with-mpstat-pidstat-sar-and-psi",
+        "linux-disks-filesystems-and-lvm"
+      ]
     },
     {
       "title": "Stage 2: Networking",
@@ -63,7 +66,11 @@
       ],
       "deeper": [
         "rbac-roles-bindings-and-least-privilege",
-        "helm-chart-authoring-schema-dependencies-and-tests"
+        "helm-chart-authoring-schema-dependencies-and-tests",
+        "kubernetes-storage-volumes-pvcs-and-statefulsets",
+        "kubernetes-scheduling-affinity-taints-and-draining",
+        "kubernetes-network-policies-from-zero",
+        "kubernetes-jobs-and-cronjobs"
       ]
     },
     {
@@ -74,7 +81,7 @@
         "gcp-vpc-compute-and-cloud-sql",
         "gke-for-beginners"
       ],
-      "deeper": []
+      "deeper": ["gcp-keyless-ci-with-workload-identity-federation"]
     },
     {
       "title": "Stage 8: CI/CD and infrastructure as code",
@@ -90,13 +97,16 @@
         "jenkins-agents-configuration-as-code-and-shared-libraries",
         "artifactory-repositories-access-and-retention",
         "sonarqube-basics-first-scan-and-triage",
-        "terraform-for-each-lifecycle-and-tests"
+        "terraform-for-each-lifecycle-and-tests",
+        "gitops-with-argo-cd",
+        "spinnaker-basics-applications-pipelines-and-judgment",
+        "chef-basics-cookbooks-test-kitchen-and-inspec"
       ]
     },
     {
       "title": "Stage 9: Security",
       "core": ["security-basics-for-devops"],
-      "deeper": []
+      "deeper": ["supply-chain-sboms-signing-and-verification"]
     },
     {
       "title": "Stage 10: Observability and incidents",
@@ -107,7 +117,7 @@
         "troubleshooting-method",
         "on-call-incidents-and-postmortems"
       ],
-      "deeper": ["promql-for-alert-rules-and-recording-rules"]
+      "deeper": ["promql-for-alert-rules-and-recording-rules", "slis-slos-and-error-budgets"]
     },
     {
       "title": "Stage 11: Next level",

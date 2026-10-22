@@ -5,7 +5,7 @@ tags:
   - patterns
   - meta
 created: 2026-10-10
-modified: 2026-10-19
+modified: 2026-10-21
 draft: false
 ---
 
@@ -29,6 +29,10 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[artifactory-access-tokens-and-oidc-for-ci|Scoped Artifactory access for CI with access tokens and OIDC]]: replace shared Artifactory passwords in CI with short-lived scoped access tokens or OIDC federation from GitLab CI and Jenkins, with permission targets per repository.
 - [[buildkit-registry-cache-in-ci|BuildKit registry cache in CI]]: export and import BuildKit layer cache through a registry in GitLab CI and Jenkins for fast image builds, without letting untrusted branches poison the cache.
 - [[gitlab-ci-components-and-includes|Reusable GitLab CI components and includes with versioned inputs]]: share pipeline logic across projects with include, CI/CD components and the catalog, using typed inputs and pinned semver versions.
+- [[multi-arch-image-builds|Multi-architecture container images in GitLab CI and Jenkins]]: build amd64 and arm64 images on native rootless runners, merge them into one image index, sign it, and deploy it by digest to mixed GKE pools.
+- [[gitlab-merge-trains-and-merged-results|Merged results pipelines and merge trains in GitLab]]: keep the default branch green under many concurrent merge requests by testing merged results and queueing merges on a train, with rules and costs.
+- [[gitlab-review-environments-on-gke|Review environments per merge request on GKE]]: give every merge request its own isolated, quota-bound namespace on GKE with a URL, automatic stop, a scheduled janitor and Spot capacity.
+- [[private-ca-and-egress-proxy-trust|Private CA trust and egress proxies for containers, CI jobs and runtimes]]: make OS stores, Java, Python, Node, Go and CI runners trust an internal CA and use an egress proxy correctly, without turning off TLS verification.
 
 ## Kubernetes and GKE
 
@@ -50,6 +54,9 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[pod-disruption-budgets-for-stateless-services|PodDisruptionBudgets for stateless services]]: choose minAvailable or maxUnavailable, set the unhealthy pod eviction policy, and avoid PDBs that deadlock GKE upgrades and node drains.
 - [[priority-classes-and-preemption|Pod priority classes and preemption]]: protect critical workloads with tiered PriorityClasses, keep batch jobs non-preempting, and avoid preemption storms on GKE Standard and Autopilot.
 - [[topology-spread-constraints-gke|Spreading stateless replicas across zones and nodes on GKE]]: use topologySpreadConstraints to spread replicas across zones and nodes, pick whenUnsatisfiable, and combine spread with PDBs, HPA and regional node pools.
+- [[patterns/kubernetes-jobs-and-cronjobs|Reliable Kubernetes Jobs and CronJobs]]: configure Jobs and CronJobs so batch work retries sensibly, never runs twice by surprise, finishes with sidecars, and alerts on failed or missed runs.
+- [[gke-spot-vms-for-workloads|Running stateless and batch workloads on GKE Spot VMs]]: which workloads fit Spot VMs on GKE, how to build tainted Spot pools with an on-demand fallback, and how preemption, PDBs and the autoscaler behave.
+- [[crd-lifecycle-with-helm-and-argocd|CRD lifecycle with Helm and Argo CD]]: install, upgrade, version and protect CustomResourceDefinitions with Helm and Argo CD, so operator upgrades never delete or strand custom resources.
 
 ## Infrastructure as code
 
@@ -57,6 +64,8 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[terraform-testing|Testing Terraform modules, static checks, terraform test and Terratest]]: three levels of Terraform module tests, from fmt and tflint to mocked terraform test runs and Terratest in a sandbox project, and when each one pays off.
 - [[terraform-plan-policy-checks|Policy checks on Terraform plans]]: evaluate Terraform plan JSON with Conftest and static scanners in GitLab CI, and treat plan files as secrets, so risky GCP changes are stopped before apply.
 - [[terraform-module-versioning|Terraform module versioning and upgrades]]: version shared Terraform modules with semver tags, pin consumers and providers, and roll module upgrades through environments without surprise plans.
+- [[terraform-gcp-iam-member-binding-policy|GCP IAM in Terraform without lockouts: member, binding and policy resources]]: when to use the google_*_iam_member, _binding and _policy resources, how to stop them fighting, and how to keep the Terraform identity from locking itself out.
+- [[secrets-out-of-terraform-state|Keeping secrets out of Terraform state]]: design Terraform on GCP so passwords and keys never land in state or plan files, protect the state bucket anyway, and clean up secrets that are already there.
 
 ## Data
 
@@ -86,11 +95,13 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 ## Observability
 
 - [[slo-burn-rate-alerting|SLO burn rate alerting]]: define SLIs and SLOs for HTTP services and alert on error budget burn with multi-window, multi-burn-rate rules in Prometheus and Cloud Monitoring.
+- [[synthetic-monitoring-blackbox-and-uptime-checks|Synthetic monitoring with blackbox exporter and Cloud Monitoring uptime checks]]: probe services from the user's side with blackbox exporter and Cloud Monitoring uptime checks, and alert on failures and certificate expiry without noise.
 
 ## Reliability and performance
 
 - [[timeouts-retries-load-shedding|Timeouts, retry budgets and load shedding]]: client and server mechanics that stop a partial failure from cascading, with Go examples, retry budgets, load shedding, alerts and a k6 overload test.
 - [[load-and-performance-testing|Load and performance testing for services]]: plan and run smoke, load, stress, soak and spike tests with k6 or Locust, set SLO-based pass criteria and turn the results into a documented capacity limit.
+- [[grpc-load-balancing-on-kubernetes|gRPC load balancing on Kubernetes and GKE]]: why gRPC over a ClusterIP Service pins traffic to a few Pods, and how to fix it with client-side balancing, connection age limits or an L7 proxy.
 
 ## Shape of a pattern note
 

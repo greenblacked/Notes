@@ -407,7 +407,7 @@ Clean up: `rm -rf ~/promql-lab`, and stop the Prometheus container if you starte
 
 ## Next steps
 
-Next lesson: [[learn/on-call-incidents-and-postmortems|Incidents 02: Your first on-call shift, incidents and blameless postmortems]] if you have not done it, and then burn-rate alerting in [[patterns/slo-burn-rate-alerting]]. Previous lessons: [[learn/first-prometheus-alert|Observability 03]] for alert rules and [[learn/observability-signals-and-dashboards|Observability 01]] for the signals. For hosts, the saturation signals you can alert on come from [[learn/linux-performance-triage-with-mpstat-pidstat-sar-and-psi|Linux 06]], including pressure stall information.
+Next lesson: [[learn/slis-slos-and-error-budgets|Observability 05: SLIs, SLOs and error budgets]], which ends in burn-rate alerting (see also [[patterns/slo-burn-rate-alerting]]). If you have not done it, do [[learn/on-call-incidents-and-postmortems|Incidents 02: Your first on-call shift, incidents and blameless postmortems]] too. Previous lessons: [[learn/first-prometheus-alert|Observability 03]] for alert rules and [[learn/observability-signals-and-dashboards|Observability 01]] for the signals. For hosts, the saturation signals you can alert on come from [[learn/linux-performance-triage-with-mpstat-pidstat-sar-and-psi|Linux 06]], including pressure stall information.
 
 To go deeper:
 

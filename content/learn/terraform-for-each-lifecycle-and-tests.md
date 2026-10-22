@@ -570,7 +570,7 @@ Use a scratch directory and the sandbox project. Steps with `plan` create nothin
 
 ## Next steps
 
-Next lesson: [[learn/promql-for-alert-rules-and-recording-rules|Observability 04: PromQL for alert rules]], or go back to the main path via [[learn/index|the learning path]]. Previous lessons: [[learn/terraform-state-modules-and-pipelines|Delivery 05]] for state, modules and pipelines, and [[learn/terraform-basics-on-gcp|Delivery 04]] for the basics.
+Next lesson: [[learn/gitops-with-argo-cd|Delivery 11: GitOps with Argo CD]], or go back to the main path via [[learn/index|the learning path]]. Previous lessons: [[learn/terraform-state-modules-and-pipelines|Delivery 05]] for state, modules and pipelines, and [[learn/terraform-basics-on-gcp|Delivery 04]] for the basics.
 
 To go deeper:
 

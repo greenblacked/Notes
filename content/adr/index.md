@@ -5,7 +5,7 @@ tags:
   - adr
   - meta
 created: 2026-10-10
-modified: 2026-10-19
+modified: 2026-10-21
 draft: false
 ---
 
@@ -88,3 +88,14 @@ An ADR has exactly one status at a time, written in lowercase in the `status` fr
 | [[0049-feature-flags-with-openfeature\|0049]]                       | OpenFeature is the feature-flag API, and the provider is still open                 |
 | [[0050-incident-severity-levels-and-roles\|0050]]                   | Incidents use SEV1 to SEV4 with fixed commander, comms and scribe roles             |
 | [[0051-backups-proven-by-quarterly-restore-drills\|0051]]           | A backup counts only after a timed quarterly restore drill                          |
+| [[0052-workload-identity-for-gke-pods\|0052]]                       | Pods reach Google APIs only through Workload Identity Federation for GKE            |
+| [[0053-production-and-non-production-never-share-a-cluster\|0053]]  | Production and non-production never share a cluster or a project                    |
+| [[0054-gke-release-channels-and-maintenance-policy\|0054]]          | GKE release channel per environment, with maintenance windows and exclusions        |
+| [[0055-private-gke-control-plane-and-egress\|0055]]                 | Private GKE nodes, a restricted control-plane endpoint and controlled egress        |
+| [[0056-vm-access-through-os-login-and-iap\|0056]]                   | VM shell access through OS Login and IAP, no metadata SSH keys or external IPs      |
+| [[0057-just-in-time-production-access\|0057]]                       | No standing human write access to production; elevation is just in time             |
+| [[0058-vpc-service-controls-for-production-data\|0058]]             | VPC Service Controls perimeter around production data projects (proposed)           |
+| [[0059-cmek-where-data-classification-requires-it\|0059]]           | Customer-managed encryption keys only where the data class requires them            |
+| [[0060-renovate-for-automated-dependency-updates\|0060]]            | Renovate opens dependency, image digest and Terraform provider updates              |
+| [[0061-jenkins-controllers-as-code-with-ephemeral-agents\|0061]]    | Jenkins controllers run from configuration as code with ephemeral pod agents        |
+| [[0062-helm-charts-rendered-by-argo-cd\|0062]]                      | Applications are Helm charts rendered by Argo CD; Kustomize only patches            |

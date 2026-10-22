@@ -5,7 +5,7 @@ tags:
   - compliance
   - meta
 created: 2026-10-17
-modified: 2026-10-19
+modified: 2026-10-21
 draft: false
 ---
 
@@ -17,6 +17,9 @@ These notes cover how a DevOps platform produces evidence for the controls it is
 - [[audit-evidence-collection-and-retention|Audit evidence collection and retention for CI/CD and cloud]]: what evidence to keep from Git, CI, Argo CD, GKE and Cloud Audit Logs, how long, how to make it tamper-evident and how to retrieve it for an audit period.
 - [[separation-of-duties-in-deployments|Separation of duties in deployments]]: standard for who may author, review, approve and deploy, and how to enforce it in GitLab, Jenkins and Argo CD, with break-glass and a small-team compensating control.
 - [[change-advisory-in-continuous-delivery|Change advisory in a continuous delivery world]]: replace a weekly change advisory board with risk tiers, pre-approved standard changes and merge-request approvals that produce the same evidence.
+- [[out-of-band-change-detection-gcp-gke|Detecting changes made outside the pipeline on GCP and GKE]]: find production changes on GCP and GKE made by anyone other than the approved CI and GitOps identities, classify them, and keep the evidence.
+- [[gitlab-compliance-frameworks-and-security-policies|Enforcing required CI jobs with GitLab compliance frameworks and security policies]]: stop project maintainers from removing required scan and evidence jobs, using GitLab pipeline execution, scan execution and merge request approval policies.
+- [[jenkins-audit-trail-and-configuration-evidence|Jenkins audit trail and configuration evidence]]: make Jenkins auditable with configuration in Git, Audit Trail and Job Configuration History, logs shipped off the controller and evidence kept outside it.
 
 ## Access and hardening
 
@@ -24,11 +27,19 @@ These notes cover how a DevOps platform produces evidence for the controls it is
 - [[cis-benchmarks-with-kube-bench|CIS Kubernetes benchmarks with kube-bench]]: run CIS Kubernetes benchmark checks with kube-bench on GKE nodes, read the results, record exceptions and keep versioned evidence.
 - [[gcp-organization-policy-guardrails|GCP organization policy guardrails as code]]: manage a baseline of GCP organization policy constraints in Terraform, with inheritance, custom constraints, dry-run rollout and a recorded exception path.
 - [[privileged-access-just-in-time-gcp-gke|Privileged access with just-in-time elevation on GCP and GKE]]: replace standing Owner and cluster-admin with time-boxed, approved elevation on GCP and GKE, keep break-glass as a logged exception.
+- [[leaver-credential-revocation-devops-tools|Leaver offboarding for credentials the identity provider does not control]]: find, revoke and verify a leaver's tokens and keys in GitLab, Jenkins, Artifactory, SonarQube, GCP, GKE and Chef, and record a timestamp per system.
+- [[data-classification-tags-gcp-and-kubernetes|Data classification with GCP resource tags and Kubernetes labels]]: make data classes machine-readable with GCP Resource Manager tags and Kubernetes namespace labels, and drive org policy, IAM and admission rules from them.
 
 ## Policy and exceptions
 
 - [[policy-exception-and-waiver-process|Policy exception and waiver process]]: request, approve, time-box, record and enforce policy exceptions in code, so a waiver expires by default instead of becoming permanent.
 - [[vulnerability-exception-register|Vulnerability exception register and reconciliation]]: keep accepted vulnerabilities in one register in Git, reconcile it with scanner findings on a schedule, and fail builds on expired entries.
+
+## Continuous monitoring and assurance
+
+- [[continuous-control-monitoring-gcp-and-gke|Continuous control monitoring on GCP and GKE with Cloud Asset Inventory and Security Command Center]]: check GCP and GKE configuration controls every day with Cloud Asset Inventory exports, BigQuery and Security Command Center, and keep dated results as evidence.
+- [[penetration-testing-gcp-and-gke|Penetration tests on GCP and GKE: scope, rules of engagement and retest evidence]]: scope, authorise, prepare, run and close a penetration test of a GCP and GKE platform, with time-bound tester access and a retest evidence package.
+- [[vendor-soc2-report-review-for-devops-saas|Reviewing a vendor SOC 2 report for DevOps SaaS tools]]: how to read a SaaS vendor's SOC 2 report as a platform engineer, covering scope, opinion, exceptions, CUECs and carve-outs, and how to record the review.
 
 ## Supply chain
 
@@ -42,9 +53,12 @@ These notes cover how a DevOps platform produces evidence for the controls it is
 - [[pci-dss-and-gdpr-for-devops-logs-and-data|PCI DSS and GDPR touch points for DevOps, logs, personal data and retention]]: where DevOps tooling touches cardholder or personal data, and how to keep it out, redact it before storage, scope environments and set retention.
 - [[encryption-at-rest-and-in-transit-evidence-gcp|Encryption at rest and in transit on GCP: what to prove]]: turn encryption claims on GCP into repeatable evidence: default and CMEK coverage per service, TLS enforcement and org policy, by gcloud.
 - [[legal-hold-for-logs-and-artifacts|Legal hold for logs and artifacts without breaking retention]]: place, track and release legal holds on Cloud Storage, log buckets and Artifactory without breaking normal retention and cleanup.
+- [[data-deletion-and-crypto-shredding-gcp|Proving data deletion on GCP across backups, logs and artifacts, with crypto-shredding]]: trace where deleted data still lives on GCP, delete it or crypto-shred it with per-tenant Cloud KMS keys, and keep evidence that it is gone.
+- [[gcp-provider-access-controls-and-data-residency|Provider access and data residency on GCP: Access Transparency, Access Approval and Assured Workloads]]: show whether Google staff can reach your data and where it lives, with Access Transparency, Access Approval, Assured Workloads and location evidence.
 
 ## Frameworks for engineering teams
 
+- [[common-control-framework-for-platform-teams|One control set for many frameworks: a common control framework for platform teams]]: keep one platform control set with stable IDs in Git, map it to SOC 2, ISO 27001, NIS2, DORA and PCI DSS, and collect each piece of evidence once.
 - [[soc2-for-ci-cd-controls|SOC 2 controls for CI/CD pipelines]]: map SOC 2 Trust Services Criteria for change, access and monitoring to CI/CD evidence, and keep Type II evidence for the whole audit period.
 - [[iso-27001-annex-a-for-platform-teams|ISO 27001 Annex A controls for platform teams]]: which ISO/IEC 27001:2022 Annex A controls a platform team owns, who owns each, and the Git, CI, GKE and Terraform evidence behind them.
 - [[nis2-basics-for-engineering-teams|NIS2 basics for engineering teams]]: what the NIS2 Directive asks of engineering teams: Article 21 risk measures and Article 23 reporting, mapped to evidence a platform already has.

@@ -8,7 +8,7 @@ import path from "./learn-path.json"
  * Stage and lesson navigation for the pages under learn/ (not the index). The order lives in
  * learn-path.json, which a script test keeps equal to the lists on the learning path index.
  * A core lesson shows its stage, "Lesson k of 43" and the previous and next core lesson; a
- * going-deeper lesson shows "Optional lesson k of 10" and walks the optional chain.
+ * going-deeper lesson shows "Optional lesson k of 21" and walks the optional chain.
  */
 type Stage = { title: string; core: string[]; deeper: string[] }
 const stages: Stage[] = path.stages

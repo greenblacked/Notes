@@ -9,7 +9,7 @@ tags:
   - gcp
   - reliability
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-10-22
 draft: false
 ---
 
@@ -191,14 +191,14 @@ If you kept the data, restore the reclaim policy and confirm a Pod can mount a f
 
 ## Troubleshooting
 
-| Symptom                                         | Likely cause and fix                                                                                      |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `Used By` shows a Pod you cannot find           | A Completed or Terminating Pod, or a Pod in another namespace for a shared PV. Use the `jq` query.        |
-| PVC clears but PV stays `Released`              | Reclaim policy `Retain`, by design. Delete the PV and disk deliberately once data is safe.                |
-| Disk still attached to a deleted node           | Stale attachment. Wait for the detach controller or delete the stale `VolumeAttachment` as a last resort. |
-| PVC recreated immediately after delete          | A StatefulSet template or GitOps controller recreates it. Remove the owner or sync setting first.         |
-| New Pod stuck `ContainerCreating` after release | Multi-attach error. Confirm the old attachment is gone; see the Pod events.                               |
-| Snapshot controller finalizer blocks            | A `VolumeSnapshot` still references the claim. Delete or detach the snapshot objects first.               |
+| Symptom                                         | Likely cause and fix                                                                                                                                                                                                                                                                                                                                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Used By` shows a Pod you cannot find           | A Completed or Terminating Pod, or a Pod in another namespace for a shared PV. Use the `jq` query.                                                                                                                                                                                                                                                                              |
+| PVC clears but PV stays `Released`              | Reclaim policy `Retain`, by design. Delete the PV and disk deliberately once data is safe.                                                                                                                                                                                                                                                                                      |
+| Disk still attached to a deleted node           | Stale attachment. Wait for the detach controller or delete the stale `VolumeAttachment` as a last resort.                                                                                                                                                                                                                                                                       |
+| PVC recreated immediately after delete          | A StatefulSet template or GitOps controller recreates it. Remove the owner or sync setting first.                                                                                                                                                                                                                                                                               |
+| New Pod stuck `ContainerCreating` after release | The disk is still attached to the old node. The widely quoted older message is "Multi-Attach error for volume"; current Kubernetes reports reason `FailedAttachVolume` with "Waiting for detach" and "already exclusively attached" or "already used by pod(s)" ([[kubernetes-storage-volumes-pvcs-and-statefulsets]]). Confirm the old attachment is gone; see the Pod events. |
+| Snapshot controller finalizer blocks            | A `VolumeSnapshot` still references the claim. Delete or detach the snapshot objects first.                                                                                                                                                                                                                                                                                     |
 
 ## Related
 

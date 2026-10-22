@@ -246,6 +246,7 @@ Expected: the first command prints nothing, the second shows `enablePrivateNodes
 - [[architecture/shared-vpc-hub-and-spoke]]: the VPC, subnets and ranges these clusters use.
 - [[architecture/zero-trust-access-iap-and-vpc-service-controls]]: who may reach admin endpoints and where API data may flow.
 - [[patterns/gitlab-runners-on-gke]]: runners that can reach a private control plane.
+- [[adr/0055-private-gke-control-plane-and-egress]]: the decision record for private control planes and egress.
 - [[patterns/kubernetes-network-policies]]: egress rules inside the cluster.
 - [[runbooks/gke-cluster-upgrade]]: upgrades with private nodes and authorised networks.
 - [[runbooks/network-troubleshooting-dns-mtu-tls-load-balancers]]: debugging when traffic does not flow.

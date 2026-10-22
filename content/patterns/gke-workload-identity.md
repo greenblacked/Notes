@@ -244,6 +244,7 @@ kubectl get serviceaccount "${KSA}" --namespace "${NAMESPACE}" -o yaml
 ## Related
 
 - [[0001-gitops-with-argocd]]: apply the ServiceAccount and annotation through Git rather than by hand.
+- [[0052-workload-identity-for-gke-pods]]: the decision that GKE pods authenticate this way.
 - [[external-secrets-with-secret-manager]]: use this identity to read Secret Manager instead of mounting keys.
 - [[kubernetes-network-policies]]: egress rules must still allow the metadata server.
 - [[leaked-credential-rotation]]: what to do if a service account key already leaked, the case this pattern avoids.

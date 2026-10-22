@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - gke
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-10-22
 draft: false
 ---
 
@@ -86,14 +86,16 @@ stage('Sign image') {
   steps {
     sh '''
       set -euo pipefail
-      # --tlog-upload=false keeps the entry out of public Rekor (flag name: check for your pinned cosign version)
-      cosign sign --yes --tlog-upload=false --key "${KMS_KEY}" "${IMAGE_REPO}@${IMAGE_DIGEST}"
+      # cosign v3: a signing config with no public services keeps the entry out of public Rekor.
+      # The v2-era --tlog-upload=false fails in v3 when a signing config is in use.
+      cosign signing-config create --no-default-fulcio --no-default-oidc --no-default-rekor --no-default-tsa --out signing-config.json
+      cosign sign --yes --signing-config signing-config.json --key "${KMS_KEY}" "${IMAGE_REPO}@${IMAGE_DIGEST}"
     '''
   }
 }
 ```
 
-Without the log entry, verification must skip the transparency log check: `cosign verify --key gcpkms://... --insecure-ignore-tlog=true`, or `rekor: {ignoreTlog: true}` on a Kyverno `keys` attestor. Check both option names against your versions.
+This follows the cosign v3 behaviour recorded in [[supply-chain-sboms-signing-and-verification]] (lab run with cosign v3.1.4 and a local key file, not a KMS key; the KMS path is not verified). On cosign v2 the equivalent was `--tlog-upload=false`; read `cosign sign --help` for the version you pin. Without the log entry, verification must skip the transparency log check: `cosign verify --key gcpkms://... --insecure-ignore-tlog=true`, or `rekor: {ignoreTlog: true}` on a Kyverno `keys` attestor. Check both option names against your versions.
 
 Keep signing in a stage or an agent pool that ordinary builds cannot influence, as discussed in [[compliance/slsa-build-provenance]].
 
