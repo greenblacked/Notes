@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ### Fixed
 
-- Changing the theme while scrolled no longer makes the top bar jump: the section row keeps sliding when it tucks or comes back during the switch (a scroll right after the tap, or a tap while it still slides), and on notes with diagrams it stays put while Mermaid redraws them (the diagrams keep their height until the new drawing is in, and the row ignores the page moving meanwhile), on phones, tablets and desktop.
+- Changing the theme while scrolled no longer makes the top bar jump: the section row keeps sliding when it tucks or comes back during the switch (a scroll right after the tap, or a tap while it still slides), and on notes with diagrams it stays put while Mermaid redraws them (the diagrams keep their height until the new drawing is in, also when the theme is switched again before it is), while a scroll by the reader in that time still tucks the row or brings it back at once, on phones, tablets and desktop.
 
 ### Changed
 

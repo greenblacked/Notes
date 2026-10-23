@@ -198,11 +198,13 @@ test("theme switch: script feature-detects the API, respects reduced motion, no 
 })
 
 test("theme switch: diagrams keep their height while Mermaid redraws them", () => {
-  // The lock is taken in a themechange listener registered at load (before Mermaid's own), and
-  // the tuck ignores scroll moves while it holds.
+  // The lock is taken in a themechange listener registered at load (before Mermaid's own). The
+  // page cannot move while it holds, so the tuck follows every scroll; it only takes the move that
+  // letting go may cause (scroll anchoring) as the page's.
   assert.match(topBar, /addEventListener\("themechange", \(\) => \{\s*lockMermaidHeights\(\)/)
-  assert.match(topBar, /if \(layoutShifting\(\)\) \{/)
-  assert.match(topBar, /querySelector\("svg"\)/)
+  assert.match(topBar, /if \(takeLayoutShift\(y - state\.lastY\)\) \{/)
+  assert.ok(!topBar.includes("layoutShifting"), "scrolls during the lock are the reader's")
+  assert.match(topBar, /querySelector\(":scope > svg"\)/, "a finished drawing only")
   assert.match(
     topBar,
     /querySelectorAll<HTMLElement>\("\.center code\.mermaid"\)/,
@@ -210,9 +212,14 @@ test("theme switch: diagrams keep their height while Mermaid redraws them", () =
   )
   assert.match(
     topBar,
-    /if \(!code\.querySelector\("svg"\)\) continue/,
+    /const svg = drawnSvg\(code\)\s*if \(!svg\) continue/,
     "never waits on an unrendered block",
   )
   assert.match(topBar, /"prenav", \(\) => \{\s*mermaidLock\?\.release\(true\)/)
+  assert.match(
+    topBar,
+    /if \(mermaidLock\) \{\s*mermaidLock\.rearm\(\)/,
+    "a second switch keeps the lock until the latest redraw",
+  )
   assert.match(topBar, /setTimeout\(\(\) => release\(\), 3000\)/, "a failed redraw lets go")
 })
