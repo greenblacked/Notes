@@ -212,6 +212,7 @@ const BAR = ".page > #quartz-body > .sidebar.left"
 const SLIDE = ["bottom::after", "bottom::before", "transform"]
 type Untuck = { switching: boolean; running: string[] }
 type TuckWindow = Window & { __tuck: () => string[]; __untuck: Promise<Untuck> }
+type SlideWindow = TuckWindow & { __ended: string[]; __cancelled: string[] }
 
 function installTuckProbe() {
   ;(window as unknown as TuckWindow).__tuck = () => {
@@ -285,11 +286,13 @@ for (const motion of [true, false]) {
           isMobile,
         }) => {
           await page.evaluate(() => {
-            const w = window as unknown as TuckWindow & { requestIdleCallback: () => number }
+            const w = window as unknown as SlideWindow & { requestIdleCallback: () => number }
             // Keep .theme-switching on for the whole test, whatever the frame timing: the class
             // is taken off when the page is idle, which never comes here (Safari has no idle
             // callback and falls back to a timer, so this also hides that timer).
             w.requestIdleCallback = () => 0
+            w.__ended = []
+            w.__cancelled = []
             w.__untuck = new Promise<Untuck>((resolve) => {
               // Bubble phase on window: after the toggle's own listeners (on the cross-fade path,
               // the click replayed inside the view transition), so .theme-switching is on.
@@ -301,12 +304,35 @@ for (const motion of [true, false]) {
                   new MutationObserver((_, observer) => {
                     if (root.hasAttribute("data-bar-tucked")) return
                     observer.disconnect()
-                    requestAnimationFrame(() =>
-                      resolve({
-                        switching: on && root.classList.contains("theme-switching"),
-                        running: w.__tuck(),
-                      }),
-                    )
+                    // The slide's own events from here on: each part must run to its end and
+                    // none be cancelled. Unlike a look one frame later, they do not depend on
+                    // how many frames the engine paints during the switch (headless WebKit
+                    // paints few, and a 260ms slide can be over before the next one).
+                    const bar = document.querySelector<HTMLElement>(
+                      ".page > #quartz-body > .sidebar.left",
+                    )!
+                    const links = bar.querySelector(".section-row-links")!
+                    const name = (e: TransitionEvent) =>
+                      (e.target === links && e.propertyName === "transform") ||
+                      (e.target === bar &&
+                        (e.pseudoElement === "::before" || e.pseudoElement === "::after") &&
+                        e.propertyName === "bottom")
+                        ? `${e.propertyName}${e.pseudoElement}`
+                        : null
+                    bar.addEventListener("transitionend", (e) => {
+                      const n = name(e)
+                      if (n) w.__ended.push(n)
+                    })
+                    bar.addEventListener("transitioncancel", (e) => {
+                      const n = name(e)
+                      if (n) w.__cancelled.push(n)
+                    })
+                    // Read in the same task as the untuck: getAnimations() applies the pending
+                    // style change first, so the slide is there now, whatever the frame timing.
+                    resolve({
+                      switching: on && root.classList.contains("theme-switching"),
+                      running: w.__tuck(),
+                    })
                   }).observe(root, { attributes: true, attributeFilter: ["data-bar-tucked"] })
                   window.scrollBy({ top: -40, behavior: "instant" })
                 },
@@ -315,13 +341,20 @@ for (const motion of [true, false]) {
             })
           })
           await tapToggle(page, isMobile)
-          const r = await page.evaluate(() => (window as unknown as TuckWindow).__untuck)
+          const r = await page.evaluate(() => (window as unknown as SlideWindow).__untuck)
           expect(r.switching, "the row must come back while the switch is still on").toBe(true)
           expect(r.running).toEqual(motion ? SLIDE : [])
           await expect(page.locator("html")).not.toHaveAttribute("saved-theme", start.theme)
           await expect(page.locator(`${BAR} .section-row-links`)).toHaveCSS("transform", "none", {
             timeout: 2_000,
           })
+          // It slid all the way: every part ran to its end, none was cut short.
+          await expect
+            .poll(() => page.evaluate(() => [...(window as unknown as SlideWindow).__ended].sort()))
+            .toEqual(motion ? SLIDE : [])
+          expect(await page.evaluate(() => (window as unknown as SlideWindow).__cancelled)).toEqual(
+            [],
+          )
         })
 
         test("a slide under way runs on through the switch", async ({ page, isMobile }) => {
@@ -346,22 +379,27 @@ for (const motion of [true, false]) {
 // position; the browser may move the scroll position to compensate (scroll anchoring). That move
 // is not a scroll by the reader, so the section row must stay as it is.
 const diagramPage = "/patterns/gke-blue-green-releases"
+type DiagramWindow = Window & { __drawn: (Element | null)[]; __log: string[]; __mid: boolean }
 
-test("the section row stays put while the diagrams are redrawn for a new theme", async ({
-  page,
-  isMobile,
-}) => {
-  test.skip((page.viewportSize()?.height ?? 0) < 30 * 16, "the bar is not sticky under 30rem")
+// A finished diagram's SVG is a direct child of its block. While Mermaid draws, the block holds the
+// source text or a temporary wrapper with the SVG under construction, so `code svg` alone does not
+// say that a drawing is done.
+async function openDiagramPage(page: Page) {
   await page.goto(diagramPage)
   await page.waitForLoadState("networkidle")
   await page.waitForFunction(
     () =>
-      [...document.querySelectorAll(".center code.mermaid")].every((el) => el.querySelector("svg")),
+      [...document.querySelectorAll(".center code.mermaid")].every((el) =>
+        el.querySelector(":scope > svg"),
+      ),
     undefined,
     { timeout: 15_000 },
   )
   await expect(page.locator("html")).toHaveClass(/motion-ready/)
-  // Scroll to 300px past the first diagram, where the row is tucked.
+}
+
+// Scrolls to 300px past the first diagram, where the row is tucked, and lets the slide end.
+async function scrollPastDiagram(page: Page) {
   await page.evaluate(() => {
     const code = document.querySelector(".center code.mermaid")!
     const r = (code.closest("pre") ?? code).getBoundingClientRect()
@@ -369,27 +407,145 @@ test("the section row stays put while the diagrams are redrawn for a new theme",
   })
   await expect(page.locator("html")).toHaveAttribute("data-bar-tucked", /.*/)
   await page.waitForTimeout(600)
-  const before = await page.evaluate(() => scrollY)
-  await page.evaluate(() => {
-    const w = window as unknown as { __log: string[] }
+}
+
+// Notes the finished SVGs now (none in a block that is being drawn); redrawn() then waits until
+// every block holds a finished SVG other than the noted one.
+const markDrawn = (page: Page) =>
+  page.evaluate(() => {
+    ;(window as unknown as DiagramWindow).__drawn = [
+      ...document.querySelectorAll(".center code.mermaid"),
+    ].map((c) => c.querySelector(":scope > svg"))
+  })
+const redrawn = (page: Page) =>
+  page.waitForFunction(
+    () => {
+      const before = (window as unknown as DiagramWindow).__drawn
+      return [...document.querySelectorAll(".center code.mermaid")].every((c, i) => {
+        const svg = c.querySelector(":scope > svg")
+        return !!svg && svg !== before[i]
+      })
+    },
+    undefined,
+    { timeout: 15_000 },
+  )
+
+// Logs every change of the tuck and every scroll position from here on.
+const logTuck = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as DiagramWindow
     w.__log = []
     const root = document.documentElement
     new MutationObserver(() =>
       w.__log.push(`tucked=${root.hasAttribute("data-bar-tucked")} y=${Math.round(scrollY)}`),
     ).observe(root, { attributes: true, attributeFilter: ["data-bar-tucked"] })
   })
+const tuckLog = (page: Page) => page.evaluate(() => (window as unknown as DiagramWindow).__log)
+
+test("the section row stays put while the diagrams are redrawn for a new theme", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip((page.viewportSize()?.height ?? 0) < 30 * 16, "the bar is not sticky under 30rem")
+  await openDiagramPage(page)
+  await scrollPastDiagram(page)
+  const before = await page.evaluate(() => scrollY)
+  await logTuck(page)
+  await markDrawn(page)
   await tapToggle(page, isMobile)
   await expect(page.locator("html")).not.toHaveAttribute("saved-theme", "light")
   // Until the new SVGs are in (they were removed for a moment), then a while longer.
-  await page.waitForFunction(
-    () =>
-      [...document.querySelectorAll(".center code.mermaid")].every((el) => el.querySelector("svg")),
-    undefined,
-    { timeout: 15_000 },
-  )
+  await redrawn(page)
   await page.waitForTimeout(1_500)
-  expect(await page.evaluate(() => (window as unknown as { __log: string[] }).__log)).toEqual([])
+  expect(await tuckLog(page)).toEqual([])
   await expect(page.locator("html")).toHaveAttribute("data-bar-tucked", /.*/)
+  expect(Math.abs((await page.evaluate(() => scrollY)) - before)).toBeLessThan(2)
+})
+
+// The heights hold still while Mermaid draws, so a scroll in that time is the reader's: a scroll
+// up shows the row at once, not once the new diagrams are in (and stays so after).
+test("a scroll up while the diagrams are redrawn brings the row back", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip((page.viewportSize()?.height ?? 0) < 30 * 16, "the bar is not sticky under 30rem")
+  await openDiagramPage(page)
+  await scrollPastDiagram(page)
+  await markDrawn(page)
+  await page.evaluate(() => {
+    const w = window as unknown as DiagramWindow
+    w.__mid = false
+    const code = document.querySelector(".center code.mermaid")!
+    // The first moment the finished SVG is gone: Mermaid has begun to draw the new one.
+    new MutationObserver((_, observer) => {
+      if (code.querySelector(":scope > svg")) return
+      observer.disconnect()
+      w.__mid = true
+      window.scrollBy({ top: -80, behavior: "instant" })
+    }).observe(code, { childList: true, subtree: true })
+  })
+  await tapToggle(page, isMobile)
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as DiagramWindow).__mid))
+    .toBe(true)
+  await expect(page.locator("html")).not.toHaveAttribute("data-bar-tucked", { timeout: 1_000 })
+  await logTuck(page)
+  await redrawn(page)
+  await page.waitForTimeout(500)
+  expect(await tuckLog(page)).toEqual([])
+})
+
+// A second switch while the first redraw still runs (its finished SVGs gone): the diagrams keep the
+// height they had until the latest redraw is in, so neither the page nor the row moves.
+test("a second switch while the diagrams are redrawn keeps the page and the row still", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip((page.viewportSize()?.height ?? 0) < 30 * 16, "the bar is not sticky under 30rem")
+  await openDiagramPage(page)
+  await scrollPastDiagram(page)
+  const before = await page.evaluate(() => scrollY)
+  await logTuck(page)
+  await page.evaluate(() => {
+    const w = window as unknown as DiagramWindow & { __ys: number[]; __mermaidErrors: string[] }
+    w.__mid = false
+    w.__ys = []
+    // Mermaid itself may reject when a new theme comes while it still draws (its own error
+    // object: str, message, hash). That is Mermaid's, not the top bar's; keep it out of the page
+    // error check here, and only here, and only that shape.
+    w.__mermaidErrors = []
+    window.addEventListener("unhandledrejection", (e) => {
+      const r: unknown = e.reason
+      if (r && typeof r === "object" && "hash" in r && "str" in r) {
+        w.__mermaidErrors.push(String((r as { message?: unknown }).message))
+        e.preventDefault()
+      }
+    })
+    window.addEventListener("scroll", () => w.__ys.push(scrollY), { passive: true })
+    const code = document.querySelector(".center code.mermaid")!
+    const toggle = document.querySelector<HTMLElement>(".darkmode")!
+    new MutationObserver((_, observer) => {
+      if (code.querySelector(":scope > svg")) return
+      observer.disconnect()
+      w.__mid = true
+      // The noted SVGs: none in this block now, so redrawn() waits for the latest redraw.
+      w.__drawn = [...document.querySelectorAll(".center code.mermaid")].map((c) =>
+        c.querySelector(":scope > svg"),
+      )
+      window.setTimeout(() => toggle.click(), 0)
+    }).observe(code, { childList: true, subtree: true })
+  })
+  await tapToggle(page, isMobile)
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as DiagramWindow).__mid))
+    .toBe(true)
+  // Two switches: back to the light theme.
+  await expect(page.locator("html")).toHaveAttribute("saved-theme", "light")
+  await redrawn(page)
+  await page.waitForTimeout(1_500)
+  expect(await tuckLog(page)).toEqual([])
+  const ys = await page.evaluate(() => (window as unknown as { __ys: number[] }).__ys)
+  expect(Math.max(0, ...ys.map((y) => Math.abs(y - before)))).toBeLessThan(2)
   expect(Math.abs((await page.evaluate(() => scrollY)) - before)).toBeLessThan(2)
 })
 
@@ -402,34 +558,16 @@ test("a link preview with a diagram does not hold the section row after a theme 
 }) => {
   test.skip(isMobile, "link previews need a hover")
   test.skip((page.viewportSize()?.height ?? 0) < 30 * 16, "the bar is not sticky under 30rem")
-  await page.goto(diagramPage)
-  await page.waitForLoadState("networkidle")
-  await page.waitForFunction(
-    () =>
-      [...document.querySelectorAll(".center code.mermaid")].every((el) => el.querySelector("svg")),
-    undefined,
-    { timeout: 15_000 },
-  )
-  await expect(page.locator("html")).toHaveClass(/motion-ready/)
+  await openDiagramPage(page)
   await page.locator('a.internal[data-slug="patterns/spinnaker-canary-analysis"]').first().hover()
   await page.locator(".popover").first().waitFor({ state: "attached", timeout: 10_000 })
   expect(await page.locator(".popover code.mermaid").count()).toBeGreaterThan(0)
   await page.mouse.move(5, 5)
-  await page.evaluate(() => {
-    const code = document.querySelector(".center code.mermaid")!
-    const r = (code.closest("pre") ?? code).getBoundingClientRect()
-    window.scrollTo({ top: r.bottom + window.scrollY + 300, behavior: "instant" })
-  })
-  await expect(page.locator("html")).toHaveAttribute("data-bar-tucked", /.*/)
-  await page.waitForTimeout(600)
+  await scrollPastDiagram(page)
+  await markDrawn(page)
   await tapToggle(page, isMobile)
   await expect(page.locator("html")).not.toHaveAttribute("saved-theme", "light")
-  await page.waitForFunction(
-    () =>
-      [...document.querySelectorAll(".center code.mermaid")].every((el) => el.querySelector("svg")),
-    undefined,
-    { timeout: 15_000 },
-  )
+  await redrawn(page)
   await page.waitForTimeout(400)
   await page.evaluate(() => window.scrollBy({ top: -80, behavior: "instant" }))
   // A scroll up shows the row again at once, not after the lock's 3 s timeout.
