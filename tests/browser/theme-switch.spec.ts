@@ -345,29 +345,53 @@ for (const motion of [true, false]) {
           expect(r.switching, "the row must come back while the switch is still on").toBe(true)
           expect(r.running).toEqual(motion ? SLIDE : [])
           await expect(page.locator("html")).not.toHaveAttribute("saved-theme", start.theme)
-          await expect(page.locator(`${BAR} .section-row-links`)).toHaveCSS("transform", "none", {
-            timeout: 2_000,
-          })
-          // It slid all the way: every part ran to its end, none was cut short.
+          // It slid all the way: every part ran to its end, none was cut short. Wait for the
+          // slide's own end, not a short deadline on the transform: a transition keeps its start
+          // value until the next frame, and headless WebKit at 3x can hold frames back for seconds.
           await expect
-            .poll(() => page.evaluate(() => [...(window as unknown as SlideWindow).__ended].sort()))
+            .poll(
+              () => page.evaluate(() => [...(window as unknown as SlideWindow).__ended].sort()),
+              {
+                timeout: 15_000,
+              },
+            )
             .toEqual(motion ? SLIDE : [])
           expect(await page.evaluate(() => (window as unknown as SlideWindow).__cancelled)).toEqual(
             [],
           )
+          await expect(page.locator(`${BAR} .section-row-links`)).toHaveCSS("transform", "none")
         })
 
         test("a slide under way runs on through the switch", async ({ page, isMobile }) => {
           test.skip(!motion, "no slide with reduced motion")
-          // A slow slide (only in this test), so that the tap surely lands while it runs.
-          await page.addStyleTag({ content: `${BAR} { --dur: 5s; }` })
-          await page.evaluate(() => window.scrollBy({ top: -40, behavior: "instant" }))
+          // A slow slide (only in this test), so that the tap surely lands while it runs and the
+          // slide outlasts the test whatever the frame rate.
+          await page.addStyleTag({ content: `${BAR} { --dur: 60s; }` })
+          await page.evaluate(() => {
+            const w = window as unknown as { __cancelled: string[] }
+            w.__cancelled = []
+            const bar = document.querySelector(".page > #quartz-body > .sidebar.left")!
+            bar.addEventListener("transitioncancel", (e) => {
+              const links = bar.querySelector(".section-row-links")
+              if (
+                (e.target === links && e.propertyName === "transform") ||
+                (e.target === bar && e.propertyName === "bottom")
+              )
+                w.__cancelled.push(e.propertyName)
+            })
+            window.scrollBy({ top: -40, behavior: "instant" })
+          })
           await expect(page.locator("html")).not.toHaveAttribute("data-bar-tucked")
           await expect.poll(() => tuckRunning(page)).toEqual(SLIDE)
           await tapToggle(page, isMobile)
           await expect(page.locator("html")).not.toHaveAttribute("saved-theme", start.theme)
-          await expect(page.locator("html")).not.toHaveClass(/theme-switching/)
+          await expect(page.locator("html")).not.toHaveClass(/theme-switching/, {
+            timeout: 15_000,
+          })
           expect(await tuckRunning(page)).toEqual(SLIDE) // not cancelled by the switch
+          expect(await page.evaluate(() => (window as unknown as SlideWindow).__cancelled)).toEqual(
+            [],
+          )
         })
       })
     }
