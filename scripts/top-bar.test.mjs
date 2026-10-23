@@ -221,5 +221,17 @@ test("theme switch: diagrams keep their height while Mermaid redraws them", () =
     /if \(mermaidLock\) \{\s*mermaidLock\.rearm\(\)/,
     "a second switch keeps the lock until the latest redraw",
   )
-  assert.match(topBar, /setTimeout\(\(\) => release\(\), 3000\)/, "a failed redraw lets go")
+  assert.match(topBar, /MERMAID_IDLE_MS\)/, "a failed redraw lets go")
+  assert.match(topBar, /const MERMAID_IDLE_MS = 3000/)
+  assert.match(topBar, /const MERMAID_CEILING_MS = 10_000/, "the lock can never hang")
+  assert.match(
+    topBar,
+    /new MutationObserver\(\(\) => \{\s*(?:\/\/[^\n]*\s*)*window\.clearTimeout\(timer\)\s*timer = window\.setTimeout\(\(\) => release\(\), MERMAID_IDLE_MS\)/,
+    "redraw progress restarts the idle wait",
+  )
+  assert.match(
+    topBar,
+    /ceiling = window\.setTimeout\(\(\) => release\(\), MERMAID_CEILING_MS\)/,
+    "the hard ceiling is armed",
+  )
 })

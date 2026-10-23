@@ -721,3 +721,78 @@ test("a link preview with a diagram does not hold the section row after a theme 
   // A scroll up shows the row again at once, not after the lock's 3 s timeout.
   await expect(page.locator("html")).not.toHaveAttribute("data-bar-tucked", { timeout: 1_000 })
 })
+
+// A slow device or a complex diagram redraws for longer than the lock's idle wait. While the blocks
+// keep changing (progress) the heights stay pinned past 3 s; the hard ceiling (10 s after the
+// switch) lets go at the latest. The slow redraw is simulated by keeping an extra child in every
+// block (so no block holds a finished SVG alone) and touching it every 500 ms until `ms` has gone.
+async function slowRedraw(page: Page, ms: number) {
+  await page.evaluate((total) => {
+    const blocks = [...document.querySelectorAll<HTMLElement>(".center code.mermaid")]
+    const start = performance.now()
+    const mark = document.createElement("span")
+    mark.dataset.slowRedraw = ""
+    const keep = () => {
+      for (const b of blocks) if (mark.parentElement !== b) b.append(mark.cloneNode())
+    }
+    const done = () => performance.now() - start >= total
+    document.addEventListener("themechange", () => {
+      const obs = new MutationObserver(() => {
+        if (done()) return obs.disconnect()
+        for (const b of blocks)
+          if (!b.querySelector(":scope > span[data-slow-redraw]")) b.append(mark.cloneNode())
+      })
+      for (const b of blocks) obs.observe(b, { childList: true })
+      keep()
+      let n = 0
+      const tick = window.setInterval(() => {
+        for (const b of blocks)
+          b.querySelector(":scope > span[data-slow-redraw]")?.append(String(++n))
+        if (!done()) return
+        window.clearInterval(tick)
+        obs.disconnect()
+        for (const b of blocks)
+          b.querySelectorAll(":scope > span[data-slow-redraw]").forEach((e) => e.remove())
+      }, 500)
+    })
+  }, ms)
+}
+const pinned = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>(".center code.mermaid")].some(
+      (c) => !!c.closest("pre")?.style.maxHeight,
+    ),
+  )
+
+test("the diagram heights stay pinned past 3 s while a slow redraw keeps making progress", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip((page.viewportSize()?.height ?? 0) < 30 * 16, "the bar is not sticky under 30rem")
+  test.setTimeout(60_000)
+  await openDiagramPage(page)
+  await scrollPastDiagram(page)
+  await slowRedraw(page, 4_800)
+  await tapToggle(page, isMobile)
+  await expect(page.locator("html")).not.toHaveAttribute("saved-theme", "light")
+  await page.waitForTimeout(3_800)
+  expect(await pinned(page)).toBe(true)
+  // The redraw is in (the extra child is gone): the lock lets go after its quiet spell.
+  await expect.poll(() => pinned(page), { timeout: 6_000 }).toBe(false)
+})
+
+test("the diagram heights are released by the ceiling even if the redraw never ends", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip((page.viewportSize()?.height ?? 0) < 30 * 16, "the bar is not sticky under 30rem")
+  test.setTimeout(60_000)
+  await openDiagramPage(page)
+  await scrollPastDiagram(page)
+  await slowRedraw(page, 14_000)
+  await tapToggle(page, isMobile)
+  await expect(page.locator("html")).not.toHaveAttribute("saved-theme", "light")
+  await page.waitForTimeout(9_000)
+  expect(await pinned(page)).toBe(true)
+  await expect.poll(() => pinned(page), { timeout: 3_000 }).toBe(false)
+})
