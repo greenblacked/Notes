@@ -274,7 +274,7 @@ for (const motion of [true, false]) {
           ...(size ? { viewport: size } : {}),
         })
         test.beforeEach(async ({ page, browserName, isMobile }) => {
-          // The tablet variants take about 20s of the 30s limit on the headless WebKit phone.
+          // Headless WebKit at 3x paints slowly: the setup and the slide waits below allow 15s each.
           test.slow(browserName === "webkit" && isMobile, "headless WebKit at 3x paints slowly")
           test.skip(
             (page.viewportSize()?.height ?? 0) < 30 * 16,
@@ -456,6 +456,9 @@ type DiagramWindow = Window & { __drawn: (Element | null)[]; __log: string[]; __
 // source text or a temporary wrapper with the SVG under construction, so `code svg` alone does not
 // say that a drawing is done.
 async function openDiagramPage(page: Page) {
+  // The drawing and the motion-ready waits below may take 15s each on the headless WebKit phone.
+  const { browserName, isMobile } = test.info().project.use
+  test.slow(browserName === "webkit" && !!isMobile, "headless WebKit at 3x paints slowly")
   await page.goto(diagramPage)
   await page.waitForLoadState("networkidle")
   await page.waitForFunction(
