@@ -549,6 +549,80 @@ test("a second switch while the diagrams are redrawn keeps the page and the row 
   expect(Math.abs((await page.evaluate(() => scrollY)) - before)).toBeLessThan(2)
 })
 
+// The second switch comes inside the first redraw, in the same task as the mutation that shows the
+// temporary wrapper gone (the block holds neither the wrapper nor an SVG). The first run's SVG
+// then still lands, and it must not release the lock: the latest redraw is not in yet.
+test("a late SVG of the first redraw does not release the lock of the second", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip((page.viewportSize()?.height ?? 0) < 30 * 16, "the bar is not sticky under 30rem")
+  await openDiagramPage(page)
+  await scrollPastDiagram(page)
+  const before = await page.evaluate(() => scrollY)
+  await logTuck(page)
+  await page.evaluate(() => {
+    const w = window as unknown as DiagramWindow & {
+      __ys: number[]
+      __clicked: boolean
+      __pinAtSvg: string | null
+    }
+    w.__mid = false
+    w.__clicked = false
+    w.__pinAtSvg = null
+    w.__ys = []
+    // Mermaid's own rejection for a switch during a draw (see the test above): not the top bar's.
+    window.addEventListener("unhandledrejection", (e) => {
+      const r: unknown = e.reason
+      if (r && typeof r === "object" && "hash" in r && "str" in r) e.preventDefault()
+    })
+    window.addEventListener("scroll", () => w.__ys.push(scrollY), { passive: true })
+    const code = document.querySelector<HTMLElement>(".center code.mermaid")!
+    const pre = code.parentElement!
+    const toggle = document.querySelector<HTMLElement>(".darkmode")!
+    let wrapper = false
+    new MutationObserver(() => {
+      const svg = code.querySelector(":scope > svg")
+      if (!w.__clicked) {
+        if (code.children.length > 0 && !svg) wrapper = true
+        if (!wrapper || code.children.length !== 0) return
+        w.__clicked = true
+        w.__drawn = [...document.querySelectorAll(".center code.mermaid")].map((c) =>
+          c.querySelector(":scope > svg"),
+        )
+        toggle.click() // synchronously, before the first run's SVG lands
+        return
+      }
+      // The first finished SVG after the second switch: the lock is to hold the height still.
+      if (svg && w.__pinAtSvg === null) {
+        w.__mid = true
+        w.__pinAtSvg = pre.style.maxHeight
+        // Let the lock release on this mutation (if it is to) before the page is read.
+        queueMicrotask(() => {
+          w.__pinAtSvg = pre.style.maxHeight
+        })
+      }
+    }).observe(code, { childList: true, subtree: true })
+  })
+  await tapToggle(page, isMobile)
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as DiagramWindow).__mid))
+    .toBe(true)
+  await expect(page.locator("html")).toHaveAttribute("saved-theme", "light")
+  await redrawn(page)
+  await page.waitForTimeout(1_500)
+  const w = (await page.evaluate(() => {
+    const x = window as unknown as { __clicked: boolean; __pinAtSvg: string | null }
+    return { clicked: x.__clicked, pin: x.__pinAtSvg }
+  })) as { clicked: boolean; pin: string | null }
+  expect(w.clicked, "the second switch came inside the first redraw").toBe(true)
+  expect(w.pin, "the pin is still set when the first run's SVG lands").toMatch(/px$/)
+  expect(await tuckLog(page)).toEqual([])
+  const ys = await page.evaluate(() => (window as unknown as { __ys: number[] }).__ys)
+  expect(Math.max(0, ...ys.map((y) => Math.abs(y - before)))).toBeLessThan(2)
+  expect(Math.abs((await page.evaluate(() => scrollY)) - before)).toBeLessThan(2)
+})
+
 // A link preview (popover) of another diagram page keeps an unrendered code.mermaid in the body,
 // hidden: Mermaid only draws the ones in .center. The lock on the diagram heights must not wait
 // for that block, or it lasts to its timeout and the scrolls in that time are dropped.
