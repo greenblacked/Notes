@@ -260,8 +260,15 @@ function setupHideOnScroll() {
   let frame = 0
   const update = () => {
     frame = 0
+    const y = window.scrollY
+    if (takeLayoutShift(y - state.lastY)) {
+      // The diagrams came back at another height as their lock let go, and the browser kept the
+      // reading position: the page moved, not the reader. Keep the row as it is.
+      state = { ...state, lastY: Math.max(0, y) }
+      return
+    }
     state = nextTuck(state, {
-      y: window.scrollY,
+      y,
       maxY: root.scrollHeight - window.innerHeight,
       topZone: bar.offsetHeight,
       hold: hold(),
@@ -431,10 +438,167 @@ document.addEventListener(
 
 // Any other source of "themechange": switch transitions off from here on.
 document.addEventListener("themechange", () => {
+  lockMermaidHeights()
   if (root.classList.contains(SWITCHING)) return
   const id = beginSwitch()
   afterPaint(() => endSwitch(id))
 })
+
+// Mermaid redraws every diagram on a theme change: it puts the source text back (a different
+// height), draws the new SVG in a temporary wrapper inside the block and then puts the finished SVG
+// in place of the wrapper. Above the reading position that would move the page, either by scroll
+// anchoring or as a jump of the content, and a tuck that reads the move as a scroll slides the
+// section row in and out. So the diagrams keep their height until every finished SVG is in (this
+// listener is registered at load, before Mermaid's own, so it runs first). The page cannot move by
+// itself meanwhile, so every scroll in that time is the reader's and the tuck follows it as usual.
+// A switch while a redraw still runs keeps the lock (and the heights of the drawn diagrams) until
+// the latest redraw is in. Without MutationObserver or a measurable block it does nothing.
+type Pinned = {
+  pre: HTMLElement
+  code: HTMLElement
+  height: number
+  drawn: Element | null // the finished SVG when the latest switch began; the redraw replaces it
+  min: string
+  max: string
+  overflow: string
+  sizing: string
+}
+// The lock gives up after this long without a change in the blocks (Mermaid failed or never ran),
+// and at the latest this long after the switch, so a redraw that keeps changing cannot hold it.
+const MERMAID_IDLE_MS = 3000
+const MERMAID_CEILING_MS = 10_000
+let mermaidLock: { rearm: () => void; release: (immediate?: boolean) => void } | null = null
+
+// A finished diagram: its SVG is a direct child of the block (while Mermaid draws, the block holds
+// the source text or the temporary wrapper with the SVG under construction).
+const drawnSvg = (code: Element) => code.querySelector(":scope > svg")
+
+// The scroll moves that letting the lock go may cause (see release), so that the tuck takes the
+// matching move as the page's and not the reader's. Cleared once one is taken, or a few frames on.
+let layoutShifts: number[] = []
+const takeLayoutShift = (dy: number) => {
+  if (!layoutShifts.some((s) => Math.abs(dy - s) <= 1)) return false
+  layoutShifts = []
+  return true
+}
+
+function lockMermaidHeights() {
+  if (mermaidLock) {
+    mermaidLock.rearm()
+    return
+  }
+  if (typeof MutationObserver !== "function") return
+  const saved: Pinned[] = []
+  let timer = 0
+  let ceiling = 0
+  let quiet = 0
+  // Done when every pinned block holds a finished SVG as its only child, drawn since the latest
+  // switch began.
+  const redrawn = () =>
+    saved.every(({ code, drawn }) => {
+      const svg = drawnSvg(code)
+      return !!svg && svg !== drawn && code.children.length === 1
+    })
+  // A finished SVG is not yet the end: after a second switch the first run's SVG can still land
+  // while the latest redraw has only begun. So the lock lets go once the blocks have held still for
+  // a short spell, and any later change restarts that wait.
+  const QUIET_MS = 150
+  const observer = new MutationObserver(() => {
+    // Progress: a slow device or a complex diagram is still drawing, so the idle wait starts over
+    // (the ceiling does not).
+    window.clearTimeout(timer)
+    timer = window.setTimeout(() => release(), MERMAID_IDLE_MS)
+    window.clearTimeout(quiet)
+    if (!redrawn()) return
+    quiet = window.setTimeout(() => {
+      if (redrawn()) release()
+    }, QUIET_MS)
+  })
+  // Only the diagrams Mermaid redraws: those in .center that hold a finished SVG. A hidden link
+  // preview (.popover) keeps a block that is never rendered, and waiting for it would hold the
+  // lock to its timeout.
+  const pin = () => {
+    for (const code of document.querySelectorAll<HTMLElement>(".center code.mermaid")) {
+      if (saved.some((p) => p.code === code)) continue
+      const svg = drawnSvg(code)
+      if (!svg) continue
+      const pre = code.parentElement
+      const h = pre?.getBoundingClientRect().height ?? 0
+      if (!pre || !(h > 0)) continue
+      saved.push({
+        pre,
+        code,
+        height: h,
+        drawn: svg,
+        min: pre.style.minHeight,
+        max: pre.style.maxHeight,
+        overflow: pre.style.overflow,
+        sizing: pre.style.boxSizing,
+      })
+      pre.style.boxSizing = "border-box"
+      pre.style.minHeight = pre.style.maxHeight = `${h}px`
+      pre.style.overflow = "hidden"
+      observer.observe(code, { childList: true, subtree: true })
+    }
+  }
+  const release = (immediate = false) => {
+    if (mermaidLock !== lock) return
+    mermaidLock = null
+    observer.disconnect()
+    window.clearTimeout(timer)
+    window.clearTimeout(ceiling)
+    window.clearTimeout(quiet)
+    // The blocks that start above the reading position, measured while still pinned: if one comes
+    // back at another height, the browser keeps the reading position by scrolling (scroll
+    // anchoring, which not every browser has), by the change of the blocks wholly above it, or of all of them
+    // when its anchor lies below the block across the top edge.
+    const above = immediate
+      ? []
+      : saved.flatMap((p) => {
+          const r = p.pre.getBoundingClientRect()
+          return r.top < 0 ? [{ p, whole: r.bottom <= 0 }] : []
+        })
+    for (const { pre, min, max, overflow, sizing } of saved) {
+      pre.style.minHeight = min
+      pre.style.maxHeight = max
+      pre.style.overflow = overflow
+      pre.style.boxSizing = sizing
+    }
+    let whole = 0
+    let all = 0
+    for (const { p, whole: isWhole } of above) {
+      const d = p.pre.getBoundingClientRect().height - p.height
+      all += d
+      if (isWhole) whole += d
+    }
+    const shifts = [whole, all].filter((s) => Math.abs(s) >= 0.5)
+    if (shifts.length === 0) return
+    layoutShifts = shifts
+    afterPaint(() =>
+      afterPaint(() => {
+        if (layoutShifts === shifts) layoutShifts = []
+      }),
+    )
+  }
+  const rearm = () => {
+    for (const p of saved) p.drawn = drawnSvg(p.code)
+    pin()
+    window.clearTimeout(quiet)
+    window.clearTimeout(timer)
+    window.clearTimeout(ceiling)
+    timer = window.setTimeout(() => release(), MERMAID_IDLE_MS)
+    ceiling = window.setTimeout(() => release(), MERMAID_CEILING_MS)
+  }
+  const lock = { rearm, release }
+  pin()
+  if (saved.length === 0) {
+    observer.disconnect()
+    return
+  }
+  mermaidLock = lock
+  timer = window.setTimeout(() => release(), MERMAID_IDLE_MS) // Mermaid failed or never ran
+  ceiling = window.setTimeout(() => release(), MERMAID_CEILING_MS)
+}
 
 // The page change. The router fetches the next page, fires "prenav", morphs it into the document
 // (the .center element survives) and scrolls, then fires "nav". While that runs the root has
@@ -448,6 +612,7 @@ document.addEventListener("themechange", () => {
 let navigating = false
 let enterTimer = 0
 document.addEventListener("prenav", () => {
+  mermaidLock?.release(true) // the lock must not survive the page change
   navigating = true
   root.dataset.navigating = ""
   root.removeAttribute(TUCKED)

@@ -233,10 +233,15 @@ $unicode-ranges: (
 // fade swaps the icons and a turn would show twice and outlast it. Where the View Transitions API
 // exists and the device has a mouse or trackpad, the whole page cross-fades as one snapshot.
 // Elsewhere (phones, tablets), and with reduced motion, the colours flip in one frame.
+// The tuck motion of the top bar is left out: the links' slide (.section-row-links, transform) and
+// the bottom edge of the bar's band and progress line (its ::before and ::after, bottom) carry only
+// geometry, never a colour, so the flip starts nothing on them. Turned off, a tuck or untuck during
+// the switch (a scroll right after the tap, or a tap while the row still slides) jumped instead of
+// sliding.
 :root.theme-switching,
-:root.theme-switching *:not(.darkmode > svg),
-:root.theme-switching *::before,
-:root.theme-switching *::after,
+:root.theme-switching *:not(.darkmode > svg):not(.section-row-links),
+:root.theme-switching *:not(.sidebar.left)::before,
+:root.theme-switching *:not(.sidebar.left)::after,
 :root.theme-switching[data-theme-snapshot] .darkmode > svg {
   transition: none !important;
 }

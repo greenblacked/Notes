@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Fixed
+
+- Changing the theme while scrolled no longer makes the top bar jump: the section row keeps sliding when it tucks or comes back during the switch (a scroll right after the tap, or a tap while it still slides), and on notes with diagrams it stays put while Mermaid redraws them (the diagrams keep their height until the new drawing is in, also when the theme is switched again before it is), while a scroll by the reader in that time still tucks the row or brings it back at once, on phones, tablets and desktop.
+
 ### Changed
 
 - **CI browser tests run as ten shards that start together with the build job** (three shards for each WebKit project, two for each Chromium project) instead of eight shards that start after it. Each shard prepares itself (`npm ci`, type check, browsers, system packages) while the build runs, then waits for the latest attempt of Build and check and fails at once if it fails. Every check is kept. The estimate is about 2.5 to 2.8 minutes from start to CI OK on 4 vCPU instead of about 4, and slower on the 2-vCPU runners of a private repository (not measured yet), for about 32 to 35 billed minutes per run instead of 24 to 25 (estimated, to be measured, because every shard's job time includes the wait for the build and rounds up to 3 minutes; standard Linux runners in private repositories on GitHub Free have 2 vCPU and count against the 2,000 minutes a month, which may change: check the GitHub docs). Fewer shards mean fewer billed copies of the build wait on 2-vCPU runners, and WebKit gets more shards than Chromium because its shards also pay about 35 to 43 s of system packages. A failed build still bills every shard's setup, a cold plugin restore (about 7 to 8 minutes) is billed in every shard while it waits, and the build job timeout is now 24 minutes so a hung build ends before the shards give up after 25.

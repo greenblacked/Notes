@@ -161,8 +161,11 @@ test("theme switch: no per-element theme fade, transitions off for the flip", ()
   assert.ok(!topBar.includes("theme-fade"))
   assert.match(
     scss,
-    /:root\.theme-switching \*:not\(\.darkmode > svg\),[\s\S]*?\{\s*transition:\s*none !important;/,
+    /:root\.theme-switching \*:not\(\.darkmode > svg\):not\(\.section-row-links\),[\s\S]*?\{\s*transition:\s*none !important;/,
   )
+  // The tuck motion (links' slide, the bar's band and line edge) keeps sliding through the flip.
+  assert.match(scss, /:root\.theme-switching \*:not\(\.sidebar\.left\)::before,/)
+  assert.match(scss, /:root\.theme-switching \*:not\(\.sidebar\.left\)::after,/)
   assert.match(
     scss,
     /:root\.theme-switching\[data-theme-snapshot\] \.darkmode > svg[\s\S]*?\{\s*transition:\s*none !important;/,
@@ -192,4 +195,43 @@ test("theme switch: script feature-detects the API, respects reduced motion, no 
   assert.match(topBar, /beginSwitch\(true\)/)
   assert.match(topBar, /removeAttribute\(SNAPSHOT\)/)
   assert.ok(!/setTimeout\([^)]*theme[^)]*,\s*450\)/.test(topBar), "the fixed 450ms timer is gone")
+})
+
+test("theme switch: diagrams keep their height while Mermaid redraws them", () => {
+  // The lock is taken in a themechange listener registered at load (before Mermaid's own). The
+  // page cannot move while it holds, so the tuck follows every scroll; it only takes the move that
+  // letting go may cause (scroll anchoring) as the page's.
+  assert.match(topBar, /addEventListener\("themechange", \(\) => \{\s*lockMermaidHeights\(\)/)
+  assert.match(topBar, /if \(takeLayoutShift\(y - state\.lastY\)\) \{/)
+  assert.ok(!topBar.includes("layoutShifting"), "scrolls during the lock are the reader's")
+  assert.match(topBar, /querySelector\(":scope > svg"\)/, "a finished drawing only")
+  assert.match(
+    topBar,
+    /querySelectorAll<HTMLElement>\("\.center code\.mermaid"\)/,
+    "only the drawn page",
+  )
+  assert.match(
+    topBar,
+    /const svg = drawnSvg\(code\)\s*if \(!svg\) continue/,
+    "never waits on an unrendered block",
+  )
+  assert.match(topBar, /"prenav", \(\) => \{\s*mermaidLock\?\.release\(true\)/)
+  assert.match(
+    topBar,
+    /if \(mermaidLock\) \{\s*mermaidLock\.rearm\(\)/,
+    "a second switch keeps the lock until the latest redraw",
+  )
+  assert.match(topBar, /MERMAID_IDLE_MS\)/, "a failed redraw lets go")
+  assert.match(topBar, /const MERMAID_IDLE_MS = 3000/)
+  assert.match(topBar, /const MERMAID_CEILING_MS = 10_000/, "the lock can never hang")
+  assert.match(
+    topBar,
+    /new MutationObserver\(\(\) => \{\s*(?:\/\/[^\n]*\s*)*window\.clearTimeout\(timer\)\s*timer = window\.setTimeout\(\(\) => release\(\), MERMAID_IDLE_MS\)/,
+    "redraw progress restarts the idle wait",
+  )
+  assert.match(
+    topBar,
+    /ceiling = window\.setTimeout\(\(\) => release\(\), MERMAID_CEILING_MS\)/,
+    "the hard ceiling is armed",
+  )
 })
