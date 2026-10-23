@@ -486,14 +486,24 @@ function lockMermaidHeights() {
   if (typeof MutationObserver !== "function") return
   const saved: Pinned[] = []
   let timer = 0
-  // Done when every pinned block holds a finished SVG drawn since the latest switch began.
+  let quiet = 0
+  // Done when every pinned block holds a finished SVG as its only child, drawn since the latest
+  // switch began.
   const redrawn = () =>
     saved.every(({ code, drawn }) => {
       const svg = drawnSvg(code)
-      return !!svg && svg !== drawn
+      return !!svg && svg !== drawn && code.children.length === 1
     })
+  // A finished SVG is not yet the end: after a second switch the first run's SVG can still land
+  // while the latest redraw has only begun. So the lock lets go once the blocks have held still for
+  // a short spell, and any later change restarts that wait.
+  const QUIET_MS = 150
   const observer = new MutationObserver(() => {
-    if (redrawn()) release()
+    window.clearTimeout(quiet)
+    if (!redrawn()) return
+    quiet = window.setTimeout(() => {
+      if (redrawn()) release()
+    }, QUIET_MS)
   })
   // Only the diagrams Mermaid redraws: those in .center that hold a finished SVG. A hidden link
   // preview (.popover) keeps a block that is never rendered, and waiting for it would hold the
@@ -527,9 +537,10 @@ function lockMermaidHeights() {
     mermaidLock = null
     observer.disconnect()
     window.clearTimeout(timer)
+    window.clearTimeout(quiet)
     // The blocks that start above the reading position, measured while still pinned: if one comes
     // back at another height, the browser keeps the reading position by scrolling (scroll
-    // anchoring; Safari has none), by the change of the blocks wholly above it, or of all of them
+    // anchoring, which not every browser has), by the change of the blocks wholly above it, or of all of them
     // when its anchor lies below the block across the top edge.
     const above = immediate
       ? []
@@ -562,6 +573,7 @@ function lockMermaidHeights() {
   const rearm = () => {
     for (const p of saved) p.drawn = drawnSvg(p.code)
     pin()
+    window.clearTimeout(quiet)
     window.clearTimeout(timer)
     timer = window.setTimeout(() => release(), 3000)
   }
