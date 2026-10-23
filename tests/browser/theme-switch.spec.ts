@@ -285,7 +285,11 @@ for (const motion of [true, false]) {
           isMobile,
         }) => {
           await page.evaluate(() => {
-            const w = window as unknown as TuckWindow
+            const w = window as unknown as TuckWindow & { requestIdleCallback: () => number }
+            // Keep .theme-switching on for the whole test, whatever the frame timing: the class
+            // is taken off when the page is idle, which never comes here (Safari has no idle
+            // callback and falls back to a timer, so this also hides that timer).
+            w.requestIdleCallback = () => 0
             w.__untuck = new Promise<Untuck>((resolve) => {
               // Bubble phase on window: after the toggle's own listeners (on the cross-fade path,
               // the click replayed inside the view transition), so .theme-switching is on.
@@ -336,3 +340,53 @@ for (const motion of [true, false]) {
     }
   }
 }
+
+// A page with a Mermaid diagram. Mermaid draws every diagram again on a theme change (the source
+// text for a moment, then the new SVG), which changes the page's height above the reading
+// position; the browser may move the scroll position to compensate (scroll anchoring). That move
+// is not a scroll by the reader, so the section row must stay as it is.
+const diagramPage = "/patterns/gke-blue-green-releases"
+
+test("the section row stays put while the diagrams are redrawn for a new theme", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip((page.viewportSize()?.height ?? 0) < 30 * 16, "the bar is not sticky under 30rem")
+  await page.goto(diagramPage)
+  await page.waitForLoadState("networkidle")
+  await page.waitForFunction(
+    () => [...document.querySelectorAll("code.mermaid")].every((el) => el.querySelector("svg")),
+    undefined,
+    { timeout: 15_000 },
+  )
+  await expect(page.locator("html")).toHaveClass(/motion-ready/)
+  // Scroll to 300px past the first diagram, where the row is tucked.
+  await page.evaluate(() => {
+    const code = document.querySelector("code.mermaid")!
+    const r = (code.closest("pre") ?? code).getBoundingClientRect()
+    window.scrollTo({ top: r.bottom + window.scrollY + 300, behavior: "instant" })
+  })
+  await expect(page.locator("html")).toHaveAttribute("data-bar-tucked", /.*/)
+  await page.waitForTimeout(600)
+  const before = await page.evaluate(() => scrollY)
+  await page.evaluate(() => {
+    const w = window as unknown as { __log: string[] }
+    w.__log = []
+    const root = document.documentElement
+    new MutationObserver(() =>
+      w.__log.push(`tucked=${root.hasAttribute("data-bar-tucked")} y=${Math.round(scrollY)}`),
+    ).observe(root, { attributes: true, attributeFilter: ["data-bar-tucked"] })
+  })
+  await tapToggle(page, isMobile)
+  await expect(page.locator("html")).not.toHaveAttribute("saved-theme", "light")
+  // Until the new SVGs are in (they were removed for a moment), then a while longer.
+  await page.waitForFunction(
+    () => [...document.querySelectorAll("code.mermaid")].every((el) => el.querySelector("svg")),
+    undefined,
+    { timeout: 15_000 },
+  )
+  await page.waitForTimeout(1_500)
+  expect(await page.evaluate(() => (window as unknown as { __log: string[] }).__log)).toEqual([])
+  await expect(page.locator("html")).toHaveAttribute("data-bar-tucked", /.*/)
+  expect(Math.abs((await page.evaluate(() => scrollY)) - before)).toBeLessThan(2)
+})
