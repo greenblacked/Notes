@@ -201,3 +201,138 @@ for (const motion of [true, false]) {
     }
   })
 }
+
+// ---- The tuck motion across a theme switch --------------------------------------------------
+// .theme-switching turns transitions off from the tap until the switch has painted (about 0.6s
+// with requestIdleCallback). The section row must still slide in that window: on a scroll right
+// after the tap, and when the tap lands while it is still sliding. The boxes measured above never
+// move by design (only the links and the band's edge do), so these tests read the tuck's own
+// transitions: the links' transform and the bottom of the bar's ::before (band) and ::after (line).
+const BAR = ".page > #quartz-body > .sidebar.left"
+const SLIDE = ["bottom::after", "bottom::before", "transform"]
+type Untuck = { switching: boolean; running: string[] }
+type TuckWindow = Window & { __tuck: () => string[]; __untuck: Promise<Untuck> }
+
+function installTuckProbe() {
+  ;(window as unknown as TuckWindow).__tuck = () => {
+    const bar = document.querySelector(".page > #quartz-body > .sidebar.left")!
+    const links = bar.querySelector(".section-row-links")!
+    return document
+      .getAnimations()
+      .filter((a): a is CSSTransition => a instanceof CSSTransition && a.playState === "running")
+      .filter((a) => {
+        const e = a.effect as KeyframeEffect | null
+        if (e?.target === links) return a.transitionProperty === "transform"
+        return (
+          e?.target === bar &&
+          (e.pseudoElement === "::before" || e.pseudoElement === "::after") &&
+          a.transitionProperty === "bottom"
+        )
+      })
+      .map((a) => `${a.transitionProperty}${(a.effect as KeyframeEffect).pseudoElement ?? ""}`)
+      .sort()
+  }
+}
+const tuckRunning = (page: Page) => page.evaluate(() => (window as unknown as TuckWindow).__tuck())
+
+async function tapToggle(page: Page, isMobile: boolean) {
+  const box = await page.locator(".darkmode").first().boundingBox() // does not scroll
+  expect(box).not.toBeNull()
+  const x = box!.x + box!.width / 2
+  const y = box!.y + box!.height / 2
+  if (isMobile) await page.touchscreen.tap(x, y)
+  else await page.mouse.click(x, y)
+}
+
+// The site's toggle has two states; with nothing saved it starts light whatever the OS prefers.
+const starts = [
+  { name: "light", saved: "light", scheme: "light", theme: "light" },
+  { name: "dark", saved: "dark", scheme: "light", theme: "dark" },
+  { name: "nothing saved, OS dark", saved: null, scheme: "dark", theme: "light" },
+] as const
+// A tablet: on the phone projects a touch tablet (one-frame flip), on the desktop projects a
+// narrow window with a trackpad (the cross-fade path, as on an iPad with a trackpad).
+const sizes = [null, { width: 820, height: 1180 }] as const
+
+for (const motion of [true, false]) {
+  for (const start of starts) {
+    for (const size of sizes) {
+      if (!motion && (start.name !== "light" || size)) continue // one reduced-motion guard
+      test.describe(`tuck across a theme switch from ${start.name}${size ? ", tablet size" : ""}${motion ? "" : ", reduced motion"}`, () => {
+        test.use({
+          reducedMotion: motion ? "no-preference" : "reduce",
+          colorScheme: start.scheme,
+          ...(size ? { viewport: size } : {}),
+        })
+        test.beforeEach(async ({ page }) => {
+          test.skip(
+            (page.viewportSize()?.height ?? 0) < 30 * 16,
+            "the bar is not sticky under 30rem",
+          )
+          if (start.saved)
+            await page.addInitScript((t) => localStorage.setItem("theme", t), start.saved)
+          await page.goto(longPage)
+          await page.evaluate(installTuckProbe)
+          await expect(page.locator("html")).toHaveClass(/motion-ready/)
+          await expect(page.locator("html")).toHaveAttribute("saved-theme", start.theme)
+          await page.evaluate(() => window.scrollTo({ top: 900, behavior: "instant" }))
+          await expect(page.locator("html")).toHaveAttribute("data-bar-tucked", /.*/)
+          await expect.poll(() => tuckRunning(page)).toEqual([]) // the tuck slide has finished
+        })
+
+        test("the row slides back on a scroll right after the switch", async ({
+          page,
+          isMobile,
+        }) => {
+          await page.evaluate(() => {
+            const w = window as unknown as TuckWindow
+            w.__untuck = new Promise<Untuck>((resolve) => {
+              // Bubble phase on window: after the toggle's own listeners (on the cross-fade path,
+              // the click replayed inside the view transition), so .theme-switching is on.
+              window.addEventListener(
+                "click",
+                () => {
+                  const root = document.documentElement
+                  const on = root.classList.contains("theme-switching")
+                  new MutationObserver((_, observer) => {
+                    if (root.hasAttribute("data-bar-tucked")) return
+                    observer.disconnect()
+                    requestAnimationFrame(() =>
+                      resolve({
+                        switching: on && root.classList.contains("theme-switching"),
+                        running: w.__tuck(),
+                      }),
+                    )
+                  }).observe(root, { attributes: true, attributeFilter: ["data-bar-tucked"] })
+                  window.scrollBy({ top: -40, behavior: "instant" })
+                },
+                { once: true },
+              )
+            })
+          })
+          await tapToggle(page, isMobile)
+          const r = await page.evaluate(() => (window as unknown as TuckWindow).__untuck)
+          expect(r.switching, "the row must come back while the switch is still on").toBe(true)
+          expect(r.running).toEqual(motion ? SLIDE : [])
+          await expect(page.locator("html")).not.toHaveAttribute("saved-theme", start.theme)
+          await expect(page.locator(`${BAR} .section-row-links`)).toHaveCSS("transform", "none", {
+            timeout: 2_000,
+          })
+        })
+
+        test("a slide under way runs on through the switch", async ({ page, isMobile }) => {
+          test.skip(!motion, "no slide with reduced motion")
+          // A slow slide (only in this test), so that the tap surely lands while it runs.
+          await page.addStyleTag({ content: `${BAR} { --dur: 5s; }` })
+          await page.evaluate(() => window.scrollBy({ top: -40, behavior: "instant" }))
+          await expect(page.locator("html")).not.toHaveAttribute("data-bar-tucked")
+          await expect.poll(() => tuckRunning(page)).toEqual(SLIDE)
+          await tapToggle(page, isMobile)
+          await expect(page.locator("html")).not.toHaveAttribute("saved-theme", start.theme)
+          await expect(page.locator("html")).not.toHaveClass(/theme-switching/)
+          expect(await tuckRunning(page)).toEqual(SLIDE) // not cancelled by the switch
+        })
+      })
+    }
+  }
+}
