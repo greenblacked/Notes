@@ -729,7 +729,7 @@ test("a link preview with a diagram does not hold the section row after a theme 
 async function slowRedraw(page: Page, ms: number) {
   await page.evaluate((total) => {
     const blocks = [...document.querySelectorAll<HTMLElement>(".center code.mermaid")]
-    const start = performance.now()
+    let start = performance.now()
     const mark = document.createElement("span")
     mark.dataset.slowRedraw = ""
     const keep = () => {
@@ -737,6 +737,7 @@ async function slowRedraw(page: Page, ms: number) {
     }
     const done = () => performance.now() - start >= total
     document.addEventListener("themechange", () => {
+      start = performance.now()
       const obs = new MutationObserver(() => {
         if (done()) return obs.disconnect()
         for (const b of blocks)

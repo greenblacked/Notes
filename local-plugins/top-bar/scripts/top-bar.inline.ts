@@ -463,6 +463,10 @@ type Pinned = {
   overflow: string
   sizing: string
 }
+// The lock gives up after this long without a change in the blocks (Mermaid failed or never ran),
+// and at the latest this long after the switch, so a redraw that keeps changing cannot hold it.
+const MERMAID_IDLE_MS = 3000
+const MERMAID_CEILING_MS = 10_000
 let mermaidLock: { rearm: () => void; release: (immediate?: boolean) => void } | null = null
 
 // A finished diagram: its SVG is a direct child of the block (while Mermaid draws, the block holds
@@ -486,6 +490,7 @@ function lockMermaidHeights() {
   if (typeof MutationObserver !== "function") return
   const saved: Pinned[] = []
   let timer = 0
+  let ceiling = 0
   let quiet = 0
   // Done when every pinned block holds a finished SVG as its only child, drawn since the latest
   // switch began.
@@ -499,6 +504,10 @@ function lockMermaidHeights() {
   // a short spell, and any later change restarts that wait.
   const QUIET_MS = 150
   const observer = new MutationObserver(() => {
+    // Progress: a slow device or a complex diagram is still drawing, so the idle wait starts over
+    // (the ceiling does not).
+    window.clearTimeout(timer)
+    timer = window.setTimeout(() => release(), MERMAID_IDLE_MS)
     window.clearTimeout(quiet)
     if (!redrawn()) return
     quiet = window.setTimeout(() => {
@@ -537,6 +546,7 @@ function lockMermaidHeights() {
     mermaidLock = null
     observer.disconnect()
     window.clearTimeout(timer)
+    window.clearTimeout(ceiling)
     window.clearTimeout(quiet)
     // The blocks that start above the reading position, measured while still pinned: if one comes
     // back at another height, the browser keeps the reading position by scrolling (scroll
@@ -575,7 +585,9 @@ function lockMermaidHeights() {
     pin()
     window.clearTimeout(quiet)
     window.clearTimeout(timer)
-    timer = window.setTimeout(() => release(), 3000)
+    window.clearTimeout(ceiling)
+    timer = window.setTimeout(() => release(), MERMAID_IDLE_MS)
+    ceiling = window.setTimeout(() => release(), MERMAID_CEILING_MS)
   }
   const lock = { rearm, release }
   pin()
@@ -584,7 +596,8 @@ function lockMermaidHeights() {
     return
   }
   mermaidLock = lock
-  timer = window.setTimeout(() => release(), 3000) // Mermaid failed or never ran
+  timer = window.setTimeout(() => release(), MERMAID_IDLE_MS) // Mermaid failed or never ran
+  ceiling = window.setTimeout(() => release(), MERMAID_CEILING_MS)
 }
 
 // The page change. The router fetches the next page, fires "prenav", morphs it into the document
