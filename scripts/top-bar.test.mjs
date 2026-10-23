@@ -203,5 +203,16 @@ test("theme switch: diagrams keep their height while Mermaid redraws them", () =
   assert.match(topBar, /addEventListener\("themechange", \(\) => \{\s*lockMermaidHeights\(\)/)
   assert.match(topBar, /if \(layoutShifting\(\)\) \{/)
   assert.match(topBar, /querySelector\("svg"\)/)
+  assert.match(
+    topBar,
+    /querySelectorAll<HTMLElement>\("\.center code\.mermaid"\)/,
+    "only the drawn page",
+  )
+  assert.match(
+    topBar,
+    /if \(!code\.querySelector\("svg"\)\) continue/,
+    "never waits on an unrendered block",
+  )
+  assert.match(topBar, /"prenav", \(\) => \{\s*mermaidLock\?\.release\(true\)/)
   assert.match(topBar, /setTimeout\(\(\) => release\(\), 3000\)/, "a failed redraw lets go")
 })

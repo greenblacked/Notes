@@ -448,7 +448,8 @@ document.addEventListener("themechange", () => {
 // by scroll anchoring or as a jump of the content, and a tuck that reads it as a scroll slides
 // the section row in and out. So the diagrams keep their height until the new SVG is in (this
 // listener is registered at load, before Mermaid's own, so it runs first), and the tuck ignores
-// scroll moves meanwhile. Without MutationObserver or a measurable block it does nothing.
+// scroll moves meanwhile: a scroll during the lock is dropped, and the tuck rebases on the
+// position once the lock lets go. Without MutationObserver or a measurable block it does nothing.
 let mermaidLock: { release: (immediate?: boolean) => void } | null = null
 let rebaseTuck = false
 const layoutShifting = () => {
@@ -468,7 +469,11 @@ function lockMermaidHeights() {
     overflow: string
     sizing: string
   }[] = []
-  for (const code of document.querySelectorAll<HTMLElement>("code.mermaid")) {
+  // Only the diagrams Mermaid redraws: those in .center that already hold an SVG. A hidden link
+  // preview (.popover) keeps a block that is never rendered, and waiting for it would hold the
+  // lock to its timeout.
+  for (const code of document.querySelectorAll<HTMLElement>(".center code.mermaid")) {
+    if (!code.querySelector("svg")) continue
     const pre = code.parentElement
     const h = pre?.getBoundingClientRect().height ?? 0
     if (!pre || !(h > 0)) continue
@@ -535,6 +540,7 @@ function lockMermaidHeights() {
 let navigating = false
 let enterTimer = 0
 document.addEventListener("prenav", () => {
+  mermaidLock?.release(true) // the lock must not survive the page change
   navigating = true
   root.dataset.navigating = ""
   root.removeAttribute(TUCKED)

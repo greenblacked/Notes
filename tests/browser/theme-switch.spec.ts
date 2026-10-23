@@ -355,14 +355,15 @@ test("the section row stays put while the diagrams are redrawn for a new theme",
   await page.goto(diagramPage)
   await page.waitForLoadState("networkidle")
   await page.waitForFunction(
-    () => [...document.querySelectorAll("code.mermaid")].every((el) => el.querySelector("svg")),
+    () =>
+      [...document.querySelectorAll(".center code.mermaid")].every((el) => el.querySelector("svg")),
     undefined,
     { timeout: 15_000 },
   )
   await expect(page.locator("html")).toHaveClass(/motion-ready/)
   // Scroll to 300px past the first diagram, where the row is tucked.
   await page.evaluate(() => {
-    const code = document.querySelector("code.mermaid")!
+    const code = document.querySelector(".center code.mermaid")!
     const r = (code.closest("pre") ?? code).getBoundingClientRect()
     window.scrollTo({ top: r.bottom + window.scrollY + 300, behavior: "instant" })
   })
@@ -381,7 +382,8 @@ test("the section row stays put while the diagrams are redrawn for a new theme",
   await expect(page.locator("html")).not.toHaveAttribute("saved-theme", "light")
   // Until the new SVGs are in (they were removed for a moment), then a while longer.
   await page.waitForFunction(
-    () => [...document.querySelectorAll("code.mermaid")].every((el) => el.querySelector("svg")),
+    () =>
+      [...document.querySelectorAll(".center code.mermaid")].every((el) => el.querySelector("svg")),
     undefined,
     { timeout: 15_000 },
   )
