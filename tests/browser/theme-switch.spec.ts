@@ -215,7 +215,12 @@ const BAR = ".page > #quartz-body > .sidebar.left"
 const SLIDE = ["bottom::after", "bottom::before", "transform"]
 type Untuck = { switching: boolean; running: string[] }
 type TuckWindow = Window & { __tuck: () => string[]; __untuck: Promise<Untuck> }
-type SlideWindow = TuckWindow & { __ended: string[]; __cancelled: string[] }
+type SlideWindow = TuckWindow & {
+  __ended: string[]
+  __cancelled: string[]
+  __untuckAt: number // performance.now() when the row came back
+  __frames: number[] // ms after __untuckAt of each animation frame since, for the failure message
+}
 
 function installTuckProbe() {
   ;(window as unknown as TuckWindow).__tuck = () => {
@@ -332,6 +337,14 @@ for (const motion of [true, false]) {
                       const n = name(e)
                       if (n) w.__cancelled.push(n)
                     })
+                    // For the failure message only: the frames the engine paints from here on.
+                    w.__untuckAt = performance.now()
+                    w.__frames = []
+                    const frame = () => {
+                      w.__frames.push(Math.round(performance.now() - w.__untuckAt))
+                      if (w.__frames.length < 100) requestAnimationFrame(frame)
+                    }
+                    requestAnimationFrame(frame)
                     // Read in the same task as the untuck: getAnimations() applies the pending
                     // style change first, so the slide is there now, whatever the frame timing.
                     resolve({
@@ -353,14 +366,43 @@ for (const motion of [true, false]) {
           // It slid all the way: every part ran to its end, none was cut short. Wait for the
           // slide's own end, not a short deadline on the transform: a transition keeps its start
           // value until the next frame, and headless WebKit at 3x can hold frames back for seconds.
+          // While the slide has not ended, the value read says what the page did since the row
+          // came back (the frames painted, each part's transition), so a failure tells an engine
+          // that paints no frames from a transition that never starts.
           await expect
             .poll(
-              () => page.evaluate(() => [...(window as unknown as SlideWindow).__ended].sort()),
-              {
-                timeout: 15_000,
-              },
+              () =>
+                page.evaluate(
+                  (parts) => {
+                    const w = window as unknown as SlideWindow
+                    if (w.__ended.length >= parts) return "slid"
+                    const bar = document.querySelector(".page > #quartz-body > .sidebar.left")!
+                    const links = bar.querySelector(".section-row-links")!
+                    const transitions = document
+                      .getAnimations()
+                      .filter((a): a is CSSTransition => a instanceof CSSTransition)
+                      .filter((a) => {
+                        const e = a.effect as KeyframeEffect | null
+                        return (
+                          (e?.target === links && a.transitionProperty === "transform") ||
+                          (e?.target === bar && a.transitionProperty === "bottom")
+                        )
+                      })
+                      .map(
+                        (a) =>
+                          `${a.transitionProperty}${(a.effect as KeyframeEffect).pseudoElement ?? ""} ${a.playState}${a.pending ? " (pending)" : ""} start=${a.startTime} now=${a.currentTime}`,
+                      )
+                    const since = Math.round(performance.now() - w.__untuckAt)
+                    return `ended ${JSON.stringify(w.__ended)} ${since}ms after the row came back; ${w.__frames.length} frames since, at ${w.__frames.join(" ")}ms; transitions: ${transitions.join(", ") || "none"}`
+                  },
+                  (motion ? SLIDE : []).length,
+                ),
+              { timeout: 15_000 },
             )
-            .toEqual(motion ? SLIDE : [])
+            .toBe("slid")
+          expect(
+            await page.evaluate(() => [...(window as unknown as SlideWindow).__ended].sort()),
+          ).toEqual(motion ? SLIDE : [])
           expect(await page.evaluate(() => (window as unknown as SlideWindow).__cancelled)).toEqual(
             [],
           )
