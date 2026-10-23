@@ -165,9 +165,12 @@ for (const motion of [true, false]) {
       test(`header holds still, ${tucked ? "tucked" : "at the top"}`, async ({
         page,
         isMobile,
+        browserName,
       }, testInfo) => {
+        test.slow(browserName === "webkit" && isMobile, "headless WebKit at 3x paints slowly")
         await page.goto(longPage)
-        await expect(page.locator("html")).toHaveClass(/motion-ready/)
+        // Setup, not the behaviour under test: the first paint can take seconds on headless WebKit.
+        await expect(page.locator("html")).toHaveClass(/motion-ready/, { timeout: 15_000 })
         if (tucked) {
           test.skip(
             (page.viewportSize()?.height ?? 0) < 30 * 16,
@@ -265,7 +268,9 @@ for (const motion of [true, false]) {
           colorScheme: start.scheme,
           ...(size ? { viewport: size } : {}),
         })
-        test.beforeEach(async ({ page }) => {
+        test.beforeEach(async ({ page, browserName, isMobile }) => {
+          // The tablet variants take about 20s of the 30s limit on the headless WebKit phone.
+          test.slow(browserName === "webkit" && isMobile, "headless WebKit at 3x paints slowly")
           test.skip(
             (page.viewportSize()?.height ?? 0) < 30 * 16,
             "the bar is not sticky under 30rem",
@@ -274,11 +279,11 @@ for (const motion of [true, false]) {
             await page.addInitScript((t) => localStorage.setItem("theme", t), start.saved)
           await page.goto(longPage)
           await page.evaluate(installTuckProbe)
-          await expect(page.locator("html")).toHaveClass(/motion-ready/)
+          await expect(page.locator("html")).toHaveClass(/motion-ready/, { timeout: 15_000 })
           await expect(page.locator("html")).toHaveAttribute("saved-theme", start.theme)
           await page.evaluate(() => window.scrollTo({ top: 900, behavior: "instant" }))
           await expect(page.locator("html")).toHaveAttribute("data-bar-tucked", /.*/)
-          await expect.poll(() => tuckRunning(page)).toEqual([]) // the tuck slide has finished
+          await expect.poll(() => tuckRunning(page), { timeout: 15_000 }).toEqual([]) // the tuck slide has finished
         })
 
         test("the row slides back on a scroll right after the switch", async ({
@@ -370,7 +375,7 @@ for (const motion of [true, false]) {
           await page.evaluate(() => {
             const w = window as unknown as { __cancelled: string[] }
             w.__cancelled = []
-            const bar = document.querySelector(".page > #quartz-body > .sidebar.left")!
+            const bar = document.querySelector<HTMLElement>(".page > #quartz-body > .sidebar.left")!
             bar.addEventListener("transitioncancel", (e) => {
               const links = bar.querySelector(".section-row-links")
               if (
@@ -419,7 +424,7 @@ async function openDiagramPage(page: Page) {
     undefined,
     { timeout: 15_000 },
   )
-  await expect(page.locator("html")).toHaveClass(/motion-ready/)
+  await expect(page.locator("html")).toHaveClass(/motion-ready/, { timeout: 15_000 })
 }
 
 // Scrolls to 300px past the first diagram, where the row is tucked, and lets the slide end.
