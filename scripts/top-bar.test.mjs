@@ -196,3 +196,12 @@ test("theme switch: script feature-detects the API, respects reduced motion, no 
   assert.match(topBar, /removeAttribute\(SNAPSHOT\)/)
   assert.ok(!/setTimeout\([^)]*theme[^)]*,\s*450\)/.test(topBar), "the fixed 450ms timer is gone")
 })
+
+test("theme switch: diagrams keep their height while Mermaid redraws them", () => {
+  // The lock is taken in a themechange listener registered at load (before Mermaid's own), and
+  // the tuck ignores scroll moves while it holds.
+  assert.match(topBar, /addEventListener\("themechange", \(\) => \{\s*lockMermaidHeights\(\)/)
+  assert.match(topBar, /if \(layoutShifting\(\)\) \{/)
+  assert.match(topBar, /querySelector\("svg"\)/)
+  assert.match(topBar, /setTimeout\(\(\) => release\(\), 3000\)/, "a failed redraw lets go")
+})

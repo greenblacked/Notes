@@ -260,6 +260,12 @@ function setupHideOnScroll() {
   let frame = 0
   const update = () => {
     frame = 0
+    if (layoutShifting()) {
+      // A theme switch is re-drawing the diagrams: scroll anchoring may move the page a little
+      // without the reader, which must not read as a scroll. Keep the row as it is.
+      state = { ...state, lastY: Math.max(0, window.scrollY), travel: 0 }
+      return
+    }
     state = nextTuck(state, {
       y: window.scrollY,
       maxY: root.scrollHeight - window.innerHeight,
@@ -431,10 +437,91 @@ document.addEventListener(
 
 // Any other source of "themechange": switch transitions off from here on.
 document.addEventListener("themechange", () => {
+  lockMermaidHeights()
   if (root.classList.contains(SWITCHING)) return
   const id = beginSwitch()
   afterPaint(() => endSwitch(id))
 })
+
+// Mermaid redraws every diagram on a theme change: it puts the source text back (a different
+// height) and renders the new SVG later. Above the reading position that moves the page, either
+// by scroll anchoring or as a jump of the content, and a tuck that reads it as a scroll slides
+// the section row in and out. So the diagrams keep their height until the new SVG is in (this
+// listener is registered at load, before Mermaid's own, so it runs first), and the tuck ignores
+// scroll moves meanwhile. Without MutationObserver or a measurable block it does nothing.
+let mermaidLock: { release: (immediate?: boolean) => void } | null = null
+let rebaseTuck = false
+const layoutShifting = () => {
+  if (!mermaidLock && !rebaseTuck) return false
+  rebaseTuck = false
+  return true
+}
+
+function lockMermaidHeights() {
+  mermaidLock?.release(true)
+  if (typeof MutationObserver !== "function") return
+  const saved: {
+    pre: HTMLElement
+    code: HTMLElement
+    min: string
+    max: string
+    overflow: string
+    sizing: string
+  }[] = []
+  for (const code of document.querySelectorAll<HTMLElement>("code.mermaid")) {
+    const pre = code.parentElement
+    const h = pre?.getBoundingClientRect().height ?? 0
+    if (!pre || !(h > 0)) continue
+    saved.push({
+      pre,
+      code,
+      min: pre.style.minHeight,
+      max: pre.style.maxHeight,
+      overflow: pre.style.overflow,
+      sizing: pre.style.boxSizing,
+    })
+    pre.style.boxSizing = "border-box"
+    pre.style.minHeight = pre.style.maxHeight = `${h}px`
+    pre.style.overflow = "hidden"
+  }
+  if (saved.length === 0) return
+  let timer = 0
+  let observer: MutationObserver | null = null
+  let lock: NonNullable<typeof mermaidLock>
+  const release = (immediate = false) => {
+    if (mermaidLock !== lock) return
+    observer?.disconnect()
+    window.clearTimeout(timer)
+    for (const { pre, min, max, overflow, sizing } of saved) {
+      pre.style.minHeight = min
+      pre.style.maxHeight = max
+      pre.style.overflow = overflow
+      pre.style.boxSizing = sizing
+    }
+    const done = () => {
+      if (mermaidLock !== lock) return
+      mermaidLock = null
+      rebaseTuck = true
+      window.dispatchEvent(new Event("scroll")) // the tuck takes the new position as its baseline
+    }
+    if (immediate) {
+      mermaidLock = null
+    } else {
+      afterPaint(done)
+    }
+  }
+  lock = { release }
+  mermaidLock = lock
+  // Mermaid puts the source text back (the SVG goes) and inserts the new SVG once it has rendered
+  // (data-processed is set when it starts, so it says nothing about the SVG).
+  let removed = false
+  observer = new MutationObserver(() => {
+    if (!saved.every(({ code }) => code.querySelector("svg"))) removed = true
+    else if (removed) release()
+  })
+  for (const { code } of saved) observer.observe(code, { childList: true, subtree: true })
+  timer = window.setTimeout(() => release(), 3000) // Mermaid failed or never ran
+}
 
 // The page change. The router fetches the next page, fires "prenav", morphs it into the document
 // (the .center element survives) and scrolls, then fires "nav". While that runs the root has
