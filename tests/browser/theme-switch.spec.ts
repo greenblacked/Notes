@@ -390,3 +390,46 @@ test("the section row stays put while the diagrams are redrawn for a new theme",
   await expect(page.locator("html")).toHaveAttribute("data-bar-tucked", /.*/)
   expect(Math.abs((await page.evaluate(() => scrollY)) - before)).toBeLessThan(2)
 })
+
+// A link preview (popover) of another diagram page keeps an unrendered code.mermaid in the body,
+// hidden: Mermaid only draws the ones in .center. The lock on the diagram heights must not wait
+// for that block, or it lasts to its timeout and the scrolls in that time are dropped.
+test("a link preview with a diagram does not hold the section row after a theme switch", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "link previews need a hover")
+  test.skip((page.viewportSize()?.height ?? 0) < 30 * 16, "the bar is not sticky under 30rem")
+  await page.goto(diagramPage)
+  await page.waitForLoadState("networkidle")
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll(".center code.mermaid")].every((el) => el.querySelector("svg")),
+    undefined,
+    { timeout: 15_000 },
+  )
+  await expect(page.locator("html")).toHaveClass(/motion-ready/)
+  await page.locator('a.internal[data-slug="patterns/spinnaker-canary-analysis"]').first().hover()
+  await page.locator(".popover").first().waitFor({ state: "attached", timeout: 10_000 })
+  expect(await page.locator(".popover code.mermaid").count()).toBeGreaterThan(0)
+  await page.mouse.move(5, 5)
+  await page.evaluate(() => {
+    const code = document.querySelector(".center code.mermaid")!
+    const r = (code.closest("pre") ?? code).getBoundingClientRect()
+    window.scrollTo({ top: r.bottom + window.scrollY + 300, behavior: "instant" })
+  })
+  await expect(page.locator("html")).toHaveAttribute("data-bar-tucked", /.*/)
+  await page.waitForTimeout(600)
+  await tapToggle(page, isMobile)
+  await expect(page.locator("html")).not.toHaveAttribute("saved-theme", "light")
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll(".center code.mermaid")].every((el) => el.querySelector("svg")),
+    undefined,
+    { timeout: 15_000 },
+  )
+  await page.waitForTimeout(400)
+  await page.evaluate(() => window.scrollBy({ top: -80, behavior: "instant" }))
+  // A scroll up shows the row again at once, not after the lock's 3 s timeout.
+  await expect(page.locator("html")).not.toHaveAttribute("data-bar-tucked", { timeout: 1_000 })
+})
