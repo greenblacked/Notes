@@ -161,8 +161,11 @@ test("theme switch: no per-element theme fade, transitions off for the flip", ()
   assert.ok(!topBar.includes("theme-fade"))
   assert.match(
     scss,
-    /:root\.theme-switching \*:not\(\.darkmode > svg\),[\s\S]*?\{\s*transition:\s*none !important;/,
+    /:root\.theme-switching \*:not\(\.darkmode > svg\):not\(\.section-row-links\),[\s\S]*?\{\s*transition:\s*none !important;/,
   )
+  // The tuck motion (links' slide, the bar's band and line edge) keeps sliding through the flip.
+  assert.match(scss, /:root\.theme-switching \*:not\(\.sidebar\.left\)::before,/)
+  assert.match(scss, /:root\.theme-switching \*:not\(\.sidebar\.left\)::after,/)
   assert.match(
     scss,
     /:root\.theme-switching\[data-theme-snapshot\] \.darkmode > svg[\s\S]*?\{\s*transition:\s*none !important;/,
