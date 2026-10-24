@@ -344,7 +344,7 @@ The target is as short as possible with every check. The critical path is now th
 
 ### Measured 10-shard runs (2026-10-23, private repository, 2 vCPU)
 
-Three runs of the 10-shard graph with the parallel start and `playwright install-deps` in each WebKit shard (the reason for moving to the Playwright image):
+Three runs of the 10-shard graph with the parallel start and `playwright install-deps` in every shard (Chromium and WebKit) (the reason for moving to the Playwright image):
 
 - Billed minutes 54, 54 and 49 (latest attempts only; failed first attempts are not included).
 - Wall-clock to CI OK 17, 31 and 38 minutes, including re-runs of single shards.
@@ -381,9 +381,9 @@ The browser matrix uses `fail-fast: false`: when one shard fails the others fini
 | 10 shards after the build, in the Playwright image     | to be measured | to be measured                      | to be measured                                                       | to be measured           |
 | 4 jobs (one per project, `shard: 1/1`)                 | about 5.7      | about 19                            | about 87                                                             | about 23                 |
 
-Every job is rounded up to a whole minute and shard setup (checkout, `npm ci`, browser restore) is billed in each shard, so fewer, larger shards are cheaper while more shards are faster; each shard sits near a minute boundary, so the figures are sensitive. The 10-shard layout (WebKit three per project, Chromium two) is the owner's choice of 2026-10-21 for a private repository. Switching to four jobs is a matrix change (`shard: 1/1` and one entry per project). GitHub Free allows about 20 concurrent jobs (check the docs); one run now uses up to 13 of them (10 shards, the build, lint and `CI OK`), so a second concurrent run can queue. The shards start only after a successful build, so a failed, hung or cold build bills no shard. "Re-run failed jobs" re-runs one shard, which finds the earlier successful build at once.
+Every job is rounded up to a whole minute and shard setup (container pull, checkout, `npm ci`) is billed in each shard, so fewer, larger shards are cheaper while more shards are faster; each shard sits near a minute boundary, so the figures are sensitive. The 10-shard layout (WebKit three per project, Chromium two) is the owner's choice of 2026-10-21 for a private repository. Switching to four jobs is a matrix change (`shard: 1/1` and one entry per project). GitHub Free allows about 20 concurrent jobs (check the docs); one run now uses up to 13 of them (10 shards, the build, lint and `CI OK`), so a second concurrent run can queue. The shards start only after a successful build, so a failed, hung or cold build bills no shard. "Re-run failed jobs" re-runs one shard; its `needs` is already met by the earlier successful build.
 
-Cold runs are slower: a plugin-cache miss (only when `quartz.lock.json` changes) adds about 7 to 8 minutes measured on 4-core runners (2026-10-20), more on 2-core; each shard pulls the Playwright image (about 1 GB compressed; pull time to be measured). PR runs read the caches written by `main` and write only their own scope; no cache or artifact written by a PR run is read by a deploy.
+Cold runs are slower: a plugin-cache miss (only when `quartz.lock.json` changes) adds about 7 to 8 minutes measured on 4-core runners (2026-10-20), more on 2-core; each shard pulls the Playwright image (about 1 GB compressed; pull time to be measured). The image has no `zstd`, so the npm cache saved inside the container is gzip and separate from the build job's cache; on the first run after merge all 10 shards miss it and race to save it, which only produces warnings. PR runs read the caches written by `main` and write only their own scope; no cache or artifact written by a PR run is read by a deploy.
 
 Savings from the private-repository change, estimated from the run durations of 2026-10-10 to 2026-10-20 (about 550 CI runs and 125 Deploy stage runs a month at that burst cadence):
 
@@ -394,7 +394,7 @@ Savings from the private-repository change, estimated from the run durations of 
 | Playwright browser cache                                    | replaced by the Playwright image (2026-10-24) | not counted      |
 | Dependabot version updates monthly                          | fewer PRs (23 to 35 min each)                 | about 100 to 150 |
 | Repository-level secret and variable, production actor gate | 0                                             | 0                |
-| Total (without the browser cache)                           |                                               | about 775 to 825 |
+| Total                                                       |                                               | about 775 to 825 |
 
 Before the shard matrix a merged PR cost about 55 minutes (about 3 PR CI runs at about 11, the push run on `main` at about 11 and Deploy stage at about 11), so 2,000 minutes covered about 35 merged PRs a month; with 10 shards see the table above. Re-measure the per-shard container initialization and the total billed minutes from `gh api repos/greenblacked/Notes/actions/runs/<id>/jobs` over the first 10 runs.
 
