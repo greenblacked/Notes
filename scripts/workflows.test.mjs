@@ -4,6 +4,7 @@ import { dirname, join } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { parse } from "yaml"
+import { GIVE_UP_SECONDS } from "../.github/scripts/wait-for-build-job.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const dir = join(root, ".github", "workflows")
@@ -258,16 +259,17 @@ test("browser shards start with the build job, wait for it in a step and use onl
   const tests = idx((s) => (s.run ?? "").includes("npm run test:browser"))
   assert.ok(setup >= 0 && setup < wait && wait < download && download < install && install < tests)
   for (const s of steps.slice(0, wait)) {
-    assert.doesNotMatch(s.run ?? "", /public\/|\$RUNNER_TEMP\/site/, s.name)
+    assert.doesNotMatch(s.run ?? "", /public\/|ci-site-download/, s.name)
   }
   // The wait gives up after 1500 s; the job limit covers it plus setup, and the test step has
   // its own shorter limit (a build that long means the tests rarely use theirs).
   const testStep = steps[tests]
   assert.equal(testStep["timeout-minutes"], 15)
   assert.equal(job["timeout-minutes"], 35)
-  assert.ok(job["timeout-minutes"] * 60 > 1500 + 300)
   assert.ok(testStep["timeout-minutes"] < job["timeout-minutes"])
-  assert.ok(ci.jobs["build-and-check"]["timeout-minutes"] !== undefined)
+  assert.ok(ci.jobs["build-and-check"]["timeout-minutes"] * 60 < GIVE_UP_SECONDS)
+  assert.ok(GIVE_UP_SECONDS + 300 < job["timeout-minutes"] * 60)
+  assert.equal(steps[download].with.path, "ci-site-download")
   assert.equal(steps[download].with.name, "ci-site")
 })
 

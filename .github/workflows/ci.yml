@@ -170,17 +170,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/wait-for-build-job.mjs
 
+      # A relative path resolves against the workspace inside the container; runner.temp may
+      # expand to the host path there, which the container's shell would not see.
       - name: Download build output
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ci-site
-          path: ${{ runner.temp }}/site
+          path: ci-site-download
 
       # The same checks as the deploy jobs: only a valid public/ is used, and the Worker's CSP
       # hashes are regenerated from it.
       - name: Install build output
         run: |
-          site="$RUNNER_TEMP/site"
+          site="$GITHUB_WORKSPACE/ci-site-download"
           node scripts/check-artifact.mjs --root "$site"
           rm -rf public worker/csp.generated.js
           cp -R "$site/public" public
