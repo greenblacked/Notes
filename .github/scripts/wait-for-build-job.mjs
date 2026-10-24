@@ -12,6 +12,7 @@ import { pathToFileURL } from "node:url"
 export const JOB_NAME = "Build and check"
 export const GIVE_UP_SECONDS = 1500
 export const MAX_API_FAILURES = 10
+export const REQUEST_TIMEOUT_MS = 30_000
 
 // Poll often while a warm build is due, then slowly (a cold plugin restore takes minutes),
 // which keeps 10 shards well under the token's API rate limit.
@@ -35,6 +36,7 @@ async function listJobs(fetchFn, { apiUrl, repository, runId, token }) {
   let url = `${apiUrl}/repos/${repository}/actions/runs/${runId}/jobs?filter=all&per_page=100`
   for (let pages = 0; url && pages < 100; pages++) {
     const res = await fetchFn(url, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
@@ -46,6 +48,10 @@ async function listJobs(fetchFn, { apiUrl, repository, runId, token }) {
     if (!Array.isArray(body?.jobs)) throw new Error("no jobs array in the response")
     jobs.push(...body.jobs)
     url = nextLink(res.headers?.get?.("link"))
+    // The token must not follow a Link header off the API origin.
+    if (url && new URL(url).origin !== new URL(apiUrl).origin) {
+      throw new Error("pagination left the API origin")
+    }
   }
   return jobs
 }

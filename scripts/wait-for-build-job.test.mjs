@@ -146,3 +146,23 @@ test("refuses to run without its environment", async () => {
   assert.equal(code, 1)
   assert.match(logs[0], /required/)
 })
+
+test("sends a request timeout signal with every call", async () => {
+  const h = harness([{ jobs: [job()] }])
+  assert.equal(await h.run(), 0)
+  assert.ok(h.calls[0].init.signal instanceof AbortSignal)
+})
+
+test("a fetch that aborts counts as an API error", async () => {
+  const abort = Object.assign(new Error("The operation was aborted"), { name: "AbortError" })
+  const h = harness([abort, { jobs: [job()] }])
+  assert.equal(await h.run(), 0)
+  assert.equal(h.calls.length, 2)
+})
+
+test("never sends the token to a next link outside the API origin", async () => {
+  const h = harness([{ jobs: [], next: "https://evil.example.test/jobs?page=2" }])
+  assert.equal(await h.run(), 1)
+  assert.equal(h.calls.length, MAX_API_FAILURES)
+  assert.ok(h.calls.every((c) => c.url.startsWith("https://api.example.test/")))
+})
