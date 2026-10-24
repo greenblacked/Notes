@@ -432,7 +432,9 @@ test("the browser job runs in the official Playwright image, pinned by digest to
 })
 
 test("CI OK accepts skipped jobs only for a run superseded on the PR", () => {
-  const step = wf["ci.yml"].jobs["ci-ok"].steps.find((s) => s.name === "Require all jobs to succeed")
+  const step = wf["ci.yml"].jobs["ci-ok"].steps.find(
+    (s) => s.name === "Require all jobs to succeed",
+  )
   const lines = step.run.split("\n")
   const exact = lines.findIndex((l) => l.includes('all(. == "success")'))
   assert.ok(exact >= 0)
