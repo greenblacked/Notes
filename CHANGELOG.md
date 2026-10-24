@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Changed
+
+- **CI browser tests run in the official Playwright container image and start after the build job.** No shard installs system packages with apt or downloads browsers any more: on 2026-10-23 the Ubuntu mirror made that step take up to 11 minutes on single shards and hit the job timeout several times. The image is pinned by digest and must match the Playwright version in `package-lock.json` (checked by the script tests). The shards now start after Build and check succeeds, so they no longer poll the job list (the job needs only `contents: read`), and a failed, hung or cold build no longer bills ten waiting shards. Every check still runs, on Chromium and WebKit at desktop and phone sizes, in the same ten shards. Measured before the change on 2-vCPU runners: 49 to 54 billed minutes and 17 to 38 minutes to CI OK per run. The new figures will be measured on the first runs: each shard now pulls the image, about 1 GB, and starts about one setup later than before.
+
 ## [0.8.0] - 2026-10-23
 
 ### Added
