@@ -230,8 +230,8 @@ test("the browser smoke tests run in ci and gate CI OK", () => {
   const ci = wf["ci.yml"]
   const job = ci.jobs.browser
   assert.ok(job)
-  assert.equal(job.needs, "build-and-check")
-  assert.deepEqual(job.permissions, { contents: "read" })
+  assert.equal(job.needs, undefined)
+  assert.deepEqual(job.permissions, { contents: "read", actions: "read" })
   assert.ok(ci.jobs["ci-ok"].needs.includes("browser"))
   const runs = job.steps.map((s) => s.run ?? "")
   assert.ok(runs.some((r) => r.includes("npm run test:browser")))
@@ -240,27 +240,46 @@ test("the browser smoke tests run in ci and gate CI OK", () => {
   assert.equal(report.if, "failure()")
 })
 
-test("browser shards start after the build job and use only its output", () => {
+test("browser shards start with the build job, wait for it in a step and use only its output", () => {
   const ci = wf["ci.yml"]
   const job = ci.jobs.browser
   const steps = job.steps
   const idx = (f) => steps.findIndex(f)
-  assert.equal(job.needs, "build-and-check")
-  assert.ok(!steps.some((s) => s.name === "Wait for the build job"))
+  assert.equal(job.needs, undefined)
+  assert.equal(job.permissions.actions, "read")
+  const wait = idx((s) => s.name === "Wait for the build job")
+  assert.ok(wait >= 0)
+  assert.equal(steps[wait].run.trim(), "node .github/scripts/wait-for-build-job.mjs")
+  assert.deepEqual(steps[wait].env, { GH_TOKEN: "${{ github.token }}" })
   assert.ok(!steps.some((s) => (s.run ?? "").includes("gh api")))
-  const download = idx((s) => (s.uses ?? "").startsWith("actions/download-artifact@"))
+  const setup = idx((s) => (s.uses ?? "").startsWith("actions/setup-node@"))
   const install = idx((s) => s.name === "Install build output")
+  const download = idx((s) => (s.uses ?? "").startsWith("actions/download-artifact@"))
   const tests = idx((s) => (s.run ?? "").includes("npm run test:browser"))
-  assert.ok(download >= 0 && download < install && install < tests)
-  for (const s of steps.slice(0, download)) {
+  assert.ok(setup >= 0 && setup < wait && wait < download && download < install && install < tests)
+  for (const s of steps.slice(0, wait)) {
     assert.doesNotMatch(s.run ?? "", /public\/|\$RUNNER_TEMP\/site/, s.name)
   }
-  assert.ok(job["timeout-minutes"] <= 20)
+  // The wait gives up after 1500 s; the job limit covers it plus setup, and the test step has
+  // its own shorter limit (a build that long means the tests rarely use theirs).
   const testStep = steps[tests]
-  assert.ok(testStep["timeout-minutes"] !== undefined)
+  assert.equal(testStep["timeout-minutes"], 15)
+  assert.equal(job["timeout-minutes"], 35)
+  assert.ok(job["timeout-minutes"] * 60 > 1500 + 300)
   assert.ok(testStep["timeout-minutes"] < job["timeout-minutes"])
   assert.ok(ci.jobs["build-and-check"]["timeout-minutes"] !== undefined)
   assert.equal(steps[download].with.name, "ci-site")
+})
+
+test("the wait script is committed, used only by the browser job", () => {
+  const src = readFileSync(join(root, ".github", "scripts", "wait-for-build-job.mjs"), "utf8")
+  assert.match(src, /GITHUB_RUN_ID/)
+  assert.match(src, /Build and check/)
+  assert.equal(wf["ci.yml"].jobs["build-and-check"].name, "Build and check")
+  for (const [name, j] of Object.entries(wf["ci.yml"].jobs)) {
+    const uses = (j.steps ?? []).some((s) => (s.run ?? "").includes("wait-for-build-job.mjs"))
+    assert.equal(uses, name === "browser", name)
+  }
 })
 
 test("playwright is never fetched by npx", () => {
@@ -426,23 +445,6 @@ test("the browser job runs in the official Playwright image, pinned by digest to
     assert.ok(s.id !== "pw-cache" && s.id !== "playwright", s.name)
     assert.doesNotMatch(s.run ?? "", /\bapt(-get)?\b|install-deps|--with-deps/, s.name)
   }
-})
-
-test("CI OK accepts skipped jobs only for a run superseded on the PR", () => {
-  const step = wf["ci.yml"].jobs["ci-ok"].steps.find(
-    (s) => s.name === "Require all jobs to succeed",
-  )
-  const lines = step.run.split("\n")
-  const exact = lines.findIndex((l) => l.includes('all(. == "success")'))
-  assert.ok(exact >= 0)
-  assert.doesNotMatch(lines[exact], /skipped/)
-  assert.doesNotMatch(lines.slice(exact, exact + 3).join("\n"), /skipped/)
-  const skipped = lines.map((l, i) => (l.includes("skipped") ? i : -1)).filter((i) => i >= 0)
-  assert.equal(skipped.length, 1)
-  assert.match(lines[skipped[0]], /cancelled/)
-  const pr = lines.findIndex((l) => l.includes('EVENT_NAME" == "pull_request"'))
-  const headCheck = lines.findIndex((l) => l.includes('"$head" != "$RUN_SHA"'))
-  assert.ok(pr >= 0 && pr <= skipped[0] && skipped[0] < headCheck)
 })
 
 test("dependabot version updates run monthly", () => {

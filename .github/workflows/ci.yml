@@ -17,7 +17,8 @@ jobs:
     name: Build and check
     runs-on: ubuntu-24.04
     # A cold `quartz plugin restore` takes about 7 to 8 minutes measured on 4-core runners (2026-10-20), slower on 2-core.
-    # The browser shards start only after this job succeeds (needs), so a slow or failed build bills no shard.
+    # The browser shards start with this job and wait for it (step "Wait for the build job"), so
+    # their image pull, checkout, npm ci and type check overlap the build.
     timeout-minutes: 24
     permissions:
       contents: read
@@ -86,18 +87,20 @@ jobs:
       - name: Deploy dry run (no credentials)
         run: npm run deploy:dry-run
 
-  # One job per (Playwright project, shard), started after the build job and run in the official
-  # Playwright image, which has both browsers and their system packages, so a shard installs
-  # nothing with apt (the Ubuntu mirror stalled shards for up to 11 minutes, 2026-10-23).
+  # One job per (Playwright project, shard), started together with the build job and run in the
+  # official Playwright image, which has both browsers and their system packages, so a shard
+  # installs nothing with apt (the Ubuntu mirror stalled shards for up to 11 minutes, 2026-10-23).
+  # The shards wait for the build job in a step (no needs), so the image pull (about 1 GB),
+  # checkout, npm ci and type check overlap the build instead of following it.
   # Every job bills at least one whole minute (and each is rounded up on its own), so the
   # shard count trades wall-clock against billed minutes: see "CI minutes" in
   # docs/deployment.md. The shard count is this list; each project's shards must be exactly
   # 1/N to N/N (checked by scripts/workflows.test.mjs).
   browser:
     name: Browser ${{ matrix.id }}
-    needs: build-and-check
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # The wait step can take up to 25 minutes (cold plugin restore in the build job), then the tests.
+    timeout-minutes: 35
     # The tag must equal the Playwright version in package-lock.json (scripts/workflows.test.mjs
     # checks it); bump tag and digest together with @playwright/test. Digest:
     #   curl -sSI -H "Accept: application/vnd.oci.image.index.v1+json" \
@@ -108,6 +111,8 @@ jobs:
       options: --ipc=host --init
     permissions:
       contents: read
+      # Read this run's job list (the wait step).
+      actions: read
     strategy:
       # Every shard runs even if one fails, so a flaky shard can be re-run alone (Re-run failed
       # jobs would otherwise re-run all cancelled shards too). CI OK still needs every shard.
@@ -156,6 +161,14 @@ jobs:
       - name: Check formatting
         if: matrix.format
         run: npm run format:check
+
+      # The build job runs in parallel; wait for its latest attempt and fail as soon as that
+      # attempt fails, so a broken build never leaves the shards waiting. A re-run of only the
+      # failed shards finds the earlier successful attempt. Node only: the image has no gh.
+      - name: Wait for the build job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/wait-for-build-job.mjs
 
       - name: Download build output
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -317,8 +330,7 @@ jobs:
       pull-requests: read # look up the PR's current head commit
     steps:
       # Cancelled jobs fail this check, except when the run was cancelled because a
-      # newer commit superseded it on the PR (browser jobs may then be skipped because of a
-      # cancelled job they need): that commit is no longer the PR head,
+      # newer commit superseded it on the PR: that commit is no longer the PR head,
       # so its result never gates a merge. A cancelled run on the current head still
       # fails (a skipped required check would count as passing).
       - name: Require all jobs to succeed
@@ -336,7 +348,7 @@ jobs:
             exit 0
           fi
           if [[ "$EVENT_NAME" == "pull_request" ]] &&
-            jq -e 'all(. == "success" or . == "cancelled" or . == "skipped")' <<<"$RESULTS" >/dev/null; then
+            jq -e 'all(. == "success" or . == "cancelled")' <<<"$RESULTS" >/dev/null; then
             head="$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq '.head.sha')"
             if [[ -n "$head" && "$head" != "$RUN_SHA" ]]; then
               echo "::notice::Run superseded by $head on the PR; $RUN_SHA no longer gates the merge."
