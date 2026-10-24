@@ -441,6 +441,8 @@ test("the browser job runs in the official Playwright image, pinned by digest to
   assert.ok(job.container.options.includes("--ipc=host"))
   assert.ok(job.container.options.includes("--init"))
   assert.equal(job.container.credentials, undefined)
+  // Container jobs default to sh, which lacks [[ ]]; the steps are written for bash.
+  assert.equal(job.defaults?.run?.shell, "bash")
   assert.doesNotMatch(JSON.stringify(job.container.env ?? {}), /\$\{\{ secrets/)
   for (const s of job.steps) {
     assert.ok(!(s.uses ?? "").startsWith("actions/cache@"), s.name)
