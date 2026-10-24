@@ -133,7 +133,6 @@ jobs:
     env:
       NPM_CONFIG_IGNORE_SCRIPTS: "true"
       PROJECT: ${{ matrix.project }}
-      BROWSER: ${{ matrix.browser }}
       SHARD: ${{ matrix.shard }}
     steps:
       - name: Check out

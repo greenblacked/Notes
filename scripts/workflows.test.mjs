@@ -275,9 +275,6 @@ test("playwright is never fetched by npx", () => {
       }
     }
   }
-  for (const s of wf["ci.yml"].jobs.browser.steps) {
-    assert.doesNotMatch(s.run ?? "", /playwright\s+install(-deps)?\b/, s.name)
-  }
   for (const job of Object.values(wf["ci.yml"].jobs)) {
     for (const s of job.steps ?? []) {
       assert.doesNotMatch(s.run ?? "", /playwright\s+install(-deps)?\b/, s.name)
@@ -593,7 +590,6 @@ test("the browser matrix runs every shard and passes its values through env, not
   assert.equal(browserJob.strategy["fail-fast"], false)
   assert.equal(browserJob.name, "Browser ${{ matrix.id }}")
   assert.equal(browserJob.env.PROJECT, "${{ matrix.project }}")
-  assert.equal(browserJob.env.BROWSER, "${{ matrix.browser }}")
   assert.equal(browserJob.env.SHARD, "${{ matrix.shard }}")
   const run = browserJob.steps.find((s) => (s.run ?? "").includes("npm run test:browser")).run
   assert.ok(run.includes('--project="$PROJECT"') && run.includes('--shard="$SHARD"'))
