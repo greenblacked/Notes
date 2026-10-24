@@ -4,6 +4,7 @@ import { dirname, join } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { parse } from "yaml"
+import { GIVE_UP_SECONDS } from "../.github/scripts/wait-for-build-job.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const dir = join(root, ".github", "workflows")
@@ -240,39 +241,46 @@ test("the browser smoke tests run in ci and gate CI OK", () => {
   assert.equal(report.if, "failure()")
 })
 
-test("browser shards wait for the latest successful build job before using its output", () => {
+test("browser shards start with the build job, wait for it in a step and use only its output", () => {
   const ci = wf["ci.yml"]
   const job = ci.jobs.browser
   const steps = job.steps
   const idx = (f) => steps.findIndex(f)
-  const waitAt = idx((s) => s.name === "Wait for the build job")
-  assert.ok(waitAt >= 0)
-  const wait = steps[waitAt]
-  assert.equal(wait.if, undefined)
-  assert.equal(wait["continue-on-error"], undefined)
-  assert.equal(wait.env.GH_TOKEN, "${{ github.token }}")
-  assert.equal(wait.env.GH_REPO, "${{ github.repository }}")
-  for (const part of [
-    `select(.name == "${ci.jobs["build-and-check"].name}")`,
-    "$GITHUB_RUN_ID",
-    "filter=all",
-    "sort -n | tail -n 1",
-    "exit 1",
-    '"$conclusion" == "success"',
-  ]) {
-    assert.ok(wait.run.includes(part), part)
-  }
-  assert.doesNotMatch(wait.run, /\$\{\{/)
-  const download = idx((s) => (s.uses ?? "").startsWith("actions/download-artifact@"))
+  assert.equal(job.needs, undefined)
+  assert.equal(job.permissions.actions, "read")
+  const wait = idx((s) => s.name === "Wait for the build job")
+  assert.ok(wait >= 0)
+  assert.equal(steps[wait].run.trim(), "node .github/scripts/wait-for-build-job.mjs")
+  assert.deepEqual(steps[wait].env, { GH_TOKEN: "${{ github.token }}" })
+  assert.ok(!steps.some((s) => (s.run ?? "").includes("gh api")))
+  const setup = idx((s) => (s.uses ?? "").startsWith("actions/setup-node@"))
   const install = idx((s) => s.name === "Install build output")
+  const download = idx((s) => (s.uses ?? "").startsWith("actions/download-artifact@"))
   const tests = idx((s) => (s.run ?? "").includes("npm run test:browser"))
-  assert.ok(waitAt < download && download < install && install < tests)
-  const limit = Number(/elapsed >= (\d+)/.exec(wait.run)?.[1])
-  assert.ok(limit > 0 && limit < job["timeout-minutes"] * 60)
-  // A hung build must end before the shards give up waiting for it.
-  assert.ok(ci.jobs["build-and-check"]["timeout-minutes"] * 60 < limit)
-  for (const s of steps.slice(0, waitAt)) {
-    assert.doesNotMatch(s.run ?? "", /public\/|\$RUNNER_TEMP\/site/, s.name)
+  assert.ok(setup >= 0 && setup < wait && wait < download && download < install && install < tests)
+  for (const s of steps.slice(0, wait)) {
+    assert.doesNotMatch(s.run ?? "", /public\/|ci-site-download/, s.name)
+  }
+  // The wait gives up after 1500 s; the job limit covers it plus setup, and the test step has
+  // its own shorter limit (a build that long means the tests rarely use theirs).
+  const testStep = steps[tests]
+  assert.equal(testStep["timeout-minutes"], 15)
+  assert.equal(job["timeout-minutes"], 35)
+  assert.ok(testStep["timeout-minutes"] < job["timeout-minutes"])
+  assert.ok(ci.jobs["build-and-check"]["timeout-minutes"] * 60 < GIVE_UP_SECONDS)
+  assert.ok(GIVE_UP_SECONDS + 300 < job["timeout-minutes"] * 60)
+  assert.equal(steps[download].with.path, "ci-site-download")
+  assert.equal(steps[download].with.name, "ci-site")
+})
+
+test("the wait script is committed, used only by the browser job", () => {
+  const src = readFileSync(join(root, ".github", "scripts", "wait-for-build-job.mjs"), "utf8")
+  assert.match(src, /GITHUB_RUN_ID/)
+  assert.match(src, /Build and check/)
+  assert.equal(wf["ci.yml"].jobs["build-and-check"].name, "Build and check")
+  for (const [name, j] of Object.entries(wf["ci.yml"].jobs)) {
+    const uses = (j.steps ?? []).some((s) => (s.run ?? "").includes("wait-for-build-job.mjs"))
+    assert.equal(uses, name === "browser", name)
   }
 })
 
@@ -288,8 +296,11 @@ test("playwright is never fetched by npx", () => {
       }
     }
   }
-  const install = wf["ci.yml"].jobs.browser.steps.find((s) => s.name === "Install browsers")
-  assert.match(install.run, /^\.\/node_modules\/\.bin\/playwright install /)
+  for (const job of Object.values(wf["ci.yml"].jobs)) {
+    for (const s of job.steps ?? []) {
+      assert.doesNotMatch(s.run ?? "", /playwright\s+install(-deps)?\b/, s.name)
+    }
+  }
 })
 
 test("the CI build hands its output to the browser job", () => {
@@ -417,28 +428,27 @@ test("the production guard requires the owner, an owner's Cut release or an owne
   })
 })
 
-test("the browser job caches Playwright browsers keyed on the Playwright version", () => {
-  const steps = wf["ci.yml"].jobs.browser.steps
-  const at = (pred) => steps.findIndex(pred)
-  const cache = at((s) => (s.uses ?? "").startsWith("actions/cache@"))
-  const version = at((s) => s.id === "playwright")
-  const install = at((s) => s.name === "Install browsers")
-  const deps = at((s) => s.name === "Install browser system dependencies")
-  const deps_ = at((s) => s.name === "Install dependencies")
-  assert.ok(cache >= 0 && version >= 0 && install >= 0 && deps >= 0)
-  assert.ok(deps_ < version && version < cache && cache < install && cache < deps)
-  assert.equal(steps[cache].id, "pw-cache")
-  assert.equal(steps[cache].with.path, "~/.cache/ms-playwright")
-  assert.equal(
-    steps[cache].with.key,
-    "playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ matrix.browser }}",
+test("the browser job runs in the official Playwright image, pinned by digest to the locked Playwright version", () => {
+  const lock = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"))
+  const v = lock.packages["node_modules/playwright-core"].version
+  assert.equal(lock.packages["node_modules/@playwright/test"].version, v)
+  const job = wf["ci.yml"].jobs.browser
+  const esc = v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  assert.match(
+    job.container.image,
+    new RegExp(`^mcr\\.microsoft\\.com\\/playwright:v${esc}-noble@sha256:[0-9a-f]{64}$`),
   )
-  assert.equal(steps[cache].with["restore-keys"], undefined)
-  assert.ok(steps[version].run.includes("node_modules/playwright-core/package.json"))
-  assert.equal(steps[install].if, "steps.pw-cache.outputs.cache-hit != 'true'")
-  assert.match(steps[install].run, /install --with-deps "\$BROWSER"$/)
-  assert.equal(steps[deps].if, "steps.pw-cache.outputs.cache-hit == 'true'")
-  assert.match(steps[deps].run, /^\.\/node_modules\/\.bin\/playwright install-deps "\$BROWSER"/)
+  assert.ok(job.container.options.includes("--ipc=host"))
+  assert.ok(job.container.options.includes("--init"))
+  assert.equal(job.container.credentials, undefined)
+  // Container jobs default to sh, which lacks [[ ]]; the steps are written for bash.
+  assert.equal(job.defaults?.run?.shell, "bash")
+  assert.doesNotMatch(JSON.stringify(job.container.env ?? {}), /\$\{\{ secrets/)
+  for (const s of job.steps) {
+    assert.ok(!(s.uses ?? "").startsWith("actions/cache@"), s.name)
+    assert.ok(s.id !== "pw-cache" && s.id !== "playwright", s.name)
+    assert.doesNotMatch(s.run ?? "", /\bapt(-get)?\b|install-deps|--with-deps/, s.name)
+  }
 })
 
 test("dependabot version updates run monthly", () => {
@@ -552,7 +562,7 @@ test("each project's shards are exactly 1/N to N/N and the ids are unique", () =
   assert.equal(new Set(ids).size, ids.length)
   for (const { project } of configProjects) {
     const mine = matrixEntries.filter((e) => e.project === project)
-    // WebKit shards pay an install-deps step and run slower, so WebKit gets more shards than Chromium.
+    // WebKit shards run slower (measured 2026-10-23), so WebKit gets more shards than Chromium.
     const total = Number(mine[0].shard.split("/")[1])
     assert.equal(total, project.startsWith("webkit-") ? 3 : 2, project)
     assert.deepEqual(
@@ -586,7 +596,6 @@ test("the browser matrix runs every shard and passes its values through env, not
   assert.equal(browserJob.strategy["fail-fast"], false)
   assert.equal(browserJob.name, "Browser ${{ matrix.id }}")
   assert.equal(browserJob.env.PROJECT, "${{ matrix.project }}")
-  assert.equal(browserJob.env.BROWSER, "${{ matrix.browser }}")
   assert.equal(browserJob.env.SHARD, "${{ matrix.shard }}")
   const run = browserJob.steps.find((s) => (s.run ?? "").includes("npm run test:browser")).run
   assert.ok(run.includes('--project="$PROJECT"') && run.includes('--shard="$SHARD"'))

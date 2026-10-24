@@ -17,7 +17,8 @@ jobs:
     name: Build and check
     runs-on: ubuntu-24.04
     # A cold `quartz plugin restore` takes about 7 to 8 minutes measured on 4-core runners (2026-10-20), slower on 2-core.
-    # Kept under the 25 minutes the browser shards wait for this job, so a hung build ends before they give up.
+    # The browser shards start with this job and wait for it (step "Wait for the build job"), so
+    # their image pull, checkout, npm ci and type check overlap the build.
     timeout-minutes: 24
     permissions:
       contents: read
@@ -86,9 +87,11 @@ jobs:
       - name: Deploy dry run (no credentials)
         run: npm run deploy:dry-run
 
-  # One job per (Playwright project, shard). Shards start with the build job and wait for it
-  # (step "Wait for the build job"), so that the wall-clock time is about the slower of the
-  # build and a shard's setup, plus the slowest shard's tests, not the sum of four projects.
+  # One job per (Playwright project, shard), started together with the build job and run in the
+  # official Playwright image, which has both browsers and their system packages, so a shard
+  # installs nothing with apt (the Ubuntu mirror stalled shards for up to 11 minutes, 2026-10-23).
+  # The shards wait for the build job in a step (no needs), so the image pull (about 1 GB),
+  # checkout, npm ci and type check overlap the build instead of following it.
   # Every job bills at least one whole minute (and each is rounded up on its own), so the
   # shard count trades wall-clock against billed minutes: see "CI minutes" in
   # docs/deployment.md. The shard count is this list; each project's shards must be exactly
@@ -96,7 +99,20 @@ jobs:
   browser:
     name: Browser ${{ matrix.id }}
     runs-on: ubuntu-24.04
+    # The wait step can take up to 25 minutes (cold plugin restore in the build job), then the tests.
     timeout-minutes: 35
+    # The tag must equal the Playwright version in package-lock.json (scripts/workflows.test.mjs
+    # checks it); bump tag and digest together with @playwright/test. Digest:
+    #   curl -sSI -H "Accept: application/vnd.oci.image.index.v1+json" \
+    #     https://mcr.microsoft.com/v2/playwright/manifests/v<version>-noble | grep -i docker-content-digest
+    # --ipc=host and --init as Playwright's Docker docs recommend (Chromium shared memory, PID 1).
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+      options: --ipc=host --init
+    # Container jobs default to sh; the steps use bash syntax ([[ ]]).
+    defaults:
+      run:
+        shell: bash
     permissions:
       contents: read
       # Read this run's job list (the wait step).
@@ -126,7 +142,6 @@ jobs:
     env:
       NPM_CONFIG_IGNORE_SCRIPTS: "true"
       PROJECT: ${{ matrix.project }}
-      BROWSER: ${{ matrix.browser }}
       SHARD: ${{ matrix.shard }}
     steps:
       - name: Check out
@@ -151,91 +166,34 @@ jobs:
         if: matrix.format
         run: npm run format:check
 
-      # The browser versions come from the Playwright version in package-lock.json.
-      - name: Read the Playwright version
-        id: playwright
-        run: echo "version=$(node -p 'require("./node_modules/playwright-core/package.json").version')" >>"$GITHUB_OUTPUT"
-
-      # PR runs write PR-scoped caches only; main runs read main-scoped ones. No restore-keys: a
-      # new Playwright version never reuses old browsers. One cache per browser, so a job
-      # downloads only the browser it uses (two shards racing to save only get a warning).
-      - name: Cache Playwright browsers
-        id: pw-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ matrix.browser }}
-
-      - name: Install browsers
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: ./node_modules/.bin/playwright install --with-deps "$BROWSER"
-
-      # The browsers come from the cache; the system packages they need are not cached.
-      - name: Install browser system dependencies
-        if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: ./node_modules/.bin/playwright install-deps "$BROWSER"
-
-      # The shards start with the build instead of after it, so that their setup (npm ci,
-      # browsers, system packages) overlaps the build. This waits for the latest attempt of the
-      # build job and fails as soon as that attempt fails, so a broken build never leaves the
-      # shards waiting. A re-run of only the failed shards finds the earlier successful attempt.
+      # The build job runs in parallel; wait for its latest attempt and fail as soon as that
+      # attempt fails, so a broken build never leaves the shards waiting. A re-run of only the
+      # failed shards finds the earlier successful attempt. Node only: the image has no gh.
       - name: Wait for the build job
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -Eeuo pipefail
-          start=$SECONDS
-          failures=0
-          while :; do
-            if latest="$(gh api --paginate "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
-              --jq '.jobs[] | select(.name == "Build and check") | "\(.run_attempt) \(.status) \(.conclusion)"' |
-              sort -n | tail -n 1)"; then
-              failures=0
-              read -r attempt status conclusion <<<"${latest:-0 missing none}"
-              if [[ "$status" == "completed" ]]; then
-                if [[ "$conclusion" == "success" ]]; then
-                  echo "Build and check (attempt $attempt) succeeded."
-                  exit 0
-                fi
-                echo "::error::Build and check (attempt $attempt) ended with '$conclusion'; there is no build output to test."
-                exit 1
-              fi
-            else
-              failures=$((failures + 1))
-              echo "::warning::Could not read the job list ($failures in a row); retrying."
-              if ((failures >= 10)); then
-                echo "::error::The job list stayed unreadable (API error or rate limit); giving up."
-                exit 1
-              fi
-            fi
-            elapsed=$((SECONDS - start))
-            if ((elapsed >= 1500)); then
-              echo "::error::Timed out after $elapsed s waiting for Build and check."
-              exit 1
-            fi
-            # Poll often while a warm build is due, then slowly (a cold plugin restore takes minutes),
-            # which keeps 10 shards well under the token's API rate limit.
-            if ((elapsed < 90)); then sleep 5; elif ((elapsed < 300)); then sleep 15; else sleep 30; fi
-          done
+        run: node .github/scripts/wait-for-build-job.mjs
 
+      # A relative path resolves against the workspace inside the container; runner.temp may
+      # expand to the host path there, which the container's shell would not see.
       - name: Download build output
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ci-site
-          path: ${{ runner.temp }}/site
+          path: ci-site-download
 
       # The same checks as the deploy jobs: only a valid public/ is used, and the Worker's CSP
       # hashes are regenerated from it.
       - name: Install build output
         run: |
-          site="$RUNNER_TEMP/site"
+          site="$GITHUB_WORKSPACE/ci-site-download"
           node scripts/check-artifact.mjs --root "$site"
           rm -rf public worker/csp.generated.js
           cp -R "$site/public" public
           node scripts/build-csp.mjs
 
       - name: Run the browser smoke tests
+        timeout-minutes: 15
         run: |
           [[ "$PROJECT" =~ ^[a-z]+-[a-z]+$ && "$SHARD" =~ ^[1-9]/[1-9]$ ]] || exit 1
           npm run test:browser -- --project="$PROJECT" --shard="$SHARD"
