@@ -16,15 +16,26 @@ function setup() {
     drawerOpen() ||
     searchActive()
   let frame = 0
+  // The page's own scroll moves (top-bar announces them with "notes:layoutshift": a Mermaid
+  // redraw after a theme switch lets its height lock go and the page shifts up) are not the reader
+  // scrolling up. A matching move re-bases the state and does not reveal the button.
+  let shifts: number[] = []
   const update = () => {
     frame = 0
-    state = nextReveal(state, {
-      y: window.scrollY,
-      maxY: root.scrollHeight - window.innerHeight,
-      limit,
-      hold: hold(),
-      focused: document.activeElement === button,
-    })
+    const y = window.scrollY
+    const held = hold()
+    if (!held && shifts.some((s) => Math.abs(y - state.lastY - s) <= 1)) {
+      shifts = []
+      state = { ...state, lastY: y, travel: 0 }
+    } else {
+      state = nextReveal(state, {
+        y,
+        maxY: root.scrollHeight - window.innerHeight,
+        limit,
+        hold: held,
+        focused: document.activeElement === button,
+      })
+    }
     if (button.classList.contains("on") !== state.shown) button.classList.toggle("on", state.shown)
   }
   const schedule = () => {
@@ -34,16 +45,25 @@ function setup() {
     limit = revealFrom(window.innerHeight)
     schedule()
   }
-  // A Mermaid redraw after a theme switch can shift the page and briefly reveal the button; it
-  // hides again on the next downward scroll. The top bar's layout-shift bookkeeping is consumed by
-  // its own tuck, so it is deliberately not shared here.
+  const onShift = (e: Event) => {
+    const detail = (e as CustomEvent<number[]>).detail
+    const mine = Array.isArray(detail) ? detail.filter((s) => Number.isFinite(s)) : []
+    if (mine.length === 0) return
+    shifts = mine
+    // Forgotten a few frames on if no scroll matched it.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (shifts === mine) shifts = []
+      }),
+    )
+  }
+  // The button stays shown on the way up (the smooth scroll runs upwards) and goes away by itself
+  // once the page is back above the reveal line.
   const onClick = () => {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     window.scrollTo({ top: 0, behavior: still ? "auto" : "smooth" })
     // The bar is where the reader lands.
     document.querySelector<HTMLElement>(".top-bar-brand")?.focus({ preventScroll: true })
-    state = initialReveal(0)
-    update()
   }
   // The drawer and the search change classes, not the scroll position.
   const observer = new MutationObserver(schedule)
@@ -53,6 +73,7 @@ function setup() {
   }
   window.addEventListener("scroll", schedule, { passive: true })
   window.addEventListener("resize", onResize, { passive: true })
+  window.addEventListener("notes:layoutshift", onShift)
   button.addEventListener("click", onClick)
   document.addEventListener("focus", schedule, true)
   document.addEventListener("blur", schedule, true)
@@ -60,6 +81,7 @@ function setup() {
   window.addCleanup(() => {
     window.removeEventListener("scroll", schedule)
     window.removeEventListener("resize", onResize)
+    window.removeEventListener("notes:layoutshift", onShift)
     button.removeEventListener("click", onClick)
     document.removeEventListener("focus", schedule, true)
     document.removeEventListener("blur", schedule, true)
