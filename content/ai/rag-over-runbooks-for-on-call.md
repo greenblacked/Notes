@@ -41,14 +41,14 @@ Ingest runs when a change merges to the default branch, so the index holds only 
 
 **Index metadata with every chunk:**
 
-| Field           | Use                                                                                                        |
-| --------------- | ---------------------------------------------------------------------------------------------------------- |
-| `path`          | Citation, and the link the responder opens                                                                 |
-| `owner`         | Who to ask, and who gets stale-page reports                                                                |
-| `service`       | Filtering to the service in the alert                                                                      |
-| `last_verified` | Staleness warning; copied from the runbook's `verified` front matter ([[verifying-ai-generated-runbooks]]) |
-| `acl_groups`    | Who may see the chunk                                                                                      |
-| `commit`        | Which version was indexed, for debugging                                                                   |
+| Field           | Use                                                                                      |
+| --------------- | ---------------------------------------------------------------------------------------- |
+| `path`          | Citation, and the link the responder opens                                               |
+| `owner`         | Who to ask, and who gets stale-page reports                                              |
+| `service`       | Filtering to the service in the alert                                                    |
+| `last_verified` | Staleness warning; copied from the runbook's `verified` front matter ([[writing-notes]]) |
+| `acl_groups`    | Who may see the chunk                                                                    |
+| `commit`        | Which version was indexed, for debugging                                                 |
 
 ## Access control at retrieval time
 
@@ -153,7 +153,6 @@ Re-baseline deliberately, in its own merge request, after a major runbook rewrit
 - [[ai-assisted-incident-response]]: what to automate during an incident and what never to.
 - [[incident-response]]: the process the assistant supports.
 - [[blameless-postmortems]]: the source of many golden questions.
-- [[verifying-ai-generated-runbooks]]: keeping the indexed pages trustworthy.
 - [[prompt-injection-test-harness-for-ci-agents]]: testing the injection cases.
 - [[securing-ai-agents-in-ci-and-cloud]]: access and egress controls for the service.
 - [[on-call-health]]: whether the assistant reduces load.

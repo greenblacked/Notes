@@ -15,7 +15,7 @@ draft: false
 
 Generated explanations and examples can become stale as quickly as handwritten prose. An agent may describe a default that no longer exists, invent a flag, copy behavior from another version, or confidently turn an assumption into an operational instruction. The goal is not to forbid AI drafting; it is to preserve a traceable relationship between documentation and the behavior it describes.
 
-Classify content before editing: API reference, configuration example, architecture overview, onboarding guide, runbook, or decision record. Each has a different source of truth and risk. A command that deletes data or changes access requires stronger verification than a high-level conceptual introduction. For AI-generated operational procedures, also apply [[verifying-ai-generated-runbooks]].
+Classify content before editing: API reference, configuration example, architecture overview, onboarding guide, runbook, or decision record. Each has a different source of truth and risk. A command that deletes data or changes access requires stronger verification than a high-level conceptual introduction. For operational procedures, verify each step against the current system and documentation before relying on it.
 
 ## Documentation workflow
 
