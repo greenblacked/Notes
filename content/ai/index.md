@@ -32,7 +32,6 @@ These notes cover using AI agents and assistants in delivery and operations with
 - [[agent-skills-and-shared-workflows|Agent skills and shared workflows for platform teams]]: treat agent instructions, skills and prompt files as versioned platform assets with review, pinned consumption, least-privilege tool lists and tests.
 - [[llm-log-analysis-and-alert-triage|LLM-assisted log analysis and alert triage without losing evidence]]: deterministic clustering, evidence-linked summaries and advisory alert triage that never silences.
 - [[rag-over-runbooks-for-on-call|RAG over internal runbooks for on-call: access control, citations, staleness and evaluation]]: a retrieval assistant that enforces permissions, cites sources, flags stale pages and is gated on golden questions.
-- [[verifying-ai-generated-runbooks|Verifying AI-generated runbooks before on-call uses them]]: check every drafted step against the live system and a staging dry run, with a named owner and a last-verified date.
 - [[validating-ai-generated-infrastructure-code|Validating AI-generated Terraform, Helm, Kubernetes and PromQL before review]]: a deterministic ladder of offline and live checks that catches invented arguments, removed APIs and queries that match nothing.
 - [[runaway-or-compromised-ai-agent-response|Runbook: stopping a runaway or compromised AI agent]]: stop the agent, contain its credentials, keep the evidence, assess the blast radius and recover.
 
