@@ -239,6 +239,14 @@ plugins:
     layout:
       position: left
       priority: 10
+  # "To top": the floating button in the bottom-right corner. Last in the document (afterBody,
+  # priority 90, after the other afterBody components), so the keyboard reaches it once the page has been read,
+  # and outside the bar's banner. It has its own z-index below the bar's (see custom.scss).
+  - source: ./local-plugins/to-top
+    enabled: true
+    layout:
+      position: afterBody
+      priority: 90
   # The second row of the bar: the section links. After the toolbar group (35), so the keyboard
   # order matches what is drawn.
   - source: ./local-plugins/section-row
@@ -338,13 +346,15 @@ layout:
         afterBody: []
         right: []
     content: {}
+    # They also have nothing after the body, except the To top button: the afterBody components
+    # are excluded by name instead of clearing the position.
     folder:
+      exclude: [comments, start-here, note-index, linked-from, note-graph, stacked-pages]
       positions:
         right: []
-        afterBody: []
     tag:
+      exclude: [comments, start-here, note-index, linked-from, note-graph, stacked-pages]
       positions:
         right: []
-        afterBody: []
     canvas: {}
     bases: {}

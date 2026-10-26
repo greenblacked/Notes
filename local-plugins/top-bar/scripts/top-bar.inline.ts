@@ -574,6 +574,8 @@ function lockMermaidHeights() {
     const shifts = [whole, all].filter((s) => Math.abs(s) >= 0.5)
     if (shifts.length === 0) return
     layoutShifts = shifts
+    // Shared with the To top button, which keeps its own copy (it must not use this one up).
+    window.dispatchEvent(new CustomEvent("notes:layoutshift", { detail: shifts }))
     afterPaint(() =>
       afterPaint(() => {
         if (layoutShifts === shifts) layoutShifts = []

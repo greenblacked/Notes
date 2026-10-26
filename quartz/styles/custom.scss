@@ -396,6 +396,13 @@ body {
     color: var(--gray);
     font: 400 0.8rem/1.5 var(--ui);
 
+    // Below 90rem the footer can reach the right edge: leave room for the To top button at the end
+    // of the page (1.5rem inset + 2.75rem button + 0.75rem). Wider, the column is centred.
+    @media all and (max-width: 89.99rem) {
+      margin-bottom: 5rem;
+      margin-bottom: calc(5rem + env(safe-area-inset-bottom));
+    }
+
     @media all and ($desktop) {
       width: 100%;
       padding: 0 0.25rem;
@@ -442,7 +449,8 @@ body {
       height: auto;
       max-height: calc(100dvh - var(--sticky-h) - 2.5rem);
       margin-top: 1.25rem;
-      padding: 1.5rem 0 1rem 1.75rem;
+      // Scrolled to its end, the last entry clears the To top button's corner.
+      padding: 1.5rem 0 3.5rem 1.75rem;
       overflow-y: auto;
       scrollbar-width: thin;
     }
@@ -692,6 +700,114 @@ body {
 
   &:hover {
     color: var(--secondary);
+  }
+}
+
+// ===== To top (local-plugins/to-top) =====
+// A round button in the bottom-right corner, hidden until the script shows it (.on). It is the
+// last thing in the page (afterBody, in .page-footer), so the keyboard reaches it after the page.
+// `position: fixed` is safe there: no transform, filter or backdrop-filter stays on an ancestor
+// (the page-enter animation's transform ends, with a `backwards` fill, and the button is hidden
+// while the page enters). z-index 30 is below the bar's (40), which holds the Browse drawer and
+// the search overlay, so they paint over it; popovers (999) and the graph dialog are above it.
+// The background is opaque --light, the pair the contrast check already covers, so there is no
+// color-mix or backdrop-filter to fall back from.
+// Transitions list the colour properties as well, because this rule's own `transition` replaces
+// the global one (see "Accessibility and motion").
+.to-top {
+  position: fixed;
+  right: 1rem; // fallback: env() is not understood everywhere
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: 1rem;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  width: 2.75rem; // a 44 x 44 target
+  height: 2.75rem;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background-color: var(--light);
+  box-shadow: var(--lift-shadow);
+  color: var(--dark);
+  font: 600 0.85rem/1 var(--ui);
+  white-space: nowrap;
+  cursor: pointer;
+  z-index: 30;
+  visibility: hidden; // hidden: out of the tab order until it is shown
+  opacity: 0;
+  transform: translateY(0.5rem);
+  pointer-events: none;
+
+  & svg {
+    display: block;
+    width: 1.125rem;
+    height: 1.125rem;
+    flex: none;
+  }
+
+  & span {
+    display: none;
+  }
+
+  &:hover {
+    color: var(--secondary);
+  }
+
+  &.on {
+    visibility: visible;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .to-top {
+    transition:
+      opacity var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out),
+      visibility 0s linear var(--dur-fast); // the fade-out finishes before it leaves the tab order
+  }
+
+  .to-top.on {
+    transition:
+      opacity var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out);
+  }
+
+  .to-top.on:active {
+    transform: scale(0.97);
+  }
+}
+
+// Away from the screen edges on tablets and desktops, and the label appears where there is room.
+@media all and (min-width: 40rem) {
+  .to-top {
+    right: 1.5rem;
+    right: max(1.5rem, env(safe-area-inset-right));
+    bottom: 1.5rem;
+    bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+@media all and (min-width: 90rem) {
+  .to-top {
+    width: auto;
+    padding: 0 1.25rem 0 1rem;
+  }
+
+  .to-top span {
+    display: inline;
   }
 }
 
@@ -1191,7 +1307,9 @@ hr {
 .center > hr {
   margin: 2.75rem 0 2rem;
 
-  &:has(+ .page-footer:empty) {
+  // The To top button sits in .page-footer too; alone, it is not "something that follows".
+  &:has(+ .page-footer:empty),
+  &:has(+ .page-footer > .to-top:only-child) {
     display: none;
   }
 }
@@ -3633,6 +3751,7 @@ body[data-slug="404"] .center article {
   // The bar holds the Browse drawer, the search overlay and the progress line.
   .left.sidebar,
   .right.sidebar,
+  .to-top,
   footer,
   .breadcrumb-container,
   .clipboard-button,
