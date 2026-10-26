@@ -5,7 +5,7 @@ tags:
   - ai
   - meta
 created: 2026-10-17
-modified: 2026-10-21
+modified: 2026-10-26
 draft: false
 ---
 
@@ -49,6 +49,146 @@ These notes cover using AI agents and assistants in delivery and operations with
 - [[evaluating-ai-tools-for-a-platform-team|Evaluating AI tools for a platform team: security scorecard and bake-off on your own repos]]: screen tools on data and security, then compare them on real past changes with CI-measured outcomes.
 - [[measuring-ai-impact-on-delivery|Measuring AI impact on delivery without fooling yourself]]: cohorts, a fixed baseline and counter-metrics around the DORA keys, instead of vanity figures.
 - [[llm-api-cost-control|Cost control for LLM APIs: gateway budgets, token caps and a kill switch]]: bound LLM spend with a gateway, per-team keys, caps, budget alerts, a kill switch and a tool-call audit trail.
+
+## Agent design and orchestration
+
+Design agent instructions, context, tools, state and handoffs as explicit, testable contracts.
+
+- [[context-engineering-for-agents|Context engineering for agents]]
+- [[system-instruction-lifecycle|System instruction lifecycle]]
+- [[prompt-templates-and-versioning|Prompt templates and versioning]]
+- [[structured-output-contracts|Structured output contracts]]
+- [[validating-model-generated-json|Validating model-generated JSON]]
+- [[tool-calling-contracts-and-schemas|Tool-calling contracts and schemas]]
+- [[safe-agent-state-machines|Safe agent state machines]]
+- [[bounded-agent-loops-and-stop-conditions|Bounded agent loops and stop conditions]]
+- [[agent-memory-retention-and-deletion|Agent memory retention and deletion]]
+- [[context-window-budgeting|Context window budgeting]]
+- [[long-context-retrieval-strategy|Long-context retrieval strategy]]
+- [[prompt-caching-and-data-isolation|Prompt caching and data isolation]]
+- [[model-router-policy|Model router policy]]
+- [[multi-agent-handoff-boundaries|Multi-agent handoff boundaries]]
+- [[human-approval-state-machine|Human approval state machine]]
+
+## AI security
+
+Threat-model AI applications and constrain identity, tools, execution, network access and model supply chains.
+
+- [[ai-system-threat-modeling|Threat modeling AI-enabled systems]]
+- [[indirect-prompt-injection-in-documents|Indirect prompt injection in documents]]
+- [[multimodal-prompt-injection|Multimodal prompt injection boundaries]]
+- [[agent-tool-authorization-boundaries|Authorization boundaries for agent tools]]
+- [[delegated-oauth-for-agent-tools|Delegated OAuth for agent tools]]
+- [[just-in-time-agent-credentials|Just-in-time credentials for AI agents]]
+- [[agent-network-egress-controls|Network egress controls for AI agents]]
+- [[browser-agent-isolation|Isolation boundaries for browser agents]]
+- [[code-execution-agent-sandboxing|Sandboxing code execution by AI agents]]
+- [[ai-agent-package-installation-risks|Package installation risks in AI agent workflows]]
+- [[llm-denial-of-service-and-resource-exhaustion|Denial of service and resource exhaustion in LLM systems]]
+- [[model-supply-chain-verification|Verifying AI model supply chains]]
+- [[open-weight-model-risk-assessment|Risk assessment for open-weight models]]
+- [[ai-red-team-exercise-planning|Planning defensive AI red-team exercises]]
+- [[ai-agent-security-incident-evidence|Evidence collection for AI agent security incidents]]
+
+## RAG and knowledge systems
+
+Build retrieval pipelines with deliberate ingestion, ranking, access control, freshness and quality checks.
+
+- [[document-ingestion-for-enterprise-rag|Document ingestion for enterprise RAG]]
+- [[chunking-strategy-evaluation|Chunking strategy evaluation]]
+- [[embedding-model-migration|Embedding model migration]]
+- [[vector-index-capacity-and-lifecycle|Vector index capacity and lifecycle]]
+- [[hybrid-search-for-rag|Hybrid search for RAG]]
+- [[reranking-and-retrieval-depth|Reranking and retrieval depth]]
+- [[metadata-filtering-and-acl-aware-retrieval|Metadata filtering and ACL-aware retrieval]]
+- [[citation-grounding-and-source-provenance|Citation grounding and source provenance]]
+- [[graph-rag-use-cases-and-limits|Graph RAG use cases and limits]]
+- [[knowledge-freshness-and-invalidation|Knowledge freshness and invalidation]]
+- [[multi-tenant-rag-isolation|Multi-tenant RAG isolation]]
+- [[retrieval-cache-invalidation|Retrieval cache invalidation]]
+- [[rag-evaluation-dataset-design|RAG evaluation dataset design]]
+- [[search-quality-incident-response|Search quality incident response]]
+- [[untrusted-content-in-retrieval-pipelines|Untrusted content in retrieval pipelines]]
+
+## Evaluation and quality
+
+Create representative datasets, trustworthy labels, task-specific metrics and safe model-release gates.
+
+- [[golden-dataset-management-for-llms|Managing golden datasets for LLM evaluation]]
+- [[representative-evaluation-set-sampling|Sampling representative evaluation sets]]
+- [[human-annotation-guidelines-for-ai-evals|Human annotation guidelines for AI evaluations]]
+- [[inter-annotator-agreement-and-adjudication|Inter-annotator agreement and adjudication]]
+- [[llm-as-judge-validation|Validating an LLM-as-judge evaluator]]
+- [[retrieval-evaluation-metrics-and-thresholds|Retrieval evaluation metrics and thresholds]]
+- [[groundedness-and-faithfulness-evaluation|Evaluating groundedness and faithfulness]]
+- [[task-success-evaluation-for-agents|Evaluating task success for agents]]
+- [[tool-call-accuracy-and-argument-evaluation|Evaluating tool-call accuracy and arguments]]
+- [[adversarial-robustness-evaluation|Adversarial robustness evaluation for AI systems]]
+- [[model-calibration-and-abstention|Model calibration and abstention]]
+- [[hallucination-triage-and-remediation|Hallucination triage and remediation]]
+- [[regression-testing-for-model-upgrades|Regression testing for model upgrades]]
+- [[shadow-and-canary-evaluation-for-models|Shadow and canary evaluation for models]]
+- [[eval-data-leakage-and-contamination|Evaluation data leakage and contamination]]
+
+## Serving and inference platform
+
+Plan and operate model-serving capacity, latency, tenancy and data pipelines across hosted and self-managed inference.
+
+- [[llm-inference-capacity-planning|LLM inference capacity planning]]
+- [[gpu-utilization-and-serving-efficiency|GPU utilization and serving efficiency]]
+- [[inference-batching-and-queueing|Inference batching and queueing]]
+- [[kv-cache-capacity-and-paging|KV cache capacity and paging]]
+- [[quantization-quality-and-performance-tradeoffs|Quantization quality and performance tradeoffs]]
+- [[speculative-decoding-deployment|Speculative decoding deployment]]
+- [[streaming-inference-latency-budgets|Streaming inference latency budgets]]
+- [[ai-gateway-architecture-and-policy|AI gateway architecture and policy]]
+- [[model-provider-failover-and-routing|Model provider failover and routing]]
+- [[rate-limits-backpressure-and-queue-design|Rate limits, backpressure, and queue design]]
+- [[llm-serving-autoscaling-signals|LLM serving autoscaling signals]]
+- [[multi-tenant-inference-isolation|Multi-tenant inference isolation]]
+- [[inference-cold-start-mitigation|Inference cold-start mitigation]]
+- [[llm-data-pipeline-quality-controls|LLM data pipeline quality controls]]
+- [[embedding-pipeline-idempotency-and-reprocessing|Embedding pipeline idempotency and reprocessing]]
+
+## Production operations
+
+Define reliability, privacy, cost and lifecycle controls for AI-backed services.
+
+- [[llm-slo-definition-and-error-budgets|Defining SLOs and error budgets for LLM-backed services]]
+- [[model-provider-outage-runbook|Responding to an LLM provider outage]]
+- [[model-degradation-detection|Detecting model degradation in production]]
+- [[llm-tracing-with-sensitive-data-controls|LLM tracing with sensitive-data controls]]
+- [[token-usage-metering-and-chargeback|Token usage metering and chargeback]]
+- [[per-request-cost-estimation|Estimating LLM cost per request]]
+- [[llm-caching-correctness-and-safety|Correctness and safety for LLM caching]]
+- [[model-capacity-forecasting|Forecasting capacity for LLM workloads]]
+- [[fallback-model-selection-and-quality-degradation|Selecting fallback models and managing quality degradation]]
+- [[llm-retry-timeout-and-circuit-breaker-policy|Retry, timeout, and circuit-breaker policy for LLM calls]]
+- [[data-retention-and-deletion-in-llm-systems|Data retention and deletion in LLM systems]]
+- [[model-region-selection-and-data-residency|Selecting model regions and controlling data residency]]
+- [[llm-change-management-and-release-gates|Change management and release gates for LLM systems]]
+- [[model-inventory-and-owner-registration|Model inventory and owner registration]]
+- [[decommissioning-ai-model-integrations|Decommissioning AI model integrations]]
+
+## AI-enabled engineering and governance
+
+Keep AI-assisted development reviewable, bounded and accountable, and assess provider and system risks explicitly.
+
+- [[ai-assisted-test-generation-quality-gates|Quality gates for AI-assisted test generation]]
+- [[coding-agent-branch-and-worktree-isolation|Branch and worktree isolation for coding agents]]
+- [[repository-context-packaging-for-coding-agents|Packaging repository context for coding agents]]
+- [[validating-generated-sql-before-execution|Validating generated SQL before execution]]
+- [[safe-shell-command-generation-for-agents|Safe shell command generation for agents]]
+- [[ai-assisted-database-migration-review|AI-assisted database migration review]]
+- [[dependency-hallucination-controls|Controls for hallucinated dependencies]]
+- [[generated-api-client-code-review|Reviewing generated API client code]]
+- [[ai-docs-drift-and-verification|Preventing documentation drift in AI-assisted changes]]
+- [[ai-code-refactoring-scope-and-rollback|Scope and rollback for AI-assisted refactoring]]
+- [[agent-pull-request-size-and-reviewability|Pull request size and reviewability for agent changes]]
+- [[ai-system-risk-classification|Risk classification for AI-enabled engineering systems]]
+- [[model-provider-due-diligence|Due diligence for AI model providers]]
+- [[model-data-use-contract-review|Reviewing model data-use terms]]
+- [[ai-impact-assessment-for-engineering-systems|Impact assessment for AI-enabled engineering systems]]
 
 The owner's agent skills and workflows live in [the owner's AI skills catalogue](https://ai.szolotov.com).
 
