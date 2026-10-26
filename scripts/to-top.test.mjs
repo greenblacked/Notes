@@ -50,9 +50,9 @@ test("to-top: a change of direction restarts the travel", () => {
   assert.equal(s.shown, true)
   s = at(s, 885)
   assert.equal(s.shown, true)
-  s = at(s, 897)
+  s = at(s, 891)
   assert.equal(s.shown, true)
-  s = at(s, 898)
+  s = at(s, 892)
   assert.equal(s.shown, false)
 })
 

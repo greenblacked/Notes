@@ -57,6 +57,13 @@ test("hidden while reading downwards", async ({ page }) => {
   await expect(page.locator("#to-top")).not.toBeVisible()
 })
 
+test("a short step up does not show it", async ({ page }) => {
+  const limit = await limitOf(page)
+  await scrollTo(page, limit + 700)
+  await scrollTo(page, limit + 700 - (STEP - 1))
+  await expect(page.locator("#to-top")).not.toBeVisible()
+})
+
 test("shown when scrolling back up", async ({ page }) => {
   await showIt(page)
   await expect(page.locator("#to-top")).toHaveClass(/\bon\b/)
