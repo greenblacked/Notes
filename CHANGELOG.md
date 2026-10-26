@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-26
+
 ### Added
 
 - **A "To top" button.** Reading down a long note, a round button appears in the bottom-right corner as soon as you scroll back up, and at the end of the page; it takes you to the top and puts the keyboard on the wordmark. It stays out of the way while you read downwards, near the top of a page, while the Browse drawer or the search is open, and in print, keeps its focus ring and a 44 px target, shows its label on wide screens, and leaves the footer and the table of contents clear. Without JavaScript it never appears.
