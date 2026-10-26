@@ -391,14 +391,17 @@ body {
     grid-area: foot;
     min-width: 0;
     max-width: var(--sheet-w);
-    // Room under the footer for the To top button, so nothing is covered at the end of the page
-    // (1.5rem inset + 2.75rem button + 0.75rem).
-    margin: 0.5rem auto;
-    margin-bottom: 5rem;
-    margin-bottom: calc(5rem + env(safe-area-inset-bottom));
+    margin: 0.5rem auto 2.5rem;
     padding: 0 var(--gutter);
     color: var(--gray);
     font: 400 0.8rem/1.5 var(--ui);
+
+    // Below 90rem the footer can reach the right edge: leave room for the To top button at the end
+    // of the page (1.5rem inset + 2.75rem button + 0.75rem). Wider, the column is centred.
+    @media all and (max-width: 89.99rem) {
+      margin-bottom: 5rem;
+      margin-bottom: calc(5rem + env(safe-area-inset-bottom));
+    }
 
     @media all and ($desktop) {
       width: 100%;
@@ -701,12 +704,14 @@ body {
 }
 
 // ===== To top (local-plugins/to-top) =====
-// A round button in the bottom-right corner, hidden until the script shows it (.on). It lives in
-// the bar so its `position: fixed` is safe (no transform, filter or backdrop-filter above it, the
-// same reason the drawer and the search overlay are fixed in there) and it declares NO z-index on
-// purpose: in the bar's stacking context (z-index 40) tree order decides, and the drawer and the
-// overlay come after it, so they paint over it. The background is opaque --light, the pair the
-// contrast check already covers, so there is no color-mix or backdrop-filter to fall back from.
+// A round button in the bottom-right corner, hidden until the script shows it (.on). It is the
+// last thing in the page (afterBody, in .page-footer), so the keyboard reaches it after the page.
+// `position: fixed` is safe there: no transform, filter or backdrop-filter stays on an ancestor
+// (the page-enter animation's transform ends, with a `backwards` fill, and the button is hidden
+// while the page enters). z-index 30 is below the bar's (40), which holds the Browse drawer and
+// the search overlay, so they paint over it; popovers (999) and the graph dialog are above it.
+// The background is opaque --light, the pair the contrast check already covers, so there is no
+// color-mix or backdrop-filter to fall back from.
 // Transitions list the colour properties as well, because this rule's own `transition` replaces
 // the global one (see "Accessibility and motion").
 .to-top {
@@ -731,6 +736,7 @@ body {
   font: 600 0.85rem/1 var(--ui);
   white-space: nowrap;
   cursor: pointer;
+  z-index: 30;
   visibility: hidden; // hidden: out of the tab order until it is shown
   opacity: 0;
   transform: translateY(0.5rem);
@@ -1301,7 +1307,9 @@ hr {
 .center > hr {
   margin: 2.75rem 0 2rem;
 
-  &:has(+ .page-footer:empty) {
+  // The To top button sits in .page-footer too; alone, it is not "something that follows".
+  &:has(+ .page-footer:empty),
+  &:has(+ .page-footer > .to-top:only-child) {
     display: none;
   }
 }

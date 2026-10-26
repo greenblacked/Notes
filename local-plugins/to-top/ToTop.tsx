@@ -4,12 +4,14 @@ import script from "./scripts/to-top.inline.ts"
 
 /**
  * "To top": a round button in the bottom-right corner that takes the reader back to the top of
- * the page. It is hidden until the reader has scrolled a screen or so and then scrolls up, is at
- * the end of the page, or gives it focus (scripts/to-top.mjs decides, the CSS shows it); without
- * JavaScript it never appears. It is rendered in the bar (the page frame's left sidebar) because
- * `position: fixed` there is safe (the Browse drawer and the search overlay are fixed in the same
- * place) and because the drawer and the overlay come after it in the bar, so they paint over it.
- * Styles are in quartz/styles/custom.scss.
+ * the page. It is hidden until the reader is past half a screen and then scrolls up, is at the end
+ * of the page, or gives it focus (scripts/to-top.mjs decides, the CSS shows it); without
+ * JavaScript it never appears. It is the last component after the page body (the `afterBody`
+ * position, in `.page-footer`), so the keyboard reaches it once the page has been read and not
+ * before it, and it is outside the `banner`. `position: fixed` is safe there: nothing above it has
+ * a transform, filter or containment once the page-enter animation (which uses a transform) has
+ * ended, and the button is hidden while the page is entering. Styles are in
+ * quartz/styles/custom.scss.
  */
 export default (() => {
   const ToTop: QuartzComponent = ({ displayClass }: QuartzComponentProps) => (

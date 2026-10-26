@@ -90,25 +90,29 @@ test("to-top: rubber-band overscroll returns the state unchanged", () => {
   assert.equal(at(s, 5100), s)
 })
 
-test("to-top: it is a registered component in the bar, painted under the drawer and the search", () => {
+test("to-top: it is a registered component, last in the document and outside the bar", () => {
   assert.match(read("quartz.ts"), /componentRegistry\.register\(\s*"to-top"/)
   const yaml = read("quartz.config.yaml")
   const entry = yaml.match(
-    /source: \.\/local-plugins\/to-top\n\s+enabled: true\n\s+layout:\n\s+position: left\n\s+priority: (\d+)/,
+    /source: \.\/local-plugins\/to-top\n\s+enabled: true\n\s+layout:\n\s+position: afterBody\n\s+priority: (\d+)/,
   )
-  assert.ok(entry, "to-top entry not found in quartz.config.yaml")
-  const bar = yaml.match(
-    /source: \.\/local-plugins\/top-bar\n\s+enabled: true\n\s+layout:\n\s+position: left\n\s+priority: (\d+)/,
+  assert.ok(entry, "to-top must be an afterBody entry in quartz.config.yaml (the bar is a banner)")
+  const others = [...yaml.matchAll(/position: afterBody\n\s+priority: (\d+)/g)]
+    .map((m) => Number(m[1]))
+    .filter((p) => p !== Number(entry[1]))
+  assert.ok(others.length > 0)
+  assert.ok(
+    Number(entry[1]) > Math.max(...others),
+    "the keyboard must reach the button after every other afterBody component",
   )
-  const search = yaml.match(/source: github:quartz-community\/search\n[\s\S]*?priority: (\d+)/)
-  const toolbar = yaml.match(/priority: (\d+)\n\s+group: toolbar/)
-  assert.ok(bar && search && toolbar, "top-bar, search or toolbar entry not found")
-  const p = Number(entry[1])
-  const reason =
-    "the drawer and the search overlay must come after the button in the bar so they paint over it"
-  assert.ok(p > Number(bar[1]), reason)
-  assert.ok(p < Number(search[1]), reason)
-  assert.ok(p < Number(toolbar[1]), reason)
+  // Folder and tag pages clear their afterBody by excluding the components, so the button stays.
+  for (const type of ["folder", "tag"]) {
+    const block = yaml.match(new RegExp(`\\n    ${type}:\\n([\\s\\S]*?)\\n    [a-z0-9"]`))
+    assert.ok(block, `${type} override not found`)
+    assert.ok(!/afterBody: \[\]/.test(block[1]), `${type} must not clear afterBody (the button)`)
+    assert.match(block[1], /exclude:\s*\[[^\]]*linked-from/)
+    assert.ok(!/to-top/.test(block[1]))
+  }
 })
 
 test("to-top: the markup is a real button with a label and no inline handler", () => {
@@ -135,10 +139,8 @@ test("to-top: styles", () => {
   const body = block[1]
   assert.match(body, /position:\s*fixed/)
   assert.match(body, /visibility:\s*hidden/)
-  assert.ok(
-    !/z-index\s*:/.test(body),
-    "no z-index: tree order in the bar keeps the drawer and the search above the button",
-  )
+  const z = Number(body.match(/\n\s{2}z-index:\s*(\d+)/)?.[1])
+  assert.ok(z > 0 && z < 40, "below the bar (z-index 40: the drawer and the search overlay)")
   assert.ok(px(body.match(/\n\s{2}width:\s*([\d.]+rem)/)[1]) >= 44)
   assert.ok(px(body.match(/\n\s{2}height:\s*([\d.]+rem)/)[1]) >= 44)
   for (const side of ["right", "bottom"]) {
@@ -153,8 +155,18 @@ test("to-top: styles", () => {
   )
   const print = scss.slice(scss.lastIndexOf("@media print"))
   assert.match(print, /\.to-top,/)
-  const footer = scss.match(/& footer \{[^}]*?margin-bottom:\s*([\d.]+rem)/)
+  const footer = scss.match(
+    /& footer \{[\s\S]*?@media all and \(max-width: 89\.99rem\) \{\s*margin-bottom:\s*([\d.]+rem)/,
+  )
   assert.ok(footer && px(footer[1]) >= 80, "the footer clears the button at the end of the page")
+})
+
+test("to-top: top-bar shares its layout shifts without using them up", () => {
+  const bar = read("local-plugins/top-bar/scripts/top-bar.inline.ts")
+  assert.match(bar, /new CustomEvent\("notes:layoutshift", \{ detail: shifts \}\)/)
+  const ts = read("local-plugins/to-top/scripts/to-top.inline.ts")
+  assert.match(ts, /addEventListener\("notes:layoutshift"/)
+  assert.match(ts, /removeEventListener\("notes:layoutshift"/)
 })
 
 test("to-top: the browser spec uses the module's constants", () => {
