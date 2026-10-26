@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-26
+
+### Added
+
+- **105 AI operations notes** covering agent design and security, retrieval, evaluation, inference, operations, and AI-enabled engineering.
+
+### Changed
+
+- Align the Playwright browser image in CI with the pinned Playwright dependency.
+
+### Removed
+
+- Remove the standalone runbook verification note and its references; retain concise verification guidance in the existing notes.
+
 ## [0.9.0] - 2026-10-26
 
 ### Added
