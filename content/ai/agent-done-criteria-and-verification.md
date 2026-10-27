@@ -73,13 +73,20 @@ run() { echo "+ $*" | tee -a "$log"; "$@" 2>&1 | tee -a "$log" | tail -n 15; }
 run make build
 run make test
 run ruff check .
-mapfile -t changed < <(git diff --name-only --diff-filter=d "$base"...HEAD)
+# Not `mapfile < <(git diff ...)`: a process substitution's exit status is lost, so a missing
+# base or a shallow clone would leave the list empty and the gate would pass unchecked.
+diff_out=$(git diff --name-only --diff-filter=d "$base"...HEAD)
+mapfile -t changed <<< "$diff_out"
+if [[ -z "$diff_out" ]]; then
+  echo "no changed files against $base; refusing to report VERIFIED" | tee -a "$log" >&2
+  exit 1
+fi
 run scripts/scan-secrets.sh "${changed[@]}"
 
 echo "VERIFIED commit=$sha" | tee -a "$log"
 ```
 
-Because it uses `set -Eeuo pipefail`, a failing stage stops the script, and the final `VERIFIED` line only prints if all stages passed. A single entry point also means the agent, a hook and CI cannot disagree about what "done" is.
+Because it uses `set -Eeuo pipefail`, a failing stage stops the script, and the final `VERIFIED` line only prints if all stages passed. Strict mode does not cover every construct: a failure inside a process substitution such as `< <(git diff ...)` is not seen, so capture the output with a plain command substitution, which `set -e` does check, and treat an empty change list as an error. A single entry point also means the agent, a hook and CI cannot disagree about what "done" is.
 
 For high-stakes changes add an independent reviewer whose job is to refute the result, ideally a separate agent or model with a fresh context that reads the final diff and tries to find what the author missed ([[independent-review-agents]]). A second reading of the diff is cheaper than an incident.
 

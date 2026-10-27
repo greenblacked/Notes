@@ -161,7 +161,13 @@ Control plane minor-version upgrades are generally not rolled back in place, so 
 - the old node pool, kept until the new one is verified;
 - backup state for stateful workloads.
 
-Because the migrated manifests were merged first and use API versions both releases serve, reverting the Git commit is a valid rollback for the workload layer. Rolling back a manifest that was migrated to a version the old cluster does not serve is not, which is why you check that before merging.
+Rollback depends on which side of the control plane upgrade you are on:
+
+- **Before the control plane upgrade**, reverting the migration commit is a valid rollback: the old cluster still serves the old API versions.
+- **After the control plane upgrade**, never revert the API version change. The upgraded cluster no longer serves the removed versions, so a revert restores manifests it rejects (for example `batch/v1beta1` CronJobs after an upgrade to 1.25). Recover by restoring workload configuration (image, replicas, settings) on top of the migrated API versions, as a forward fix.
+- **Helm rollback has the same trap.** Rolling back to a release revision whose stored manifest uses a removed API fails on the upgraded cluster. Check the target revision's API versions before you rely on `helm rollback`, and check the current Helm docs for how to handle releases that still reference removed APIs.
+
+The migrated manifests must use API versions that both releases serve, so the same commit works before and after the upgrade. Check that before merging.
 
 Keep detector output, each diff with its cited guide entry, validation results and the production approval as pipeline artifacts, and handle session logs per [[agent-session-transcript-handling]].
 
@@ -176,6 +182,7 @@ Keep detector output, each diff with its cited guide entry, validation results a
 - **Missing CRD schemas.** Custom resources are skipped silently. Fix: supply CRD schemas and fail on unknown kinds ([[crd-lifecycle-with-helm-and-argocd]]).
 - **Agent loops on a failing fix.** Fix: stop conditions and a file-count cap.
 - **Rollback assumed, never rehearsed.** Fix: record revisions and SHAs, rehearse on staging.
+- **Post-upgrade revert to removed APIs.** Reverting the migration commit or rolling a Helm release back after the upgrade restores API versions the cluster no longer serves. Fix: post-upgrade recovery keeps the migrated API versions and rolls forward.
 
 ## Review checklist
 
