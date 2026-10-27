@@ -206,6 +206,20 @@ Run coding and operations agents as an engineered workflow: model tiers, plans, 
 - [[agent-assisted-dependency-upgrades|Agent-assisted dependency upgrades]]: an agent fixes breaking Renovate or Dependabot upgrades on the bot branch, with CI, supply-chain checks and no auto-merged majors.
 - [[chatops-ai-assistants-in-slack|ChatOps AI assistants in Slack]]: verified requests, scoped channels, per-user authorization, bound approvals, audit and rate limits.
 
+## AI in day-to-day platform work
+
+Apply assistants and agents to routine platform tasks with deterministic tools first, evidence in every answer and humans owning the decision.
+
+- [[effective-prompting-for-operations-work|Effective prompting for operations work]]: raw evidence, stated versions, ranked hypotheses, verification commands and fixed output formats.
+- [[coding-agent-permission-allowlists|Coding agent permission allowlists]]: per-repository and per-user allow, ask and deny rules for shell, file, network and MCP use, reviewed and audited.
+- [[ai-assisted-ci-failure-triage|AI-assisted CI failure triage]]: classify failed GitLab CI and Jenkins runs as infrastructure, flaky or real with cited evidence, owner routing and no auto-retry.
+- [[ai-assisted-security-findings-triage|AI-assisted security findings triage]]: cluster and contextualise scanner findings and draft decisions, while humans own risk acceptance and nothing is auto-suppressed.
+- [[ai-assisted-kubernetes-api-deprecation-upgrades|AI-assisted Kubernetes API deprecation upgrades]]: deterministic detectors first, constrained agent fixes, target-version validation and staged rollout.
+- [[ai-assisted-jenkins-to-gitlab-pipeline-conversion|AI-assisted Jenkins to GitLab pipeline conversion]]: inventory, a reviewed mapping table, lint gates, credential mapping and parity checks.
+- [[ai-assisted-runbook-authoring-and-testing|AI-assisted runbook authoring and testing]]: evidence-grounded steps, lab-verified commands, destructive-step markers, freshness reviews and game days.
+- [[llm-assisted-cloud-cost-anomaly-investigation|LLM-assisted cloud cost anomaly investigation]]: deterministic billing-export queries first, then a model that explains with cited evidence and never deletes.
+- [[team-norms-for-ai-assisted-engineering|Team norms for AI-assisted engineering]]: author ownership, review disclosure, what never to paste, review load, junior learning and pairing.
+
 The owner's agent skills and workflows live in [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 > [!note] Tools change fast
