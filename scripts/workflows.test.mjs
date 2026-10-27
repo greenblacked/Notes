@@ -14,7 +14,7 @@ const files = readdirSync(dir)
 const raw = Object.fromEntries(files.map((f) => [f, readFileSync(join(dir, f), "utf8")]))
 const wf = Object.fromEntries(files.map((f) => [f, parse(raw[f])]))
 
-test("the workflow set is exactly ci, cleanup-deployments, cut-release, delete-merged-branches, deploy-production, deploy-stage and text-release", () => {
+test("the workflow set includes development checks alongside CI and release workflows", () => {
   assert.deepEqual(files, [
     "ci.yml",
     "cleanup-deployments.yml",
@@ -22,6 +22,7 @@ test("the workflow set is exactly ci, cleanup-deployments, cut-release, delete-m
     "delete-merged-branches.yml",
     "deploy-production.yml",
     "deploy-stage.yml",
+    "dev-checks.yml",
     "text-release.yml",
   ])
 })
@@ -147,10 +148,76 @@ test("the stage gate names match deploy-stage.yml", () => {
   assert.ok(!script.includes("event="))
 })
 
-test("ci runs for main only", () => {
+test("full CI stays on main", () => {
   const on = wf["ci.yml"].on
   assert.deepEqual(on.pull_request.branches, ["main"])
   assert.deepEqual(on.push.branches, ["main"])
+})
+
+test("development checks run one inexpensive job for dev without rendering or deployment", () => {
+  const dev = wf["dev-checks.yml"]
+  assert.equal(dev.name, "Development checks")
+  assert.deepEqual(dev.on, { pull_request: { branches: ["dev"] }, push: { branches: ["dev"] } })
+  assert.equal(Object.keys(dev.jobs).length, 1)
+  const job = dev.jobs["development-checks"]
+  assert.deepEqual(job.permissions, { contents: "read" })
+  assert.equal(job.env.NPM_CONFIG_IGNORE_SCRIPTS, "true")
+  assert.equal(job.environment, undefined)
+  assert.equal(job.strategy, undefined)
+  assert.equal(dev.concurrency["cancel-in-progress"], true)
+  assert.equal(dev.concurrency.group, "dev-checks-${{ github.ref }}")
+  assert.deepEqual(
+    job.steps.filter((s) => s.run).map((s) => s.run),
+    [
+      "npm ci --ignore-scripts",
+      'node scripts/check-attribution.mjs --range "$BASE_SHA..$HEAD_SHA" --event "$GITHUB_EVENT_PATH"',
+      "npm run test:scripts",
+      "npm run check:notes",
+      "npm run format:check",
+    ],
+  )
+  const checkout = job.steps.find((step) => (step.uses ?? "").startsWith("actions/checkout@"))
+  assert.equal(checkout.with["fetch-depth"], 0)
+  assert.equal(checkout.with["persist-credentials"], false)
+  const attribution = job.steps.find((step) => (step.run ?? "").includes("check-attribution.mjs"))
+  assert.deepEqual(attribution.env, {
+    BASE_SHA: "${{ github.event.pull_request.base.sha || github.event.before }}",
+    HEAD_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
+  })
+  assert.ok(!JSON.stringify(job).includes("secrets."))
+  for (const step of job.steps) {
+    assert.equal(step.if, undefined)
+    assert.equal(step["continue-on-error"], undefined)
+    assert.equal(step.with?.cache, undefined)
+  }
+})
+
+test("only CI caches plugins and the cache binds runtime and build policy", () => {
+  const caches = []
+  for (const [file, workflow] of Object.entries(wf)) {
+    for (const job of Object.values(workflow.jobs)) {
+      for (const step of job.steps ?? []) {
+        if ((step.uses ?? "").startsWith("actions/cache@")) caches.push({ file, step })
+      }
+    }
+  }
+  assert.equal(caches.length, 1)
+  assert.equal(caches[0].file, "ci.yml")
+  const { step } = caches[0]
+  assert.equal(step.with.path, ".quartz/plugins")
+  assert.equal(step.with["restore-keys"], undefined)
+  for (const source of [
+    ".nvmrc",
+    "package-lock.json",
+    "quartz.lock.json",
+    "quartz.config.yaml",
+    "scripts/check-plugins.mjs",
+    "package.json",
+    "quartz/plugins/loader/**",
+    "quartz/cli/plugin-*.js",
+  ]) {
+    assert.ok(step.with.key.includes(`'${source}'`), source)
+  }
 })
 
 test("dependabot targets the default branch", () => {

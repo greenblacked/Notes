@@ -38,13 +38,13 @@ jobs:
           cache: npm
 
       # Plugins are cloned at the commits in quartz.lock.json. No restore-keys: a
-      # changed lock file never reuses stale plugin directories (restore skips
-      # directories that already exist).
+      # changed runtime, dependency lock or build policy never reuses stale plugin directories.
+      # Restore can skip existing directories; check:plugins validates them before use.
       - name: Cache Quartz plugins
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .quartz/plugins
-          key: quartz-plugins-${{ runner.os }}-${{ hashFiles('quartz.lock.json') }}
+          key: quartz-plugins-${{ runner.os }}-${{ hashFiles('.nvmrc', 'package-lock.json', 'quartz.lock.json', 'quartz.config.yaml', 'scripts/check-plugins.mjs', 'package.json', 'quartz/plugins/loader/**', 'quartz/cli/plugin-*.js') }}
 
       - name: Install dependencies
         run: npm ci

@@ -1,0 +1,53 @@
+name: Development checks
+
+# Fast feedback only; full rendering and browser validation still run through CI on main.
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+
+permissions: {}
+
+concurrency:
+  group: dev-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  development-checks:
+    name: Development checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      NPM_CONFIG_IGNORE_SCRIPTS: "true"
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Check attribution in commits and event metadata
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/check-attribution.mjs --range "$BASE_SHA..$HEAD_SHA" --event "$GITHUB_EVENT_PATH"
+
+      - name: Test scripts and Worker policy
+        run: npm run test:scripts
+
+      - name: Check note metadata
+        run: npm run check:notes
+
+      - name: Check formatting
+        run: npm run format:check

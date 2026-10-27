@@ -9,11 +9,11 @@
   "scripts": {
     "quartz": "node ./quartz/bootstrap-cli.mjs",
     "plugins:restore": "node ./quartz/bootstrap-cli.mjs plugin restore",
-    "dev": "node ./quartz/bootstrap-cli.mjs plugin restore && node ./quartz/bootstrap-cli.mjs build --serve",
-    "build": "node ./quartz/bootstrap-cli.mjs plugin restore && node ./quartz/bootstrap-cli.mjs build && node scripts/postprocess-build.mjs && node scripts/build-csp.mjs && node scripts/write-version.mjs",
+    "dev": "node ./quartz/bootstrap-cli.mjs plugin restore && npm run check:plugins && node ./quartz/bootstrap-cli.mjs build --serve",
+    "build": "node ./quartz/bootstrap-cli.mjs plugin restore && npm run check:plugins && node ./quartz/bootstrap-cli.mjs build && node scripts/postprocess-build.mjs && node scripts/build-csp.mjs && node scripts/write-version.mjs",
     "preview": "wrangler dev --port 8787",
     "preview:stage": "wrangler dev --var ENVIRONMENT:preview --port 8788",
-    "check": "node ./quartz/bootstrap-cli.mjs plugin restore && tsc --noEmit",
+    "check": "node ./quartz/bootstrap-cli.mjs plugin restore && npm run check:plugins && tsc --noEmit",
     "check:browser": "tsc -p tests/browser",
     "check:links": "node scripts/check-links.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
@@ -23,7 +23,8 @@
     "serve:built": "node scripts/serve-built-site.mjs",
     "test:browser": "playwright test",
     "test:scripts": "node --test \"scripts/*.test.mjs\" \"worker/*.test.mjs\"",
-    "deploy:dry-run": "wrangler deploy --dry-run --outdir .wrangler/dry-run"
+    "deploy:dry-run": "wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "check:plugins": "node scripts/check-plugins.mjs"
   },
   "engines": {
     "npm": ">=10.9.2",
