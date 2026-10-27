@@ -5,7 +5,7 @@ tags:
   - ai
   - meta
 created: 2026-10-17
-modified: 2026-10-26
+modified: 2026-10-27
 draft: false
 ---
 
@@ -188,6 +188,23 @@ Keep AI-assisted development reviewable, bounded and accountable, and assess pro
 - [[model-provider-due-diligence|Due diligence for AI model providers]]
 - [[model-data-use-contract-review|Reviewing model data-use terms]]
 - [[ai-impact-assessment-for-engineering-systems|Impact assessment for AI-enabled engineering systems]]
+
+## Agentic engineering workflows
+
+Run coding and operations agents as an engineered workflow: model tiers, plans, parallel work, independent review, hooks, evidence of done and clean history.
+
+- [[tiered-model-agent-workflows|Tiered model agent workflows]]: route agent subtasks to cheap, mid or strongest model tiers by risk and verifiability, with escalation caps and handoff discipline.
+- [[plan-first-agent-workflows|Plan-first agent workflows]]: a reviewed, versioned plan before an agent edits files, with approval gates and scripted plan-drift checks.
+- [[parallel-agent-fan-out-and-result-merging|Parallel agent fan-out and result merging]]: one worktree and branch per subtask, sequential merges behind gates, and caps on concurrency, cost and attempts.
+- [[independent-review-agents|Independent review agents]]: a separate reviewer with fresh context, narrow scope and adversarial framing, backed by deterministic gates and a capped fix loop.
+- [[deterministic-hooks-for-coding-agents|Deterministic hooks for coding agents]]: harness tool hooks and git hooks that enforce must-hold rules, fail closed and are proven to fire.
+- [[agent-done-criteria-and-verification|Agent done criteria and verification]]: done as checkable commands, evidence and a "not verified" section in every agent report, gated in CI.
+- [[agent-session-transcript-handling|Agent session transcript handling]]: transcripts as sensitive data, covering secrets in tool output, retention, redaction before sharing and a separate audit record.
+- [[tooling-attribution-in-git-history|Tooling attribution in git history]]: decide whether commits, PRs and branch names may name the tool used, enforce it in CI and keep provenance elsewhere.
+- [[third-party-mcp-server-vetting|Third-party MCP server vetting]]: provenance, version pinning, tool description review, scoped credentials, allowlists and re-review on update.
+- [[scheduled-autonomous-agent-jobs|Scheduled autonomous agent jobs]]: agents on cron, CI schedules or webhooks with scoped identities, idempotent proposals, run budgets, a kill switch and alerts on silence.
+- [[agent-assisted-dependency-upgrades|Agent-assisted dependency upgrades]]: an agent fixes breaking Renovate or Dependabot upgrades on the bot branch, with CI, supply-chain checks and no auto-merged majors.
+- [[chatops-ai-assistants-in-slack|ChatOps AI assistants in Slack]]: verified requests, scoped channels, per-user authorization, bound approvals, audit and rate limits.
 
 The owner's agent skills and workflows live in [the owner's AI skills catalogue](https://ai.szolotov.com).
 
