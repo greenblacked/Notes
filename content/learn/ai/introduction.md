@@ -16,7 +16,9 @@ draft: false
 
 ## What you will learn
 
-Explain the difference between a model, an assistant application and an agent. Test whether an answer follows supplied evidence. Finish with a short evidence log you can reuse throughout this track.
+- Distinguish training, inference, retrieval and tool execution.
+- Identify claims that exceed supplied evidence.
+- Record exact prompts, responses and checks across repeated runs.
 
 ## The mental model
 
@@ -45,7 +47,7 @@ Questions:
 4. What read-only evidence would you request next?
 ```
 
-Expected: owner is the learning team; RTO is not provided; recovery has not been demonstrated. A backup timestamp does not prove recoverability. The last answer should request evidence, such as a restore-drill record, without claiming it exists.
+Expected: owner is the learning team; RTO is not provided; recovery has not been demonstrated by the supplied evidence. A backup timestamp does not prove recoverability. The last answer should request evidence, such as a restore-drill record, without claiming it exists.
 
 **If you see something else:** mark the exact unsupported sentence. Tighten the evidence requirement and repeat, retaining the failed answer. Do not quietly discard failures.
 
@@ -59,20 +61,17 @@ Mistaking confidence for evidence; treating a model name as a capability guarant
 
 ## Check your understanding
 
-> [!question]- Does adding a document retrain the model?
-> Usually it supplies inference context. Fine-tuning and provider data-use policy are different mechanisms.
+1. Does adding a document to a chat necessarily retrain the model?
+2. What can you conclude from no recorded restore drill?
+3. Why keep three answers to the same prompt?
+4. Where must permission to execute a proposed command be checked?
 
-> [!question]- What makes an agent more consequential than a text answer?
-> Its tools can affect external state. Authorisation must be enforced outside generated text.
-
-> [!question]- What counts as evidence of a successful command?
-> An observed result from a recorded run, not generated example output.
-
-> [!question]- What should happen when required evidence is missing?
-> State what is unknown and request the smallest relevant observation; do not invent a fact.
-
-> [!question]- Does this lab establish production readiness?
-> No. Its synthetic fixtures and limited runs leave real access, scale, reliability and data-handling requirements untested.
+> [!question]- Answers
+>
+> 1. No. It normally supplies inference context; fine-tuning and provider data-use terms are separate questions.
+> 2. Recovery is not demonstrated by the supplied evidence. You cannot conclude recovery is impossible or that no drill ever occurred.
+> 3. They expose variation and preserve failures that a single selected answer could hide.
+> 4. In the application or tool authorisation boundary, outside generated text.
 
 ## Pass criteria
 
