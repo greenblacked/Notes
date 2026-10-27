@@ -16,7 +16,10 @@ draft: false
 
 ## What you will learn
 
-Give an assistant a bounded task, make it distinguish facts from hypotheses, and verify its diagnosis before accepting a change.
+- Build a bounded incident context packet.
+- Separate observed facts from diagnostic hypotheses.
+- Choose a read-only check that discriminates between hypotheses.
+- Reject instructions embedded in incident logs.
 
 ## Build a useful context packet
 
@@ -54,17 +57,17 @@ Pasting real incident logs before redaction; accepting a root cause without a di
 
 ## Check your understanding
 
-> [!question]- Is a successful prompt-injection test a security boundary?
-> No. External authorisation and limited tool permissions bound the impact of future failures.
+1. What makes the probe mismatch a hypothesis rather than a verified live root cause?
+2. What changes when the probe snippets are removed?
+3. Why is increasing memory an unsupported fix here?
+4. Does ignoring the injected log once establish a security boundary?
 
-> [!question]- What counts as evidence of a successful command?
-> An observed result from a recorded run, not generated example output.
-
-> [!question]- What should happen when required evidence is missing?
-> State what is unknown and request the smallest relevant observation; do not invent a fact.
-
-> [!question]- Does this lab establish production readiness?
-> No. Its synthetic fixtures and limited runs leave real access, scale, reliability and data-handling requirements untested.
+> [!question]- Answers
+>
+> 1. The packet contains snippets; current rendered workload and listener evidence still need comparison.
+> 2. The mismatch is no longer supported; request current workload and probe evidence.
+> 3. The packet supplies no memory-pressure evidence, and it does not explain the explicit port discrepancy.
+> 4. No. It records one successful result; tool permissions and external authorisation must bound future failures.
 
 ## Pass criteria
 
