@@ -16,7 +16,10 @@ draft: false
 
 ## What you will learn
 
-Build a reproducible retrieval baseline. Inspect source IDs, ties and missing evidence before introducing embeddings or generation.
+- Run a deterministic lexical retrieval baseline.
+- Inspect source IDs, scores and ranking changes.
+- Distinguish relevant passages from answerable questions.
+- Separate retrieval failures from generation failures.
 
 ## Retrieval first
 
@@ -70,7 +73,7 @@ Expected: the first query returns `backup` with score 2; the second returns `[]`
 3. Optionally paste the returned passages into an approved assistant. Ask “What is the RTO?” and require either a source-supported answer or “not provided”. Expected: abstention even when `backup` was retrieved. No model or paid API is required to complete the retrieval exercise.
 4. Write two independent failure labels: retrieval missed a relevant passage; generation contradicted or exceeded a retrieved passage. Explain which component you would change for each.
 
-Cleanup only the two lab files you created, then remove the empty directory:
+Clean up the lab file you created, then remove the empty directory:
 
 ```bash
 rm -- "$AI_LAB_DIR/retrieve.py"
@@ -86,17 +89,17 @@ Calling token overlap semantic search; quoting a source ID without checking its 
 
 ## Check your understanding
 
-> [!question]- Would embeddings guarantee the correct RTO answer?
-> No. Better retrieval cannot recover a fact absent from the corpus. Generation must still abstain.
+1. Why can the backup document be retrieved without answering the RTO question?
+2. How are equal-score results ordered?
+3. Would embeddings recover an RTO absent from every source?
+4. Which component failed if a relevant source was returned but the answer invented a schedule?
 
-> [!question]- What counts as evidence of a successful command?
-> An observed result from a recorded run, not generated example output.
-
-> [!question]- What should happen when required evidence is missing?
-> State what is unknown and request the smallest relevant observation; do not invent a fact.
-
-> [!question]- Does this lab establish production readiness?
-> No. Its synthetic fixtures and limited runs leave real access, scale, reliability and data-handling requirements untested.
+> [!question]- Answers
+>
+> 1. Its word overlap earns a score, but its text contains no RTO.
+> 2. By source ID in ascending order, because the sort key uses negative score then source ID.
+> 3. No. A better retriever cannot supply a missing fact; generation must abstain.
+> 4. Generation or answer grounding failed; retrieval did return relevant evidence.
 
 ## Pass criteria
 

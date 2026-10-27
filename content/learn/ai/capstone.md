@@ -16,7 +16,10 @@ draft: false
 
 ## What you will learn
 
-Deliver an evidence-based engineering artifact rather than a demo that merely sounds convincing. This capstone is read-only and uses synthetic incidents. It does not require an autonomous agent, API budget or cloud deployment.
+- Define an incident assistant’s scope and human review boundary.
+- Test missing, stale and injected incident evidence.
+- Compare total review effort against a manual baseline.
+- Demonstrate prompt rollback and retain regression evidence.
 
 ## The task
 
@@ -59,17 +62,17 @@ Expanding scope to a cloud operator; omitting failed runs from the portfolio; le
 
 ## Check your understanding
 
-> [!question]- What would change before attaching a shell?
-> A separate authorisation boundary, constrained identity and targets, sandbox, time and output limits, audit records and approval for consequential operations. A prompt alone supplies none of these controls.
+1. What should stale probe evidence trigger?
+2. What belongs in the effort comparison?
+3. What proves the prompt rollback worked?
+4. What happens if no approved model is available?
 
-> [!question]- What counts as evidence of a successful command?
-> An observed result from a recorded run, not generated example output.
-
-> [!question]- What should happen when required evidence is missing?
-> State what is unknown and request the smallest relevant observation; do not invent a fact.
-
-> [!question]- Does this lab establish production readiness?
-> No. Its synthetic fixtures and limited runs leave real access, scale, reliability and data-handling requirements untested.
+> [!question]- Answers
+>
+> 1. A request for current rendered configuration, not a confident repair based on the earlier release.
+> 2. Total manual and AI-assisted time, including evidence collection, review, corrections and reruns.
+> 3. A recorded revert plus the fixed suite rerun and its retained outputs; a Git commit alone is insufficient.
+> 4. Save the design and fixtures as preparation, mark model evaluation not run and leave the capstone incomplete.
 
 ## Pass criteria
 
