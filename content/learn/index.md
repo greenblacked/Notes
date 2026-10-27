@@ -1,11 +1,11 @@
 ---
 title: Learning path
-description: Sixty-four lessons from first job to middle level in DevOps, in stages with milestones, a self-assessment and a weekly plan.
+description: A staged DevOps learning path with milestones, a weekly plan and a practical AI track covering evidence, retrieval and evaluation.
 tags:
   - learning
   - meta
 created: 2026-10-17
-modified: 2026-10-21
+modified: 2026-10-27
 draft: false
 ---
 
@@ -273,12 +273,25 @@ After week 14, do P6 (the recovery drill) and repeat the self-assessment. Lesson
 
 **Weeks 19 to 22 (optional, going deeper):** week 19, Linux 07, Kubernetes 09 and Kubernetes 10; week 20, Kubernetes 11, Kubernetes 12 and Security 02; week 21, GCP 05, Delivery 11 and Delivery 12; week 22, Config 01, Observability 05 and the self-assessment again. Times are estimates, not measured.
 
-## Using AI while learning
+## AI practice track
 
-> [!tip] Using AI while learning
-> An AI assistant is useful for explaining a concept a different way, for reviewing a script or manifest you wrote, and for asking "what would break this?". It is a poor substitute for running the command yourself: ask it, then verify in your lab. Never paste secrets, customer data, internal hostnames or real configuration from your employer into an AI tool, and treat generated commands as untrusted until you understand them. For the owner's catalogue of AI skills, see <https://ai.szolotov.com>. The team's view on AI is in [[ai/index|the AI section]].
+Five additional lessons teach AI use as an engineering skill: understand the mechanism, verify claims, retrieve evidence and measure whether a change helps. This optional track complements the 64 DevOps lessons above; it does not change their stage numbers or the 14-week core schedule. No GPU, model download, paid API or cloud resources are required. Model exercises use an approved chat tool and synthetic data; the Python retrieval lab runs offline without dependencies.
 
-Related: [[ai/index|AI in DevOps]], <https://ai.szolotov.com>.
+| Lesson                                                                                      | When to take it                             | Artifact you keep                                                             |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------- |
+| [[learn/ai/introduction\|AI 01: Understand what an assistant can and cannot do]]            | After lab setup                             | Evidence log and model/tool boundary sketch                                   |
+| [[learn/ai/verified-troubleshooting\|AI 02: Troubleshoot with evidence instead of guesses]] | After troubleshooting and Kubernetes probes | Three diagnostic runs, including missing evidence and an untrusted log        |
+| [[learn/ai/retrieval-lab\|AI 03: Build a tiny retrieval lab before adding a model]]         | After Python for ops                        | Runnable retrieval baseline and ranking experiment                            |
+| [[learn/ai/evaluation-lab\|AI 04: Measure answer quality with a small evaluation set]]      | After AI 03                                 | Fixed cases, 18 baseline results and a regression comparison                  |
+| [[learn/ai/capstone\|AI 05: Deliver a reviewable incident-assistant capstone]]              | After AI 01–04 and incident response        | Reviewed scope, evaluation report, manual baseline and tested prompt rollback |
+
+Allow roughly 10 to 12 additional hours, including review, spread over two or three weeks. These are planning estimates. Start AI 01 early; return to the later lessons once their prerequisites are comfortable.
+
+**Self-assessment:** can you distinguish a supplied fact from an inference, explain why a retrieved document may not answer a question, refuse an unsupported fix, and show a failed evaluation case? Score each from 0 (new) to 3 (can demonstrate unaided). At 0–1, take the relevant lesson; at 2, attempt its exercise first; at 3, show its pass evidence and move on.
+
+**Completion milestone:** a peer can reproduce your synthetic incident evaluation, trace accepted claims to sources and check your prompt rollback. A polished answer without these artifacts does not complete the track. Keep failed runs. Never paste credentials, customer data or employer configuration into an unapproved tool.
+
+For advanced production designs after the labs, continue with [[ai/index|AI in DevOps]]. The owner's skills catalogue is at <https://ai.szolotov.com>.
 
 ## After this path
 
