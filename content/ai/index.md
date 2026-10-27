@@ -5,11 +5,15 @@ tags:
   - ai
   - meta
 created: 2026-10-17
-modified: 2026-10-26
+modified: 2026-10-27
 draft: false
 ---
 
 These notes cover using AI agents and assistants in delivery and operations without giving up control: what they may access, how their output is reviewed, how it is traced and how a team adopts them.
+
+## Start with the practical learning track
+
+New to AI? Take [[learn/index#AI practice track|the five-lesson AI practice track]]: fundamentals, evidence-based troubleshooting, a dependency-free retrieval lab, evaluation and an incident-assistant capstone. Each lesson has prerequisites, exercises, failure checks and pass criteria. These reference notes are the next step after that foundation.
 
 ## Security and governance
 
