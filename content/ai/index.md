@@ -5,7 +5,7 @@ tags:
   - ai
   - meta
 created: 2026-10-17
-modified: 2026-10-26
+modified: 2026-10-27
 draft: false
 ---
 
@@ -188,6 +188,37 @@ Keep AI-assisted development reviewable, bounded and accountable, and assess pro
 - [[model-provider-due-diligence|Due diligence for AI model providers]]
 - [[model-data-use-contract-review|Reviewing model data-use terms]]
 - [[ai-impact-assessment-for-engineering-systems|Impact assessment for AI-enabled engineering systems]]
+
+## Agentic engineering workflows
+
+Run coding and operations agents as an engineered workflow: model tiers, plans, parallel work, independent review, hooks, evidence of done and clean history.
+
+- [[tiered-model-agent-workflows|Tiered model agent workflows]]: route agent subtasks to cheap, mid or strongest model tiers by risk and verifiability, with escalation caps and handoff discipline.
+- [[plan-first-agent-workflows|Plan-first agent workflows]]: a reviewed, versioned plan before an agent edits files, with approval gates and scripted plan-drift checks.
+- [[parallel-agent-fan-out-and-result-merging|Parallel agent fan-out and result merging]]: one worktree and branch per subtask, sequential merges behind gates, and caps on concurrency, cost and attempts.
+- [[independent-review-agents|Independent review agents]]: a separate reviewer with fresh context, narrow scope and adversarial framing, backed by deterministic gates and a capped fix loop.
+- [[deterministic-hooks-for-coding-agents|Deterministic hooks for coding agents]]: harness tool hooks and git hooks that enforce must-hold rules, fail closed and are proven to fire.
+- [[agent-done-criteria-and-verification|Agent done criteria and verification]]: done as checkable commands, evidence and a "not verified" section in every agent report, gated in CI.
+- [[agent-session-transcript-handling|Agent session transcript handling]]: transcripts as sensitive data, covering secrets in tool output, retention, redaction before sharing and a separate audit record.
+- [[tooling-attribution-in-git-history|Tooling attribution in git history]]: decide whether commits, PRs and branch names may name the tool used, enforce it in CI and keep provenance elsewhere.
+- [[third-party-mcp-server-vetting|Third-party MCP server vetting]]: provenance, version pinning, tool description review, scoped credentials, allowlists and re-review on update.
+- [[scheduled-autonomous-agent-jobs|Scheduled autonomous agent jobs]]: agents on cron, CI schedules or webhooks with scoped identities, idempotent proposals, run budgets, a kill switch and alerts on silence.
+- [[agent-assisted-dependency-upgrades|Agent-assisted dependency upgrades]]: an agent fixes breaking Renovate or Dependabot upgrades on the bot branch, with CI, supply-chain checks and no auto-merged majors.
+- [[chatops-ai-assistants-in-slack|ChatOps AI assistants in Slack]]: verified requests, scoped channels, per-user authorization, bound approvals, audit and rate limits.
+
+## AI in day-to-day platform work
+
+Apply assistants and agents to routine platform tasks with deterministic tools first, evidence in every answer and humans owning the decision.
+
+- [[effective-prompting-for-operations-work|Effective prompting for operations work]]: raw evidence, stated versions, ranked hypotheses, verification commands and fixed output formats.
+- [[coding-agent-permission-allowlists|Coding agent permission allowlists]]: per-repository and per-user allow, ask and deny rules for shell, file, network and MCP use, reviewed and audited.
+- [[ai-assisted-ci-failure-triage|AI-assisted CI failure triage]]: classify failed GitLab CI and Jenkins runs as infrastructure, flaky or real with cited evidence, owner routing and no auto-retry.
+- [[ai-assisted-security-findings-triage|AI-assisted security findings triage]]: cluster and contextualise scanner findings and draft decisions, while humans own risk acceptance and nothing is auto-suppressed.
+- [[ai-assisted-kubernetes-api-deprecation-upgrades|AI-assisted Kubernetes API deprecation upgrades]]: deterministic detectors first, constrained agent fixes, target-version validation and staged rollout.
+- [[ai-assisted-jenkins-to-gitlab-pipeline-conversion|AI-assisted Jenkins to GitLab pipeline conversion]]: inventory, a reviewed mapping table, lint gates, credential mapping and parity checks.
+- [[ai-assisted-runbook-authoring-and-testing|AI-assisted runbook authoring and testing]]: evidence-grounded steps, lab-verified commands, destructive-step markers, freshness reviews and game days.
+- [[llm-assisted-cloud-cost-anomaly-investigation|LLM-assisted cloud cost anomaly investigation]]: deterministic billing-export queries first, then a model that explains with cited evidence and never deletes.
+- [[team-norms-for-ai-assisted-engineering|Team norms for AI-assisted engineering]]: author ownership, review disclosure, what never to paste, review load, junior learning and pairing.
 
 The owner's agent skills and workflows live in [the owner's AI skills catalogue](https://ai.szolotov.com).
 
