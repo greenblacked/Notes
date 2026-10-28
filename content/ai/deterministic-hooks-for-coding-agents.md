@@ -121,8 +121,11 @@ secret-scan:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   script:
     - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-    # --diff-filter=d skips deleted files; the scanner must also handle an empty list
-    - scripts/scan-secrets.sh $(git diff --name-only --diff-filter=d "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"...HEAD)
+    # A separate command, so a failed diff (no merge base in a shallow clone) fails the job
+    # instead of running the scanner with no files. -z keeps file names with spaces intact.
+    - git diff --name-only -z --diff-filter=d "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"...HEAD > changed.z
+    - if [ ! -s changed.z ]; then echo "no added or modified files to scan"; exit 0; fi
+    - xargs -0 scripts/scan-secrets.sh < changed.z
 ```
 
 See [[secret-scanning-pre-commit-and-ci]] for scanner choices. Make a bypass visible: if an agent session uses `--no-verify`, a server-side check should still fail the merge request.

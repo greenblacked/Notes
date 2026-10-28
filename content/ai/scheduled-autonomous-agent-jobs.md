@@ -68,6 +68,15 @@ spec:
               env:
                 - name: JOB_NAME
                   value: dep-triage
+                # Kill switch: one edit to this ConfigMap disables every agent job at its next run.
+                # optional: true means a missing ConfigMap or key leaves it unset, which the
+                # wrapper treats as disabled.
+                - name: AGENT_JOBS_ENABLED
+                  valueFrom:
+                    configMapKeyRef:
+                      name: agent-jobs
+                      key: enabled
+                      optional: true
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
@@ -99,6 +108,8 @@ agent-dep-triage:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $AGENT_JOBS_ENABLED == "true" && $SCHEDULE_NAME == "dep-triage"'
   resource_group: agent-dep-triage
   timeout: 30m
+  variables:
+    JOB_NAME: dep-triage # the wrapper requires it; AGENT_JOBS_ENABLED comes from the project or group
   id_tokens:
     AGENT_OIDC:
       aud: https://vault.example.com
