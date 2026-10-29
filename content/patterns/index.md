@@ -66,6 +66,7 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[terraform-plan-policy-checks|Policy checks on Terraform plans]]: evaluate Terraform plan JSON with Conftest and static scanners in GitLab CI, and treat plan files as secrets, so risky GCP changes are stopped before apply.
 - [[terraform-module-versioning|Terraform module versioning and upgrades]]: version shared Terraform modules with semver tags, pin consumers and providers, and roll module upgrades through environments without surprise plans.
 - [[terraform-gcp-iam-member-binding-policy|GCP IAM in Terraform without lockouts: member, binding and policy resources]]: when to use the google_*_iam_member, _binding and _policy resources, how to stop them fighting, and how to keep the Terraform identity from locking itself out.
+- [[terraform-importing-existing-gcp-resources|Adopting existing GCP resources with Terraform import blocks]]: bring existing Cloud resources under Terraform management with a reviewed import-only plan and a clean follow-up plan.
 - [[secrets-out-of-terraform-state|Keeping secrets out of Terraform state]]: design Terraform on GCP so passwords and keys never land in state or plan files, protect the state bucket anyway, and clean up secrets that are already there.
 
 ## Data
