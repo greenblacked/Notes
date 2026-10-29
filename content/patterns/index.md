@@ -5,7 +5,7 @@ tags:
   - patterns
   - meta
 created: 2026-10-10
-modified: 2026-10-21
+modified: 2026-10-29
 draft: false
 ---
 
@@ -38,6 +38,7 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 
 - [[helm-chart-conventions|Helm chart conventions]]: conventions for in-house Helm charts covering layout, values schema, labels, probes, optional PDB and HPA, secrets, versioning, testing and publishing.
 - [[kubernetes-resource-requests-and-limits|Kubernetes resource requests and limits]]: how requests and limits drive scheduling, QoS and throttling, how to size them from real usage, and the traps with GKE Autopilot, the JVM and Go.
+- [[kubernetes-namespace-quotas-and-limitranges|Namespace resource quotas and LimitRanges]]: bound aggregate allocations and object counts, budget rollout headroom, and separate admission failures from scheduling failures.
 - [[zero-downtime-deployments-kubernetes|Zero-downtime deployments on Kubernetes]]: rolling update settings, probes, graceful shutdown, PodDisruptionBudgets, GCP load balancer draining and expand/contract migrations, with a verification checklist.
 - [[kubernetes-network-policies|Kubernetes network policies]]: default-deny NetworkPolicies with DNS, namespace and Google API egress on GKE, plus testing, common mistakes and a safe rollout.
 - [[gke-workload-identity|Workload Identity Federation for GKE]]: give Pods access to Google Cloud APIs without service account keys, using a direct IAM principal or GSA impersonation.
@@ -71,6 +72,7 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 
 - [[postgres-expand-contract-migrations|Zero-downtime Postgres schema migrations (expand and contract)]]: change a large live Postgres or Cloud SQL schema without outages using expand, migrate and contract phases, lock timeouts, concurrent indexes, NOT VALID constraints and batched backfills.
 - [[postgres-connection-pooling-gke|Postgres connection pooling for GKE workloads]]: size a connection budget for autoscaled pods against Cloud SQL, and run PgBouncer as a sidecar or shared Deployment behind the Auth Proxy.
+- [[postgres-autovacuum-health-and-tuning|PostgreSQL autovacuum health and tuning]]: inspect cleanup backlog and retained transaction horizons, tune busy tables, and recognise freeze-safety escalation.
 
 ## Policy and supply chain
 
@@ -96,6 +98,7 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 
 - [[slo-burn-rate-alerting|SLO burn rate alerting]]: define SLIs and SLOs for HTTP services and alert on error budget burn with multi-window, multi-burn-rate rules in Prometheus and Cloud Monitoring.
 - [[synthetic-monitoring-blackbox-and-uptime-checks|Synthetic monitoring with blackbox exporter and Cloud Monitoring uptime checks]]: probe services from the user's side with blackbox exporter and Cloud Monitoring uptime checks, and alert on failures and certificate expiry without noise.
+- [[opentelemetry-tail-sampling-operations|Operating OpenTelemetry tail sampling]]: route by trace ID, size buffered state, test late spans and restarts, and make sampling loss and output budgets explicit.
 
 ## Reliability and performance
 
