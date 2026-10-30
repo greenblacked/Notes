@@ -12,8 +12,8 @@ created: 2026-10-29
 modified: 2026-10-30
 draft: false
 evidence: source-reviewed
-reviewed: 2026-10-29
-review-due: 2027-04-29
+reviewed: 2026-10-30
+review-due: 2027-04-30
 destructive: true
 ---
 
@@ -70,7 +70,7 @@ Run context-dependent enrichment, such as `k8sattributes`, before tail sampling.
 
 Use peak new traces per second multiplied by the decision window as an initial estimate of pending trace count, then add measured headroom for bursts and decision processing. At 1,000 new traces per second and 30 seconds, that estimate is 30,000 pending traces before headroom. This is a sizing heuristic, not a memory guarantee.
 
-`num_traces` bounds the count of stored traces, not their bytes; when it is full, the oldest trace is removed, possibly before its decision. Newer releases add `maximum_trace_size_bytes`, which drops a single oversized trace to protect the Collector; check that your release has it before relying on it. Measure span counts, attribute sizes and heap use under representative load. `expected_new_traces_per_sec` helps allocate data structures; it is not an ingestion rate limiter.
+`num_traces` bounds the count of stored traces, not their bytes; when it is full, the oldest trace is removed, possibly before its decision. Since Collector-contrib v0.145.0 the processor has `maximum_trace_size_bytes`, which drops a single oversized trace to protect the Collector; confirm your distribution includes it. Measure span counts, attribute sizes and heap use under representative load. `expected_new_traces_per_sec` helps allocate data structures; it is not an ingestion rate limiter.
 
 Choose `decision_wait` from observed span arrival delay, including SDK batching and network retries, rather than request duration alone. A finite wait cannot guarantee complete traces. Larger waits increase buffered state and delay export.
 
@@ -90,12 +90,12 @@ Monitor receiver refusals, export failures, buffered trace pressure, early trace
 
 - [OpenTelemetry sampling concepts](https://opentelemetry.io/docs/concepts/sampling/): head/tail trade-offs, upstream loss and operating costs; checked 2026-10-29.
 - [Tail sampling processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/processor/tailsamplingprocessor/README.md): statefulness, configuration fields, policy combination, context loss and decision caches; checked 2026-10-29.
-- Tail sampling processor README at Collector-contrib `main` commit `6411c22`: `drop_pending_traces_on_shutdown`, `maximum_trace_size_bytes`, eviction of the oldest trace when `num_traces` is full and decision caches much greater than `num_traces`; checked 2026-10-30. These options may not be in a released Collector yet.
+- Tail sampling processor README at Collector-contrib `main` commit `6411c22`: `drop_pending_traces_on_shutdown`, `maximum_trace_size_bytes`, eviction of the oldest trace when `num_traces` is full and decision caches much greater than `num_traces`; checked 2026-10-30. `maximum_trace_size_bytes` was released in v0.145.0 (contrib `CHANGELOG.md`); the release that added `drop_pending_traces_on_shutdown` was not confirmed.
 - [Load-balancing exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/loadbalancingexporter/README.md): component naming, trace-ID routing, DNS endpoint discovery and membership changes; checked 2026-10-29.
 
 ### Not verified
 
-No Collector binary, routing experiment or load test was run. Upstream `main` can describe unreleased functionality. Configuration compatibility, metric names, achievable completeness and memory budgets remain deployment-specific.
+No Collector binary, routing experiment or load test was run. Upstream `main` can describe unreleased functionality. Configuration compatibility, metric names, achievable completeness and memory budgets remain deployment-specific. Web pages listed as checked 2026-10-29 were not re-fetched on 2026-10-30 (no web access); the new claims were checked against the documentation sources listed with that date.
 
 ### Environment
 

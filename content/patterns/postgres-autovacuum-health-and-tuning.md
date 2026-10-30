@@ -10,8 +10,8 @@ created: 2026-10-29
 modified: 2026-10-30
 draft: false
 evidence: source-reviewed
-reviewed: 2026-10-29
-review-due: 2027-04-29
+reviewed: 2026-10-30
+review-due: 2027-04-30
 ---
 
 Autovacuum is part of database availability, not optional housekeeping. Updates and deletes leave old row versions that vacuum can reclaim once they are no longer needed. Vacuum also maintains visibility information and freezes old transaction IDs. A healthy application can still accumulate maintenance debt.
@@ -80,7 +80,7 @@ FROM pg_replication_slots;
 
 Long-running transactions can retain old row versions. A replication slot's `xmin` and `catalog_xmin` can retain tuple versions; `restart_lsn` identifies a separate WAL-retention requirement. Slot WAL retention consumes WAL storage, not `pg_xact`. Escalate stale slots to their replication owner rather than treating them as disposable cleanup targets.
 
-Wraparound protection works per database, and table queries see only the database you are connected to. Check every database's oldest XID and multixact, and any prepared transactions, which hold their horizon until committed or rolled back and survive restarts:
+Wraparound protection works per database. Check every database's oldest XID and multixact, and any prepared transactions, which hold their horizon until committed or rolled back and survive restarts:
 
 ```sql title="vacuum-cluster-age.sql"
 SELECT datname,
@@ -126,12 +126,12 @@ If a tuning change worsens latency, restore the recorded previous settings, not 
 - [PostgreSQL 18 routine vacuuming](https://www.postgresql.org/docs/18/routine-vacuuming.html): space reuse, locking, freeze safety, trigger calculations, cost balancing and partition maintenance; checked 2026-10-29.
 - [PostgreSQL 18 cumulative statistics](https://www.postgresql.org/docs/18/monitoring-stats.html): table estimates, activity fields, statistics freshness and visibility; checked 2026-10-29.
 - [PostgreSQL 18 replication slots](https://www.postgresql.org/docs/18/view-pg-replication-slots.html): tuple retention horizons and WAL retention fields; checked 2026-10-29.
-- PostgreSQL 18 documentation source (`REL_18_STABLE`, commit `cc4bf6e`, `doc/src/sgml`): the vacuum trigger formula with `autovacuum_vacuum_max_threshold` (new in 18), no autovacuum `ANALYZE` of partitioned tables, `pg_database.datfrozenxid` and `datminmxid`, and the `pg_prepared_xacts` columns; checked 2026-10-30.
+- PostgreSQL 18 documentation source (`REL_18_STABLE`, commit `cc4bf6e`, `doc/src/sgml`): the vacuum trigger formula with `autovacuum_vacuum_max_threshold` (new in 18), no autovacuum `ANALYZE` of partitioned tables, `pg_database.datfrozenxid` and `datminmxid`, the `pg_prepared_xacts` columns, prepared transactions stored on disk so they survive a crash and interfere with VACUUM and wraparound (`ref/prepare_transaction.sgml`), and the wraparound step "Resolve old prepared transactions" (`maintenance.sgml`); checked 2026-10-30.
 - [PostgreSQL 18 progress reporting](https://www.postgresql.org/docs/18/progress-reporting.html): vacuum progress view and fields; checked 2026-10-29.
 
 ### Not verified
 
-No SQL was executed and no tuning values were load-tested. Monitoring permissions, provider-specific flags and workload capacity remain unverified. Threshold examples and acceptance budgets are engineering guidance, not observed results.
+No SQL was executed and no tuning values were load-tested. Monitoring permissions, provider-specific flags and workload capacity remain unverified. Threshold examples and acceptance budgets are engineering guidance, not observed results. Web pages listed as checked 2026-10-29 were not re-fetched on 2026-10-30 (no web access); the new claims were checked against the documentation sources listed with that date.
 
 ## Related
 

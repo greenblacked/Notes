@@ -10,8 +10,8 @@ created: 2026-10-29
 modified: 2026-10-30
 draft: false
 evidence: source-reviewed
-reviewed: 2026-10-29
-review-due: 2027-04-29
+reviewed: 2026-10-30
+review-due: 2027-04-30
 ---
 
 Import existing infrastructure when a team is adopting resources created by hand, another tool or an earlier process. The import binds a remote object to one Terraform resource address in state; it does not write the resource configuration for you. The goal is to make that binding in a reviewed plan, then leave Terraform with a clean plan against configuration that matches the real object.
@@ -42,7 +42,7 @@ import {
 }
 ```
 
-The project and bucket name above are examples. For other resource types, use the exact import ID documented by that provider. Import blocks require a destination `resource` block whose address matches `to`. To draft that block, `terraform plan -generate-config-out=generated.tf` (Terraform 1.5 and later) writes configuration for imports that have none; treat the output as a starting point to review and trim, not as finished configuration. Terraform 1.12 also accepts an `identity` object instead of `id` for resources that support it; check the provider's import section.
+The project and bucket name above are examples. For other resource types, use the exact import ID documented by that provider. Import blocks require a destination `resource` block whose address matches `to`. To draft that block, `terraform plan -generate-config-out=generated.tf` (Terraform 1.5 and later) writes configuration for imports that have none, to a new file that must not already exist; treat the output as a starting point to review and trim, not as finished configuration. Terraform 1.12 also accepts an `identity` object instead of (not together with) `id` for resources that support it; check the provider's import section.
 
 Before planning, confirm the destination address is not already in the state and that no other address in this or another state manages the same remote object. A duplicate binding can make later plans behave unexpectedly.
 
@@ -82,7 +82,7 @@ The state listing should include the imported address. The final plan should be 
 
 ## Rollback
 
-An import changes Terraform state, not the remote resource by itself. If the wrong object or address was imported, pause further applies and use the backup-first recovery procedure in [[runbooks/terraform-state-recovery]] to reconcile state. Do not simply remove the resource block and apply; that can plan a remote destroy. To release an object that was imported at the wrong address without touching it, Terraform 1.7 and later can replace the `resource` block with a `removed` block, reviewed in a plan like any other change:
+An import changes Terraform state, not the remote resource by itself. If the wrong object or address was imported, pause further applies and use the backup-first recovery procedure in [[runbooks/terraform-state-recovery]] to reconcile state. Do not simply remove the resource block and apply; that can plan a remote destroy. To release an object that was imported at the wrong address without touching it, Terraform 1.7 and later can replace the `resource` block with a `removed` block, and delete any `import` block for that address, reviewed in a plan like any other change:
 
 ```hcl title="live/production/storage/assets.tf"
 removed {
@@ -111,10 +111,11 @@ The plan must show the object leaving state with no destroy; apply it, then dele
 - [Import existing resources](https://developer.hashicorp.com/terraform/language/import): the import workflow, destination resource configuration and provider-specific IDs, checked 2026-10-29.
 - [Import block reference](https://developer.hashicorp.com/terraform/language/block/import): `to`, `id`, and the requirement for a matching resource address, checked 2026-10-29.
 - [Terraform CLI import usage](https://developer.hashicorp.com/terraform/cli/import/usage): one-to-one state bindings and the need to reconcile configuration with the imported object, checked 2026-10-29.
-- Terraform changelogs (hashicorp/terraform `v1.5` and `v1.7` branches): `import` blocks and `-generate-config-out` in 1.5.0, `removed` blocks in 1.7.0; checked 2026-10-30.
+- Terraform changelogs ([hashicorp/terraform](https://github.com/hashicorp/terraform) `v1.5`, `v1.7` and `v1.12` branches): `import` blocks and `-generate-config-out` writing to a new file in 1.5.0, `removed` blocks in 1.7.0, and `identity` import, mutually exclusive with `id`, in 1.12; checked 2026-10-30.
+- Terraform `internal/configs/removed.go` at tag `v1.7.0`: the `removed` block's `from` attribute and `lifecycle { destroy }`, with `destroy` defaulting to true; checked 2026-10-30.
 - Google provider bucket documentation source (`website/docs/r/storage_bucket.html.markdown`): `{{project_id}}/{{bucket}}` and `{{bucket}}` import IDs, and `identity` import from Terraform 1.12; checked 2026-10-30.
 - [Google provider: Cloud Storage bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket): bucket import ID forms and Terraform version support for import blocks, checked 2026-10-29.
 
 ### Not verified
 
-No commands were run against a live GCP project or a disposable Terraform root module. Provider-specific import IDs for resources other than Cloud Storage buckets, and OpenTofu compatibility for the pinned version, must be checked before use.
+No commands were run against a live GCP project or a disposable Terraform root module. Provider-specific import IDs for resources other than Cloud Storage buckets, and OpenTofu compatibility for the pinned version, must be checked before use. Web pages listed as checked 2026-10-29 were not re-fetched on 2026-10-30 (no web access); the new claims were checked against the documentation sources listed with that date.

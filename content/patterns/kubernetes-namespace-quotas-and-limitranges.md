@@ -11,8 +11,8 @@ created: 2026-10-29
 modified: 2026-10-30
 draft: false
 evidence: source-reviewed
-reviewed: 2026-10-29
-review-due: 2027-04-29
+reviewed: 2026-10-30
+review-due: 2027-04-30
 ---
 
 Use ResourceQuota to bound a namespace's aggregate allocations and object counts. Use LimitRange to supply container defaults and constrain individual allocations. Neither reserves physical cluster capacity nor replaces [[kubernetes-resource-requests-and-limits|workload sizing]].
@@ -29,7 +29,7 @@ Quota violations reject API requests with `403 Forbidden`. A Deployment can be a
 
 ## A namespace baseline
 
-This example budgets CPU **requests**, not CPU limits: the LimitRange defaults a CPU request but sets no default CPU limit, so containers that omit one are not throttled (see [[kubernetes-resource-requests-and-limits]] for that trade-off). Memory gets both a default request and a default limit because the quota caps `limits.memory`. If the namespace must enforce CPU limits, add a `cpu` entry to `default` and `limits.cpu` to the quota together.
+This example budgets CPU **requests**, not CPU limits: the LimitRange defaults a CPU request but sets no default CPU limit, so this policy adds no CPU limit (and no CFS-quota throttling) to containers that omit one; other admission, such as GKE Autopilot, may still set limits (see [[kubernetes-resource-requests-and-limits]] for that trade-off). Memory gets both a default request and a default limit because the quota caps `limits.memory`. If the namespace must enforce CPU limits, add a `cpu` entry to `default` and `limits.cpu` to the quota together.
 
 ```yaml title="namespace-budget.yaml"
 apiVersion: v1
@@ -90,7 +90,7 @@ kubectl get deployment,replicaset,pods --namespace "${NAMESPACE}"
 kubectl get events --namespace "${NAMESPACE}" --sort-by=.metadata.creationTimestamp
 ```
 
-After rollout, require all intended replicas to become ready, inspect the admitted Pods' `resources`, and compare quota usage with the calculated peak. In a disposable namespace, test a Pod with missing resources, an explicit request above the default limit, and a workload above the quota. Record which objects are rejected and check controller events for `FailedCreate`.
+After rollout, require all intended replicas to become ready, inspect the admitted Pods' `resources`, and compare quota usage with the calculated peak. In a disposable namespace, test a Pod with missing resources, a container with a memory request above the default memory limit and no memory limit (for example `1Gi`, which should be rejected as invalid), and a workload above the quota. Record which objects are rejected and check controller events for `FailedCreate`.
 
 Server-side dry-run can check an individual admission request, but is not a simulation of many concurrent Pod creations. Dry-running a Deployment does not exercise admission for its future Pods.
 
@@ -109,11 +109,11 @@ Recover by restoring the previously reviewed quota and LimitRange manifests thro
 
 - [Kubernetes resource quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/): namespace scope, rejection semantics, controller admission, quota keys and non-retroactive enforcement; checked 2026-10-29.
 - [Kubernetes LimitRanges](https://kubernetes.io/docs/concepts/policy/limit-range/): defaulting, request/limit conflicts, multiple-default ambiguity and unchanged existing Pods; checked 2026-10-29.
-- Kubernetes website source for the two pages above ([kubernetes/website](https://github.com/kubernetes/website/tree/main/content/en/docs/concepts/policy), commit `491f14e`): `403 Forbidden` rejections, `pods` counting only non-terminal Pods, `count/jobs.batch`, non-deterministic defaults with several LimitRanges and defaults not checked against requests; checked 2026-10-30.
+- Kubernetes website source for the two pages above ([kubernetes/website](https://github.com/kubernetes/website/tree/491f14e/content/en/docs/concepts/policy), commit `491f14e`): `403 Forbidden` rejections, `pods` counting only non-terminal Pods, `count/jobs.batch`, non-deterministic defaults with several LimitRanges, defaults not checked against requests, and a request above an injected limit rejected as invalid (`must be less than or equal to ... limit`; the source example is CPU, and the same request-not-above-limit validation applies to memory); checked 2026-10-30.
 
 ### Not verified
 
-No cluster commands or admission experiments were run. The budgets and rollout checklist are engineering recommendations; distribution-specific admission changes and capacity must be checked on the target cluster.
+No cluster commands or admission experiments were run. The budgets and rollout checklist are engineering recommendations; distribution-specific admission changes and capacity must be checked on the target cluster. Web pages listed as checked 2026-10-29 were not re-fetched on 2026-10-30 (no web access); the new claims were checked against the documentation sources listed with that date.
 
 ## Related
 
