@@ -8,7 +8,7 @@ tags:
   - policy-as-code
   - audit
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-10-30
 draft: false
 ---
 
@@ -150,8 +150,7 @@ Set expectations in [[team-norms-for-ai-assisted-engineering]]: who may add rule
 
 ## Sources
 
-- [Claude Code permissions](https://code.claude.com/docs/en/permissions) — one tool's rule syntax, deny-ask-allow precedence, wildcard behaviour, compound commands, file-rule limits and MCP rules, used here as a worked example; other tools differ, and grammar and version gates change.
-- [Claude Code sandboxing](https://code.claude.com/docs/en/sandboxing) — OS-level filesystem and network enforcement that complements command-text rules.
+- Your coding agent's own documentation for rule syntax, precedence, wildcard matching, compound commands, MCP rules and OS-level sandboxing. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [NIST SP 800-53 Rev. 5](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) — the least-privilege control (AC-6) and separation of duties (AC-5) used as the policy frame.
 - [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) — an allow-only authorisation model, as a contrast to deny-first precedence.
 

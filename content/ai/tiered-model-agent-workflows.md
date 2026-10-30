@@ -8,7 +8,7 @@ tags:
   - reliability
   - team-process
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-10-30
 draft: false
 ---
 
@@ -49,7 +49,7 @@ escalation:
 
 ## Configure tiers through subagents
 
-Many harnesses let a subagent definition name its own model. In Claude Code, for example, subagent definitions accept a `model` field, with a per-invocation override taking precedence over frontmatter. Check the current docs for the alias list and resolution order before copying any config. A read-only explorer might look like this:
+Many harnesses let a subagent definition name its own model, often with a per-invocation override that takes precedence over the definition. Check the current docs for the alias list and resolution order before copying any config. A read-only explorer might look like this:
 
 ```markdown title="explorer.md (location depends on your harness)"
 ---
@@ -123,10 +123,7 @@ Record, per artifact, which tier and pinned model ID produced it, the prompt or 
 
 ## Sources
 
-- [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents) — orchestrator-worker and evaluator-optimizer patterns; start simple and add complexity only when it measurably helps; agentic systems trade latency and cost for performance.
-- [How we built our multi-agent research system](https://www.anthropic.com/engineering/built-multi-agent-research-system) — token multiples for multi-agent runs on research tasks; caveat that tightly coupled work such as most coding suits multi-agent designs poorly.
-- [Claude Code subagents](https://code.claude.com/docs/en/sub-agents) — example of a per-subagent model field, resolution order, separate context windows and tool allowlists (check current docs).
-- [Claude Code common workflows](https://code.claude.com/docs/en/common-workflows) — delegating research to subagents to keep the main context clean.
-- [Claude API pricing](https://platform.claude.com/docs/en/about-claude/pricing) — example of how batch and caching modifiers are published; values change, check the current page.
+- Your coding agent's own documentation for per-subagent model settings, alias resolution, batch and caching price modifiers. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
+- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance framing for deciding where model output needs independent checks and human sign-off.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

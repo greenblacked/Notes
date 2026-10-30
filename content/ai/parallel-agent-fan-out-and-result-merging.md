@@ -8,7 +8,7 @@ tags:
   - cost
   - reliability
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-10-30
 draft: false
 ---
 
@@ -97,7 +97,7 @@ Treat any non-trivial conflict as evidence the split was wrong, not as a task fo
 
 ## Bound cost and concurrency
 
-Each parallel agent consumes its own context and tokens, so run cost is the sum. Vendor research reports multi-agent runs using many times the tokens of a single chat session, but that figure comes from research workloads and does not measure coding, so budget from your own measurements. Set a per-run token or spend budget before launch, and stop the run when it is hit.
+Each parallel agent consumes its own context and tokens, so run cost is the sum. Multi-agent runs can use many times the tokens of a single session; measure your own runs rather than relying on published figures, which come from different workloads. Set a per-run token or spend budget before launch, and stop the run when it is hit.
 
 Concurrency also hits provider rate limits. A burst of many agents can throttle the whole team's quota, including unrelated CI jobs. Cap parallelism at a small number, stagger launches, and use backoff ([[rate-limits-backpressure-and-queue-design]], [[llm-retry-timeout-and-circuit-breaker-policy]]). Harnesses have their own default concurrency limits and settings to change them; look them up rather than assuming a number.
 
@@ -159,10 +159,7 @@ integrate:
 
 ## Sources
 
-- [How we built our multi-agent research system](https://www.anthropic.com/engineering/built-multi-agent-research-system) — orchestrator-worker design with parallel subagents in separate context windows; token multiples for multi-agent runs; poor fit for tightly coupled work such as most coding.
-- [Claude Code worktrees](https://code.claude.com/docs/en/worktrees) — example of worktree naming, subagent isolation, locking, cleanup rules and what is shared across worktrees (check current docs).
-- [Claude Code subagents](https://code.claude.com/docs/en/sub-agents) — parallel subagents, default concurrency and how to change it, summaries returned to the parent.
-- [Claude Code common workflows](https://code.claude.com/docs/en/common-workflows) — running parallel sessions with worktrees.
+- Your coding agent's own documentation for parallel subagents, worktree naming, concurrency limits and cleanup. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [git-worktree documentation](https://git-scm.com/docs/git-worktree) — linked worktrees share history; add, list, lock, prune and remove; a branch is not normally checked out in two worktrees.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

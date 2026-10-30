@@ -8,7 +8,7 @@ tags:
   - reliability
   - incident-management
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-10-30
 draft: false
 ---
 
@@ -171,7 +171,7 @@ Logs, tickets, READMEs and web pages can contain instructions, deliberately or b
 
 ## Sources
 
-- [Anthropic prompt engineering: Be clear and direct](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/be-clear-and-direct) - colleague test and supplying context; vendor guidance changes, check the current docs.
+- Your coding agent's own documentation for prompting guidance: give context and say what good output looks like. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [Google SRE Book: Postmortem culture](https://sre.google/sre-book/postmortem-culture/) - blameless framing for incident prompts and reviews.
 - [Kubernetes docs: Debug Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/) - starting with describe, state and restarts; debug container behaviour is version dependent.
 

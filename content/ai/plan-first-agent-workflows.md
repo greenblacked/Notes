@@ -8,7 +8,7 @@ tags:
   - delivery
   - reliability
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-10-30
 draft: false
 ---
 
@@ -151,9 +151,8 @@ Track two numbers: how often an approved plan needed a mid-run amendment, and ho
 
 ## Sources
 
-- [Claude Code permission modes](https://code.claude.com/docs/en/permission-modes) - plan mode blocks edits until approval, the approval options, editing the plan before approving, and the caveat that behaviour varies by session type.
-- [Claude Code common workflows](https://code.claude.com/docs/en/common-workflows) - the "plan before editing" recipe and reviewing changes before they touch disk.
-- [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents) - start with the simplest design and add complexity only when it improves outcomes.
-- [Claude Code sub-agents](https://code.claude.com/docs/en/sub-agents) - a sub-agent starts from its delegation message, so the plan must be written out when delegating.
+- Your coding agent's own documentation for plan or approval modes, editing a plan before approving, and what a delegated subagent receives. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
+- [NIST SP 800-218, Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) — reviewing and approving changes before they are made, and recording the decision.
+- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance framing for deciding where model output needs independent checks and human sign-off.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

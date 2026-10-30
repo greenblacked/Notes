@@ -8,7 +8,7 @@ tags:
   - team-process
   - delivery
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-10-30
 draft: false
 ---
 
@@ -150,7 +150,7 @@ git diff origin/main...HEAD -U0 -- 'tests/**' '**/*.test.*' '.eslintrc*' 'ruff.t
 
 ## Sources
 
-- [Claude Code best practices](https://code.claude.com/docs/en/best-practices) - giving the agent a pass/fail check, asking for evidence, and using hooks to block completion until a script passes.
+- Your coding agent's own documentation for pass/fail checks, evidence in agent reports and hooks that block completion. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [NIST SP 800-218, Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) - governance framing for integrating verification into the development lifecycle.
 - [SLSA: distributing provenance](https://slsa.dev/spec/v1.0/distributing-provenance) - verifiable provenance, relevant when done includes released artifacts.
 

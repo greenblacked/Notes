@@ -8,7 +8,7 @@ tags:
   - reliability
   - ci-cd
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-10-30
 draft: false
 ---
 
@@ -148,9 +148,8 @@ For changes that affect production, a reviewer agent's approval is one input. A 
 
 ## Sources
 
-- [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents) — the evaluator-optimizer pattern and the conditions under which it helps (clear criteria, measurable value of iteration).
-- [Claude Code subagents](https://code.claude.com/docs/en/sub-agents) — example of subagents with their own context window and per-subagent tool allowlists (check current docs for your version).
-- [How we built our multi-agent research system](https://www.anthropic.com/engineering/built-multi-agent-research-system) — separate-context subagents keep the lead's context clean; multi-agent suits breadth-first work more than tightly coupled work.
+- Your coding agent's own documentation for subagents with their own context and tool allowlists. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
+- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance framing for deciding where model output needs independent checks and human sign-off.
 - [LLM Evaluators Recognize and Favor Their Own Generations](https://arxiv.org/abs/2404.13076) — reported self-preference in model evaluators; results vary by task, so verify on your own outputs.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
