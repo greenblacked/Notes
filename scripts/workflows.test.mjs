@@ -153,6 +153,17 @@ test("ci runs for main only", () => {
   assert.deepEqual(on.push.branches, ["main"])
 })
 
+test("the branch name check runs for pull requests in the workflow lint job and gates CI OK", () => {
+  const job = wf["ci.yml"].jobs["workflow-lint"]
+  const step = job.steps.find((s) => s.name === "Require a conventional branch name")
+  assert.ok(step, "step exists")
+  assert.equal(step.if, "github.event_name == 'pull_request'")
+  assert.equal(step.env.HEAD_REF, "${{ github.head_ref }}")
+  assert.equal(step.run, 'node scripts/check-branch-name.mjs "$HEAD_REF"')
+  assert.equal(step["continue-on-error"], undefined)
+  assert.ok(wf["ci.yml"].jobs["ci-ok"].needs.includes("workflow-lint"))
+})
+
 test("dependabot targets the default branch", () => {
   const d = parse(readFileSync(join(root, ".github", "dependabot.yml"), "utf8"))
   for (const u of d.updates) assert.equal(u["target-branch"], undefined)

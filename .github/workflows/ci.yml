@@ -296,6 +296,15 @@ jobs:
             node scripts/check-attribution.mjs --range "$PUSH_BEFORE..$PUSH_AFTER"
           fi
 
+      # The head branch becomes the source ref in the merge commit subject, which stays in the
+      # history: it must be `<type>/<kebab>`, `dependabot/...` or GitHub's `revert-<N>-...`, and
+      # never a tool-named prefix. Pull requests only; a push to main has no head branch.
+      - name: Require a conventional branch name
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: node scripts/check-branch-name.mjs "$HEAD_REF"
+
       - name: Install actionlint
         run: |
           curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/actionlint.tgz" \
