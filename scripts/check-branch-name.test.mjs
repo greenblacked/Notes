@@ -33,18 +33,11 @@ test("dependabot and GitHub revert branches are allowed", () => {
   assert.deepEqual(branchProblems("revert-93-text/ai-agentic-and-platform-notes"), [])
 })
 
-test("tool-named branches are rejected with a tool message", () => {
-  for (const b of [
-    "claude/fix-links",
-    "copilot/update-ci",
-    "codex/x",
-    "AI/notes",
-    "bot/sync",
-    "claude-fix/x",
-  ]) {
+test("a prefix outside the list is rejected, whatever made the branch", () => {
+  for (const b of ["bot/sync", "agent/update-ci", "auto/x", "AI/notes", "assistant-fix/x"]) {
     const p = branchProblems(b)
     assert.equal(p.length, 1, b)
-    assert.match(p[0], /named after a tool/, b)
+    assert.match(p[0], /must start with one of .*; name it after the change$/, b)
   }
 })
 

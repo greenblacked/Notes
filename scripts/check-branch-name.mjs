@@ -27,9 +27,6 @@ export const TYPES = [
   "text",
 ]
 
-// Prefixes that name the tool that made the branch rather than the change.
-const TOOL_PREFIXES = ["ai", "bot", "claude", "codex", "copilot", "cursor", "devin"]
-
 const SEGMENT = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/
 // Must match the head-branch rule in .github/scripts/verify-text-merge.sh.
 const TEXT_BRANCH = /^text\/[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -41,12 +38,11 @@ export function branchProblems(name) {
   if (branch.startsWith("dependabot/")) return []
   if (/^revert-[1-9][0-9]*-./.test(branch)) return []
   const [type, ...rest] = branch.split("/")
-  const lower = type.toLowerCase()
-  if (TOOL_PREFIXES.includes(lower) || TOOL_PREFIXES.some((t) => lower.startsWith(`${t}-`))) {
-    return [`branch '${branch}' is named after a tool; name it after the change, e.g. fix/<kebab>`]
-  }
+  // An allowlist: any other prefix fails, including one named after whatever made the branch.
   if (!TYPES.includes(type)) {
-    return [`branch '${branch}' must start with one of ${TYPES.map((t) => `${t}/`).join(", ")}`]
+    return [
+      `branch '${branch}' must start with one of ${TYPES.map((t) => `${t}/`).join(", ")}; name it after the change`,
+    ]
   }
   if (type === "text" && !TEXT_BRANCH.test(branch)) {
     return [

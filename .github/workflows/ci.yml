@@ -297,8 +297,8 @@ jobs:
           fi
 
       # The head branch becomes the source ref in the merge commit subject, which stays in the
-      # history: it must be `<type>/<kebab>`, `dependabot/...` or GitHub's `revert-<N>-...`, and
-      # never a tool-named prefix. Pull requests only; a push to main has no head branch.
+      # history: it must be `<type>/<kebab>`, `dependabot/...` or GitHub's `revert-<N>-...`; any
+      # other prefix fails. Pull requests only; a push to main has no head branch.
       - name: Require a conventional branch name
         if: github.event_name == 'pull_request'
         env:
