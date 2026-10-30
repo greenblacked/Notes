@@ -8,7 +8,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-29
-modified: 2026-10-29
+modified: 2026-10-30
 draft: false
 evidence: source-reviewed
 reviewed: 2026-10-29
@@ -29,7 +29,7 @@ Quota violations reject API requests with `403 Forbidden`. A Deployment can be a
 
 ## A namespace baseline
 
-This example deliberately budgets CPU **requests**, not CPU limits. The quota does not require CPU limits, but the paired LimitRange injects a CPU limit into every container that omits one. To allow containers without CPU limits, omit the CPU entry from `default` too.
+This example budgets CPU **requests**, not CPU limits: the LimitRange defaults a CPU request but sets no default CPU limit, so containers that omit one are not throttled (see [[kubernetes-resource-requests-and-limits]] for that trade-off). Memory gets both a default request and a default limit because the quota caps `limits.memory`. If the namespace must enforce CPU limits, add a `cpu` entry to `default` and `limits.cpu` to the quota together.
 
 ```yaml title="namespace-budget.yaml"
 apiVersion: v1
@@ -44,7 +44,6 @@ spec:
         cpu: 100m
         memory: 128Mi
       default:
-        cpu: "1"
         memory: 512Mi
 ---
 apiVersion: v1
@@ -65,7 +64,7 @@ spec:
 
 These are illustrative budgets, not production sizing. The namespace must already exist. Review the rendered resources from every workload, including sidecars and batch jobs, before adopting the policy.
 
-LimitRange defaulting occurs during admission; quota evaluates the resulting resource requirements. A container requesting `1500m` CPU without a limit would conflict with this example's injected `1` CPU limit. Workloads above the defaults must set compatible explicit requests and limits. Keep one defaults-owning LimitRange per namespace: with multiple LimitRanges, selection of defaults is not deterministic.
+LimitRange defaulting occurs during admission; quota evaluates the resulting resource requirements. LimitRange does not check its defaults against what a container asks for: a container requesting `1Gi` of memory without a memory limit gets this example's injected `512Mi` limit, a request above its limit, and the API server rejects the Pod as invalid (the request must be less than or equal to the limit). Workloads above the defaults must set compatible explicit requests and limits. Keep one defaults-owning LimitRange per namespace: with multiple LimitRanges, selection of defaults is not deterministic.
 
 The `pods` quota counts non-terminal Pods. `count/jobs.batch` counts Job objects, including completed Jobs that still exist. Choose history retention in [[patterns/kubernetes-jobs-and-cronjobs|Jobs and CronJobs]] alongside the object budget.
 
@@ -110,6 +109,7 @@ Recover by restoring the previously reviewed quota and LimitRange manifests thro
 
 - [Kubernetes resource quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/): namespace scope, rejection semantics, controller admission, quota keys and non-retroactive enforcement; checked 2026-10-29.
 - [Kubernetes LimitRanges](https://kubernetes.io/docs/concepts/policy/limit-range/): defaulting, request/limit conflicts, multiple-default ambiguity and unchanged existing Pods; checked 2026-10-29.
+- Kubernetes website source for the two pages above ([kubernetes/website](https://github.com/kubernetes/website/tree/main/content/en/docs/concepts/policy), commit `491f14e`): `403 Forbidden` rejections, `pods` counting only non-terminal Pods, `count/jobs.batch`, non-deterministic defaults with several LimitRanges and defaults not checked against requests; checked 2026-10-30.
 
 ### Not verified
 
