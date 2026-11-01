@@ -11,6 +11,9 @@ tags:
 created: 2026-10-21
 modified: 2026-11-01
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-01
+review-due: 2027-05-01
 ---
 
 A managed model API is the default: no GPUs to buy, no drivers to patch, no capacity to chase. Some workloads still belong inside your own cluster: data that may not leave the VPC, a steady high volume where per-token pricing loses to GPU-hours, a fine-tuned open-weights model, or latency that a shared public endpoint cannot hold. This note describes how to run that on GKE so it behaves like any other production service: a dedicated GPU node pool, a pinned model server exposing the widely used chat-completions HTTP API, so existing client SDKs can call it unchanged, model weights loaded through Workload Identity, autoscaling on queue depth, Spot capacity with a safe floor, and a rollback that is one Service change.
@@ -18,12 +21,12 @@ A managed model API is the default: no GPUs to buy, no drivers to patch, no capa
 > [!info] Scope
 > GKE Standard, NVIDIA GPUs, and [vLLM](https://docs.vllm.ai/) as the model server. The same structure fits other servers (the GKE tutorials also use others), but the metric names and flags differ. No GPU prices, GPU memory sizes, model sizes or per-region availability are quoted: they change often and differ by region, so check the GKE GPU page and the pricing page for your region before sizing anything. Behind this service sits the shared gateway from [[llm-api-cost-control]]; clients never call the model server directly.
 
-> [!note] Not verified
-> Nothing here was run against a real cluster. The `gcloud container node-pools create` flags were read from the local `--help` text of Google Cloud SDK 570.0.0; the rest comes from official documentation read only as search excerpts on 2026-10-21. Not confirmed: whether `cloud.google.com/gke-accelerator` is the documented node selector on GKE Standard (only the Autopilot page was seen), the vLLM `/health` endpoint and every vLLM flag other than `--api-key`, the vLLM and Cloud SDK container image names and tags, the example GPU type and machine type pair, the `gmp-system` namespace for the managed collectors, the labels and taints GKE puts on Spot nodes, the Workload Identity setup for the Cloud Storage FUSE driver, the exact custom metric name the adapter exposes to the HPA for a Managed Service for Prometheus metric, and every HPA `behavior` value below (they are design starting points). Check the current pages under Sources before you copy anything.
+> [!note] Review status
+> Source-reviewed on 2026-11-01 against the Kubernetes and vLLM documentation; nothing here was run against a real cluster. Everything that depends on GKE or Google Cloud documentation or on the Cloud SDK could not be checked and is hedged in the text and listed under Not verified in the Evidence section. Check the current pages under Sources before you copy anything.
 
 ## When to self-host and when to use a managed API
 
-| Question            | Managed API (for example Vertex AI)                                 | Self-hosted on GKE                                                        |
+| Question            | Managed API (for example a cloud provider's managed model service)  | Self-hosted on GKE                                                        |
 | ------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | Where does data go? | To the provider's endpoint, under its data terms and region options | Stays in your VPC and your nodes                                          |
 | Which models?       | The provider's catalogue                                            | Any open-weights or fine-tuned model your licence allows                  |
@@ -143,7 +146,7 @@ spec:
       containers:
         - name: vllm
           image: ${VLLM_IMAGE}
-          command: ["vllm", "serve", "/models", "--host", "0.0.0.0", "--port", "8000"]
+          command: ["vllm", "serve", "/models", "--host", "0.0.0.0", "--port", "8000"]  # check the flag names for your vLLM version
           env:
             - name: VLLM_API_KEY
               valueFrom:
@@ -181,9 +184,9 @@ EOF
 Points that matter in production:
 
 - **GPUs are limits only.** Kubernetes requires the GPU count under `limits`; a `requests` value is copied from it, must be equal if set, and fractions are not allowed. Pods schedule onto a node only after the NVIDIA device plugin advertises `nvidia.com/gpu`, which is why a fresh node takes a while to accept the pod. CPU and memory are sized separately, see [[kubernetes-resource-requests-and-limits]].
-- **Probes sized for long loads.** Liveness and readiness do not start until the startup probe succeeds, and the startup probe never runs again after that. The tolerated start time is roughly `periodSeconds x failureThreshold`, here about 30 minutes. Measure your real cold start and set it with margin: a startup probe that is too short restarts the pod forever, which looks like a crash loop on a healthy pod. The `/health` path is not confirmed here; check the vLLM documentation for the version you run.
-- **The API key is not enough.** vLLM's newer documentation says `--api-key` (or `VLLM_API_KEY`) protects only the `/v1`, `/v2` and `/inference` paths; other endpoints are unauthenticated. Keep the server reachable only from the gateway.
-- **`/dev/shm`.** A memory-backed `emptyDir` gives the server shared memory beyond the container default; it counts against the pod's memory.
+- **Probes sized for long loads.** Liveness and readiness do not start until the startup probe succeeds, and the startup probe never runs again after that. The tolerated start time is roughly `periodSeconds x failureThreshold`, here about 30 minutes. Measure your real cold start and set it with margin: a startup probe that is too short restarts the pod forever, which looks like a crash loop on a healthy pod. The vLLM documentation lists `/health` as a health-check endpoint and its Kubernetes example probes it; it does not say that `/health` reports ready only after the weights have loaded, so confirm that for the version you run before relying on it for the probes.
+- **The API key is not enough.** The vLLM security documentation says `--api-key` (or `VLLM_API_KEY`) protects only the `/v1`, `/v2` and `/inference` path prefixes and one vendor-compatible prefix; other endpoints on the same server, such as `/metrics` and `/health`, need no key. Do not rely on it alone. Keep the server reachable only from the gateway. Because `/metrics` is unauthenticated, the scrape rule below needs no key.
+- **`/dev/shm`.** A memory-backed `emptyDir` gives the server shared memory beyond the container default; files written to it count against the memory limit of the container that writes them.
 - **Pin everything.** The image by digest, the model by a versioned `gs://` prefix, and the vLLM flags in the manifest. vLLM metric names and flags have changed between releases; an unpinned `latest` breaks dashboards and HPAs on its own.
 - **Baseline exceptions.** The Deployment sets no `securityContext`, so the server runs as the image's default user with a writable root filesystem, and it uses the `llm-serving` PriorityClass defined below (and `llm-serving-base` in the mixed Spot setup) rather than one of the classes in [[priority-classes-and-preemption]]. Both depart from [[kubernetes-workload-baseline-standard]]: record them as exceptions with a reason and an expiry, or add the security context once you have confirmed which user and writable paths your vLLM image needs.
 
@@ -265,7 +268,7 @@ The second rule lets the managed Prometheus collectors scrape `/metrics`; adjust
 
 CPU utilisation says nothing about a GPU server. Google's inference autoscaling guidance recommends the model server's **queue size** as the signal when you optimise throughput and cost within a latency target: start with a target between 3 and 5 waiting requests per pod and raise it until latency becomes unacceptable; for targets under 10, tune the HPA's scale-up behaviour. Queue size does not cap concurrency, so the gateway still needs its own concurrency limits.
 
-vLLM exposes Prometheus metrics on `/metrics` with a `vllm:` prefix, including the gauges `vllm:num_requests_waiting` and `vllm:num_requests_running` and the histogram `vllm:time_to_first_token_seconds`. Scrape them with Managed Service for Prometheus ([[0042-managed-prometheus-for-application-metrics]]):
+vLLM exposes Prometheus metrics on `/metrics` with a `vllm:` prefix, including the gauge `vllm:num_requests_running` and the histogram `vllm:time_to_first_token_seconds`. The vLLM metrics design page lists the queue gauge only in passing ("`vllm:num_requests_running` (also, `_swapped` and `_waiting`)"), so confirm that `vllm:num_requests_waiting` appears in the `/metrics` output of your version before building an HPA on it. Scrape them with Managed Service for Prometheus ([[0042-managed-prometheus-for-application-metrics]]):
 
 ```yaml title="llm-podmonitoring.yaml"
 apiVersion: monitoring.googleapis.com/v1
@@ -313,7 +316,7 @@ Design notes ([[kubernetes-autoscaling]] covers HPA and the cluster autoscaler i
 
 - **Scale-up is slow by nature.** A new pod may need a new GPU node, the driver, the image and the weights. If your latency target cannot absorb that, keep `minReplicas` and the pool's minimum at one or more during working hours and accept the idle cost; let the gateway queue or shed load meanwhile ([[timeouts-retries-load-shedding]]).
 - **`maxReplicas` must match quota.** An HPA that asks for more pods than the pool can hold leaves pods Pending and makes the queue metric look worse, which asks for even more.
-- **Scale to zero** is possible with the node pool at `--min-nodes=0`, but the HPA keeps at least `minReplicas` pods; scaling the Deployment itself to zero needs a scheduled job or an event-driven autoscaler, and the first request after that waits for the whole cold start.
+- **Scale to zero** is possible with the node pool at `--min-nodes=0`, but the HPA above keeps at least `minReplicas: 1` pods. The Kubernetes documentation allows `minReplicas: 0` only for HPAs that use object or external metrics (not the `Pods` metric used here) and behind the `HPAScaleToZero` feature gate (enabled by default in the current docs), so scaling the Deployment to zero needs a different metric type, a scheduled job or an event-driven autoscaler. The first request after that waits for the whole cold start.
 
 ## Spot GPUs and preemption
 
@@ -486,17 +489,38 @@ Then check the HPA sees the metric: `kubectl -n llm-serving describe hpa model-a
 
 For general pod failures see [[kubernetes-pod-troubleshooting]]; for nodes under memory or disk pressure, [[node-resource-pressure-triage]].
 
+## Evidence
+
+### Sources checked
+
+- [Schedule GPUs](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/): GPUs only under `limits`, a request is copied from the limit and must be equal if set, the `nvidia.com/gpu` extended resource comes from a device plugin; [Resource management for pods and containers](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources): extended resource quantities must be whole numbers; checked 2026-11-01 (Kubernetes website checkout, commit 491f14e).
+- [Configure liveness, readiness and startup probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) and [Liveness, readiness and startup probes](https://kubernetes.io/docs/concepts/workloads/pods/probes/): liveness and readiness wait for the startup probe, which runs only at startup; the tolerated start time is `failureThreshold * periodSeconds`; checked 2026-11-01 (commit 491f14e).
+- [Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/): `behavior` with `stabilizationWindowSeconds` and `policies` of type `Pods` with `periodSeconds`; scale to zero only for object and external metrics behind the `HPAScaleToZero` gate (correction made above); checked 2026-11-01 (commit 491f14e).
+- [Pod Priority and Preemption](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/): PriorityClass `value`, `globalDefault`, `description`, and preemption of lower-priority pods for a pending pod; [Volumes](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir): `emptyDir.medium: Memory` and files counting against the container memory limit; [Network policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/): the `kubernetes.io/metadata.name` namespace label; [EndpointSlices](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/): the `kubernetes.io/service-name` label; [Disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/): PodDisruptionBudgets cover voluntary disruptions; checked 2026-11-01 (commit 491f14e).
+- [vLLM server arguments](https://docs.vllm.ai/en/latest/configuration/serve_args/), [ModelOpt quantization](https://docs.vllm.ai/en/latest/features/quantization/modelopt/) and [security](https://docs.vllm.ai/en/latest/usage/security/): `vllm serve` with a local checkpoint path and `--host 0.0.0.0 --port 8000`, `host` as a long-form server argument, `--api-key` and `VLLM_API_KEY`, the protected path prefixes (`/v1`, `/v2`, `/inference` and one vendor-compatible prefix, corrected above), `/health` and `/metrics` listed as unauthenticated; checked 2026-11-01 (vLLM checkout, commit 8530a77).
+- [vLLM metrics design](https://docs.vllm.ai/en/latest/design/metrics/) and [Kubernetes deployment](https://docs.vllm.ai/en/latest/deployment/k8s/): the `vllm:` prefix on `/metrics`, `vllm:num_requests_running`, `vllm:time_to_first_token_seconds`, `/health` probed in the example, `/dev/shm` mounted from a memory volume; checked 2026-11-01 (commit 8530a77).
+
+### Not verified
+
+- Everything that depends on Google Cloud or GKE documentation: GPU quota guidance, the GKE-added `nvidia.com/gpu=present:NoSchedule` taint and toleration, the Spot VM notice and graceful-shutdown timings, the autoscaling guidance (queue size target of 3 to 5), the Cloud Storage FUSE and Hyperdisk ML comparison, the labels and taints GKE puts on Spot nodes, the `gmp-system` namespace and `PodMonitoring` resource, the custom metrics adapter and the metric name it exposes, and the Workload Identity principal form.
+- The `gcloud container node-pools create` and `gcloud storage` flags: read from local `--help` text of Google Cloud SDK 570.0.0 on 2026-10-21, not from a source checkout reviewed on 2026-11-01. The GPU and machine type pair and the default driver version by GKE release are also unchecked.
+- vLLM: the exact flag set for your version (only `--host`, `--port` and `--api-key` were checked), that `/health` reports ready only after the weights load, and that the `vllm:num_requests_waiting` gauge is exposed under that exact name (only an "also `_waiting`" mention was found).
+- Container image names and tags (the vLLM image and the Cloud SDK image).
+- Every HPA `behavior` value and the probe timings are design starting points, not documented defaults.
+- Cluster autoscaler pool selection for a pending burst pod, and the memory and CPU sizing figures.
+- Nothing was run against a real cluster.
+
 ## Sources
 
 - [Run GPUs in GKE Standard node pools](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/gpus), Google Cloud documentation: quota, driver installation, taints.
 - [About GPUs in GKE](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/gpus), Google Cloud documentation.
-- [Serve open models using GPUs on GKE with vLLM](https://docs.cloud.google.com/kubernetes-engine/docs/tutorials/serve-gemma-gpu-vllm), Google Cloud tutorial (model and GPU lists change; read the current version).
 - [Best practices for autoscaling LLM inference workloads with GPUs](https://docs.cloud.google.com/kubernetes-engine/docs/best-practices/machine-learning/inference/autoscaling), Google Cloud documentation.
 - [Spot VMs in GKE](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/spot-vms), Google Cloud documentation: preemption notice and graceful shutdown.
 - [Cloud Storage FUSE CSI driver](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/cloud-storage-fuse-csi-driver), Google Cloud documentation.
 - [Schedule GPUs](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/), Kubernetes documentation.
-- [Configure liveness, readiness and startup probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/), Kubernetes documentation.
-- [API server](https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html) and [metrics](https://docs.vllm.ai/en/latest/design/metrics/), vLLM documentation.
+- [Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/), [Pod Priority and Preemption](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/) and [Volumes](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir), Kubernetes documentation.
+- [Configure liveness, readiness and startup probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/), Kubernetes documentation.
+- [Server arguments](https://docs.vllm.ai/en/latest/configuration/serve_args/), [security](https://docs.vllm.ai/en/latest/usage/security/) and [metrics](https://docs.vllm.ai/en/latest/design/metrics/), vLLM documentation.
 - `gcloud container node-pools create --help`, Google Cloud SDK 570.0.0: the node pool flags used above.
 
 ## Related
