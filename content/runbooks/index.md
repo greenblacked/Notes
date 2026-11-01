@@ -5,7 +5,7 @@ tags:
   - runbooks
   - meta
 created: 2026-10-11
-modified: 2026-10-21
+modified: 2026-11-01
 draft: false
 ---
 
@@ -70,6 +70,16 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 - [[cloud-sql-point-in-time-recovery|Recover from a bad data change with Cloud SQL point-in-time recovery]]: stop the damage, pin the timestamp, clone the PostgreSQL instance to just before the bad change, verify it, then repair rows or cut over.
 - [[gcs-deleted-object-recovery|Restore deleted or overwritten Cloud Storage objects]]: stop the cause, check soft delete and versioning, then restore deleted or overwritten objects or a deleted bucket with gcloud storage, and prove it.
 - [[alert-fired-but-nobody-was-paged|An alert fired but nobody was paged]]: trace a missed page hop by hop from the Prometheus rule through Alertmanager routing, silences and inhibition to the receiver, then prove the path end to end.
+
+## AI and inference
+
+- [[llm-serving-latency-regression|LLM serving latency regression on GKE]]: confirm a slowdown is in the model server, split queue, prefill and decode time with vLLM metrics, stabilise, then rule out traffic mix, KV cache pressure, prefix cache loss, changes, node faults, autoscaler lag and GPU contention.
+- [[gpu-out-of-memory-and-kv-cache-exhaustion|GPU out of memory and KV cache exhaustion in model serving]]: tell CUDA out of memory on the GPU from a container OOMKilled on host RAM, fix start-up failures with the memory budget, and stop preemption storms when the KV cache fills under load.
+- [[gpu-pods-pending-on-gke|GPU Pods Pending on GKE]]: find out why Pods that request nvidia.com/gpu stay Pending, from taints, labels and drivers to quota, zone stockouts and GPU sharing mismatches, and restore capacity safely.
+- [[model-or-prompt-rollout-quality-regression|Quality regression after a model or prompt rollout]]: freeze changes, find what changed, confirm the regression with the golden set and sampled traces, roll back one change at a time, then root-cause it and add a regression case.
+- [[llm-token-spend-spike|LLM token spend spike]]: confirm a token budget alert is real, find the key and caller behind it, classify the cause, contain it with the smallest blast radius first, and set caps that would have caught it.
+- [[llm-api-rate-limit-429-storm|LLM API rate limits and 429 retry storms]]: tell which layer returned a 429 and which limit was hit, check whether retries amplify it, contain with Retry-After, concurrency caps and load shedding, and fix it with backoff, per-tenant buckets and quota.
+- [[model-provider-outage-runbook|Model provider outage]] and [[runaway-or-compromised-ai-agent-response|Runaway or compromised AI agent]]: the two AI incident procedures kept with the [[ai/index|AI notes]].
 
 ## This site
 
