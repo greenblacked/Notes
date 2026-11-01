@@ -7,7 +7,7 @@ tags:
   - security
   - ci-cd
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -59,6 +59,5 @@ Use a small, trusted context pack for routine code changes. Escalate to an archi
 
 ## Sources
 
-- [GitHub Docs: Adding repository custom instructions for GitHub Copilot](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions): repository instruction mechanism and scope; behavior is product-specific.
-- [GitHub Docs: Responsible use of GitHub Copilot features](https://docs.github.com/en/copilot/responsible-use): review responsibilities and limitations of generated suggestions.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OWASP Top 10 for Agentic Applications for 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): agent-specific risk framing; use as a risk reference, not a substitute for local threat modeling.

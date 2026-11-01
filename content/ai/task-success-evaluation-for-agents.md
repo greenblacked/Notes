@@ -7,7 +7,7 @@ tags:
   - reliability
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -53,5 +53,5 @@ The owner's agent skills and workflows are listed in [the AI skills catalogue](h
 ## Sources
 
 - [NIST AI RMF Playbook (AI RMF 1.0 (January 2023); page notes it is being updated, accessed 2026-10-26)](https://airc.nist.gov/airmf-resources/playbook/): evaluating systems in operational context and managing lifecycle risk; the linked page states AI RMF 1.0 is being updated (accessed 2026-10-26).
-- [Working with evals (OpenAI API; documentation accessed 2026-10-26)](https://developers.openai.com/api/docs/guides/evals): task datasets and graders for evaluating model behavior.
-- [Gen AI evaluation service overview (Gemini Enterprise Agent Platform; Google Cloud documentation accessed 2026-10-26)](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/evaluation-overview): evaluation design and metrics for generative applications.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
+- [Gen AI evaluation service overview (Google Cloud documentation accessed 2026-10-26)](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/evaluation-overview): evaluation design and metrics for generative applications.

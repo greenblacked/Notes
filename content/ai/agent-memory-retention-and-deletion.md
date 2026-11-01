@@ -7,7 +7,7 @@ tags:
   - security
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -50,7 +50,7 @@ Avoid putting secrets, credentials or protected data into long-term memory. If m
 ## Sources
 
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance and lifecycle risk management; NIST says AI RMF 1.0 is being revised.
-- [Anthropic: API and data retention](https://platform.claude.com/docs/en/manage-claude/api-and-data-retention) — provider-specific retention information; verify current terms and product configuration before relying on it.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) — security risks involving agentic application data and control.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

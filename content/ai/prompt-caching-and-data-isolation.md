@@ -7,7 +7,7 @@ tags:
   - security
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -48,8 +48,8 @@ Risks include cross-tenant content in a reusable prefix, a cache key reused acro
 
 ## Sources
 
-- [OpenAI: Prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching) — current provider guide on reusable prefixes and diagnostics; supported models and behavior can change.
-- [Anthropic: Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) — describes automatic caching and explicit breakpoints; inspect current TTL and feature terms.
-- [Anthropic: API and data retention](https://platform.claude.com/docs/en/manage-claude/api-and-data-retention) — provider retention documentation; configuration and contractual scope matter.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
+- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) — sensitive information disclosure and data leakage between users and tenants.
+- [NIST AI 600-1, Generative AI Profile](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence) — data privacy risks of generative AI systems and the controls for them.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

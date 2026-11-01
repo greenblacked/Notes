@@ -8,7 +8,7 @@ tags:
   - security
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -54,6 +54,6 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 
 ## Sources
 
-- [Prompt caching](https://platform.openai.com/docs/guides/prompt-caching): OpenAI's provider-managed prompt-cache behavior; details may change.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Context caching overview](https://cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview): Google Cloud context-cache concepts and lifecycle.
 - [Prompt caching for faster model inference - Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html): Amazon Bedrock provider-specific caching behavior.

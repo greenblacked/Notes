@@ -8,7 +8,7 @@ tags:
   - compliance
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -55,6 +55,6 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 
 ## Sources
 
-- [Gemini Enterprise Agent Platform and zero data retention](https://cloud.google.com/vertex-ai/generative-ai/docs/data-governance): provider-specific data-governance description; verify endpoint and account applicability.
-- [Data controls in the OpenAI platform](https://platform.openai.com/docs/guides/your-data): provider-specific retention and control details; confirm current product terms.
+- [Google Cloud: data governance and zero data retention](https://cloud.google.com/vertex-ai/generative-ai/docs/data-governance): provider-specific data-governance description; verify endpoint and account applicability.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Data, privacy, and security for Foundry Models sold by Azure in Microsoft Foundry](https://learn.microsoft.com/en-us/legal/cognitive-services/openai/data-privacy): provider-specific processing information; check current scope and contract.

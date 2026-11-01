@@ -6,7 +6,7 @@ tags:
   - ai
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -53,5 +53,4 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 ## Sources
 
 - [Agent Platform Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing): official example of rate dimensions; check current region and model prices.
-- [Pricing - Claude Platform Docs](https://docs.anthropic.com/en/docs/about-claude/pricing): provider-specific token and model pricing details, subject to change.
-- [Prompt caching](https://platform.openai.com/docs/guides/prompt-caching): provider-specific cache behavior and pricing context; verify current eligibility.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).

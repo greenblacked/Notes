@@ -7,7 +7,7 @@ tags:
   - audit
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -56,4 +56,4 @@ The owner's agent skills and workflows are listed in [the AI skills catalogue](h
 
 - [NIST AI RMF Playbook (AI RMF 1.0 (January 2023); page notes it is being updated, accessed 2026-10-26)](https://airc.nist.gov/airmf-resources/playbook/): data governance, documentation and ongoing risk management; the linked page states AI RMF 1.0 is being updated (accessed 2026-10-26).
 - [Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile (NIST AI 600-1; July 2024)](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): risks involving training data, evaluation and information integrity.
-- [Working with evals (OpenAI API; documentation accessed 2026-10-26)](https://developers.openai.com/api/docs/guides/evals): dataset creation and evaluation workflow design.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).

@@ -8,7 +8,7 @@ tags:
   - compliance
   - networking
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -55,4 +55,4 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 
 - [Deployments and endpoints](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations): Google Cloud model deployment and location information; availability can vary by model.
 - [Data, privacy, and security for Foundry Models sold by Azure in Microsoft Foundry](https://learn.microsoft.com/en-us/legal/cognitive-services/openai/data-privacy): Microsoft provider-specific processing details; check service and contract applicability.
-- [Gemini Enterprise Agent Platform and zero data retention](https://cloud.google.com/vertex-ai/generative-ai/docs/data-governance): data governance controls and scope limitations.
+- [Google Cloud: data governance and zero data retention](https://cloud.google.com/vertex-ai/generative-ai/docs/data-governance): data governance controls and scope limitations.

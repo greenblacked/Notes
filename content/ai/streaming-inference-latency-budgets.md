@@ -8,7 +8,7 @@ tags:
   - observability
   - opentelemetry
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -62,6 +62,6 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 
 ## Sources
 
-- [Streaming API responses | OpenAI API](https://developers.openai.com/api/docs/guides/streaming-responses): OpenAI-specific streaming response behavior; recheck current API semantics.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Generative AI semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai): current dedicated repository for OpenTelemetry GenAI conventions; use its maintained definitions rather than the moved older docs pages.
 - [Engine Arguments - vLLM](https://docs.vllm.ai/en/latest/configuration/engine_args/): serving-engine configuration; local timing instrumentation remains implementation-specific.

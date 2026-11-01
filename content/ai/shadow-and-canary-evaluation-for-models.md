@@ -7,7 +7,7 @@ tags:
   - reliability
   - observability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -56,4 +56,4 @@ The owner's agent skills and workflows are listed in [the AI skills catalogue](h
 
 - [NIST AI RMF Playbook (AI RMF 1.0 (January 2023); page notes it is being updated, accessed 2026-10-26)](https://airc.nist.gov/airmf-resources/playbook/): ongoing measurement, monitoring and governance; the linked page states AI RMF 1.0 is being updated (accessed 2026-10-26).
 - [Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile (NIST AI 600-1; July 2024)](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): lifecycle monitoring and risk management for deployed GenAI.
-- [Gen AI evaluation service overview (Gemini Enterprise Agent Platform; Google Cloud documentation accessed 2026-10-26)](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/evaluation-overview): evaluation strategies and metrics for generative models.
+- [Gen AI evaluation service overview (Google Cloud documentation accessed 2026-10-26)](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/evaluation-overview): evaluation strategies and metrics for generative models.

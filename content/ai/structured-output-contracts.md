@@ -7,7 +7,7 @@ tags:
   - reliability
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -25,7 +25,7 @@ For fields that influence a consequential workflow, include evidence references 
 
 Maintain the canonical schema in source control, with a human-readable explanation of each field and a machine-readable validator. Give it a version and compatibility rules. Additive optional fields may be backward-compatible only if consumers ignore unknown fields; removed fields, changed meanings, narrower enums or altered null semantics are breaking changes. The exact compatibility policy depends on the consumer fleet; test actual old and new consumers.
 
-If the provider supports a structured response format, use its documented API and supported JSON Schema subset. OpenAI calls this feature Structured Outputs; Google documents structured outputs for Gemini. Do not infer identical feature behavior from similar names. Provider constraints, refusal representation, streaming behavior and supported schema keywords can change, so confirm in current documentation and pin SDK/API versions where practical.
+If the provider supports a structured response format, use its documented API and supported JSON Schema subset. Providers name and scope this feature differently. Do not infer identical feature behavior from similar names. Provider constraints, refusal representation, streaming behavior and supported schema keywords can change, so confirm in current documentation and pin SDK/API versions where practical.
 
 Record the selected schema revision and model revision with validation outcomes. This enables comparison when an upgrade changes completion behavior, without retaining raw confidential outputs longer than needed. The signal model in [[llm-observability-tracing-and-slos]] can capture schema revision, parse outcome and refusal status as low-cardinality attributes.
 
@@ -52,8 +52,7 @@ Review each contract against these questions:
 
 ## Sources
 
-- [OpenAI: Structured model outputs](https://developers.openai.com/api/docs/guides/structured-outputs) — provider documentation for JSON Schema-constrained responses; the page describes explicit refusals and parsing support. Check current API compatibility details before deployment.
-- [Google AI: Structured outputs](https://ai.google.dev/gemini-api/docs/structured-output) — Gemini API structured-output documentation; supported schema features are provider-specific.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — risk and measurement framing; NIST states AI RMF 1.0 is being revised.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

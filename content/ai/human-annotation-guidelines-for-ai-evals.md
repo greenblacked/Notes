@@ -7,7 +7,7 @@ tags:
   - audit
   - team-process
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -57,5 +57,4 @@ The owner's agent skills and workflows are listed in [the AI skills catalogue](h
 ## Sources
 
 - [NIST AI RMF Playbook (AI RMF 1.0 (January 2023); page notes it is being updated, accessed 2026-10-26)](https://airc.nist.gov/airmf-resources/playbook/): documenting evaluation methods, uncertainty, roles and governance; the linked page states AI RMF 1.0 is being updated (accessed 2026-10-26).
-- [Working with evals (OpenAI API; documentation accessed 2026-10-26)](https://developers.openai.com/api/docs/guides/evals): graders and evaluation design for model outputs.
-- [Define success criteria and build evaluations (Claude Platform Docs; accessed 2026-10-26)](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests): task-specific criteria and representative examples.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).

@@ -8,7 +8,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -54,7 +54,6 @@ Common mistakes include aliases resolving to new model versions without review; 
 ## Sources
 
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance and risk management; NIST reports that AI RMF 1.0 is being revised.
-- [OpenAI: Models](https://developers.openai.com/api/docs/models) — current provider model catalog; availability and model capabilities change.
-- [Google AI: Models](https://ai.google.dev/gemini-api/docs/models) — current Gemini model documentation; verify capabilities and regional availability at deployment time.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

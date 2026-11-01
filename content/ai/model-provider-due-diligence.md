@@ -8,7 +8,7 @@ tags:
   - audit
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -57,6 +57,5 @@ An adoption decision should be conditional on evidence, not provider reputation.
 
 ## Sources
 
-- [OpenAI API: Data controls in the OpenAI platform](https://developers.openai.com/api/docs/guides/your-data): platform data-control overview; verify current applicability for the selected product and account configuration.
-- [Anthropic Commercial Terms of Service](https://www.anthropic.com/legal/commercial-terms): contractual terms for applicable commercial services; have counsel confirm scope and current version.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): risk-management framing; AI RMF 1.0 (2023) is noted as under revision on the NIST page.

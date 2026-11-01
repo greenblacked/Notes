@@ -8,7 +8,7 @@ tags:
   - audit
   - team-process
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-01
 draft: false
 ---
 
@@ -127,8 +127,7 @@ Review the whole register at each renewal and whenever a vendor announces a term
 
 ## Sources
 
-- [GitHub Copilot documentation](https://docs.github.com/en/copilot): administration, data and privacy pages. Paths move; check the current ones.
-- [Claude Code settings](https://docs.claude.com/en/docs/claude-code/settings): settings files, permissions and managed policy. This page may have moved; verify the address.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OWASP Top 10 for LLM applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/), OWASP.
 
 ## Related

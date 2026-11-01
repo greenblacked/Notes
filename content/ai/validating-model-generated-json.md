@@ -7,7 +7,7 @@ tags:
   - security
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -54,8 +54,7 @@ Watch for duplicate JSON keys interpreted differently across components, coercio
 
 ## Sources
 
-- [OpenAI: Structured model outputs](https://developers.openai.com/api/docs/guides/structured-outputs) — documents constrained output and explicit refusals; local checks remain necessary for application-specific meaning.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [JSON Schema reference documentation](https://json-schema.org/understanding-json-schema/reference) — documentation for JSON Schema keywords; select a dialect supported by your validator.
-- [Anthropic: Tool use with Claude](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview) — explains structured tool calls and the division between model requests and application execution.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
