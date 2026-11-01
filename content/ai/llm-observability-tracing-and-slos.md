@@ -9,17 +9,20 @@ tags:
   - reliability
   - prometheus
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-01
+evidence: source-reviewed
+reviewed: 2026-11-01
+review-due: 2027-05-01
 draft: false
 ---
 
 An LLM-backed feature fails differently from a normal service. It can be slow to start answering and still fast to finish, or the reverse. It can return HTTP 200 with an answer that fails schema validation. It can be throttled by a provider while every one of your pods is healthy. An agent can make twelve tool calls where it used to make three, and the only symptom is cost. The token metrics in [[llm-api-cost-control]] cover spend; this note covers the rest: which signals to collect, how to trace a request across the gateway, the model and the tools with the OpenTelemetry GenAI conventions, how to keep prompts out of telemetry, and how to put LLM features under SLOs and burn-rate alerts like any other user-facing service.
 
 > [!info] Scope
-> Services and agents that call models through one internal gateway, with OpenTelemetry for traces ([[observability-pipeline-opentelemetry]]) and Prometheus for metrics and alerting. Applies to managed APIs ([[vertex-ai-private-access-from-gke]]) and self-hosted models ([[self-hosted-llm-inference-on-gke]]) alike.
+> Services and agents that call models through one internal gateway, with OpenTelemetry for traces ([[observability-pipeline-opentelemetry]]) and Prometheus for metrics and alerting. Applies to managed APIs ([[vertex-ai-private-access-from-gke|private access to a managed model API]]) and self-hosted models ([[self-hosted-llm-inference-on-gke]]) alike.
 
-> [!note] Not verified
-> The OpenTelemetry GenAI semantic conventions are in **Development** status: names and attributes can change between versions, and sources disagree on how mature each part is. Checked only through search excerpts on 2026-10-21: the span name format, span kind, `gen_ai.operation.name`, `gen_ai.request.model`, the `gen_ai.usage.*` token attributes, the `gen_ai.client.token.usage` and `gen_ai.client.operation.duration` metrics, the `OTEL_SEMCONV_STABILITY_OPT_IN` value, and that content capture is opt-in. Not confirmed: tool-call span names and attributes, error and cache-hit attributes, the time-to-first-token metric names (they have moved between versions), the environment variable that turns on content capture in a given instrumentation, how trace context crosses an MCP server, and which libraries implement which version. Not checked against the Prometheus practice pages and the SRE workbook chapters; verify there. The burn-rate numbers come from [[slo-burn-rate-alerting]]. The Prometheus rules below passed `promtool check rules` (promtool 2.45.3); nothing else was run.
+> [!note] Convention status
+> The OpenTelemetry GenAI semantic conventions are in **Development** status: names and attributes change between versions (the model-call metric names below differ from older ones you may see in instrumentation libraries). See the Evidence section for what was checked and what was not. The burn-rate numbers come from [[slo-burn-rate-alerting]].
 
 ## Signals that matter
 
@@ -46,35 +49,37 @@ One user request becomes a tree of spans: the feature's own server span, the gat
 flowchart TB
   A["SERVER: POST /incident-summary<br/>(feature service)"] --> B["SERVER: gateway /v1/chat<br/>team, route, llm_job"]
   B --> C["CLIENT: chat model-a<br/>gen_ai.operation.name=chat<br/>gen_ai.usage.input_tokens / output_tokens"]
-  B --> D["tool call: promql_query_range"]
+  B --> D["INTERNAL: execute_tool promql_query_range"]
   D --> E["SERVER: MCP server<br/>caller, tool, decision"]
   E --> F["CLIENT: Prometheus /api/v1/query_range"]
   B --> G["CLIENT: chat model-a<br/>second turn"]
 ```
 
-What the conventions specify for a model call span (from the GenAI spans page, Development status):
+What the conventions specify (client inference and spans pages, Development status):
 
-- **Name:** `{gen_ai.operation.name} {gen_ai.request.model}`, for example `chat model-a`.
-- **Kind:** `CLIENT` for a call to a remote model; `INTERNAL` is allowed for a model running in the same process.
-- **Attributes:** `gen_ai.operation.name` is required; `gen_ai.request.model` names the requested model; token usage goes in `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens`.
-- **Metrics:** the client metrics `gen_ai.client.token.usage` and `gen_ai.client.operation.duration` are histograms.
+- **Model call span name:** `{gen_ai.operation.name} {gen_ai.request.model}`, for example `chat model-a`.
+- **Kind:** `CLIENT` for a call to a model that usually runs in another process or over HTTP; `INTERNAL` is allowed for a model running in the same process.
+- **Attributes:** `gen_ai.operation.name` and `gen_ai.provider.name` are required; `gen_ai.request.model` is required if available; `error.type` is required if the operation ended in an error; token usage goes in `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` (recommended). Input tokens include cached tokens, and cached tokens are also reported separately in `gen_ai.usage.cache_read.input_tokens` (the cache-hit signal at the provider level).
+- **Tool call span:** named `execute_tool {gen_ai.tool.name}`, kind `INTERNAL`, with `gen_ai.operation.name=execute_tool` and `gen_ai.tool.name` required.
+- **Metrics (histograms unless noted):** `gen_ai.client.inference.duration` (unit `s`), `gen_ai.client.inference.time_to_first_chunk` (streaming calls only), the counters `gen_ai.client.inference.usage.input_tokens` and `gen_ai.client.inference.usage.output_tokens`, and `gen_ai.execute_tool.duration` for tools. `gen_ai.client.operation.duration` is not to be reported for inference operations (use `gen_ai.client.inference.duration`), so dashboards and queries built on that name need checking when you adopt the inference metrics.
 
 Instrument in two places:
 
 1. **The gateway** creates the model-call spans itself, from the request and the provider's usage fields, whatever client library the caller used. This is the one place where every call is guaranteed to be traced in the same way.
-2. **Agents and tool servers** create spans for each tool call and continue the trace context they received. The conventions also cover agent and tool spans; check the current page for their names and attributes before you build dashboards on them.
+2. **Agents and tool servers** create `execute_tool` spans for each tool call and continue the trace context they received. The conventions also define agent spans and agent metrics such as `gen_ai.invoke_agent.tool_calls` (tool calls per agent invocation); check the current pages before you build dashboards on them.
 
-Because the conventions change, plan for it. Many instrumentations keep emitting the older form unless told otherwise; setting `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` asks them to emit the latest experimental conventions instead. Pin instrumentation versions, record which convention version each service emits, and when you move, update queries and dashboards in the same change ([[0046-dashboards-and-alert-rules-as-code]]). A rename handled in the collector gateway ([[0043-opentelemetry-collector-gateway]]) can bridge a transition.
+Because the conventions change, plan for it. Instrumentations may emit different versions of the conventions, and how a given library selects the version is library-specific (check its documentation). Pin instrumentation versions, record which convention version each service emits, and when you move, update queries and dashboards in the same change ([[0046-dashboards-and-alert-rules-as-code]]). A rename handled in the collector gateway ([[0043-opentelemetry-collector-gateway]]) can bridge a transition.
 
 ### Trace context across the gateway and tools
 
 - The gateway accepts the W3C `traceparent` header from callers and continues the trace; it never starts a new root for a request that came with context.
-- Calls from the gateway to a remote MCP server or any other HTTP tool carry `traceparent` too, and the server continues it. Whether and how the MCP specification carries trace context was not checked; for your own servers ([[internal-mcp-servers-for-platform-tools]]) propagate it as an HTTP header and record the trace ID in the audit line.
-- A stdio tool started by an agent has no HTTP headers. Pass the context in the way your agent framework documents, or accept that those spans are separate and link them by a run ID attribute.
+- Calls from the gateway to a plain HTTP tool carry the `traceparent` header too, and the tool continues it. Propagation uses the configured OpenTelemetry propagators, and the W3C Trace Context propagator uses the `traceparent` and `tracestate` headers.
+- For MCP, HTTP headers cover only the HTTP request, not the individual JSON-RPC messages inside it. The OpenTelemetry MCP conventions say to inject the context into the request's `params._meta` (unprefixed `traceparent`, `tracestate`, `baggage`), and the receiver uses it as the remote parent. The MCP specification versions dated 2026-07-28 and the draft reserve those `_meta` keys for this purpose; the 2025-11-25 version does not mention them. This works on stdio as well as Streamable HTTP. For your own servers ([[internal-mcp-servers-for-platform-tools]]) read `params._meta` and record the trace ID in the audit line.
+- If a client or server does not implement this, those spans are separate; link them by a run ID attribute.
 
 ## Keep prompts out of telemetry
 
-Prompt and response content is opt-in in the GenAI conventions because it often contains personal data. When it is turned on, it lands in structured attributes such as `gen_ai.input.messages`, `gen_ai.output.messages` and `gen_ai.system_instructions`; older versions of the conventions used span events instead, so check what your instrumentation emits.
+Instructions, prompts and responses are opt-in in the GenAI conventions: they are considered sensitive and large, and instrumentations should not capture them by default. When turned on, content can land on spans (`gen_ai.input.messages`, `gen_ai.output.messages`, `gen_ai.system_instructions`, and for tools `gen_ai.tool.call.arguments` and `gen_ai.tool.call.result`), on events, or both. The conventions define an environment variable, `OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT`, with values `NO_CONTENT` (the default), `SPAN_ONLY`, `EVENT_ONLY` and `SPAN_AND_EVENT`, for instrumentations that expose such a setting through an environment variable. For production the conventions suggest storing content externally and recording references (`*_ref` attributes) on the spans.
 
 The default for production: **content capture off**. Traces carry sizes, token counts, model, outcome and hashes, not text. If a team needs content for debugging:
 
@@ -91,6 +96,8 @@ processors:
       - { key: gen_ai.input.messages, action: delete }
       - { key: gen_ai.output.messages, action: delete }
       - { key: gen_ai.system_instructions, action: delete }
+      - { key: gen_ai.tool.call.arguments, action: delete }
+      - { key: gen_ai.tool.call.result, action: delete }
 
 service:
   pipelines:
@@ -117,10 +124,10 @@ The gateway exports the request-level metrics. Names follow Prometheus conventio
 Rules for labels:
 
 - Fixed, small value sets only: `outcome`, `direction` and `result` are enums; `team`, `model`, `route` and `llm_job` come from gateway configuration, not from the request text. Never a prompt hash, user ID, request ID or tool argument; those go in traces and logs ([[prometheus-high-cardinality-triage]]).
-- `llm_job`, not `job`: Prometheus reserves `job` for the scrape job (as in [[llm-api-cost-control]]).
+- `llm_job`, not `job`: Prometheus adds a `job` label from the scrape configuration to every scraped series (as in [[llm-api-cost-control]]).
 - LLM latencies are long and spread out. Choose histogram buckets from measured data, covering from a fraction of a second up to your longest timeout, with boundaries at your SLO thresholds (the rules below need a bucket at exactly `2.5`).
 
-Self-hosted model servers export their own metrics (vLLM uses a `vllm:` prefix, including a time-to-first-token histogram and waiting and running request gauges); scrape them next to the gateway's, through [[0042-managed-prometheus-for-application-metrics]] on GKE.
+Self-hosted model servers export their own metrics (vLLM uses a `vllm:` prefix, including the `vllm:time_to_first_token_seconds` histogram and the `vllm:num_requests_running` gauge, with a waiting-requests counterpart); scrape them next to the gateway's, through [[0042-managed-prometheus-for-application-metrics]] on GKE.
 
 ## SLIs and SLOs
 
@@ -246,12 +253,37 @@ Count degraded responses as their own outcome (`degraded`), and decide per featu
 | Prometheus series count grows quickly                    | A label filled from request data                           | [[prometheus-high-cardinality-triage]]; fix the label at the gateway                               |
 | Self-hosted latency rises with load                      | Queue building on the model server                         | Queue depth and running requests; autoscaling on queue size ([[self-hosted-llm-inference-on-gke]]) |
 
+## Evidence
+
+Source-reviewed on 2026-11-01. Nothing was run. Scope: the OpenTelemetry GenAI and MCP conventions, MCP trace-context propagation, vLLM metric names and the Prometheus job label; the SLO and Prometheus-practice claims could not be checked locally.
+
+### Sources checked
+
+- [Semantic conventions for generative AI client inference](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/client-inference.md): inference span name `{gen_ai.operation.name} {gen_ai.request.model}`, kind CLIENT (INTERNAL allowed in-process), required and recommended attributes, `gen_ai.usage.*` token attributes including cache-read, the `gen_ai.client.inference.*` metrics and the removal of `gen_ai.client.operation.duration` from inference use, plus `gen_ai.execute_tool.duration` and `gen_ai.invoke_agent.tool_calls` (`gen-ai-metrics.md`). Checked 2026-11-01 against semantic-conventions-genai commit 244465e (`docs/gen-ai/client-inference.md`, `gen-ai-metrics.md`, `gen-ai-token-metrics.md`).
+- [GenAI spans](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/): `execute_tool {gen_ai.tool.name}` span (kind INTERNAL), Development status, opt-in content attributes, the default of no content capture, `OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT` and its values, external-storage references. Checked 2026-11-01 against semantic-conventions-genai commit 244465e (`docs/gen-ai/gen-ai-spans.md`, lines 553-610, 697-845).
+- [Semantic conventions for Model Context Protocol](https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/): context propagation through `params._meta`. Checked 2026-11-01 against semantic-conventions-genai commit 244465e (`docs/gen-ai/mcp.md`).
+- [Model Context Protocol specification, basic](https://modelcontextprotocol.io/specification/2026-07-28/basic): `_meta` keys `traceparent`, `tracestate` and `baggage` reserved for trace context, in the 2026-07-28 and draft versions only. Checked 2026-11-01 against modelcontextprotocol commit d0e246e.
+- [Context propagators](https://opentelemetry.io/docs/specs/otel/context/api-propagators/): the W3C Trace Context propagator uses `traceparent` and `tracestate` headers. Checked 2026-11-01 against opentelemetry-specification commit 25ebe40.
+- [Metrics - vLLM](https://docs.vllm.ai/en/latest/design/metrics/): `vllm:` prefix, `vllm:time_to_first_token_seconds` histogram, `vllm:num_requests_running` gauge, waiting-request metric. Checked 2026-11-01 against vLLM commit 8530a77.
+- [Getting started | Prometheus](https://prometheus.io/docs/prometheus/latest/getting_started/): the job name from scrape configuration is added as the `job` label. Checked 2026-11-01 against prometheus commit ef78ff6.
+
+### Not verified
+
+- The Prometheus practices pages (histograms, naming) and the Site Reliability Workbook chapters were not available locally; histogram bucket guidance, naming rules (base units, `_total`) and SLI/SLO wording rest on them or on engineering guidance.
+- The OpenTelemetry Collector `attributes` processor `delete` action, `memory_limiter` and `batch` processors: collector documentation was not available.
+- How individual instrumentation libraries select a convention version or enable content capture, and which libraries implement which version.
+- Whether earlier convention versions used `gen_ai.client.token.usage` or used `gen_ai.client.operation.duration` for inference: the local repository has a single commit, so no history could be checked.
+- That the Prometheus rules are syntactically valid and behave as intended: they were not validated here. The burn-rate numbers come from [[slo-burn-rate-alerting]], not from a checked source.
+- Metric and label design for the gateway, the SLI definitions, targets, dashboards and degradation advice are engineering guidance.
+- Nothing was run.
+
 ## Sources
 
-- [Semantic conventions for generative AI systems](https://opentelemetry.io/docs/specs/semconv/gen-ai/), OpenTelemetry: status, opt-in, content capture guidance.
-- [GenAI spans](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans), OpenTelemetry: span name, kind and attributes.
-- [Histograms and summaries](https://prometheus.io/docs/practices/histograms/) and [metric and label naming](https://prometheus.io/docs/practices/naming/), Prometheus documentation.
-- [Implementing SLOs](https://sre.google/workbook/implementing-slos/) and [alerting on SLOs](https://sre.google/workbook/alerting-on-slos/), The Site Reliability Workbook.
+- [GenAI client inference](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/client-inference.md), [GenAI spans](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/) and [MCP conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/), OpenTelemetry: span names, kinds, attributes, metrics, content capture, MCP context propagation.
+- [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2026-07-28/basic): reserved `_meta` trace-context keys.
+- [Metrics - vLLM](https://docs.vllm.ai/en/latest/design/metrics/): vLLM metric names.
+- [Histograms and summaries](https://prometheus.io/docs/practices/histograms/) and [metric and label naming](https://prometheus.io/docs/practices/naming/), Prometheus documentation (not read locally; see Not verified).
+- [Implementing SLOs](https://sre.google/workbook/implementing-slos/) and [alerting on SLOs](https://sre.google/workbook/alerting-on-slos/), The Site Reliability Workbook (not read; see Not verified).
 
 ## Related
 

@@ -9,23 +9,26 @@ tags:
   - delivery
   - audit
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-01
+evidence: source-reviewed
+reviewed: 2026-11-01
+review-due: 2027-05-01
 draft: false
 ---
 
 A model behind an auto-updating alias is a dependency with a floating version. When the provider moves the alias to a newer model, every job that uses it changes behaviour on the same day, with no commit, no review and no changelog in your repository: a review bot starts flagging different things, an extraction job's JSON loses a field, a triage summary gets longer and costs more. Provider retirement does the same in the other direction: a pinned ID that reaches its retirement date stops answering. This standard treats model IDs like any other pinned dependency ([[dependency-update-policy]]) and model upgrades like any other production change ([[production-change-checklist]]).
 
 > [!info] Scope
-> Written for a platform team that runs one internal LLM gateway ([[llm-api-cost-control]]) in front of one or more providers, with model IDs set in reviewed configuration. The Vertex AI lifecycle behaviour below comes from Google's documentation; for every other provider the rule is the same, but read that provider's own model and deprecation pages. No model names, versions, retirement dates or prices are quoted, on purpose: they change and the sources disagree.
+> Written for a platform team that runs one internal LLM gateway ([[llm-api-cost-control]]) in front of one or more providers, with model IDs set in reviewed configuration. The provider lifecycle behaviour below is as the provider's documentation describes it, but that documentation was not available for the 2026-11-01 review (see the Evidence section); for every other provider the rule is the same, but read that provider's own model and deprecation pages. No model names, versions, retirement dates or prices are quoted, on purpose: they change and the sources disagree.
 
 > [!note] Not verified
-> Checked only at page level against the Vertex AI "Model versions and lifecycle" page on 2026-10-21, through search summaries, not a full read. Not checked: the notice period before a retirement date, how users are notified, how much warning an alias move gets, and any other provider's behaviour. The gateway routing, canary and audit fields are a generic design, not run against a real gateway. The thresholds and scripts are starting points and illustrations; nothing here was run.
+> The provider's lifecycle page was not readable in the 2026-11-01 review, so the description of versioned IDs, auto-updated aliases and retirement dates below is unconfirmed. See the Evidence section for what was and was not checked. The gateway routing, canary and audit fields are a generic design, not run against a real gateway. The thresholds and scripts are starting points and illustrations; nothing here was run.
 
 ## Why aliases and retirements are change-management problems
 
-Google's Vertex AI documentation describes two ways to name a model:[^vertex]
+The provider's documentation is reported to describe two ways to name a model (not confirmed in the 2026-11-01 review):[^vertex]
 
-- **A versioned model ID** names one stable version. Behaviour stays the same until you change the ID, and each stable version has a published **retirement date** after which calls to it fail. Some dates on the page are minimums ("or later"), and changes to dates are announced in the Vertex AI release notes.
+- **A versioned model ID** names one stable version. Behaviour stays the same until you change the ID, and each stable version has a published **retirement date** after which calls to it fail. Check the page for whether a date is a minimum, and the provider's release notes for date changes.
 - **An auto-updated alias** (a model name without a version suffix) points at the latest stable model in a family and moves when a new one ships. Code that uses the alias can change behaviour without any change on your side.
 
 Other providers use similar ideas under different names. Whatever the provider, there are two failure modes to manage:
@@ -36,7 +39,7 @@ Other providers use similar ideas under different names. Whatever the provider, 
 | Pinned version reaches retirement | Calls fail on the retirement date; the fix is a rushed upgrade | Retirement dates sit in the EOL register with an owner and plan |
 | Provider changes a date           | Nobody notices until it fails                                  | The register row is re-checked on a schedule against the source |
 
-Do not confuse the generative model aliases above with Vertex AI Model Registry aliases, which are a separate feature for models you register yourself.[^registry]
+Do not confuse the generative model aliases above with a cloud model registry's version aliases, which are a separate feature for models you register yourself: the provider's API defines user-provided `version_aliases` on a registered model, so that a version can be referenced as `models/{model_id}@{version_alias}` instead of by version ID.[^registry]
 
 ## Rules
 
@@ -57,13 +60,13 @@ Keep the mapping in the gateway's repository, changed only through reviewed merg
   "policy_version": "2026-10-21.1",
   "routes": {
     "review-default": {
-      "provider": "vertex-ai",
+      "provider": "cloud-provider",
       "model": "example-model-002",
       "fallback": null,
       "owner": "platform-ai"
     },
     "summarise-small": {
-      "provider": "vertex-ai",
+      "provider": "cloud-provider",
       "model": "example-small-001",
       "fallback": null,
       "owner": "platform-ai"
@@ -183,7 +186,7 @@ Add one row per approved model ID to the same register as Kubernetes, Terraform 
 
 ```yaml title="eol-register.yaml (excerpt)"
 - component: LLM route review-default
-  product: vertex-ai-model
+  product: provider-model
   cycle: example-model-002 # change: the exact versioned model ID
   eol_source: https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions
   owner: platform-ai
@@ -191,7 +194,7 @@ Add one row per approved model ID to the same register as Kubernetes, Terraform 
   status: ok
 ```
 
-- **Source of truth:** the provider's model lifecycle page, plus its release notes for date changes (for Vertex AI, the generative AI release notes).[^notes] Re-check every row at least monthly, and when the provider announces a new model in the family.
+- **Source of truth:** the provider's model lifecycle page, plus its release notes for date changes (the provider's generative AI release notes).[^notes] Re-check every row at least monthly, and when the provider announces a new model in the family.
 - **Status:** `at risk` when retirement is within 90 days, the same rule as other components. Start the upgrade eval at that point at the latest; a forced migration in the final week skips the canary.
 - **Notifications:** subscribe the owning team to the provider's deprecation notices, if the provider offers them. How and how early each provider notifies was not verified; do not rely on email alone.
 
@@ -317,7 +320,7 @@ An audit or a postmortem asks "which model and which prompt produced this?" The 
 }
 ```
 
-- `model_served` is what the provider's response says it used, when the response includes such a field. Whether and how each provider reports it was not verified; if it does not, record `null` rather than copying the requested ID.
+- `model_served` is what the provider's response says it used, when the response includes such a field. The OpenTelemetry GenAI semantic conventions define `gen_ai.response.model` ("The name of the model that generated the response", development stability) next to `gen_ai.request.model`, which is a natural place to put the two values on a span. Whether and how each provider reports it was not verified; if it does not, record `null` rather than copying the requested ID.
 - `prompt_version` is the path and commit of the prompt file. Prompts are code: they live in a repository and change by merge request, ideally next to the shared skills and workflows that use them ([[agent-skills-and-shared-workflows]]).
 - Outputs that are stored (review comments, generated reports, triage summaries) carry the same fields in their metadata, so they can be traced after the logs expire. This also supports the provenance rules in [[ai-generated-code-policy-and-provenance]].
 - Traces and SLOs for these requests are in [[llm-observability-tracing-and-slos]].
@@ -344,7 +347,7 @@ Every exception has an owner and an expiry date, and is reviewed in the same cyc
 
 ## Rollback
 
-The upgrade is one commit that changes a route's `model`. Rollback is `git revert` of that commit through a normal merge request and a gateway redeploy; the old model ID is still in the catalogue because cleanup waits. Verify the rollback by checking that new audit lines show the old `model_requested` and that the comparison metrics return to the baseline. If the old version has already been retired by the provider, there is no rollback to it: that is why the eval starts at the 90-day warning, not in the last week.
+The upgrade is one commit that changes a route's `model`. Rollback is `git revert` of that commit (which reverts the changes of an existing commit by recording new ones) through a normal merge request and a gateway redeploy; the old model ID is still in the catalogue because cleanup waits. Verify the rollback by checking that new audit lines show the old `model_requested` and that the comparison metrics return to the baseline. If the old version has already been retired by the provider, there is no rollback to it: that is why the eval starts at the 90-day warning, not in the last week.
 
 ## Checklist
 
@@ -358,17 +361,37 @@ The upgrade is one commit that changes a route's `model`. Rollback is `git rever
 - [ ] The switch is a single reviewed commit, and its revert has been read and is ready.
 - [ ] Audit lines and stored outputs carry the model and prompt versions.
 
-[^vertex]: Google Cloud, "Model versions and lifecycle" for generative AI on Vertex AI; read the current page for the version list, the alias behaviour and the retirement dates.
+[^vertex]: The provider's "Model versions and lifecycle" page for generative AI; read the current page for the version list, the alias behaviour and the retirement dates.
 
-[^registry]: Vertex AI Model Registry aliases name versions of models you upload to the registry; they are not the generative model aliases described here.
+[^registry]: Model registry aliases name versions of models you upload to the registry; they are not the generative model aliases described here.
 
-[^notes]: Vertex AI generative AI release notes, where Google announces changes to model availability and dates.
+[^notes]: The provider's generative AI release notes, where the provider announces changes to model availability and dates.
+
+## Evidence
+
+Source-reviewed on 2026-11-01. Nothing was run. Scope: the CI rule syntax, the revert step, the span attributes for the audit fields and the registry alias feature were checked against local primary sources; the provider lifecycle claims were not.
+
+### Sources checked
+
+- [GitLab CI/CD job rules](https://docs.gitlab.com/ci/jobs/job_rules/): `rules:if` with `$CI_PIPELINE_SOURCE == "merge_request_event"` for merge request pipelines and the `schedule` pipeline source for scheduled pipelines, as used in the CI excerpt. Checked 2026-11-01 against gitlabhq/gitlabhq commit d7b9a61 (doc/ci/jobs/job_rules.md:235, 241).
+- [git-revert](https://git-scm.com/docs/git-revert): reverting existing commits by recording new commits, the basis of the one-revert rollback. Checked 2026-11-01 against the Git repository commit 50fe5cc (Documentation/git-revert.adoc:17).
+- [GenAI attribute registry](https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/): `gen_ai.request.model` and `gen_ai.response.model` ("The name of the model that generated the response"), both stability development. Checked 2026-11-01 against semantic-conventions-genai commit 244465e (model/gen-ai/registry.yaml:98, 205).
+- [Model resource definition (googleapis)](https://github.com/googleapis/googleapis/blob/ff8fd20/google/cloud/aiplatform/v1/model.proto): Model Registry `version_aliases` are user-provided names for a model version, referenced as `models/{model_id}@{version_alias}`, which supports the statement that registry aliases are a separate feature. Checked 2026-11-01 against googleapis/googleapis commit ff8fd20 (lines 182-191).
+
+### Not verified
+
+- The provider's "Model versions and lifecycle" page and generative AI release notes could not be read (the provider's cloud documentation was not available): versioned IDs vs auto-updated aliases for generative models, retirement dates, whether a date can be a minimum, and how date changes are announced. These statements are kept but marked as unconfirmed in the text.
+- The notice period before a retirement, how users are notified, how much warning an alias move gets, and any other provider's behaviour.
+- Whether and how each provider reports the served model in its response.
+- Gateway routing, canary splitting, the audit fields, the scripts and the thresholds are generic design and illustration, not run against a real gateway.
+- General engineering guidance (pinning policy, golden-set evals, canary by team or job, 90-day warning window, review cadence) is not stated by any source above.
+- Nothing was run.
 
 ## Sources
 
-- [Model versions and lifecycle](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions), Vertex AI generative AI documentation: stable and latest stable versions, auto-updated aliases, retirement dates.
-- [Generative AI on Vertex AI release notes](https://cloud.google.com/vertex-ai/generative-ai/docs/release-notes): announcements of model and date changes.
-- [Model aliases in Vertex AI Model Registry](https://cloud.google.com/vertex-ai/docs/model-registry/model-alias): the separate registry alias feature.
+- [Model versions and lifecycle](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions), the provider's generative AI documentation: stable and latest stable versions, auto-updated aliases, retirement dates. Not read in the 2026-11-01 review; see Not verified.
+- [Generative AI release notes](https://cloud.google.com/vertex-ai/generative-ai/docs/release-notes): announcements of model and date changes. Not read in the 2026-11-01 review; see Not verified.
+- [Model aliases in the model registry](https://cloud.google.com/vertex-ai/docs/model-registry/model-alias): the separate registry alias feature (confirmed only through the API definition, see Evidence).
 
 ## Related
 

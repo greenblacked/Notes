@@ -9,8 +9,11 @@ tags:
   - on-call
   - gcp
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-01
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-01
+review-due: 2027-05-01
 ---
 
 Most incident notes treat AI as a helper during an incident ([[ai-assisted-incident-response]]). This runbook is for the case where the agent is the incident: a token-spend spike from a loop, merge requests or commits from the bot identity that nobody asked for, writes in cloud or cluster audit logs, a canary secret showing up where it should not, or signs that the agent is following instructions injected through an issue, a log line or a web page. The order is: **stop it, contain its credentials, keep the evidence, measure the blast radius, revert, then recover**. Each step gives the command, what to expect, how to verify it and how to undo it.
@@ -18,8 +21,8 @@ Most incident notes treat AI as a helper during an incident ([[ai-assisted-incid
 > [!info] Scope
 > Agents that run as GitLab CI jobs, as Kubernetes Deployments or CronJobs on GKE, or as scheduled jobs, with a Google service account, GitLab tokens and a key for an internal LLM gateway ([[llm-api-cost-control]]). A suspected compromise of the wider project or cluster, beyond the agent's own identity, moves to [[compromised-cloud-cluster-containment]]. A single leaked secret with no sign of use is [[leaked-credential-rotation]].
 
-> [!note] Not verified
-> No step was run. The `gcloud`, GitLab API and `kubectl` calls were checked at page level, on 2026-10-21, against Google Cloud, GitLab and Kubernetes documentation through search summaries, not a full read. Not checked: whether disabling a service account invalidates access tokens already issued, the `username` filter on the GitLab pipelines list, the GitLab service-account token endpoints, how your gateway's kill switch and audit log work, and every expected output shown. Check `--help` and the version-matched GitLab API docs before you need them, not during the incident.
+> [!note] Evidence
+> Source-reviewed, nothing run. Commands and API calls were checked against local copies of the Kubernetes, GitLab, Git and gcloud documentation; Google Cloud behaviour and every expected output were not. See Evidence at the end of this note, and check `--help` and the version-matched GitLab API docs before you need them, not during the incident.
 
 ## Triggers
 
@@ -109,7 +112,7 @@ done < /tmp/agent-pipelines.txt
 ```
 
 - **Expected:** each pipeline prints its ID with status `canceled` or `canceling`.
-- **Verify:** run the list call again; it returns `[]`. If the `username` filter is not supported by your GitLab version, list without it and filter on `.user.username` with jq. Do the same for `status=pending` and for every project the bot can reach.
+- **Verify:** run the list call again; it returns `[]`. If your GitLab version does not accept the `username` filter, list without it and filter on `.user.username` with jq. Do the same for `status=pending` and for every project the bot can reach.
 - **Troubleshooting:** a 429 means the rate limit was hit; wait for `Retry-After`. A job that ignores the cancel can be cancelled individually through the Jobs API (`POST /projects/:id/jobs/:job_id/cancel`).
 - **Rollback:** none needed; do not use the retry endpoint on these pipelines during recovery, because it would re-run the same inputs.
 
@@ -136,7 +139,7 @@ for cj in $(kubectl --context="$K8S_CONTEXT" -n "$AGENT_NS" get cronjob -l "$AGE
 done
 ```
 
-- **Expected:** `deployment.apps/<name> scaled` for each workload, `cronjob.batch/<name> patched` for each CronJob. Pods terminate gracefully within their `terminationGracePeriodSeconds`; the Deployments stay.
+- **Expected:** one `scaled` line per workload and one `patched` line per CronJob. Pods terminate gracefully within their `terminationGracePeriodSeconds`; the Deployments stay.
 - **Verify:** `kubectl --context="$K8S_CONTEXT" -n "$AGENT_NS" get pods -l "$AGENT_SELECTOR"` returns no pods after the grace period, and stays empty for a few minutes.
 - **Watch out:** a GitOps controller or an autoscaler can scale it back up. Suspend the sync for the agent's application first (for example `flux suspend kustomization <name>` or `argocd app set <name> --sync-policy none`), and check whether an HPA or another controller targets the workload. The HPA page documents that an HPA stops adjusting a target whose replicas you set to 0 while its `minReplicas` is above 0, until you scale the target up again; check the HPA page for your version.
 - **Rollback:** scale each workload back to the replica count recorded in `workloads-before.json`, and set `suspend` back to `false` (step 6).
@@ -156,10 +159,10 @@ gcloud iam service-accounts describe "$AGENT_SA" --project="$PROJECT" --format='
 ```
 
 - **Expected:** the describe prints `True`.
-- **What it does:** while disabled, the account cannot be used to generate credentials or call Google APIs. Disabling an already disabled account changes nothing. Google recommends disabling before deleting; do not delete it, because deletion loses the identity you are investigating.
+- **What it does:** while disabled, the account cannot be used to generate credentials or call Google APIs. Do not delete the account, because deletion loses the identity you are investigating.
 - **Not verified:** whether access tokens already issued stop working at once. Check the disable page; until you know, assume a token issued just before may work until it expires, and keep watching the audit logs.
 - **Keys:** if the account has user-managed keys, list them with `gcloud iam service-accounts keys list --iam-account="$AGENT_SA" --managed-by=user` and disable each with `gcloud iam service-accounts keys disable KEY_ID --iam-account="$AGENT_SA"`. Check the flags with `--help`. Then plan to remove keys altogether ([[gcp-iam-guardrails-for-agent-service-accounts]]).
-- **Rollback:** `gcloud iam service-accounts enable "$AGENT_SA" --project="$PROJECT"` in step 6. An account that Google itself disabled (for example after detecting a compromise) cannot be re-enabled this way.
+- **Rollback:** `gcloud iam service-accounts enable "$AGENT_SA" --project="$PROJECT"` in step 6. An account that Google itself disabled (for example after detecting a compromise) may not be re-enabled this way; check the Google Cloud documentation.
 
 #### 2b. Revoke the agent's GitLab tokens
 
@@ -179,9 +182,9 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X DELETE -H "PRIVATE-TOKEN: $GL_TOKEN
 
 - **Expected:** `204`.
 - **Group tokens:** `DELETE /groups/:id/access_tokens/:token_id`, also `204` (`404` if it does not exist).
-- **Personal access tokens** of a bot user: `DELETE /personal_access_tokens/:id`, `204`; an administrator can revoke any user's token. Revocation is permanent and GitLab keeps the record for audit.
-- **Service-account tokens** have their own endpoints in the GitLab service accounts API; the exact path was not verified.
-- **Verify:** list the tokens again and confirm the token shows as revoked or is gone, and that a call with the revoked token returns `401`.
+- **Personal access tokens** of a bot user: `DELETE /personal_access_tokens/:id`, `204`; an administrator can revoke any user's token.
+- **Service-account tokens** have their own endpoints in the service accounts API: `DELETE /groups/:id/service_accounts/:user_id/personal_access_tokens/:token_id` and `DELETE /projects/:id/service_accounts/:user_id/personal_access_tokens/:token_id` (the group endpoint was introduced in GitLab 17.11; check your version).
+- **Verify:** list the tokens again and confirm the token shows as revoked or is gone, and that a call with the revoked token is refused.
 - **Rollback:** there is none for a revoked token. Recovery issues a new token with a narrower scope and an expiry (step 6). Do not use the rotate endpoint as containment: it issues a new token, and if the attacker controls the agent's environment they may get the new one too.
 
 #### 2c. Rotate provider and gateway keys
@@ -249,10 +252,11 @@ done < "$OUT/agent-bindings-plan.tsv"
 ```
 
 - **Expected:** for each binding listed, a `deleted` line (the agent was the only subject) or a `patched` line naming the removed subject indexes (other subjects kept), and one `rollback-*.yaml` file per binding.
-- **Verify:** `kubectl --context="$K8S_CONTEXT" auth can-i --list --as="system:serviceaccount:$AGENT_NS:$K8S_SA"` shows only the default discovery permissions, and each patched binding still lists its other subjects (`kubectl --context="$K8S_CONTEXT" get -n <namespace> rolebinding <name> -o jsonpath='{.subjects}'`).
+- **Verify:** `kubectl --context="$K8S_CONTEXT" auth can-i --list --as="system:serviceaccount:$AGENT_NS:$K8S_SA"` shows only the default permissions (discovery, basic user info, public info), and each patched binding still lists its other subjects (`kubectl --context="$K8S_CONTEXT" get -n <namespace> rolebinding <name> -o jsonpath='{.subjects}'`).
 - **Patch refused:** a `test` operation that fails means the binding changed after it was read. Run the script again; it re-reads every binding.
 - **Workload Identity:** if the Kubernetes ServiceAccount is bound to the Google service account, disabling the Google account (2a) already blocks it. Removing the `roles/iam.workloadIdentityUser` binding is the longer-term fix.
-- **Tokens already issued:** whether ServiceAccount tokens already issued stop working was not verified; removing the bindings takes away what they can do, which is the documented route. Deleting the ServiceAccount also invalidates its bound tokens but loses the object; save it first if you do.
+- **Group bindings:** the script above matches only subjects of kind `ServiceAccount`. A ServiceAccount also belongs to the groups `system:serviceaccounts` and `system:serviceaccounts:$AGENT_NS`, so a binding to either group still applies to the agent (and to every other ServiceAccount in scope). List them and review each by hand before changing it: `kubectl --context="$K8S_CONTEXT" get rolebindings,clusterrolebindings -A -o json | jq -r --arg ns "$AGENT_NS" '.items[] | select(any(.subjects[]?; .kind == "Group" and (.name == "system:serviceaccounts" or .name == "system:serviceaccounts:" + $ns))) | "\(.kind) \(.metadata.namespace // "-") \(.metadata.name)"'`.
+- **Tokens already issued:** per the Kubernetes docs there is no way to revoke an individual TokenRequest token; it stays valid until it expires. Deleting the Pod expires the tokens bound to it (scaling to zero in 1c already does this), and deleting and re-creating the ServiceAccount changes its UID and invalidates all of its tokens. Removing the bindings only takes away what the tokens can do. Save the ServiceAccount object before deleting it.
 - **Rollback:** restore from the agent's GitOps source in step 6, or re-apply a saved `rollback-*.yaml` file with `kubectl --context="$K8S_CONTEXT" replace -f` (for a patched binding) or `create -f` (for a deleted one) after removing `metadata.resourceVersion`, `metadata.uid`, `metadata.creationTimestamp` and `metadata.managedFields`.
 
 The design of narrow Roles for agents is in [[kubernetes-rbac-for-ai-agents]].
@@ -359,7 +363,7 @@ terraform -chdir="infra/example" plan -detailed-exitcode -lock=false -input=fals
 echo "exit: $?"
 ```
 
-Exit code `0` means no differences, `2` means differences, `1` means an error. A difference is something to explain, not proof of the agent's work. A clean plan does not prove nothing changed: resources outside Terraform, and data inside resources, need the audit logs from step 3. If the state file itself was written, compare its object versions in the state bucket (`gcloud storage ls --all-versions` on the state object) before touching it, and follow your state recovery procedure ([[terraform-plan-policy-checks]] covers plan JSON for the comparison).
+Exit code `0` means no differences, `2` means differences, `1` means an error (check `terraform plan -help` for your version). A difference is something to explain, not proof of the agent's work. A clean plan does not prove nothing changed: resources outside Terraform, and data inside resources, need the audit logs from step 3. If the state file itself was written, compare its object versions in the state bucket (`gcloud storage ls --all-versions` on the state object) before touching it, and follow your state recovery procedure ([[terraform-plan-policy-checks]] covers plan JSON for the comparison).
 
 #### 5c. Cluster and cloud resources
 
@@ -404,7 +408,7 @@ The incident is contained when all of these hold:
 - No running pipelines, pods or CronJob runs from the agent, and nothing has scaled back up.
 - The service account shows `disabled: True`, and no new audit entries for it appear after the disable time (allow for tokens already issued).
 - The agent's GitLab tokens and gateway key are revoked, and calls with them fail.
-- The agent's ServiceAccount has no permissions beyond discovery.
+- The agent's ServiceAccount has no permissions beyond the defaults (discovery, basic user info, public info).
 - The evidence is in the forensic bucket with a checksum file.
 
 ## Rollback of this runbook's actions
@@ -419,15 +423,69 @@ The incident is contained when all of these hold:
 | RBAC bindings deleted    | Restore from GitOps or the saved `agent-bindings.json`                           |
 | Reverts                  | Revert the revert through a reviewed merge request, if the change was legitimate |
 
+## Evidence
+
+Source-reviewed on 2026-11-01. Nothing was run. Scope: the Kubernetes, GitLab, Git and gcloud commands and API calls used in the steps, not the Google Cloud behaviour behind them.
+
+#
+
+### Sources checked
+
+- [Horizontal Pod Autoscaling | Kubernetes](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/): an HPA stops adjusting a target whose desired replicas are 0 while the HPA minimum is above 0, until the target or the minimum is changed. Checked 2026-11-01 against kubernetes/website commit 491f14e.
+- [CronJob | Kubernetes](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/): `.spec.suspend` suspends later executions. Checked 2026-11-01 against kubernetes/website commit 491f14e.
+- [Volumes | Kubernetes](https://kubernetes.io/docs/concepts/storage/volumes/): `emptyDir` data is deleted permanently when the Pod is removed from the node. Checked 2026-11-01 against kubernetes/website commit 491f14e.
+- [Pod Lifecycle | Kubernetes](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/): `terminationGracePeriodSeconds` (default 30 seconds), then SIGKILL for processes still running. Checked 2026-11-01 against kubernetes/website commit 491f14e.
+- [ServiceAccount administration](https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/) and [Service Accounts](https://kubernetes.io/docs/concepts/security/service-accounts/): no mechanism invalidates an individual TokenRequest token; deleting a Pod expires its bound tokens; deleting and re-creating the ServiceAccount changes its UID and invalidates all its tokens. Checked 2026-11-01 against kubernetes/website commit 491f14e.
+- [kubectl scale](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_scale/), [kubectl patch](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_patch/) and [kubectl auth can-i](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_auth/kubectl_auth_can-i/): the commands exist; `patch --type=json`; `auth can-i --list` and `--as=system:serviceaccount:<ns>:<name>`. Checked 2026-11-01 against kubernetes/website commit 491f14e.
+- [Using RBAC Authorization | Kubernetes](https://kubernetes.io/docs/reference/access-authn-authz/rbac/): a RoleBinding grants permissions within its own namespace and may bind a ClusterRole to that namespace; default bindings give `system:authenticated` the roles `system:basic-user`, `system:discovery` and `system:public-info-viewer`; ServiceAccounts belong to the groups `system:serviceaccounts` and `system:serviceaccounts:<ns>`. Checked 2026-11-01 against kubernetes/website commit 491f14e.
+- [Pipelines API | GitLab](https://docs.gitlab.com/api/pipelines/): list filters `status` (including `running`, `pending`) and `username`; `POST /projects/:id/pipelines/:pipeline_id/cancel` returns 200 whatever the pipeline state, and returns 429 with a `Retry-After` header when the cancellation rate limit is exceeded; the retry endpoint exists. Checked 2026-11-01 against gitlabhq/gitlabhq commit d7b9a61.
+- [Jobs API | GitLab](https://docs.gitlab.com/api/jobs/): `POST /projects/:id/jobs/:job_id/cancel`. Checked 2026-11-01 against gitlabhq/gitlabhq commit d7b9a61.
+- [Project access tokens API](https://docs.gitlab.com/api/project_access_tokens/), [Group access tokens API](https://docs.gitlab.com/api/group_access_tokens/) and [Personal access tokens API](https://docs.gitlab.com/api/personal_access_tokens/): list fields (`id`, `name`, `scopes`, `expires_at`, `revoked`); `DELETE` revokes and returns 204, with 404 if the token does not exist (project and group token APIs; the personal token API lists 400, 401 and 403); administrators can revoke any user's personal token; the rotate endpoint revokes the old token and creates a new one. Checked 2026-11-01 against gitlabhq/gitlabhq commit d7b9a61.
+- [Pipeline schedules API | GitLab](https://docs.gitlab.com/api/pipeline_schedules/): a schedule has an `active` boolean, so editing it with `active=false` pauses it. Checked 2026-11-01 against gitlabhq/gitlabhq commit d7b9a61.
+- [Service accounts API | GitLab](https://docs.gitlab.com/api/service_accounts/): revoke endpoints for group and project service-account personal access tokens. Checked 2026-11-01 against gitlabhq/gitlabhq commit d7b9a61.
+- [Merge requests API | GitLab](https://docs.gitlab.com/api/merge_requests/): `author_username` and `created_after` (ISO 8601) filters. Checked 2026-11-01 against gitlabhq/gitlabhq commit d7b9a61.
+- [git revert](https://git-scm.com/docs/git-revert) and [git log](https://git-scm.com/docs/git-log): `-m parent-number` selects the mainline when reverting a merge; `--author=<pattern>`. Checked 2026-11-01 against git/git commit 50fe5cc.
+- gcloud SDK 570.0.0 `--help` (no credentials, no API calls): `iam service-accounts disable` (credential generation and API requests fail while disabled; counterpart `enable`), `iam service-accounts keys list --managed-by`, `keys disable`, `logging read --freshness` (default `1d`), `storage ls --recursive/--all-versions`, `storage cp --recursive`. Checked 2026-11-01 against the installed SDK, not a repository.
+
+### Not verified
+
+- Nothing was run. No command, API call or expected output shown was executed.
+- Google Cloud documentation was not reachable: whether access tokens already issued survive a service-account disable, re-enabling an account Google disabled, the guidance to disable before deleting, Cloud Audit Log names and which are on by default, Data Access log defaults (including the BigQuery exception), logging of impersonation and token creation, the `roles/logging.privateLogViewer` requirement, the `k8s_cluster` resource type and the `principalEmail` form for Kubernetes ServiceAccounts, and Workload Identity binding behaviour.
+- Terraform: the local copy has no documentation, so the `plan` flags (`-detailed-exitcode`, `-lock=false`, `-input=false`, `-chdir`) and exit codes were not checked.
+- Kubernetes: that a ServiceAccount subject without a namespace in a RoleBinding means the binding's namespace (the RBAC page was not found to state it).
+- GitLab: that a revoked token returns 401, the exact behaviour of the 429 limit on other endpoints, and the CI/GitOps sync-suspend commands (`flux suspend`, `argocd app set`), which belong to other tools.
+- Your gateway's kill switch, audit log and fields; GitLab edition-specific audit events.
+- Engineering guidance, not a documented claim: the stop, contain, preserve, measure, revert, recover order, severity starting points, roles, evidence handling, and the postmortem questions.
+
+### Environment
+
+An operator host with `kubectl`, `gcloud`, `curl`, `jq` and `git`, a GitLab API token for an operator, a Google project with the agent's service account, a GKE cluster context, and a forensic bucket. Versions were not recorded because nothing was run.
+
+### Prerequisites
+
+See the Preconditions section: operator token, rights over the service account, audit logs and cluster workloads, a forensic bucket and the credential list.
+
+### Expected results
+
+The agent has no running pipelines or pods, its service account shows `disabled: True`, its tokens and gateway key are revoked, and the evidence is in the forensic bucket with a checksum file. See the Validation section.
+
+### Failure conditions
+
+Workloads scale back up, new audit entries for the agent appear after the disable, a revoked token still works, or a shared credential outage breaks other consumers. See the Watch out notes in steps 1c and 2 and escalate to [[compromised-cloud-cluster-containment]].
+
+### Cleanup and rollback
+
+See the Rollback of this runbook's actions section and step 6: re-enable only after the cause is fixed, and issue new narrower credentials instead of restoring revoked tokens.
+
 ## Sources
 
-- [gcloud iam service-accounts disable](https://cloud.google.com/sdk/gcloud/reference/iam/service-accounts/disable), Google Cloud SDK reference, and [Disable and enable service accounts](https://cloud.google.com/iam/docs/service-accounts-disable-enable).
-- [Cloud Audit Logs overview](https://cloud.google.com/logging/docs/audit), Google Cloud Logging documentation.
+- [gcloud iam service-accounts disable](https://cloud.google.com/sdk/gcloud/reference/iam/service-accounts/disable), Google Cloud SDK reference, and [Disable and enable service accounts](https://cloud.google.com/iam/docs/service-accounts-disable-enable) (the Google Cloud pages were not readable; see Not verified).
+- [Cloud Audit Logs overview](https://cloud.google.com/logging/docs/audit), Google Cloud Logging documentation (not readable; see Not verified).
 - [gcloud logging read](https://cloud.google.com/sdk/gcloud/reference/logging/read), Google Cloud SDK reference.
-- [GKE audit logging](https://cloud.google.com/kubernetes-engine/docs/how-to/audit-logging), Google Kubernetes Engine documentation.
+- [GKE audit logging](https://cloud.google.com/kubernetes-engine/docs/how-to/audit-logging), Google Kubernetes Engine documentation (not readable; see Not verified).
 - [Pipelines API](https://docs.gitlab.com/api/pipelines/) and [Jobs API](https://docs.gitlab.com/api/jobs/), GitLab documentation.
 - [Project access tokens API](https://docs.gitlab.com/api/project_access_tokens/), [Group access tokens API](https://docs.gitlab.com/api/group_access_tokens/) and [Personal access tokens API](https://docs.gitlab.com/api/personal_access_tokens/), GitLab documentation.
-- [Merge requests API](https://docs.gitlab.com/api/merge_requests/), GitLab documentation (the `author_username` and `created_after` filters were not re-checked).
+- [Merge requests API](https://docs.gitlab.com/api/merge_requests/), GitLab documentation .
 - [kubectl scale](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_scale/), Kubernetes documentation.
 - [git revert](https://git-scm.com/docs/git-revert), Git documentation.
 
