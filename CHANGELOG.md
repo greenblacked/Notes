@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 ### Fixed
 
 - **Runaway or compromised agent:** removing RBAC bindings does not revoke ServiceAccount tokens already issued; they stay valid until they expire, and deleting the Pod or re-creating the ServiceAccount is what invalidates them.
-- **Sandboxing coding agents:** the agent now works in a throwaway clone, and its commits are fetched with Git hooks and the file system monitor disabled, so it cannot plant code that the engineer's next Git command runs on the host. The internal Docker network also uses bridge gateway mode `isolated`, so host services are no longer reachable from the sandbox.
+- **Sandboxing coding agents:** the agent now works in a throwaway clone, and its commits reach the real repository only as a bundle file written by a container with no network, so hooks or command-running Git configuration it plants cannot run on the host; a repository the agent could write is treated as untrusted until its Git configuration is restored. The internal Docker network also uses bridge gateway mode `isolated`, so host services are no longer reachable from the sandbox.
 - **AI-generated code policy:** the merge request check now warns that its token is readable by anyone who can push a branch, the agent included, and says to run the check from pipeline configuration the merge request cannot change.
 
 ## [0.13.0] - 2026-11-01
