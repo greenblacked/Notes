@@ -7,7 +7,7 @@ tags:
   - cost
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -50,5 +50,5 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 ## Sources
 
 - [Agent Platform Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing): official example of model-specific pricing; rates and billing units can change.
-- [Pricing - Claude Platform Docs](https://docs.anthropic.com/en/docs/about-claude/pricing): provider pricing categories; verify the current model and account terms.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Generative AI on Agent Platform quotas and system limits](https://cloud.google.com/vertex-ai/generative-ai/docs/quotas): official quota dimensions that may affect metering and service behavior.

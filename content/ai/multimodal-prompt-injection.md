@@ -6,7 +6,7 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -24,7 +24,7 @@ Treat camera input, user uploads, third-party attachments, and web media as untr
 
 Do not connect a media-understanding model directly to high-impact tools. Put a typed, policy-enforced action layer between model output and external effects. Validate that an action is allowed for the authenticated user and the target resource, require human confirmation where consequences warrant it, and make a clear preview available before sending or publishing. The confirmation should describe the actual target and effect, not merely ask “continue?” after the model has already chosen an opaque operation.
 
-For extraction tasks, request narrow fields and reject unexpected output rather than passing free-form response text to another system. OpenAI’s Structured Outputs documentation describes a schema-constrained response feature for its API, but schema conformance is not truth, authorization, or safety; validate business meaning and permission separately. Provider capabilities and feature behavior may change, so confirm current documentation and your selected model’s support before relying on them.
+For extraction tasks, request narrow fields and reject unexpected output rather than passing free-form response text to another system. Some provider APIs offer schema-constrained (structured) responses, but schema conformance is not truth, authorization, or safety; validate business meaning and permission separately. Provider capabilities and feature behavior may change, so confirm current documentation and your selected model’s support before relying on them.
 
 ## Validate and minimize media
 
@@ -59,5 +59,5 @@ When a suspected manipulation or unsafe action occurs, preserve the original ass
 
 - [NIST AI 600-1, Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): risks and governance across generative AI systems.
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): LLM application risk taxonomy and mitigations.
-- [OpenAI: Structured model outputs](https://developers.openai.com/api/docs/guides/structured-outputs): current API documentation for schema-constrained outputs; feature support varies and must be checked.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [MITRE ATLAS](https://atlas.mitre.org/): catalog for organizing AI-system threats and defensive testing.

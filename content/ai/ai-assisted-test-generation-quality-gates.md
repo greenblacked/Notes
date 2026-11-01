@@ -8,7 +8,7 @@ tags:
   - reliability
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -59,4 +59,4 @@ If any answer is no, revise or discard the test rather than lowering the gate. F
 
 - [pytest documentation](https://docs.pytest.org/en/stable/): test collection and execution conventions; check the project's pinned pytest version before adopting APIs.
 - [NIST SP 800-218, Secure Software Development Framework (SSDF) Version 1.1](https://csrc.nist.gov/pubs/sp/800/218/final): software verification and review practices; guidance, not a test-specific certification.
-- [GitHub Docs: Responsible use of GitHub Copilot features](https://docs.github.com/en/copilot/responsible-use): human review and validation responsibilities for generated suggestions.
+- Your coding agent's own documentation for responsible use and the review it expects of generated tests. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.

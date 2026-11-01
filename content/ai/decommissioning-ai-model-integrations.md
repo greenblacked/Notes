@@ -8,7 +8,7 @@ tags:
   - reliability
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -55,5 +55,5 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 ## Sources
 
 - [Google SRE: Role of Release Engineer and Best Practices](https://sre.google/sre-book/release-engineering/): controlled releases and change accountability.
-- [Data controls in the OpenAI platform](https://platform.openai.com/docs/guides/your-data): provider-specific retention controls and limitations; verify current scope.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [NIST AI Risk Management Framework Playbook](https://airc.nist.gov/airmf-resources/playbook/): risk-management lifecycle context for AI RMF 1.0; the NIST page states revision is underway.

@@ -7,7 +7,7 @@ tags:
   - security
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -57,8 +57,7 @@ Danger signs include generic passthrough tools; schema-only enforcement; descrip
 
 ## Sources
 
-- [OpenAI: Function calling](https://developers.openai.com/api/docs/guides/function-calling) — describes tool definitions using JSON Schema and application-side execution; provider support varies.
-- [Anthropic: Tool use with Claude](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview) — explains client tools and server tools and that client applications execute client-side calls.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) — peer-reviewed agentic application risk framework; use as a starting point, not a substitute for authorization design.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

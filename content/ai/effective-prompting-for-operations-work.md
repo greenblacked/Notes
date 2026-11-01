@@ -8,14 +8,14 @@ tags:
   - reliability
   - incident-management
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-01
 draft: false
 ---
 
 This note covers how to write prompts for day-to-day operations work: debugging a failing deploy, reading a Terraform plan, narrowing an incident, drafting a runbook step. It is for engineers who already know the system and want the assistant to be useful instead of confidently generic. It does not cover tool permissions ([[coding-agent-permission-allowlists]]), the incident process itself ([[ai-assisted-incident-response]]) or bulk log tooling ([[llm-log-analysis-and-alert-triage]]); it also does not replace [[context-engineering-for-agents]], which covers how context is packaged for autonomous agents.
 
 > [!note] Not verified
-> The sources below were found through search on 2026-10-27, but the pages could not be fetched and read. Before relying on or quoting them, check: the exact wording of the vendor prompting guidance (it changes between model releases), the Google SRE postmortem chapter, and the Kubernetes "Debug Pods" page for the cluster's actual version. No OWASP primary source was confirmed, so prompt-injection numbering is deliberately not cited.
+> The sources below were found through search on 2026-10-27, but the pages could not be fetched and read. Before relying on or quoting them, check: the current prompting guidance from your model provider or coding agent (it changes between model releases), the Google SRE postmortem chapter, and the Kubernetes "Debug Pods" page for the cluster's actual version. No OWASP primary source was confirmed, so prompt-injection numbering is deliberately not cited.
 
 ## Core principle: the colleague test
 
@@ -171,7 +171,7 @@ Logs, tickets, READMEs and web pages can contain instructions, deliberately or b
 
 ## Sources
 
-- [Anthropic prompt engineering: Be clear and direct](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/be-clear-and-direct) - colleague test and supplying context; vendor guidance changes, check the current docs.
+- Your model or coding-agent provider's own documentation for prompting guidance: give context and say what good output looks like. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [Google SRE Book: Postmortem culture](https://sre.google/sre-book/postmortem-culture/) - blameless framing for incident prompts and reviews.
 - [Kubernetes docs: Debug Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/) - starting with describe, state and restarts; debug container behaviour is version dependent.
 

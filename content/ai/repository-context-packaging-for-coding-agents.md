@@ -7,7 +7,7 @@ tags:
   - security
   - ci-cd
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -31,7 +31,7 @@ This is an engineering complement to [[ai-generated-code-policy-and-provenance]]
 6. **Label trust and freshness.** Distinguish policy from examples, source code from logs, generated files from hand-maintained files, and known facts from unresolved questions. Include a date or revision for copied operational facts.
 7. **Verify what the agent used.** Ask the agent to list assumptions, cited files, and validation commands. Compare the response with the bundle; an invented path or dependency is a stop-and-check signal.
 
-For repeatable tasks, store concise repository instructions in the mechanism supported by the tool and verify their scope. GitHub's repository custom-instructions documentation describes its own behavior; do not assume another assistant interprets the same file or precedence rules. Keep instruction files reviewable and versioned. Add an owner and a review trigger for context that encodes operational policy.
+For repeatable tasks, store concise repository instructions in the mechanism supported by the tool and verify their scope. Each tool documents its own instruction-file location, scope and precedence; do not assume another assistant interprets the same file or precedence rules. Keep instruction files reviewable and versioned. Add an owner and a review trigger for context that encodes operational policy.
 
 ## Risks and failure modes
 
@@ -59,6 +59,5 @@ Use a small, trusted context pack for routine code changes. Escalate to an archi
 
 ## Sources
 
-- [GitHub Docs: Adding repository custom instructions for GitHub Copilot](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions): repository instruction mechanism and scope; behavior is product-specific.
-- [GitHub Docs: Responsible use of GitHub Copilot features](https://docs.github.com/en/copilot/responsible-use): review responsibilities and limitations of generated suggestions.
+- Your coding agent's own documentation for instruction files, their location, scope and precedence. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [OWASP Top 10 for Agentic Applications for 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): agent-specific risk framing; use as a risk reference, not a substitute for local threat modeling.

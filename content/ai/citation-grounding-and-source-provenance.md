@@ -7,7 +7,7 @@ tags:
   - reliability
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -52,5 +52,5 @@ For broader AI practice resources, see [the owner's AI skills catalogue](https:/
 ## Sources
 
 - [PROV-O: The PROV Ontology](https://www.w3.org/TR/prov-o/): W3C Recommendation of 30 April 2013; defines a model for provenance concepts and relationships.
-- [Structured model outputs](https://developers.openai.com/api/docs/guides/structured-outputs): OpenAI API guide (canonical page fetched live); schema adherence can constrain output shape but does not establish factual grounding.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Generative AI with RAG](https://docs.cloud.google.com/architecture/rag-reference-architectures): Google Cloud's RAG architecture index, last reviewed 2025-09-22; supports retrieval flow context, not a universal citation correctness guarantee.

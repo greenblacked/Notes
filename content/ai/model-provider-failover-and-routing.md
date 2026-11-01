@@ -8,7 +8,7 @@ tags:
   - reliability
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -60,7 +60,5 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 
 ## Sources
 
-- [Rate limits | OpenAI API](https://developers.openai.com/api/docs/guides/rate-limits): OpenAI-specific rate limit and response guidance; behavior and limits can vary by account and model.
-- [Rate limits - Claude Platform Docs](https://platform.claude.com/docs/en/api/rate-limits): Anthropic-specific rate-limit behavior; confirm current account and endpoint details.
-- [Rate limits | Gemini API](https://ai.google.dev/gemini-api/docs/rate-limits): Google AI Studio Gemini API quotas and rate-limit guidance; not interchangeable with Vertex AI quotas.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Quotas for Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html): Amazon Bedrock quota documentation; quotas vary by account, model, and region.

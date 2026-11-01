@@ -8,14 +8,14 @@ tags:
   - policy-as-code
   - audit
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-01
 draft: false
 ---
 
 This note covers the allow, ask and deny rules a coding agent checks before it runs a shell command, touches a file or calls an MCP tool: scoping, precedence and wildcards, reviewing rule changes, and auditing auto-approvals. It is for engineers who own agent configuration in shared repositories. It does not cover OS-level isolation ([[sandboxing-coding-agents-on-workstations-and-runners]]), egress filtering ([[agent-network-egress-controls]]), hook scripts ([[deterministic-hooks-for-coding-agents]]), vetting a server before you trust it ([[third-party-mcp-server-vetting]]) or organisation-wide managed policy ([[ai-coding-assistant-admin-controls]]). The wider model of what an agent may be authorised to do is in [[agent-tool-authorization-boundaries]].
 
 > [!note] Not verified
-> The tool documentation in Sources was not re-checked line by line. Rule grammar, precedence, mode names and version gates differ between tools and releases. Check your tool's current docs for: settings precedence; whether a trailing wildcard matches the bare command; handling of compound commands and leading environment assignments; MCP rule syntax; and which file rules also cover shell commands.
+> No tool's documentation was re-checked line by line. Rule grammar, precedence, mode names and version gates differ between tools and releases. Check your tool's current docs for: settings precedence; whether a trailing wildcard matches the bare command; handling of compound commands and leading environment assignments; MCP rule syntax; and which file rules also cover shell commands.
 
 ## Principles
 
@@ -150,8 +150,7 @@ Set expectations in [[team-norms-for-ai-assisted-engineering]]: who may add rule
 
 ## Sources
 
-- [Claude Code permissions](https://code.claude.com/docs/en/permissions) — one tool's rule syntax, deny-ask-allow precedence, wildcard behaviour, compound commands, file-rule limits and MCP rules, used here as a worked example; other tools differ, and grammar and version gates change.
-- [Claude Code sandboxing](https://code.claude.com/docs/en/sandboxing) — OS-level filesystem and network enforcement that complements command-text rules.
+- Your coding agent's own documentation for rule syntax, precedence, wildcard matching, compound commands, MCP rules and OS-level sandboxing. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [NIST SP 800-53 Rev. 5](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) — the least-privilege control (AC-6) and separation of duties (AC-5) used as the policy frame.
 - [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) — an allow-only authorisation model, as a contrast to deny-first precedence.
 

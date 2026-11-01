@@ -6,7 +6,7 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -51,6 +51,5 @@ For broader AI practice resources, see [the owner's AI skills catalogue](https:/
 
 ## Sources
 
-- [Mitigate jailbreaks and prompt injections](https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks): Anthropic's canonical guide (title and URL live-fetched); discusses direct and indirect prompt injection and defenses. Provider-specific behavior can change.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): OWASP 2026 framework page, canonical URL confirmed by live fetch; use as risk guidance rather than a guarantee or exhaustive control catalog.
-- [Structured model outputs](https://developers.openai.com/api/docs/guides/structured-outputs): OpenAI API guide, canonical page confirmed by live fetch; structured conformance constrains format, not trust or correctness.

@@ -7,7 +7,7 @@ tags:
   - security
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -51,7 +51,7 @@ Common issues are stale index snapshots, access checks applied after the model s
 ## Sources
 
 - [Google Cloud: RAG-capable generative AI application using Vertex AI](https://cloud.google.com/architecture/rag-capable-gen-ai-app-using-vertex-ai) — reference architecture; live page says last reviewed 2026-02-04.
-- [Google AI: Long context](https://ai.google.dev/gemini-api/docs/long-context) — provider guidance on long-context use; model limits and behavior vary.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — risk management framing; AI RMF 1.0 was released in 2023 and is being revised.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

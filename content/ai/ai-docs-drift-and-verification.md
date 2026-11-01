@@ -7,7 +7,7 @@ tags:
   - reliability
   - ci-cd
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -56,5 +56,4 @@ For low-risk conceptual prose, normal peer review may suffice. For security, dat
 ## Sources
 
 - [NIST SP 800-218, Secure Software Development Framework (SSDF) Version 1.1](https://csrc.nist.gov/pubs/sp/800/218/final): review and verification practices for software artifacts.
-- [GitHub Docs: Adding repository custom instructions for GitHub Copilot](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions): repository-specific context mechanism; not a documentation validator.
-- [GitHub Docs: Responsible use of GitHub Copilot features](https://docs.github.com/en/copilot/responsible-use): human responsibility for reviewing generated output.
+- Your coding agent's own documentation for how the assistant reads and updates repository documentation. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.

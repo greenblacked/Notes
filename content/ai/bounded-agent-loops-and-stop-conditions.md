@@ -7,7 +7,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -57,7 +57,7 @@ A per-turn timeout without a total deadline allows infinite retries. A model tok
 
 ## Sources
 
-- [OpenAI: Function calling](https://developers.openai.com/api/docs/guides/function-calling) — describes the application handling tool calls; design execution bounds in that application layer.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) — risk context for autonomous systems and excessive agency.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — monitoring and governance framing; AI RMF 1.0 is being revised according to NIST.
 

@@ -7,7 +7,7 @@ tags:
   - reliability
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -52,7 +52,5 @@ The owner's agent skills and workflows are listed in [the AI skills catalogue](h
 
 ## Sources
 
-- [Working with evals (OpenAI API; documentation accessed 2026-10-26)](https://developers.openai.com/api/docs/guides/evals): constructing graders and task-specific model evaluations.
-- [Structured model outputs (OpenAI API; documentation accessed 2026-10-26)](https://developers.openai.com/api/docs/guides/structured-outputs): current provider guidance for constrained structured output; confirm the supported modes and limits in the live documentation before relying on them.
-- [Tool use with Claude (Claude Platform Docs; accessed 2026-10-26)](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview): tool definitions and structured tool-use behavior.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile (NIST AI 600-1; July 2024)](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): risks associated with autonomous actions and model outputs.

@@ -8,7 +8,7 @@ tags:
   - audit
   - team-process
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-01
 draft: false
 ---
 
@@ -21,7 +21,7 @@ A policy that says "do not feed secrets to AI assistants" is only as good as the
 > Written for organisation-managed use of coding assistants in IDEs, CLIs and CI. It names no vendor values on purpose. Retention periods, training use of your data, regions and telemetry options differ by vendor and plan and change over time. Read the vendor's current trust, privacy and admin pages at every renewal, and record the date you read them.
 
 > [!note] Not verified
-> Not checked against any product. Setting names, file locations and precedence rules vary and move; the vendor pages under Sources may have changed paths. Everything here is a checklist of questions to answer from the current documentation, plus the verification method.
+> Not checked against any product. Setting names, file locations and precedence rules vary and move; check the current vendor pages, whose paths move. Everything here is a checklist of questions to answer from the current documentation, plus the verification method.
 
 ## Control inventory
 
@@ -127,8 +127,7 @@ Review the whole register at each renewal and whenever a vendor announces a term
 
 ## Sources
 
-- [GitHub Copilot documentation](https://docs.github.com/en/copilot): administration, data and privacy pages. Paths move; check the current ones.
-- [Claude Code settings](https://docs.claude.com/en/docs/claude-code/settings): settings files, permissions and managed policy. This page may have moved; verify the address.
+- Your coding agent's own documentation for settings files, permissions, managed policy and admin controls. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [OWASP Top 10 for LLM applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/), OWASP.
 
 ## Related

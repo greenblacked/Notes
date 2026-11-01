@@ -8,7 +8,7 @@ tags:
   - policy-as-code
   - reliability
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-10-30
 draft: false
 ---
 
@@ -167,8 +167,7 @@ Run the script-level test in CI. Run the end-to-end agent canary after every set
 
 ## Sources
 
-- [Claude Code hooks reference](https://code.claude.com/docs/en/hooks) - example of hook events, tool-name matchers, the exit code that blocks a pre-tool call, and timeout and failure behaviour; check the current page for your version.
-- [Best practices (code.claude.com)](https://code.claude.com/docs/en/best-practices) - guidance on hooks as deterministic gates and on checkable pass/fail signals.
+- Your coding agent's own documentation for hook events, matchers, the exit code that blocks a call, and timeout and failure behaviour. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [githooks documentation](https://git-scm.com/docs/githooks) - which client-side hooks exist, that a non-zero exit aborts pre-commit and commit-msg, and that `--no-verify` skips them.
 - [pre-commit framework](https://pre-commit.com/) - the official home for installing and configuring pre-commit hooks.
 

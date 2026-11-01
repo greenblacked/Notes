@@ -8,7 +8,7 @@ tags:
   - kubernetes
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -61,7 +61,6 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 
 ## Sources
 
-- [Rate limits | OpenAI API](https://developers.openai.com/api/docs/guides/rate-limits): OpenAI-specific rate limits and handling guidance; values depend on account and model.
-- [Rate limits - Claude Platform Docs](https://platform.claude.com/docs/en/api/rate-limits): Anthropic rate-limit documentation; check current scope and response behavior.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Quotas for Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html): Amazon Bedrock quotas; service quotas are provider- and region-specific.
 - [Horizontal Pod Autoscaling | Kubernetes](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/): Kubernetes scaling inputs; HPA alone does not implement queue backpressure.

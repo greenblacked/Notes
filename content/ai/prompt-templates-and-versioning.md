@@ -7,7 +7,7 @@ tags:
   - reliability
   - team-process
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -52,8 +52,7 @@ Use shared templates for stable, common behavior, but keep genuinely task-specif
 
 ## Sources
 
-- [OpenAI: Prompt engineering](https://developers.openai.com/api/docs/guides/prompt-engineering) — provider guidance on structuring prompts; recommendations and features may change.
-- [Anthropic: Mitigate jailbreaks and prompt injections](https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/mitigate-jailbreaks) — discusses handling untrusted content and application guardrails; do not treat prompt formatting as authorization.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance and monitoring concepts. NIST says AI RMF 1.0 is being revised.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

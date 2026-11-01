@@ -9,7 +9,7 @@ tags:
   - security
   - networking
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-01
 draft: false
 ---
 
@@ -136,7 +136,7 @@ You still need DNS records that send the API names to the endpoint; follow the P
 
 ## VPC Service Controls: dry run, then enforce
 
-Google's Vertex AI VPC-SC page says that with `aiplatform.googleapis.com` as a restricted service, public internet access to Vertex AI is blocked and protected artifacts include Gemini models and online inference requests; private access goes through Private Service Connect or Private Google Access. Some Vertex AI features need extra network setup inside a perimeter (the page lists vector search querying, the custom training data plane, Pipelines and private online prediction endpoints), and Pipelines components cannot install from public PyPI inside one. Read the page before you enforce if the project uses any of those.
+Google's Vertex AI VPC-SC page says that with `aiplatform.googleapis.com` as a restricted service, public internet access to Vertex AI is blocked and protected artifacts include Google's first-party models and online inference requests; private access goes through Private Service Connect or Private Google Access. Some Vertex AI features need extra network setup inside a perimeter (the page lists vector search querying, the custom training data plane, Pipelines and private online prediction endpoints), and Pipelines components cannot install from public PyPI inside one. Read the page before you enforce if the project uses any of those.
 
 The perimeter design itself (access levels, ingress and egress rules, who may use the console) is in [[zero-trust-access-iap-and-vpc-service-controls]]. The rollout is the same audit-then-enforce idea as [[policy-rollout-audit-to-enforce]]:
 
@@ -203,7 +203,7 @@ Record the choice and its reason as a decision, configure it in the gateway (one
 Read Google's generative AI data governance page and record what applies to you; do not rely on a summary. The points from it that most often change a design:
 
 - Google states it does not train on customer data without permission.
-- Gemini caches inputs and outputs in memory by default, isolated per project, for a limited time; caching can be disabled per project, and zero data retention requires disabling it.
+- Google's first-party models cache inputs and outputs in memory by default, isolated per project, for a limited time; caching can be disabled per project, and zero data retention requires disabling it.
 - Abuse-monitoring prompt logging applies to some billing and terms categories, and an exception can be requested.
 - Features such as session resumption and grounding have their own retention terms.
 

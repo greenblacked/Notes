@@ -7,7 +7,7 @@ tags:
   - observability
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -51,4 +51,4 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 
 - [GitHub: OpenTelemetry GenAI Semantic Conventions](https://github.com/open-telemetry/semantic-conventions-genai): current repository for evolving GenAI span attributes.
 - [OpenTelemetry Trace API](https://opentelemetry.io/docs/specs/otel/trace/api/): trace, span, and context model.
-- [Data controls in the OpenAI platform](https://platform.openai.com/docs/guides/your-data): provider-specific data handling controls; verify current account and endpoint terms.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).

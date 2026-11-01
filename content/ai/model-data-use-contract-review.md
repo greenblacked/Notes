@@ -8,7 +8,7 @@ tags:
   - security
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
 ---
 
@@ -55,6 +55,5 @@ Engineering can implement and verify controls, but only authorized legal and pri
 
 ## Sources
 
-- [OpenAI API: Data controls in the OpenAI platform](https://developers.openai.com/api/docs/guides/your-data): current documentation on platform data controls; confirm product/account applicability and contractual precedence.
-- [Anthropic Commercial Terms of Service](https://www.anthropic.com/legal/commercial-terms): primary commercial terms; contract interpretation belongs to authorized counsel.
-- [Google Cloud documentation: Gemini Enterprise Agent Platform and zero data retention](https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/zero-data-retention): Google Cloud's product-specific zero-retention documentation; check current product naming, configuration scope, and contractual terms.
+- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
+- [Google Cloud documentation: zero data retention](https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/zero-data-retention): Google Cloud's product-specific zero-retention documentation; check current product naming, configuration scope, and contractual terms.
