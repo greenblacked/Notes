@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-01
+
+### Added
+
+- **AI practice track in the learning path.** Five optional lessons teach AI use as an engineering skill: what an assistant can and cannot do, troubleshooting with evidence, a dependency-free retrieval lab, measuring answer quality with a fixed evaluation set and sealed holdout, and a reviewable incident-assistant capstone with a tested prompt rollback. They use synthetic data only and need no GPU, model download, paid API or cloud resources. The AI section links to the track as its starting point.
+
+### Changed
+
+- **Lesson standard:** lessons with graded exercises may add a Pass criteria section.
+
 ## [0.11.0] - 2026-11-01
 
 ### Added
