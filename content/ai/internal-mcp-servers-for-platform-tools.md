@@ -9,17 +9,21 @@ tags:
   - observability
   - audit
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-01
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-01
+review-due: 2027-05-01
+destructive: true
 ---
 
 Sooner or later someone asks for "an MCP server for Prometheus", or for pipeline status, or for artifact lookups, so their agent can answer questions without a human pasting output into a chat. The Model Context Protocol (MCP) makes that easy to build, which is the problem: the easiest server is a thin wrapper that forwards whatever the model asks for, with a powerful token, to a system full of data. Other notes cover the consumer side: allowlisting and pinning servers ([[ai-coding-assistant-admin-controls]]) and attacking them with planted instructions ([[prompt-injection-test-harness-for-ci-agents]]). This note is for the platform team that builds and runs its own servers: what to expose, how to design tools so the server enforces the limits, how authorization works for remote servers, how to deploy on GKE, and how to audit and roll back.
 
 > [!info] Scope and revision
-> Specification revision checked: **2026-07-28**, on 2026-10-21. MCP changes quickly between revisions (transports, authorization, schema dialect), so read the current revision before building, and record in your server's README which revision it targets. Examples are for read-mostly tools over Prometheus, a CI system and an artifact repository. No SDK is used or named: the code is plain Python standard library for the validation logic, and you wire it into whichever SDK you choose.
+> Specification revision checked: **2026-07-28**, against the specification repository on 2026-11-01 (see Evidence). MCP changes quickly between revisions (transports, authorization, schema dialect), so read the current revision before building, and record in your server's README which revision it targets. Examples are for read-mostly tools over Prometheus, a CI system and an artifact repository. No SDK is used or named: the code is plain Python standard library for the validation logic, and you wire it into whichever SDK you choose.
 
 > [!note] Not verified
-> No server was built or run for this note. Only the `validate` function of `promql_tool.py` was exercised locally against a handful of sample queries; the Prometheus call was not run. The MCP pages were read as search excerpts, not in full; the Prometheus API page was read from search excerpts of older versions. Not confirmed: the exact token audience rules and resource indicator behaviour in revision 2026-07-28, which revision made JSON Schema 2020-12 the tool-schema dialect, the current default values of the Prometheus `--query.*` flags for your version, whether the Prometheus `query_range` API has a series `limit` parameter in your version, and every SDK class or function name (none are used here on purpose). The identity model (caller identity versus service identity) is design guidance, not a quotation from the specification.
+> No server was built or run for this note. Only the `validate` function of `promql_tool.py` was exercised locally against a handful of sample queries; the Prometheus call was not run. The claims about the MCP specification and Prometheus were checked against the documentation sources listed under Evidence. The GKE parts (Workload Identity, internal load balancers and Gateways, Secret Manager) depend on Google Cloud documentation that was not available for this review and are unverified. The identity model (caller identity versus service identity) is design guidance, not a quotation from the specification. Details are in the Not verified list under Evidence.
 
 ## What to expose
 
@@ -39,7 +43,7 @@ Start with tools that read. A write tool (retry a pipeline, scale a Deployment) 
 
 Everything the model sends is untrusted input, and the tool's JSON Schema is advice to the client, not enforcement. The server validates every argument again, bounds every output, and fails with a clear error instead of guessing.
 
-A tool definition carries a `name`, a `description` and an `inputSchema`; an `outputSchema` is optional (added in revision 2025-06-18), and the current revision uses JSON Schema 2020-12 for tool schemas; check the specification changelog for the revision that introduced it. Tool `annotations` are hints: the specification says clients should treat them as untrusted unless the server is trusted, so do not use them as a security boundary on either side.
+A tool definition carries a `name`, a `description` and an `inputSchema`; an `outputSchema` is optional (structured tool output arrived in revision 2025-06-18). JSON Schema 2020-12 became the default dialect for MCP schemas in revision 2025-11-25, and revision 2026-07-28 defaults to 2020-12 when a schema has no `$schema` field and allows any 2020-12 keyword in `inputSchema` and `outputSchema`. Tool `annotations` are hints: the specification says clients MUST consider them untrusted unless they come from trusted servers, so do not use them as a security boundary on either side.
 
 ```json title="promql_query_range.tool.json"
 {
@@ -162,18 +166,18 @@ def run(args: dict) -> dict:
 
 Design points:
 
-- **The Prometheus API does the heavy lifting safely only within its own limits.** `query_range` accepts `query`, `start`, `end`, `step` and an optional `timeout`, which is capped by the server's `--query.timeout`; the server also has `--query.max-samples` and `--query.max-concurrency`. Check their values for your version, and set the tool's limits well inside them so one agent cannot use up the query capacity on-call depends on. Point the tool at a query frontend or a replica rather than the primary if you have one ([[multi-tenant-prometheus-architecture]]).
+- **The Prometheus API does the heavy lifting safely only within its own limits.** `query_range` accepts `query`, `start`, `end`, `step` and an optional `timeout`, which defaults to and is capped by the server's `--query.timeout` (or by the `query_max_duration` option when the `query-cost` feature flag is enabled and that option is set); the server also has `--query.max-samples` and `--query.max-concurrency`. In the documentation checked, the defaults are `2m`, `50000000` and `20`; check the values for your version, and set the tool's limits well inside them so one agent cannot use up the query capacity on-call depends on. Point the tool at a query frontend or a replica rather than the primary if you have one ([[multi-tenant-prometheus-architecture]]).
 - **The allowlist is crude on purpose.** The metric-name check is a cheap filter, not a PromQL parser; it rejects anything it does not understand. If you need more, parse with a real PromQL parser in the server, and keep the allowlist anyway. High-cardinality metrics are a separate risk ([[prometheus-high-cardinality-triage]]).
-- **Bounded output, and say so.** Return `truncated: true` and the total count rather than silently cutting; a model that does not know data is missing draws confident wrong conclusions.
+- **Bounded output, and say so.** Return `truncated: true` and the total count rather than silently cutting (`query_range` also takes an optional `limit` parameter for the maximum number of returned series, which you can pass in addition to your own cap; check that your Prometheus version supports it); a model that does not know data is missing draws confident wrong conclusions.
 - **Errors are data.** Return short, fixed error messages. Never return upstream stack traces, internal URLs or tokens in an error.
 - **Same pattern for every tool.** For a CI tool: validate `project` against the caller's allowed projects, accept only a ref name pattern, return the failed job names and a bounded, redacted tail of the log. For an artifact tool: allowlisted repositories, a path pattern, metadata only (no download URLs with embedded credentials).
 
 ## Transports: stdio or remote HTTP
 
-| Transport       | How it runs                                                         | Fits                                                                | Authorization                                                                                                                            |
-| --------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| stdio           | The client starts the server as a local process on the same machine | Personal tools on a workstation; tools in a CI job's own container  | The specification says stdio implementations should not use the HTTP authorization flow and should take credentials from the environment |
-| Streamable HTTP | A shared service the client connects to over HTTP                   | Platform tools used by many people and agents, with central control | OAuth 2.1 based authorization as defined in the specification                                                                            |
+| Transport       | How it runs                                                         | Fits                                                                | Authorization                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| stdio           | The client starts the server as a local process on the same machine | Personal tools on a workstation; tools in a CI job's own container  | The specification says stdio implementations should not follow the authorization specification and should retrieve credentials from the environment |
+| Streamable HTTP | A shared service the client connects to over HTTP                   | Platform tools used by many people and agents, with central control | OAuth 2.1 based authorization as defined in the specification                                                                                       |
 
 Streamable HTTP replaced the older HTTP+SSE transport in revision 2025-03-26, and revision 2026-07-28 removes protocol-level sessions and the `Mcp-Session-Id` header from it. If you maintain a server that still speaks the older transport, plan the migration with the current revision's changelog open.
 
@@ -181,10 +185,10 @@ For platform tools, prefer a **remote server**: one deployment, one set of upstr
 
 ## Authorization for remote servers
 
-From revision 2025-06-18 an MCP server is an OAuth resource server: it publishes protected resource metadata, and clients obtain tokens from your authorization server (your identity provider). The specification's security best practices page names two failures to design against:
+From revision 2025-06-18 an MCP server is an OAuth resource server: it implements OAuth 2.0 Protected Resource Metadata, and clients obtain tokens from your authorization server (your identity provider). The specification's authorization security considerations and its security best practices guidance name two failures to design against:
 
-- **Token passthrough** is explicitly forbidden: accepting a token that was not issued for this server and forwarding it to a downstream API. It bypasses the downstream's own validation, rate limits and monitoring, and breaks the audit trail. The main defence is to **validate the token's audience**: reject any token not issued for this server.
-- **Confused deputy**: a server that proxies a third-party API with its own credentials can be tricked into acting for the wrong user, for example through consent that is recorded before the user approves. The page covers the conditions in detail; read it if your server sits in front of an OAuth-protected third-party API.
+- **Token passthrough** is explicitly forbidden: the server must not pass the token it received from the client on to an upstream API, and must only accept tokens issued for itself. The upstream token is a separate token. The main defence is to **validate the token's audience**: reject any token that does not name this server as its audience. Clients request tokens with the RFC 8707 `resource` parameter so the audience is bound to the server.
+- **Confused deputy**: a server that proxies a third-party API with its own credentials can be tricked into acting for the wrong user, for example with stolen authorization codes. The specification requires proxy servers that use a static client ID to obtain user consent for each dynamically registered client; read the current security best practices guidance if your server sits in front of an OAuth-protected third-party API.
 
 The identity model that follows from this (design guidance, not specification text):
 
@@ -197,13 +201,13 @@ flowchart LR
 ```
 
 - **Caller identity** comes from the validated token and decides what this caller may ask: which tools, which projects, which namespaces. Enforce it in the server on every call.
-- **Service identity** is the server's own credential to the upstream: Workload Identity for Google APIs ([[gke-workload-identity]]), a read-only, narrowly scoped token for the CI system, a short-lived token for the artifact repository ([[artifactory-access-tokens-and-oidc-for-ci]]). It is never the caller's token.
+- **Service identity** is the server's own credential to the upstream: Workload Identity for Google APIs ([[gke-workload-identity]]; not verified here, check the current Google Cloud docs), a read-only, narrowly scoped token for the CI system, a short-lived token for the artifact repository ([[artifactory-access-tokens-and-oidc-for-ci]]). It is never the caller's token.
 - Because the service identity can usually see more than any one caller, the server's per-call authorization is the boundary. Test it: a caller without access to project B must get an authorization error from the tool, not project B's data.
-- Revision 2026-07-28 also changes client registration and issuer validation (Client ID Metadata Documents in place of Dynamic Client Registration; `iss` validation per RFC 9207). These mostly affect clients and the authorization server; check what your identity provider supports before you choose a client registration model.
+- Revision 2026-07-28 also deprecates Dynamic Client Registration in favour of Client ID Metadata Documents (which revision 2025-11-25 added as a recommended mechanism; Dynamic Client Registration remains for backwards compatibility), and says authorization servers SHOULD include the `iss` parameter (RFC 9207) in authorization responses, which clients MUST validate when present. These mostly affect clients and the authorization server; check what your identity provider supports before you choose a client registration model.
 
 ## Deployment on GKE
 
-Run the server like any other internal service: its own namespace, its own Kubernetes service account, internal reachability only, egress only to its upstreams.
+Run the server like any other internal service (the manifest below is checked against the Kubernetes documentation only; GKE-specific parts are not verified): its own namespace, its own Kubernetes service account, internal reachability only, egress only to its upstreams.
 
 ```yaml title="mcp-platform-tools.yaml"
 apiVersion: apps/v1
@@ -265,12 +269,13 @@ spec:
         - namespaceSelector:
             matchLabels: { kubernetes.io/metadata.name: kube-system }
       ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+    # The DNS rule is needed because a policy that restricts egress also blocks DNS.
     # Add one rule per upstream (CI system, artifact repository, identity provider for key fetches).
 ```
 
-- Expose it through an internal load balancer or an internal Gateway, never a public one; the options and their annotations are in [[edge-and-ingress-cloudflare-gclb-gateway-api]].
-- The pod meets the restricted Pod Security profile ([[pod-security-admission]]); the `/healthz` path is your server's own, not part of MCP.
-- Upstream tokens come from Secret Manager through the pattern in [[secrets-architecture-gcp-and-gke]], each scoped read-only to what the tools need.
+- Expose it through an internal load balancer or an internal Gateway, never a public one; the options and their annotations are in [[edge-and-ingress-cloudflare-gclb-gateway-api]] (GKE-specific; not verified here, check the current Google Cloud docs).
+- The pod is written to meet the restricted Pod Security profile (non-root, `RuntimeDefault` seccomp, no privilege escalation, all capabilities dropped; `readOnlyRootFilesystem` is extra hardening, not required by the profile) ([[pod-security-admission]]); the `/healthz` path is your server's own, not part of MCP.
+- Upstream tokens come from Secret Manager through the pattern in [[secrets-architecture-gcp-and-gke]], each scoped read-only to what the tools need (Google Cloud-specific; not verified here, check the current docs).
 - Egress is limited by NetworkPolicy here and by the cluster egress controls in [[kubernetes-network-policies]].
 
 ## Tool output is untrusted input to the model
@@ -324,16 +329,64 @@ Log a hash of arguments that can hold sensitive data (the query text, free-text 
 
 ## Rollback
 
+> [!warning] Disabling tools and revoking tokens is disruptive
+> Disabling a tool or revoking the service identity's upstream tokens stops every client that depends on them at once. Do it deliberately, record why in the audit trail, and use the steps below to restore service.
+
 - **One bad tool.** Disable it server-side with a per-tool flag (the server stops listing and serving it), then remove it from the client allowlist. Prefer the server flag: it takes effect for every client at once.
 - **A bad release.** Revert the image digest in Git; GitOps rolls back. Keep the previous release's schema compatible so clients do not break during the rollback.
 - **Suspected misuse.** Revoke the server's upstream tokens (the service identity), which stops every tool that uses them, then investigate from the audit log. Rotate per [[leaked-credential-rotation]] if a token may have leaked.
 
+## Evidence
+
+Reviewed on 2026-11-01 against local checkouts of the primary documentation. Nothing was run beyond the helper `validate` function.
+
+### Sources checked
+
+- [MCP authorization, revision 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization): OAuth 2.1 resource server role, Protected Resource Metadata, RFC 8707 audience validation, stdio should not follow it and takes credentials from the environment. Checked 2026-11-01, `modelcontextprotocol` repository commit d0e246e.
+- [MCP authorization security considerations, revision 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations): token audience validation, no token passthrough, confused deputy consent rule for static client IDs. Checked 2026-11-01, commit d0e246e.
+- [MCP key changes, revision 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/changelog): removal of sessions and `Mcp-Session-Id`, `iss` per RFC 9207, deprecation of Dynamic Client Registration for Client ID Metadata Documents, loosened JSON Schema 2020-12 keywords. Checked 2026-11-01, commit d0e246e.
+- [MCP key changes, revision 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/changelog): JSON Schema 2020-12 as default dialect, Client ID Metadata Documents added. Checked 2026-11-01, commit d0e246e.
+- [MCP key changes, revision 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/changelog) and [revision 2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26/changelog): structured tool output and OAuth resource server classification; Streamable HTTP replacing HTTP+SSE. Checked 2026-11-01, commit d0e246e.
+- [MCP tools, revision 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/server/tools): `inputSchema`, `outputSchema`, annotations must be considered untrusted unless from trusted servers. Checked 2026-11-01, commit d0e246e.
+- [Prometheus HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/): `query_range` parameters (`query`, `start`, `end`, `step`, `timeout`, `limit`), POST with form encoding, `status` and `errorType` fields, `timeout` capped by `--query.timeout`. Checked 2026-11-01, `prometheus` repository commit ef78ff6.
+- [Prometheus command-line flags](https://prometheus.io/docs/prometheus/latest/command-line/prometheus/): `--query.timeout` (2m), `--query.max-concurrency` (20), `--query.max-samples` (50000000). Checked 2026-11-01, commit ef78ff6.
+- [Kubernetes Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/): restricted profile requirements used by the manifest. Checked 2026-11-01, `website` repository commit 491f14e.
+- [Kubernetes Network Policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) and [Namespaces](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/): `policyTypes`, `namespaceSelector`, `kubernetes.io/metadata.name` label, egress restriction also blocks DNS. Checked 2026-11-01, commit 491f14e.
+
+### Not verified
+
+- Everything that depends on Google Cloud or GKE documentation: Workload Identity for the service identity, internal load balancers and Gateways, Secret Manager usage.
+- The Security best practices page (token passthrough, confused deputy, session hijacking detail) was not available locally; only the authorization security considerations that summarise it were checked.
+- The MCP and Prometheus values above describe the documentation at the commits named; check the current docs for your version, especially the `limit` parameter and flag defaults.
+- The `promql_tool.py` behaviour beyond `validate`, the manifest applied to a real cluster, the NetworkPolicy behaviour under a specific CNI, and the Rollback steps were not run.
+- Design guidance (caller versus service identity, per-tool flags, audit line fields, test list) is not a specification claim.
+
+### Environment
+
+The steps assume a Kubernetes cluster with NetworkPolicy enforcement, an MCP server targeting revision 2026-07-28, and the Prometheus and Kubernetes documentation versions named above. See Deployment on GKE.
+
+### Prerequisites
+
+Access to the GitOps repository, the audit log and the server configuration, and the list of clients that use each tool. See Rollback.
+
+### Expected results
+
+After disabling a tool, the server no longer lists or serves it and clients get a clear error; after reverting the image digest, GitOps restores the previous release.
+
+### Failure conditions
+
+Clients still see a disabled tool (the allowlist or cache was not updated), a rolled-back release breaks clients because schemas are incompatible, or upstream calls fail after tokens were revoked.
+
+### Cleanup and rollback
+
+Re-enable the tool flag, restore the previous image digest through Git, and issue new read-only upstream tokens after the investigation, following Rollback and [[leaked-credential-rotation]].
+
 ## Sources
 
-- [Model Context Protocol specification](https://modelcontextprotocol.io/specification), revision 2026-07-28 at the time of writing, and its [release announcement](https://blog.modelcontextprotocol.io/posts/2026-07-28/).
+- [Model Context Protocol specification](https://modelcontextprotocol.io/specification), revision 2026-07-28 at the time of writing.
 - [Authorization (revision 2026-07-28)](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization): HTTP transports only; stdio takes credentials from the environment.
-- [Security best practices](https://modelcontextprotocol.io/specification/latest/basic/security_best_practices): token passthrough, confused deputy, session hijacking.
-- [Tools (revision 2025-06-18)](https://modelcontextprotocol.io/specification/2025-06-18/server/tools): `inputSchema`, `outputSchema`, annotations as hints. Re-read the 2026-07-28 tools page for the JSON Schema 2020-12 change.
+- [Authorization security considerations (revision 2026-07-28)](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations): token audience validation, token passthrough, confused deputy. The separate security best practices guidance was not available for this review.
+- [Tools (revision 2026-07-28)](https://modelcontextprotocol.io/specification/2026-07-28/server/tools): `inputSchema`, `outputSchema`, annotations as untrusted hints.
 - [Prometheus HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/) and [command-line flags](https://prometheus.io/docs/prometheus/latest/command-line/prometheus/), Prometheus documentation.
 
 ## Related

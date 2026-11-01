@@ -9,8 +9,11 @@ tags:
   - cost
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-01
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-01
+review-due: 2027-05-01
 ---
 
 ## Start with the workload, not the accelerator
@@ -31,9 +34,9 @@ For each model-serving configuration, record a capacity curve: sustainable arriv
 
 ## Account for memory and placement
 
-Budget accelerator memory for model weights, runtime workspace, key-value cache, graph capture or other engine allocations, and safety headroom. These components vary by engine and model configuration. Parameter count alone is not a sufficient memory estimate. Use the serving engine's current documented memory controls, then verify actual allocation under the intended workload. Include host memory, CPU, network, and storage constraints where weights or caches are staged.
+Budget accelerator memory for model weights, runtime workspace, key-value cache, graph capture or other engine allocations, and safety headroom. These components vary by engine and model configuration. Parameter count alone is not a sufficient memory estimate. Use the serving engine's current documented memory controls (for vLLM, for example `gpu_memory_utilization`, `max_model_len` and the CUDA graph settings; check the docs for your version), then verify actual allocation under the intended workload. Include host memory, CPU, network, and storage constraints where weights or caches are staged.
 
-A replica is not necessarily one GPU. Tensor or pipeline parallel configurations can require a set of devices to be scheduled together, changing the placement and failure domain. Plan for available device topology and node capacity, including whether a full replica can be scheduled after one node is drained. If a cluster autoscaler cannot obtain the required shape quickly, additional queued demand does not create capacity.
+A replica is not necessarily one GPU. Tensor or pipeline parallel configurations spread one replica across several GPUs, and possibly several nodes, so the replica's devices generally need to be placed together, which changes the placement and failure domain. Plan for available device topology and node capacity, including whether a full replica can be scheduled after one node is drained. If a cluster autoscaler cannot obtain the required shape quickly, additional queued demand does not create capacity.
 
 Keep some headroom for variance and safe operations. It should reflect measured burstiness, replica loss, rollout strategy, and provisioning delay rather than a universal percentage. Too much reserve ties up expensive accelerators; too little turns small deviations into queue growth and latency collapse.
 
@@ -55,6 +58,24 @@ Re-evaluate after model or engine upgrades and when request distributions shift.
 Tradeoffs should be explicit: reserve capacity buys recovery and latency stability at ongoing cost, while high utilization lowers idle cost but leaves less room for bursts and maintenance. Neither is universally correct; choose against a stated objective and revisit it with production evidence.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
+
+## Evidence
+
+### Sources checked
+
+- [Parallelism and Scaling - vLLM](https://docs.vllm.ai/en/latest/serving/parallelism_scaling/): a model too large for one GPU can use tensor parallelism across the GPUs of a node, combined with pipeline parallelism across nodes when one node is not enough (`tensor_parallel_size`, `pipeline_parallel_size`); startup logs report GPU KV cache size and estimated maximum concurrency. Checked 2026-11-01 against vLLM docs commit 8530a77.
+- [Engine Arguments - vLLM](https://docs.vllm.ai/en/latest/configuration/engine_args/): engine arguments combine the configuration classes in `vllm.config`, which the page names as the source of truth for types and defaults. Checked 2026-11-01 against vLLM docs commit 8530a77.
+- [Conserving Memory - vLLM](https://docs.vllm.ai/en/latest/configuration/conserving_memory/): CUDA graphs use extra GPU memory; `max_model_len` and quantization reduce memory use. Checked 2026-11-01 against vLLM docs commit 8530a77.
+- [Optimization - vLLM](https://docs.vllm.ai/en/latest/configuration/optimization/): `gpu_memory_utilization` controls the pre-allocated KV cache share, and insufficient KV cache causes preemption and recompute. Checked 2026-11-01 against vLLM docs commit 8530a77.
+- [Horizontal Pod Autoscaling | Kubernetes](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/): HPA scales replica counts from resource, custom, object and external metrics and treats not-yet-ready pods specially (that it is therefore not a model-capacity estimator is the note's reading). Checked 2026-11-01 against Kubernetes website commit 491f14e.
+- [Liveness, Readiness, and Startup Probes | Kubernetes](https://kubernetes.io/docs/concepts/workloads/pods/probes/): readiness probes determine when a container is ready to accept traffic. Checked 2026-11-01 against Kubernetes website commit 491f14e.
+
+### Not verified
+
+- Behaviour of the GKE cluster autoscaler, node provisioning delay and accelerator availability: depends on Google Cloud docs, which were not available. Check the current GKE documentation.
+- That a multi-GPU replica must be scheduled as a unit on Kubernetes: the vLLM docs describe the parallelism, but the scheduling consequence is the note's inference.
+- Readiness behaviour of the serving engine's own health endpoint and of any load balancer in front of it: only the Kubernetes probe semantics were checked.
+- General guidance (workload modelling, percentile objectives, retry amplification, headroom) is practice advice, not backed by a cited source.
 
 ## Sources
 
