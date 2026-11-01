@@ -1,13 +1,12 @@
 ---
 title: GPU Pods Pending on GKE
-description: Find out why Pods that request nvidia.com/gpu stay Pending on GKE, from taints, labels and drivers to quota, zone stockouts and GPU sharing mismatches, and restore capacity safely.
+description: Find out why Pods that request nvidia.com/gpu stay Pending on GKE, from taints and drivers to quota and zone stockouts, and restore capacity safely.
 type: runbook
 tags:
   - runbooks
   - ai
   - gke
   - kubernetes
-  - gpu
   - reliability
 created: 2026-11-01
 modified: 2026-11-01
@@ -186,11 +185,11 @@ gcloud container node-pools create gpu-inference-2 \
   --num-nodes 1 --enable-autoscaling --min-nodes 0 --max-nodes 2
 ```
 
-`--num-nodes` is set because gcloud otherwise defaults to 3 nodes per zone, above `--max-nodes`. Then validate the pool before moving any Pods to it:
+`--num-nodes` is set because gcloud otherwise defaults to 3 nodes per zone, above `--max-nodes`. Then validate the pool before moving any Pods to it. A healthy node shows `READY=True` and a non-empty `GPU_ALLOC`:
 
 ```bash
 kubectl get nodes -l cloud.google.com/gke-nodepool=gpu-inference-2 \
-  -o custom-columns='NODE:.metadata.name,READY:.status.conditions[-1].type,GPU_ALLOC:.status.allocatable.nvidia\.com/gpu'
+  -o custom-columns='NODE:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status,GPU_ALLOC:.status.allocatable.nvidia\.com/gpu'
 ```
 
 The new pool has a new name, so a Deployment that selects `cloud.google.com/gke-nodepool=gpu-inference` never lands on it. Select on `workload=llm-inference` instead and confirm the Deployment's nodeSelector and affinity match the new pool's labels.
@@ -342,7 +341,7 @@ Mitigate in this order, and stop at the first step that restores service:
    kubectl -n "$NS" patch deployment/"$DEPLOY" --type merge -p '{"spec":{"strategy":{"rollingUpdate":{"maxSurge":0,"maxUnavailable":1}}}}'
    ```
 
-   Resume the rollout (`kubectl -n "$NS" rollout resume deployment/"$DEPLOY"`) once capacity is back.
+   A paused Deployment does not progress, so the patch has no effect until you resume. After the `maxSurge: 0` patch, resume right away (`kubectl -n "$NS" rollout resume deployment/"$DEPLOY"`), because that strategy needs no extra GPU. If you leave the strategy unchanged, keep the rollout paused and resume it once capacity is back.
 
 2. **Shed load.** Scale down batch or low-priority GPU Pods first: it is the fastest, cheapest and fully reversible way to free a GPU. Record replica counts before scaling so the change can be undone, for example `kubectl -n BATCH_NS get deploy,statefulset -o jsonpath='{range .items[*]}{.kind}/{.metadata.name}={.spec.replicas}{"\n"}{end}' > batch-replicas.txt`. The holders are listed in step 2. See [[priority-classes-and-preemption]]. If no capacity can be found in time, route traffic to a fallback model or provider; see [[model-provider-failover-and-routing]].
 3. **Another zone.** Add or enable the pool in a zone that `accelerator-types list` shows and where the MIG has no errors. In a regional cluster, add the zone to `--node-locations` through Terraform. With a zonal volume for model weights, the Pod may be pinned to one zone; see [[stateful-workloads-gke]].

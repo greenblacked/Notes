@@ -1,6 +1,6 @@
 ---
 title: LLM serving latency regression on GKE
-description: Confirm a slowdown is server-side, split queue, prefill and decode time with vLLM metrics, then rule out traffic mix, KV cache pressure, prefix cache loss, changes, node faults, autoscaler lag and GPU contention.
+description: Confirm a slowdown is server-side, split queue, prefill and decode time with vLLM metrics
 type: runbook
 tags:
   - runbooks
@@ -296,7 +296,6 @@ Compare the time latency changed with the start times. Look for a new image tag 
 ```bash
 kubectl -n "$NS" get pods -l "$APP_LABEL" -o wide
 kubectl get nodes -L cloud.google.com/gke-nodepool,node.kubernetes.io/instance-type
-kubectl describe node "$NODE" | sed -n '/Conditions:/,/Addresses:/p;/Allocated resources:/,/Events:/p'
 ```
 
 Set `POD` to the slow pod (from the per-pod queries in step 1), then derive `NODE` from it. Do not reuse a `POD` left over from 4b unless it is the slow pod.
@@ -305,6 +304,7 @@ Set `POD` to the slow pod (from the per-pod queries in step 1), then derive `NOD
 POD=<slow pod from the per-pod query in step 1>
 NODE=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.spec.nodeName}')
 echo "$POD on $NODE"
+kubectl describe node "$NODE" | sed -n '/Conditions:/,/Addresses:/p;/Allocated resources:/,/Events:/p'
 ```
 
 Questions to answer: did a node pool upgrade, auto-repair or Spot reclamation move pods to new nodes ([[gke-node-pool-upgrade-strategies]])? Is the slow pod on a different machine type, GPU type or driver version than the healthy ones? Is the node under CPU or memory pressure, which slows tokenisation and request handling on the host ([[node-resource-pressure-triage]])? If one pod is slow and the cause is not visible, cordon its node and delete the pod so it is rescheduled; keep the node for investigation.

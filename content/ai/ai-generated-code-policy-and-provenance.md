@@ -123,7 +123,7 @@ import urllib.request
 API = os.environ["CI_API_V4_URL"]  # set by GitLab CI
 PROJECT_ID = os.environ["CI_PROJECT_ID"]
 MR_IID = os.environ["CI_MERGE_REQUEST_IID"]
-TOKEN = os.environ["POLICY_CHECK_TOKEN"]  # masked read_api token, no write scope
+TOKEN = os.environ["POLICY_CHECK_TOKEN"]  # read_api project access token (Reporter role, expiry set); masking only hides it in logs
 LABEL = os.environ.get("AI_LABEL", "ai-assisted")
 MIN_HUMAN_APPROVALS = int(os.environ.get("MIN_HUMAN_APPROVALS", "1"))
 
@@ -187,6 +187,8 @@ ai-mr-approval-check:
     - python3 scripts/check_ai_mr_approval.py
 ```
 
+This job runs code from the merge request branch, so anyone who can push a branch, an agent included, can read `POLICY_CHECK_TOKEN` or edit the job so it passes. Use a project access token for this project only, never a personal one. GitLab can limit a variable to protected branches and tags, but merge request pipelines can optionally access protected variables, so check that setting. To keep the check out of MR-controlled code, run it from pipeline configuration the merge request cannot change, such as a pipeline execution policy.
+
 Things to check before relying on it: the approvals endpoint and its `approved_by[].user` object (the documented example has no `bot` flag; the `author.bot` attribute is documented on the merge request object, not on approvers, so the bot filter may not exclude anything), and that the check re-runs when approvals change (a pipeline may not re-run on approval; this was not checked; use the approval rules and a merge-time gate as the real control, and treat this job as an early warning). A label is also set by the author, so pair it with a team norm and spot checks.
 
 ## Checklist
@@ -225,12 +227,13 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the GitLab API and CI var
 - [Merge requests API | GitLab](https://docs.gitlab.com/api/merge_requests/): the merge request object has `labels` as an array of label names and an `author` object with an `author.bot` attribute. Checked 2026-11-01, commit d7b9a61.
 - [Predefined CI/CD variables | GitLab](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_API_V4_URL`, `CI_PROJECT_ID` and `CI_MERGE_REQUEST_IID` exist with the meanings the script assumes. Checked 2026-11-01, commit d7b9a61.
 - [Job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/): `$CI_PIPELINE_SOURCE == "merge_request_event"` is the documented rule for merge request pipelines. Checked 2026-11-01, commit d7b9a61.
-- [CI/CD variables | GitLab](https://docs.gitlab.com/ci/variables/): variables can be masked. Checked 2026-11-01, commit d7b9a61.
+- [CI/CD variables | GitLab](https://docs.gitlab.com/ci/variables/): variables can be masked, and can be limited to protected branches and tags; the page says malicious code can compromise both masked and protected variables, and that merge request pipelines can optionally access protected variables (linked page not in the local checkout). Checked 2026-11-01, commit d7b9a61.
 - [REST API authentication | GitLab](https://docs.gitlab.com/api/rest/authentication/): most endpoints accept the `read_api` scope only for `GET` and `HEAD` requests. Checked 2026-11-01, commit d7b9a61.
 - [git-interpret-trailers | Git](https://git-scm.com/docs/git-interpret-trailers): trailers are key-value metadata at the end of a commit message, so a line such as `Assisted-by:` fits the mechanism. Checked 2026-11-01 against git commit 50fe5cc.
 
 ### Not verified
 
+- That a pipeline execution policy or compliance pipeline cannot be changed from a merge request branch, and the project access token role and expiry settings: not checked in local sources.
 - SLSA: the local SLSA checkout (commit 4d3f9d4) contains no spec documents, so the assumption that SLSA defines no AI provenance metadata was not checked.
 - Legal status and ownership of generated code, provider terms, and audit or control wording: counsel and the auditor decide; no local source covers them.
 - Whether a GitLab pipeline re-runs when approvals change: not found in the local documentation.

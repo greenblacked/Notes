@@ -1,11 +1,10 @@
 ---
 title: Quality regression after a model or prompt rollout
-description: Freeze changes, find what changed, confirm the regression with the golden set and sampled traces, roll back one change at a time, then root-cause it and add a regression case.
+description: Freeze changes, find what changed, confirm with the golden set and traces, roll back one change at a time, then root-cause it and add a regression case.
 type: runbook
 tags:
   - runbooks
   - ai
-  - evaluation
   - reliability
   - observability
 created: 2026-11-01
@@ -90,13 +89,16 @@ Treat a confirmed or likely regression as an incident with an owner. Then stop t
 ```bash
 # Pause an in-flight Deployment rollout, if one is running
 kubectl -n "$NS" rollout pause deployment/"$APP"
-# Freeze Argo CD auto-sync, if Argo CD manages the app
+# Record the Argo CD sync policy first, so you can restore it later
+mkdir -p evidence
+argocd app get "$ARGOCD_APP" -o yaml > evidence/argocd-app-before.yaml
+# Freeze Argo CD auto-sync, if Argo CD manages the app (this also drops self-heal and prune)
 argocd app set "$ARGOCD_APP" --sync-policy none
 # Check what automation could still change things: scheduled jobs, config reloaders
 kubectl get cronjob -A | grep -iE 'prompt|index|embed|eval'
 ```
 
-A paused Deployment does not roll out pod-template changes and cannot be rolled back until it is resumed, so Step 4 resumes it first. A sync freeze also stops Argo CD from applying your revert; re-enable sync or sync by hand in Step 4. See [[argocd-sync-failure-and-drift]].
+A paused Deployment does not roll out pod-template changes and cannot be rolled back until it is resumed, so Step 4 resumes it inside the rollback path you choose. A sync freeze also stops Argo CD from applying your revert; re-enable sync or sync by hand in Step 4. Whatever the outcome, undo both freezes with "Lift the freeze" after Step 6. See [[argocd-sync-failure-and-drift]].
 
 3. Record the time quality was last known good and the time the first report arrived. The window between them is where the cause sits.
 
@@ -180,7 +182,7 @@ Care with traces: they may hold personal data or confidential prompts. Use the a
 
 **Online signals.** Compare the same windows on the signals you already have: thumbs-down or edit rate, escalation to a human, retry rate, abandoned sessions, refusal rate, average output length and finish reasons (`gen_ai.response.finish_reasons` records why generation stopped; a rise in the provider's token-limit finish reason, for example `length`, means truncation). See [[model-degradation-detection]] for which signals to keep.
 
-Decide: **confirmed** (the golden set or the blind sample shows a drop, and an online signal agrees), **not confirmed** (nothing measurable moved; the reports may be about a different problem or a changed expectation), or **inconclusive** (go to more samples before undoing anything). If not confirmed, unfreeze changes, keep the incident open for a short observation window and report that no regression was measured, with the numbers.
+Decide: **confirmed** (the golden set or the blind sample shows a drop, and an online signal agrees), **not confirmed** (nothing measurable moved; the reports may be about a different problem or a changed expectation), or **inconclusive** (go to more samples before undoing anything). If not confirmed, lift the freeze (resume the Deployment and restore Argo CD sync, see "Lift the freeze" after step 6), keep the incident open for a short observation window and report that no regression was measured, with the numbers.
 
 ### 4. Roll back the single most likely change first
 
@@ -201,20 +203,24 @@ kubectl -n "$NS" get pods -l app="$APP" -o jsonpath='{range .items[*]}{.metadata
 
 Pick one of the three paths below and run only that one. Running two of them rolls back twice.
 
-```bash
-# A paused Deployment cannot be rolled back and ignores template changes. Resume only this Deployment.
-kubectl -n "$NS" rollout resume deployment/"$APP"
+A paused Deployment cannot be rolled back and ignores template changes, so each path resumes it at the point where the rollback can take effect. Do not resume earlier: the suspect version would finish rolling out while you wait.
 
+```bash
 # Path A: Helm-managed release (Argo CD does not own it)
+kubectl -n "$NS" rollout resume deployment/"$APP"
 helm -n "$NS" rollback "$RELEASE" "$REVISION" --wait --timeout 10m
 
 # Path B: plain Deployment, not managed by Helm or GitOps
+kubectl -n "$NS" rollout resume deployment/"$APP"
 kubectl -n "$NS" rollout undo deployment/"$APP"
 
 # Path C: GitOps (Argo CD owns the release). Revert in Git only, through a merge request.
 git -C "$CONFIG_DIR" revert --no-edit "$BAD_COMMIT"
 git -C "$CONFIG_DIR" push origin HEAD:revert-"$BAD_COMMIT"
 # Open a merge request, get the named approver to merge it, then sync (or re-enable auto-sync).
+# Only after Argo CD has synced the merged revert, resume the Deployment. While it is paused,
+# the reverted pod template will not roll out either.
+kubectl -n "$NS" rollout resume deployment/"$APP"
 
 # After any path: prove the change rolled out
 kubectl -n "$NS" rollout status deployment/"$APP" --timeout 10m
@@ -272,7 +278,7 @@ Check that:
 - the online signals (thumbs-down, escalation, refusal rate, output length, finish reasons) move back over a window long enough to be meaningful for your traffic;
 - no other signal got worse, in particular latency and cost (the old version may be slower or dearer); see [[llm-serving-latency-regression]] and [[llm-token-spend-spike]].
 
-If the rollback fixed it, keep the freeze for a short soak period, then lift it in a controlled order. If it did not, return to step 4 with the next candidate. If you have gone through all candidates, the cause is probably outside the change list: traffic mix, upstream data, the provider or the judge. Go back to the "we didn't change anything" list.
+If the rollback fixed it, keep the freeze for a short soak period, then lift it in a controlled order (see "Lift the freeze" after step 6). If it did not, return to step 4 with the next candidate. If you have gone through all candidates, the cause is probably outside the change list: traffic mix, upstream data, the provider or the judge. Go back to the "we didn't change anything" list.
 
 ### 6. Root cause and regression case
 
@@ -284,6 +290,26 @@ After service is restored and the freeze is lifted, find out why the regression 
 4. **Close the gate that failed.** Pin model versions, require an evaluation run on every prompt, system instruction, retrieval and decoding change, and compare against the last-good result before rollout; see [[llm-change-management-and-release-gates]] and [[model-version-pinning-and-upgrade-evals]]. Roll out in shadow or canary first and compare; see [[shadow-and-canary-evaluation-for-models]].
 5. **Close the telemetry gap**: record request and response model, prompt name and version, and retrieval configuration on every trace, so the next timeline takes minutes; see [[llm-observability-tracing-and-slos]].
 6. **Write the postmortem**, with the timeline, the measure that confirmed the regression, and what was not undoable; see [[postmortems-for-ai-involved-incidents]].
+
+### Lift the freeze
+
+Use this after the soak period, on the not-confirmed exit from step 3, and in Cleanup. Step 1 paused the Deployment and set Argo CD sync to none; neither undoes itself.
+
+```bash
+# Resume the Deployment only if it is still paused (.spec.paused is "true" when paused, empty otherwise)
+if [ "$(kubectl -n "$NS" get deployment/"$APP" -o jsonpath='{.spec.paused}')" = "true" ]; then
+  kubectl -n "$NS" rollout resume deployment/"$APP"
+fi
+
+# Restore the sync policy saved in step 1. Re-enable auto-sync only if the saved policy had
+# "automated"; an app that was on manual sync before the incident stays on manual sync.
+grep -A6 -E 'syncPolicy' evidence/argocd-app-before.yaml
+argocd app set "$ARGOCD_APP" --sync-policy automated   # only if the saved policy had automated
+# Add --self-heal and/or --auto-prune only if the saved policy had them
+argocd app get "$ARGOCD_APP"
+```
+
+Then lift the other freezes (prompt, retrieval, alias and guardrail changes) one team at a time.
 
 ## Validation
 
@@ -301,7 +327,7 @@ The steps above are themselves rollbacks. To undo a rollback that turns out to b
 - **Service or gateway:** `helm -n "$NS" rollback "$RELEASE"` to the revision before your rollback, or `kubectl -n "$NS" rollout undo deployment/"$APP"`, or revert the Git revert commit. Resume a paused Deployment first.
 - **Model pin:** change the pin back through the same configuration path, and re-run the evaluation set first.
 - **Cache purge:** cannot be undone. The cache refills from the model, which costs tokens and time. Do it in batches by prefix.
-- **Frozen changes:** lift the freeze one team at a time, and stop if the quality signals move.
+- **Frozen changes:** follow "Lift the freeze" after step 6, one team at a time, and stop if the quality signals move.
 
 Not undoable: outputs already sent to users or stored, actions taken on bad answers, a provider-side alias move, and the time the regression ran. See the list at the end of step 4.
 
@@ -351,7 +377,7 @@ Source-reviewed on 2026-11-01. Nothing was run and no live system was used. Read
 - That a provider-side floating alias can change the underlying model without a customer-side change, that earlier builds remain available to pin, and how long: provider behaviour was not checked. Ask the provider.
 - That your telemetry records `gen_ai.response.model`, `gen_ai.prompt.name` or `gen_ai.prompt.version`: these attributes exist in the conventions but are in development status, and tools may not emit them. The example `jq` filters assume a JSON-lines trace export with that shape, which is invented for the example.
 - The evaluation runner and its flags, the gateway ConfigMap layout and the cache key layout are illustrative stand-ins. The `redis-cli --scan`/`unlink` purge assumes a Redis cache, and its flags were not checked against Redis documentation.
-- `helm history --max`, `helm rollback --wait --timeout`, `helm get values --all` and `argocd app set --sync-policy`: no helm or Argo CD binary or docs were available, so flags were not checked.
+- `helm history --max`, `helm rollback --wait --timeout`, `helm get values --all`, `argocd app set --sync-policy none|automated`, `--self-heal`, `--auto-prune` and `argocd app get -o yaml`: no helm or Argo CD binary or docs were available, so flags and the layout of the saved `syncPolicy` were not checked.
 - The finish-reason string for a token-limit stop (often `length`) depends on the provider; the conventions show it only as an example.
 - Whether `seed` and `temperature` make a given provider's output reproducible: not checked and often false.
 - Thresholds for "recovered" (variance, sample size of 100, soak period) are not sourced; set them from your own measurements.
@@ -374,7 +400,7 @@ See Troubleshooting. Stop and escalate if: the regression cannot be confirmed wi
 
 ### Cleanup and rollback
 
-See Rollback. Delete the temporary clone of the prompt repository and any trace exports, which may contain personal data (`rm -rf /tmp/prompts-audit "$CONFIG_DIR" before.jsonl after.jsonl traces*.jsonl`) only after the regression cases are added and the postmortem is written; until then keep them in access-controlled incident storage, see [[llm-tracing-with-sensitive-data-controls]]. Lift the freeze in a controlled order, and record the final configuration in the incident record.
+See Rollback. Delete the temporary clone of the prompt repository and any trace exports, which may contain personal data (`rm -rf /tmp/prompts-audit "$CONFIG_DIR" before.jsonl after.jsonl traces*.jsonl`) only after the regression cases are added and the postmortem is written; until then keep them in access-controlled incident storage, see [[llm-tracing-with-sensitive-data-controls]]. Lift the freeze (see "Lift the freeze" after step 6: resume the Deployment, restore Argo CD sync) in a controlled order, and record the final configuration in the incident record.
 
 ## Sources
 

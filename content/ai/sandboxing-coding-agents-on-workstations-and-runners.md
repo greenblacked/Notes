@@ -62,6 +62,9 @@ The underlying commands are worth knowing, because every dev container tool ends
 set -euo pipefail
 
 REPO_DIR="$(git rev-parse --show-toplevel)"
+# The agent gets a throwaway clone, never the real .git directory (see "Git" below).
+AGENT_CLONE="$(mktemp -d /tmp/agent-clone.XXXXXX)"
+git clone --no-hardlinks "$REPO_DIR" "$AGENT_CLONE"
 AGENT_IMAGE="registry.example.com/platform/agent-sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000"  # change: your approved image digest
 PROXY_IMAGE="registry.example.com/platform/egress-proxy@sha256:0000000000000000000000000000000000000000000000000000000000000000"  # change: your Squid or proxy image digest
 
@@ -91,7 +94,7 @@ docker run --rm -it \
   --tmpfs /tmp:rw,mode=1777 \
   --tmpfs /home/agent:rw,mode=1777 \
   --env HOME=/home/agent \
-  -v "$REPO_DIR:/workspace" \
+  -v "$AGENT_CLONE:/workspace" \
   -w /workspace \
   "$AGENT_IMAGE"
 ```
@@ -99,7 +102,7 @@ docker run --rm -it \
 What each part does:
 
 - `--network agent-internal` with an `--internal` network: the container has no route to the internet. Host services listening on the bridge address (including `0.0.0.0` or `::` listeners) stay reachable unless the network is created with `-o com.docker.network.bridge.gateway_mode_ipv4=isolated` (and the `_ipv6` equivalent) or the host firewall blocks it, so keep sensitive local services off all-interface listeners. Its only way out to the internet is the proxy container, which holds the allowlist. Proxy environment variables alone are advisory (a process can ignore them); the internal network is what enforces it.
-- `-v "$REPO_DIR:/workspace"` is the only bind mount. No home directory, no `~/.kube`, no `~/.ssh`, no Docker socket.
+- `-v "$AGENT_CLONE:/workspace"` is the only bind mount, and it is a throwaway clone of the repository rather than the real working tree. No home directory, no `~/.kube`, no `~/.ssh`, no Docker socket. Mounting the real repository read-write would let the agent write `.git/hooks` or `core.hooksPath` and `core.fsmonitor` in `.git/config`; the next Git command on the host would then run that code outside the sandbox, and the change is untracked, so a diff review would not show it.
 - `--tmpfs /home/agent` gives tools a writable, empty, throwaway home.
 - `--cap-drop ALL`, `--security-opt no-new-privileges`, `--read-only` and a non-root `--user` remove the easy escalation paths.
 - The image contains the agent CLI and the repository's toolchain, built by the platform team and pinned by digest.
@@ -226,7 +229,17 @@ Mount the generated kubeconfig read-only, set `KUBECONFIG` to it inside the sand
 
 ### Git
 
-Give the sandbox no push credentials. The agent commits locally inside `/workspace`; the engineer reviews and pushes from the host. If an agent must open merge requests, use a project access token with the narrowest scope and an expiry, as in [[securing-ai-agents-in-ci-and-cloud]].
+Give the sandbox no push credentials. The agent commits locally inside `/workspace`, which is a throwaway clone. The engineer brings the commits into the real repository from the host with hooks and the file system monitor disabled, reviews them, and pushes from the host:
+
+```bash
+AGENT_CLONE=/tmp/agent-clone.k3Xa9Q   # the directory agent-sandbox.sh created
+git -c core.hooksPath=/dev/null -c core.fsmonitor=false fetch "$AGENT_CLONE" HEAD
+git -c core.hooksPath=/dev/null -c core.fsmonitor=false log --stat FETCH_HEAD
+```
+
+Never run Git on the host inside the agent's clone, and delete the clone after the session. If you do mount the real repository read-write instead (for example with the dev container's default `workspaceMount`, which binds `${localWorkspaceFolder}`), inspect `.git/hooks` and `.git/config` (`core.hooksPath`, `core.fsmonitor`, `include.path`, alias entries) before any Git command on the host after a session, or run Git with the two `-c` options above.
+
+If an agent must open merge requests, use a project access token with the narrowest scope and an expiry, as in [[securing-ai-agents-in-ci-and-cloud]].
 
 ## Runners: the same rules on GKE
 
@@ -348,6 +361,7 @@ Source-reviewed on 2026-11-01. Nothing was run. The review covered the documente
 - gcloud SDK 570.0.0 `--help` output (`gcloud auth print-access-token`, `gcloud config`, `gcloud container node-pools create`): `--impersonate-service-account` and `--access-token-file` are global flags; `--lifetime` defaults to 3600 seconds and requires impersonation; `auth/access_token_file` property; `--sandbox=[type=TYPE]` with `gvisor` the only supported type; `--image-type`, `--num-nodes`. Checked 2026-11-01 against the installed SDK; no credentials or API calls were used.
 - [google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster): `sandbox_config` requires the `COS_CONTAINERD` image type; an `agent_sandbox_config` add-on exists. Checked 2026-11-01 against terraform-provider-google commit c4248bd.
 - [Project access tokens](https://docs.gitlab.com/user/project/settings/project_access_tokens/): scoped to one project, selectable scopes, expiration dates. Checked 2026-11-01 against gitlabhq/gitlabhq commit d7b9a61.
+- [git-config core.hooksPath](https://git-scm.com/docs/git-config) and [githooks](https://git-scm.com/docs/githooks): hooks are looked up in `$GIT_DIR/hooks` or the `core.hooksPath` directory; setting `core.hooksPath` to `/dev/null` disables all hooks, advisable per command as `git -c core.hooksPath=/dev/null ...`; `core.fsmonitor` can name a hook command. Checked 2026-11-01 against git/git commit 50fe5cc.
 - [gitcredentials](https://git-scm.com/docs/gitcredentials): Git obtains credentials through configurable credential helpers. Checked 2026-11-01 against git/git commit 50fe5cc.
 
 ### Not verified
@@ -356,6 +370,7 @@ Source-reviewed on 2026-11-01. Nothing was run. The review covered the documente
 - Google Cloud documentation was not reachable: the need for `roles/iam.serviceAccountTokenCreator` (and that Service Account User is not enough), IAM Data Access audit logging of token creation, the GKE Sandbox requirements and limits (a node pool without the sandbox for system workloads, Autopilot behaviour, no hostPath or privileged pods, no node metadata server access, Workload Identity Federation for GKE), and the GKE Sandbox how-to itself.
 - The GitLab Runner Kubernetes executor setting `runtime_class_name`: runner documentation is not in the local GitLab docs.
 - The `docker run` flag semantics used in the script (`--cap-drop`, `--security-opt no-new-privileges`, `--read-only`, `--tmpfs`, `--user`): the Docker CLI reference is not in the local docs checkout. The Squid configuration, the curl exit codes used in the self-check, and Podman rootless mode were also not checked.
+- That `git fetch` from the agent's clone runs none of that clone's hooks or configured commands: `core.hooksPath=/dev/null` and its per-command `-c` form are documented, but the fetch behaviour and `core.fsmonitor=false` in this role are not covered by the local Git docs reviewed. Also not checked: whether `include.path` or alias entries in the clone's config can have any effect on the host.
 - `CLOUDSDK_*` environment variable names for gcloud properties and how client libraries consume an access token.
 - Engineering guidance, not a documented claim: the isolation-level ranking, the rollout and rollback approach, and the trade-offs section.
 - No performance figures are given because none were measured.

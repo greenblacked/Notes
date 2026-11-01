@@ -1,6 +1,6 @@
 ---
 title: GPU out of memory and KV cache exhaustion in model serving
-description: Tell CUDA out-of-memory on the GPU from a container OOMKilled on host RAM, fix start-up failures with the memory budget, and stop preemption storms when the KV cache fills under load.
+description: Tell GPU CUDA out-of-memory from a host-RAM OOMKilled container, fix start-up failures with the memory budget, and stop KV cache preemption storms under load.
 type: runbook
 tags:
   - runbooks
