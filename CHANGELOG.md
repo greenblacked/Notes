@@ -6,9 +6,17 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-01
+
 ### Added
 
+- **Four platform pattern notes:** namespace ResourceQuotas and LimitRanges, operating OpenTelemetry tail sampling, PostgreSQL autovacuum health and tuning, and adopting existing Google Cloud resources with Terraform import blocks.
 - **Branch-name check in CI.** A pull request into `main` fails CI OK unless its head branch is `<type>/<name>` (`build`, `chore`, `ci`, `docs`, `feat`, `feature`, `fix`, `perf`, `refactor`, `test` or `text`), `dependabot/...` or GitHub's `revert-<N>-...`. Any other prefix is refused, including one named after whatever created the branch, and a `text/` branch must be the single kebab segment that Text release accepts, so it can no longer pass CI and then silently not be released.
+
+### Changed
+
+- **Platform notes corrected and extended.** The quota example no longer injects a CPU limit it says it avoids, and the four new notes gain the tail sampler's shutdown and trace-size options, per-database transaction ID age and prepared transactions, and generated import configuration, identity import and a no-destroy `removed` rollback; each new claim records the documentation source it was checked against.
+- **AI notes no longer name AI vendors, models or assistants.** Links to vendors' own documentation are replaced by a pointer to the reader's provider or coding-agent documentation, with neutral OWASP, NIST or JSON Schema sources where a note needed one; cloud-platform documentation stays as an infrastructure reference.
 
 ## [0.10.0] - 2026-10-26
 
