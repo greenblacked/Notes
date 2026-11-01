@@ -8,14 +8,14 @@ tags:
   - policy-as-code
   - audit
 created: 2026-10-27
-modified: 2026-10-30
+modified: 2026-11-01
 draft: false
 ---
 
 This note covers the allow, ask and deny rules a coding agent checks before it runs a shell command, touches a file or calls an MCP tool: scoping, precedence and wildcards, reviewing rule changes, and auditing auto-approvals. It is for engineers who own agent configuration in shared repositories. It does not cover OS-level isolation ([[sandboxing-coding-agents-on-workstations-and-runners]]), egress filtering ([[agent-network-egress-controls]]), hook scripts ([[deterministic-hooks-for-coding-agents]]), vetting a server before you trust it ([[third-party-mcp-server-vetting]]) or organisation-wide managed policy ([[ai-coding-assistant-admin-controls]]). The wider model of what an agent may be authorised to do is in [[agent-tool-authorization-boundaries]].
 
 > [!note] Not verified
-> The tool documentation in Sources was not re-checked line by line. Rule grammar, precedence, mode names and version gates differ between tools and releases. Check your tool's current docs for: settings precedence; whether a trailing wildcard matches the bare command; handling of compound commands and leading environment assignments; MCP rule syntax; and which file rules also cover shell commands.
+> No tool's documentation was re-checked line by line. Rule grammar, precedence, mode names and version gates differ between tools and releases. Check your tool's current docs for: settings precedence; whether a trailing wildcard matches the bare command; handling of compound commands and leading environment assignments; MCP rule syntax; and which file rules also cover shell commands.
 
 ## Principles
 

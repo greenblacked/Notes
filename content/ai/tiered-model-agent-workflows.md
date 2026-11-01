@@ -8,14 +8,14 @@ tags:
   - reliability
   - team-process
 created: 2026-10-27
-modified: 2026-10-30
+modified: 2026-11-01
 draft: false
 ---
 
 This note covers how to split one coding-agent workflow across model tiers: a cheap, fast tier for read-only exploration, a mid tier for bounded implementation, and the strongest tier for ambiguous design and final review of risky diffs. It is for engineers and platform teams who run agent workflows by hand or in CI and want predictable cost and quality. It does not cover request-level routing for production applications ([[model-router-policy]]), provider failover ([[fallback-model-selection-and-quality-degradation]]) or per-call cost maths ([[per-request-cost-estimation]]).
 
 > [!note] Not verified
-> The sources below were found through search, but the pages could not be fetched on 2026-10-27. Before relying on this note, check: the current subagent configuration fields and model aliases in your harness docs, the current tier mapping and pricing for your provider, and whether the token-multiplier figures from the vendor's research post apply to coding work (they come from research tasks, not coding).
+> The sources below were found through search, but the pages could not be fetched on 2026-10-27. Before relying on this note, check: the current subagent configuration fields and model aliases in your harness docs, the current tier mapping and pricing for your provider, and whether published token-multiplier figures for multi-agent runs apply to coding work (those figures come from research tasks, not coding).
 
 ## Tier by subtask, not by project
 
@@ -92,7 +92,7 @@ The gate (`make check`) decides success, not the agent's own report. The loop al
 
 ## Cost is tokens per resolved task
 
-Price per token is only one input. A cheap model that reads the wrong files and sends a lossy summary costs more in retries and re-reading than one strong pass. Measure tokens and wall-clock per resolved task, split by tier, and compare against a single-tier baseline on a fixed task set. Multi-agent runs can use several times the tokens of a single chat session; the vendor research post reports large multiples for research workloads, but that is one internal evaluation, so measure your own. Tiering saves money only if the cheap tier really absorbs the volume.
+Price per token is only one input. A cheap model that reads the wrong files and sends a lossy summary costs more in retries and re-reading than one strong pass. Measure tokens and wall-clock per resolved task, split by tier, and compare against a single-tier baseline on a fixed task set. Multi-agent runs can use several times the tokens of a single chat session; published figures come from research workloads, not coding, so measure your own.
 
 Two further levers are separate from tiering: batch interfaces (discounted, asynchronous, unsuitable for interactive loops) and prompt caching (a stable system prompt and tool list make repeated calls on one tier cheaper, while very short one-off calls can lose). Verify current terms in provider docs. Budget limits belong in [[llm-api-cost-control]] and [[context-window-budgeting]].
 
@@ -105,7 +105,7 @@ Record, per artifact, which tier and pinned model ID produced it, the prompt or 
 - **Lossy handoff:** the cheap tier's summary omits a constraint and the mid tier implements against the wrong picture. Require summaries with an explicit "not determined" section ([[multi-agent-handoff-boundaries]]).
 - **Weak or same-tier reviewer:** the reviewer shares the author's blind spots. Review needs fresh context and, for risky changes, a stronger tier; treat "weaker reviewers miss more" as an inference to test, not a measured result.
 - **Hidden complexity:** a task that looked simple needs cross-module reasoning, so it escalates repeatedly and costs more than starting strong. Route by cross-file context, not line count.
-- **Coupled work split across tiers:** tightly coupled coding changes parallelise and delegate poorly; keep them in one context.
+- **Coupled work split across tiers:** tightly coupled coding changes usually parallelise and delegate poorly; keep them in one context.
 - **Unpinned aliases:** a tier alias moves to a new model and behaviour changes without review.
 - **No cap:** escalation loops until the budget is gone.
 
@@ -123,7 +123,7 @@ Record, per artifact, which tier and pinned model ID produced it, the prompt or 
 
 ## Sources
 
-- Your coding agent's own documentation for per-subagent model settings, alias resolution, batch and caching price modifiers. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
+- Your coding agent's and model provider's own documentation for per-subagent model settings, alias resolution, and batch and caching price modifiers. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance framing for deciding where model output needs independent checks and human sign-off.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

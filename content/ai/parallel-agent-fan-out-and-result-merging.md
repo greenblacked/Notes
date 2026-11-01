@@ -8,7 +8,7 @@ tags:
   - cost
   - reliability
 created: 2026-10-27
-modified: 2026-10-30
+modified: 2026-11-01
 draft: false
 ---
 
@@ -19,7 +19,7 @@ This note covers running several agents in parallel on independent subtasks and 
 
 ## Fan out only over independent work
 
-Parallel agents pay off when subtasks have disjoint file sets, no shared generated artifacts and no ordering dependency. Typical good splits: the same mechanical change applied to separate services, one test file per agent, independent documentation pages, read-only audits of different modules. Vendor guidance is that most coding tasks have fewer parallelisable pieces than research tasks, so default to serial work and fan out only when the split is obvious. If two subtasks both touch a lockfile, a route table, a generated client or an index file, they are not independent.
+Parallel agents pay off when subtasks have disjoint file sets, no shared generated artifacts and no ordering dependency. Typical good splits: the same mechanical change applied to separate services, one test file per agent, independent documentation pages, read-only audits of different modules. In practice most coding tasks have fewer independent pieces than research or audit tasks, so default to serial work and fan out only when the split is obvious. If two subtasks both touch a lockfile, a route table, a generated client or an index file, they are not independent.
 
 Write the split down before launching, as a manifest the orchestrator can check:
 

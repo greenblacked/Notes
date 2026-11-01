@@ -8,14 +8,14 @@ tags:
   - team-process
   - delivery
 created: 2026-10-27
-modified: 2026-10-30
+modified: 2026-11-01
 draft: false
 ---
 
 This note explains how to define "done" for a task handed to a coding agent, how to demand evidence for the claim, and how to treat missing evidence. It is for engineers and reviewers who merge agent-produced changes. It does not cover scoring agents over many tasks ([[task-success-evaluation-for-agents]]), generating tests ([[ai-assisted-test-generation-quality-gates]]) or bounding retries in depth ([[bounded-agent-loops-and-stop-conditions]]); those are linked where they apply. For the pipeline baseline, see [[ci-pipeline-standard]].
 
 > [!note] Not verified
-> Sources were found via search on 2026-10-27, but the pages could not be fetched. Before use, check: the current wording of the vendor best-practices page, whether named features such as a goal evaluator, a verify skill or a stop-event hook exist in your tool version, and the current branch protection and required status check behaviour for your hosting plan (it differs between cloud and self-managed editions).
+> Sources were found via search on 2026-10-27, but the pages could not be fetched. Before use, check: the current wording of your coding agent's best-practices documentation, whether named features such as a goal evaluator, a verify skill or a stop-event hook exist in your tool version, and the current branch protection and required status check behaviour for your hosting plan (it differs between cloud and self-managed editions).
 
 ## Define done before the work starts
 
@@ -26,7 +26,7 @@ This note explains how to define "done" for a task handed to a coding agent, how
 - CI job `unit` is green on the head SHA of the pushed branch.
 - `git grep OLD_API_NAME` returns nothing.
 
-Prefer checks the agent can run itself that give an unambiguous pass or fail: test suites, build exit codes, linters, fixture diffs. Vendor guidance treats this as one of the strongest levers on agent quality; an agent without such a signal can only guess. Copy the criteria into the pull request description so a reviewer can compare stated criteria with evidence.
+Prefer checks the agent can run itself that give an unambiguous pass or fail: test suites, build exit codes, linters, fixture diffs. Coding-agent guidance commonly treats this as one of the strongest levers on agent quality (check your tool's documentation); an agent without such a signal can only guess. Copy the criteria into the pull request description so a reviewer can compare stated criteria with evidence.
 
 ## Require evidence, not assertion
 

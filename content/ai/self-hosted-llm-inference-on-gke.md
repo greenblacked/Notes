@@ -13,7 +13,7 @@ modified: 2026-11-01
 draft: false
 ---
 
-A managed model API is the default: no GPUs to buy, no drivers to patch, no capacity to chase. Some workloads still belong inside your own cluster: data that may not leave the VPC, a steady high volume where per-token pricing loses to GPU-hours, a fine-tuned open-weights model, or latency that a shared public endpoint cannot hold. This note describes how to run that on GKE so it behaves like any other production service: a dedicated GPU node pool, a pinned model server with a standard chat-completions HTTP API that existing client SDKs can call, model weights loaded through Workload Identity, autoscaling on queue depth, Spot capacity with a safe floor, and a rollback that is one Service change.
+A managed model API is the default: no GPUs to buy, no drivers to patch, no capacity to chase. Some workloads still belong inside your own cluster: data that may not leave the VPC, a steady high volume where per-token pricing loses to GPU-hours, a fine-tuned open-weights model, or latency that a shared public endpoint cannot hold. This note describes how to run that on GKE so it behaves like any other production service: a dedicated GPU node pool, a pinned model server exposing the widely used chat-completions HTTP API, so existing client SDKs can call it unchanged, model weights loaded through Workload Identity, autoscaling on queue depth, Spot capacity with a safe floor, and a rollback that is one Service change.
 
 > [!info] Scope
 > GKE Standard, NVIDIA GPUs, and [vLLM](https://docs.vllm.ai/) as the model server. The same structure fits other servers (the GKE tutorials also use others), but the metric names and flags differ. No GPU prices, GPU memory sizes, model sizes or per-region availability are quoted: they change often and differ by region, so check the GKE GPU page and the pricing page for your region before sizing anything. Behind this service sits the shared gateway from [[llm-api-cost-control]]; clients never call the model server directly.
@@ -490,7 +490,7 @@ For general pod failures see [[kubernetes-pod-troubleshooting]]; for nodes under
 
 - [Run GPUs in GKE Standard node pools](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/gpus), Google Cloud documentation: quota, driver installation, taints.
 - [About GPUs in GKE](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/gpus), Google Cloud documentation.
-- [Serve Gemma open models using GPUs on GKE with vLLM](https://docs.cloud.google.com/kubernetes-engine/docs/tutorials/serve-gemma-gpu-vllm), Google Cloud tutorial (model and GPU lists change; read the current version).
+- [Serve open models using GPUs on GKE with vLLM](https://docs.cloud.google.com/kubernetes-engine/docs/tutorials/serve-gemma-gpu-vllm), Google Cloud tutorial (model and GPU lists change; read the current version).
 - [Best practices for autoscaling LLM inference workloads with GPUs](https://docs.cloud.google.com/kubernetes-engine/docs/best-practices/machine-learning/inference/autoscaling), Google Cloud documentation.
 - [Spot VMs in GKE](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/spot-vms), Google Cloud documentation: preemption notice and graceful shutdown.
 - [Cloud Storage FUSE CSI driver](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/cloud-storage-fuse-csi-driver), Google Cloud documentation.
