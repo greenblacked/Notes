@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-01
+
+### Added
+
+- **Six AI notes:** choosing prompting, retrieval, tools or fine-tuning; output guardrails and content filtering; synthetic data for AI evaluation; postmortems for AI-involved incidents; GPU sharing on Kubernetes; and local models on engineer workstations, which follows the data classification standard for what may reach a local model.
+
+### Changed
+
+- **AI index regrouped by what the reader is doing.** Twelve sections replace thirteen overlapping ones (adopt, run coding agents safely, agentic workflows, review AI-generated changes, operations and incidents, design, security, retrieval, evaluation, serving, production operations and governance), and Start here names four first reads after the learning track.
+- **Eight serving and platform notes are source-reviewed.** Their claims were checked against the documentation sources of Kubernetes, vLLM, the OpenTelemetry GenAI conventions and specification, Prometheus and the MCP specification at recorded commits, with corrections where the sources disagreed and GKE-dependent claims listed as not verified.
+
 ## [0.12.0] - 2026-11-01
 
 ### Added
