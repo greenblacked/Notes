@@ -6,19 +6,19 @@ tags:
   - learning
   - ai
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-01
 draft: false
 ---
 
 [[learn/index#AI practice track|Track overview]] · [[learn/ai/verified-troubleshooting|Previous: AI 02]] · [[learn/ai/evaluation-lab|Next: AI 04]]
 
-> [!info] Level: junior-middle | Time: 2 h | Prerequisites: [[learn/python-for-ops|Python for ops]] and [[learn/ai/introduction|AI 01]] | Lab: Python 3, standard library only
+> [!info] Level: junior-middle | Time: about 2 h | You need: [[learn/python-for-ops|Scripting 03: Python for ops]] and [[learn/ai/introduction|AI 01: Understand what an assistant can and cannot do]] | Lab: Python 3, standard library only
 
 ## What you will learn
 
 - Run a deterministic lexical retrieval baseline.
 - Inspect source IDs, scores and ranking changes.
-- Distinguish relevant passages from answerable questions.
+- Distinguish a relevant passage from one that answers the question.
 - Separate retrieval failures from generation failures.
 
 ## Retrieval first
@@ -69,13 +69,14 @@ Expected: the first query returns `backup` with score 2; the second returns `[]`
 
 **If you see something else:** check Python 3, spelling and the unchanged fixture. A shell closed since setup loses `AI_LAB_DIR`; rerun setup to create a fresh workspace.
 
-2. Add one document containing the word “restore” but no schedule. Repeat the first query and explain why a lexical hit is not evidence of answerability. Record ranking and source IDs before and after the change.
+2. Open `$AI_LAB_DIR/retrieve.py` in an editor and add `"restore": "Lantern restore needs an approved change ticket.",` to `DOCS`. Repeat the first query. Expected: `backup` score 2, then `restore` score 1. Explain why a lexical hit is not evidence of answerability, and record ranking and source IDs before and after the change.
 3. Optionally paste the returned passages into an approved assistant. Ask “What is the RTO?” and require either a source-supported answer or “not provided”. Expected: abstention even when `backup` was retrieved. No model or paid API is required to complete the retrieval exercise.
 4. Write two independent failure labels: retrieval missed a relevant passage; generation contradicted or exceeded a retrieved passage. Explain which component you would change for each.
 
 Clean up the lab file you created, then remove the empty directory:
 
 ```bash
+: "${AI_LAB_DIR:?set AI_LAB_DIR to the path printed at setup}"
 rm -- "$AI_LAB_DIR/retrieve.py"
 rmdir -- "$AI_LAB_DIR"
 unset AI_LAB_DIR
@@ -85,7 +86,10 @@ If you added other files, inspect them before removing anything else. Do not sub
 
 ## Common mistakes
 
-Calling token overlap semantic search; quoting a source ID without checking its text; treating a non-empty result as a supported answer; indexing private notes before deciding access and deletion rules.
+- **Calling token overlap semantic search.** The toy matches shared words only, so it misses paraphrases and rewards coincidences. Name the method accurately and measure it before comparing it with embeddings.
+- **Quoting a source ID without checking its text.** An ID looks like a citation but proves nothing about what the passage says. Open the retrieved text and confirm it supports the claim.
+- **Treating a non-empty result as a supported answer.** A relevant hit can still lack the fact asked for, as the RTO query shows. Require a supporting sentence or an explicit "not provided".
+- **Indexing private notes before deciding access and deletion rules.** Once text is in an index it is copied, searchable and hard to remove. Decide who may read it and how it is deleted first, and keep this lab synthetic.
 
 ## Check your understanding
 
@@ -103,14 +107,14 @@ Calling token overlap semantic search; quoting a source ID without checking its 
 
 ## Pass criteria
 
-Reproduce all three cases, explain the false implication from a relevant hit and retain the ranking experiment. Continue into [[ai/hybrid-search-for-rag|hybrid search]] only after you have a baseline to compare.
+Reproduce all three cases, explain the false implication from a relevant hit and retain the ranking experiment, and label one retrieval failure and one generation failure with the component you would change. Continue into [[ai/hybrid-search-for-rag|hybrid search]] only after you have a baseline to compare.
 
 ## Next steps
 
 [[learn/index#AI practice track|Track overview]] · [[learn/ai/verified-troubleshooting|Previous: AI 02]] · [[learn/ai/evaluation-lab|Next: AI 04]]
 
-After completing the pass criteria, keep your evidence log and continue to [[ai/index|the production AI reference notes]] for the boundaries your next project needs.
+After completing the pass criteria, keep your evidence log and continue to [[ai/index|the production AI reference notes]] for the boundaries your next project needs. The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 
-Concepts checked on 2026-10-27 against [NIST's Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf) and [OWASP's prompt-injection prevention guidance](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html). The exercises and grading criteria are this learning track's design. Model behaviour, privacy settings and account capabilities must be checked in the chosen tool. No model-backed runs or production validation are claimed here.
+Checked on 2026-10-27: [NIST AI 600-1, Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf) (July 2024) and the [OWASP LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html). Tokens, context windows, embeddings and sampling are general background, not tied to one source. The script uses the Python [`re`](https://docs.python.org/3/library/re.html) and [`json`](https://docs.python.org/3/library/json.html) modules and was tested on Python 3.13 on 2026-11-01. The exercises and grading criteria are this learning track's design. Model behaviour, privacy settings and account capabilities must be checked in the chosen tool. No model-backed runs or production validation are claimed here.

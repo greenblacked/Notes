@@ -5,7 +5,7 @@ tags:
   - learning
   - meta
 created: 2026-10-17
-modified: 2026-10-27
+modified: 2026-11-01
 draft: false
 ---
 
@@ -19,6 +19,7 @@ It is for people from their first job to middle level: new engineers, developers
 - **Or jump in.** Do the self-assessment below. If you score 3 on every row of a stage, skip that stage's lessons and read only the milestone. At 2, do the exercises as a test. Start at the first stage where you score below 3.
 - **Do the exercises.** Reading is not learning. Every lesson has numbered exercises with expected output and an "If you see something else" line for when it goes wrong.
 - **Keep a notes file** with the commands that worked. It becomes your own runbook.
+- **Using an AI assistant while you learn?** Ask it, then verify in your lab; the rules and the optional track are in [[learn/index#AI practice track|AI practice track]].
 
 > [!warning] The lab-first rule
 > Everything in this path runs in your lab, never on production or on a shared team system. The first lesson, [[learn/lab-setup|Start 01: Set up your lab]], builds a disposable Linux machine, local tools and a budgeted Google Cloud sandbox project. Do it before anything else. Cloud steps can cost money, and each says so and prints its cleanup command.
@@ -26,13 +27,13 @@ It is for people from their first job to middle level: new engineers, developers
 **What "middle level" means here.** A middle engineer owns a service end to end: they can ship a change through CI to Kubernetes on GCP, define the infrastructure as code, watch it with dashboards and alerts, take the pager, and write the postmortem. They work with little supervision on well-understood problems and ask early on new ones. The full expectations by level are in [[management/career-ladder-devops|the career ladder]].
 
 > [!note] How the lessons are written
-> Every lesson has the same shape: an opening callout with the level, time, prerequisites and lab; what you will learn; concept sections; hands-on exercises; common mistakes; check-your-understanding questions with folded answers; next steps; and sources. Time estimates are rough. Facts that depend on a tool version are flagged "Check before relying on this" or "verify for your version"; check them before relying on them.
+> Every lesson has the same shape: an opening callout with the level, time, what you need and the lab; what you will learn; concept sections; hands-on exercises; common mistakes; check-your-understanding questions with folded answers; next steps; and sources. Time estimates are rough. Facts that depend on a tool version are flagged "Check before relying on this" or "verify for your version"; check them before relying on them. The optional AI practice track lessons also have a `## Pass criteria` section after the exercises and their own track navigation (see [[learn/index#AI practice track|AI practice track]]).
 
 Level chips: `junior` can be done without prior experience of the topic; `junior-middle` needs the earlier stages and takes more thought; `middle` is the level of independent work, with trade-offs and judgement.
 
 ## Stages
 
-Each lesson shows its stage, its number in the path and the previous and next lesson at the top. Jump to a stage:
+Each core lesson shows its stage, its number in the path and the previous and next lesson at the top (the optional AI practice track has its own navigation, described below). Jump to a stage:
 
 - [Stage 0: Start](#stage-0-start)
 - [Stage 1: Linux](#stage-1-linux)
@@ -275,21 +276,21 @@ After week 14, do P6 (the recovery drill) and repeat the self-assessment. Lesson
 
 ## AI practice track
 
-Five additional lessons teach AI use as an engineering skill: understand the mechanism, verify claims, retrieve evidence and measure whether a change helps. This optional track complements the 64 DevOps lessons above; it does not change their stage numbers or the 14-week core schedule. No GPU, model download, paid API or cloud resources are required. Model exercises use an approved chat tool and synthetic data; the Python retrieval lab runs offline without dependencies.
+Five additional lessons teach AI use as an engineering skill: understand the mechanism, verify claims, retrieve evidence and measure whether a change helps. This optional track complements the 64 DevOps lessons above; it does not change their stage numbers or the 14-week core schedule. No GPU, model download, paid API or cloud resources are required. Model exercises use an approved chat tool (defined in [[learn/ai/introduction|AI 01]]) and synthetic data; the Python retrieval lab runs offline without dependencies.
 
 | Lesson                                                                                      | When to take it                             | Artifact you keep                                                             |
 | ------------------------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------- |
-| [[learn/ai/introduction\|AI 01: Understand what an assistant can and cannot do]]            | After lab setup                             | Evidence log and model/tool boundary sketch                                   |
-| [[learn/ai/verified-troubleshooting\|AI 02: Troubleshoot with evidence instead of guesses]] | After troubleshooting and Kubernetes probes | Three diagnostic runs, including missing evidence and an untrusted log        |
-| [[learn/ai/retrieval-lab\|AI 03: Build a tiny retrieval lab before adding a model]]         | After Python for ops                        | Runnable retrieval baseline and ranking experiment                            |
+| [[learn/ai/introduction\|AI 01: Understand what an assistant can and cannot do]]            | After Start 01                              | Evidence log and model/tool boundary sketch                                   |
+| [[learn/ai/verified-troubleshooting\|AI 02: Troubleshoot with evidence instead of guesses]] | After Incidents 01, Kubernetes 05 and AI 01 | Three diagnostic runs, including missing evidence and an untrusted log        |
+| [[learn/ai/retrieval-lab\|AI 03: Build a tiny retrieval lab before adding a model]]         | After Scripting 03 and AI 01                | Runnable retrieval baseline and ranking experiment                            |
 | [[learn/ai/evaluation-lab\|AI 04: Measure answer quality with a small evaluation set]]      | After AI 03                                 | Fixed cases, 18 baseline results and a regression comparison                  |
-| [[learn/ai/capstone\|AI 05: Deliver a reviewable incident-assistant capstone]]              | After AI 01–04 and incident response        | Reviewed scope, evaluation report, manual baseline and tested prompt rollback |
+| [[learn/ai/capstone\|AI 05: Deliver a reviewable incident-assistant capstone]]              | After AI 01–04 and Incidents 02             | Reviewed scope, evaluation report, manual baseline and tested prompt rollback |
 
-Allow roughly 10 to 12 additional hours, including review, spread over two or three weeks. These are planning estimates. Start AI 01 early; return to the later lessons once their prerequisites are comfortable.
+Allow roughly 13 to 16 additional hours, including review, spread over two to four weeks. These are rough planning estimates. Start AI 01 early; return to the later lessons once their prerequisites are comfortable. Without access to an approved chat tool you can prepare every fixture, but you cannot complete AI 04, AI 05 or the track.
 
-**Self-assessment:** can you distinguish a supplied fact from an inference, explain why a retrieved document may not answer a question, refuse an unsupported fix, and show a failed evaluation case? Score each from 0 (new) to 3 (can demonstrate unaided). At 0–1, take the relevant lesson; at 2, attempt its exercise first; at 3, show its pass evidence and move on.
+**Self-assessment:** can you distinguish a supplied fact from an inference, explain why a retrieved document may not answer a question, refuse an unsupported fix, and show a failed evaluation case? Score each with the scale above (0 I have not done it … 3 I could teach it): fact versus inference (AI 01), retrieved but not answering (AI 03), refusing an unsupported fix (AI 02), showing a failed evaluation case (AI 04). At 0–1 take the lesson; at 2 attempt its exercise first; at 3 show its pass evidence and move on.
 
-**Completion milestone:** a peer can reproduce your synthetic incident evaluation, trace accepted claims to sources and check your prompt rollback. A polished answer without these artifacts does not complete the track. Keep failed runs. Never paste credentials, customer data or employer configuration into an unapproved tool.
+**Completion milestone:** a peer can reproduce your synthetic incident evaluation, trace accepted claims to sources and check your prompt rollback. A polished answer without these artifacts does not complete the track. Keep failed runs. Never paste secrets or credentials into any AI tool, approved or not. Keep customer data, internal hostnames and real employer configuration out of any tool your employer has not approved for that data class, and treat generated commands as untrusted until you understand and have tested them in your lab.
 
 For advanced production designs after the labs, continue with [[ai/index|AI in DevOps]]. The owner's skills catalogue is at <https://ai.szolotov.com>.
 

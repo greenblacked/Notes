@@ -6,7 +6,7 @@ tags:
   - standards
   - meta
 created: 2026-10-10
-modified: 2026-10-20
+modified: 2026-11-01
 verified: 2026-10-11
 draft: false
 ---
@@ -221,6 +221,8 @@ Notes in `learn/` are lessons: `type: guide`, tag `learning` plus the platform a
 6. `## Check your understanding`: four to six questions, with the answers in a folded `> [!question]- Answers` callout.
 7. `## Next steps`: the next lesson and the senior notes for going deeper.
 8. `## Sources`: official documentation first, with the version checked.
+
+Lessons with graded exercises (the AI practice track) may add `## Pass criteria` after the exercises.
 
 Add `verified` only when the commands were actually run, and give the distro and tool versions. Lessons keep using `verified`; they may also declare `evidence` (see Evidence levels). Paid cloud steps get a `> [!warning] Costs money` callout with the cleanup command next to them. Use example domains and the documentation address ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24), never real addresses.
 
