@@ -70,13 +70,14 @@ promote-model:
 
 ### Data classes allowed
 
-Map each class in [[data-classification-and-handling-standard]] to what may reach a local model. A workable default:
+Map each class in [[data-classification-and-handling-standard]] to what may reach a local model. These rules follow the standard; where they differ, the standard wins:
 
-| Class                                             | Local model use                                        |
-| ------------------------------------------------- | ------------------------------------------------------ |
-| Public, internal code and docs                    | Allowed on an approved, encrypted, managed device      |
-| Confidential                                      | Only with owner sign-off and the controls named in it  |
-| Restricted (customer PII, credentials, regulated) | Not in local prompts, caches or logs without a control |
+| Class        | Local model use                                                                                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public       | Allowed on an approved, encrypted, managed device                                                                                                                                                 |
+| Internal     | Only through a local tool that is on the approved list, on an approved, encrypted, managed device                                                                                                 |
+| Confidential | The standard allows it only in approved tools behind the gateway's redaction; a local model bypasses the gateway, so it is not allowed unless an approved exception records an equivalent control |
+| Restricted   | **Never**: not in local prompts, caches, logs, fine-tuning data or files on the workstation. The standard allows no Restricted data on workstations or in AI tools, and a local model is both     |
 
 Prompt caches, conversation history and logs are data at rest on the same disk. Redact before calls where the class demands it ([[redacting-sensitive-data-before-llm-calls]]). Content capture in traces is opt-in and may contain personal data, so the local default is metadata only: model, token counts, latency, errors. Enabling content capture needs a classification decision ([[llm-tracing-with-sensitive-data-controls]]).
 
@@ -169,7 +170,7 @@ Local fits individual experimentation and personal work inside the data-class li
 - Weights are pulled by name from a public page; the file changes or is tampered with and nobody notices.
 - A pickle-based checkpoint is loaded before any scan.
 - A model's licence forbids the intended use, discovered after code ships.
-- Restricted data lands in prompt caches or logs on an unencrypted disk.
+- Restricted data reaches a local model at all, in prompts, caches or logs. The standard never allows it on a workstation or in an AI tool, encrypted disk or not.
 - Content capture is switched on for debugging and never switched off.
 - An engineer clusters two machines for more memory, exposing unauthenticated inter-node traffic.
 - Stale runtimes keep running long after a security fix.
