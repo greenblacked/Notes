@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-01
+
+### Added
+
+- **AI and inference runbooks.** Six step-by-step procedures in a new runbooks section: LLM serving latency regression on GKE, GPU out of memory and KV cache exhaustion, GPU Pods Pending on GKE, quality regression after a model or prompt rollout, LLM token spend spikes, and 429 retry storms. Each captures evidence before any traffic-affecting step, says what its rollback cannot undo, and records what was checked against which source and what was not verified. The section also links the existing provider outage and runaway agent procedures.
+
+### Changed
+
+- **Ten more AI notes are source-reviewed**, the most linked ones, so 21 AI notes now carry checked evidence. Their claims were checked against the documentation sources of Kubernetes, OpenTelemetry, Prometheus, the MCP specification, OWASP, SLSA, Docker, Git, GitLab and the Google API definitions at recorded commits.
+
+### Fixed
+
+- **Runaway or compromised agent:** removing RBAC bindings does not revoke ServiceAccount tokens already issued; they stay valid until they expire, and deleting the Pod or re-creating the ServiceAccount is what invalidates them.
+- **Sandboxing coding agents:** the agent now works in a throwaway clone, and its commits are fetched with Git hooks and the file system monitor disabled, so it cannot plant code that the engineer's next Git command runs on the host. The internal Docker network also uses bridge gateway mode `isolated`, so host services are no longer reachable from the sandbox.
+- **AI-generated code policy:** the merge request check now warns that its token is readable by anyone who can push a branch, the agent included, and says to run the check from pipeline configuration the merge request cannot change.
+
 ## [0.13.0] - 2026-11-01
 
 ### Added
