@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Added
+
+- **Branch-name check in CI.** A pull request into `main` fails CI OK unless its head branch is `<type>/<name>` (`build`, `chore`, `ci`, `docs`, `feat`, `feature`, `fix`, `perf`, `refactor`, `test` or `text`), `dependabot/...` or GitHub's `revert-<N>-...`. Any other prefix is refused, including one named after whatever created the branch, and a `text/` branch must be the single kebab segment that Text release accepts, so it can no longer pass CI and then silently not be released.
+
 ## [0.10.0] - 2026-10-26
 
 ### Added
