@@ -129,18 +129,18 @@ Then check the logs, which are more reliable than one probe:
 ```bash
 # Gateway: which component rejected, and with what reason
 # (-l reads every matching pod; "deploy/NAME" would read only one pod. Lines that are not JSON are skipped.)
-kubectl -n "$NS" logs -l "$GW_LABEL" --since=15m --prefix --max-log-requests=20 \
+kubectl -n "$NS" logs -l "$GW_LABEL" --since=15m --tail=-1 --prefix --max-log-requests=20 \
   | sed 's/^[^ ]* //' \
   | jq -R -c 'fromjson? | select(.status==429) | {ts, key_id, team, model, limit: .limit_reason, upstream: .upstream_status, retry_after: .retry_after_s}' \
   | head -20
 
 # Same, restricted to one key, to follow a single caller
-kubectl -n "$NS" logs -l "$GW_LABEL" --since=15m --prefix --max-log-requests=20 \
+kubectl -n "$NS" logs -l "$GW_LABEL" --since=15m --tail=-1 --prefix --max-log-requests=20 \
   | sed 's/^[^ ]* //' \
   | jq -R -c --arg k "$KEY_ID" 'fromjson? | select(.status==429 and .key_id==$k)' | head -5
 
 # Count by limit_reason, and by whether the upstream was even called
-kubectl -n "$NS" logs -l "$GW_LABEL" --since=15m --prefix --max-log-requests=20 \
+kubectl -n "$NS" logs -l "$GW_LABEL" --since=15m --tail=-1 --prefix --max-log-requests=20 \
   | sed 's/^[^ ]* //' \
   | jq -R -r 'fromjson? | select(.status==429) | [.limit_reason // "none", (.upstream_status // "not-called" | tostring)] | @tsv' \
   | sort | uniq -c | sort -rn
@@ -221,10 +221,10 @@ Look for these amplifiers in the client code and config, then confirm in its log
 | Fan-out of one task             | One user action creates many parallel calls (tool calls, map steps, chunks) that all hit the limit.                                                                                   |
 
 ```bash
-kubectl -n "$APP_NS" logs -l app="$APP" --since=15m --prefix --max-log-requests=50 \
+kubectl -n "$APP_NS" logs -l app="$APP" --since=15m --tail=-1 --prefix --max-log-requests=50 \
   | grep -E '429|Too Many|retry|backoff' | tail -30
 
-kubectl -n "$APP_NS" logs -l app="$APP" --since=15m --max-log-requests=50 \
+kubectl -n "$APP_NS" logs -l app="$APP" --since=15m --tail=-1 --max-log-requests=50 \
   | jq -R -r 'fromjson? | select(.msg=="llm retry") | [.ts, .attempt, .delay_ms, .retry_after_s] | @tsv' | head -20
 ```
 
@@ -240,8 +240,8 @@ Do these in order, cheapest and most reversible first. Each one reduces load; st
 
 ```bash
 mkdir -p "$INC_DIR"
-kubectl -n "$APP_NS" logs -l app="$APP" --since=30m --prefix --max-log-requests=50 > "$INC_DIR/$APP-logs.txt"
-kubectl -n "$NS" logs -l "$GW_LABEL" --since=30m --prefix --max-log-requests=20 > "$INC_DIR/gateway-logs.txt"
+kubectl -n "$APP_NS" logs -l app="$APP" --since=30m --tail=-1 --prefix --max-log-requests=50 > "$INC_DIR/$APP-logs.txt"
+kubectl -n "$NS" logs -l "$GW_LABEL" --since=30m --tail=-1 --prefix --max-log-requests=20 > "$INC_DIR/gateway-logs.txt"
 kubectl -n "$APP_NS" get deploy "$APP" -o yaml > "$INC_DIR/$APP-deploy-before.yaml"
 kubectl -n "$APP_NS" get hpa -o yaml > "$INC_DIR/hpa-before.yaml"
 kubectl -n "$APP_NS" get cronjob,job -o wide > "$INC_DIR/cronjobs-before.txt"
@@ -422,6 +422,7 @@ Then run a controlled load test in staging at 1.5x the expected peak. Confirm th
 
 ### Sources checked
 
+- [kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/): with a label selector and no `--tail`, kubectl returns only the last 10 lines per pod even when `--since` is set; `--tail=-1` lifts that cap. Checked 2026-11-01 in the kubectl source, `pkg/cmd/logs/logs.go` (`selectorTail = 10` and the `--tail` flag help), kubernetes/kubectl commit 8f64009.
 - [Prometheus querying functions](https://prometheus.io/docs/prometheus/latest/querying/functions/) and [operators](https://prometheus.io/docs/prometheus/latest/querying/operators/): `rate()`, `topk`, `sum by`, and the `offset` modifier (querying basics). Checked 2026-11-01 in the Prometheus repository docs, commit ef78ff6.
 - [OpenTelemetry semantic conventions for generative AI](https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai): `error.type` (conditionally required when the operation ends in an error; should match the error code returned by the provider or client library), `gen_ai.request.model`, `gen_ai.provider.name` (Development); `error.type` is Stable. The inference span document (docs/gen-ai/client-inference.md) is Development. Checked 2026-11-01 in the local semantic-conventions checkout, commit 244465e.
 - [Kubernetes Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) (default RollingUpdate: 25% max unavailable, 25% max surge), [CronJob](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) (unsuspending without a starting deadline schedules missed Jobs immediately) and [Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/) (an HPA manages the Deployment's `replicas`). Checked 2026-11-01 in the local website checkout, commit 491f14e: concepts/workloads/controllers/deployment.md, concepts/workloads/controllers/cron-jobs.md, concepts/workloads/autoscaling/horizontal-pod-autoscale.md.

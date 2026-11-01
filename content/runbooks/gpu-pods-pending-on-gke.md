@@ -240,10 +240,13 @@ kubectl -n "$DRIVER_NS" logs "$DRIVER_POD" --all-containers --previous > driver-
 gcloud compute instances get-serial-port-output "$N" --zone "$ZONE" > serial.txt
 kubectl cordon "$N"
 kubectl drain "$N" --ignore-daemonsets --delete-emptydir-data --timeout=10m
-gcloud compute instance-groups managed delete-instances MIG_NAME --instances "$N" --zone "$ZONE"
+MIG="$(gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
+  --format="value(instanceGroupUrls)" | tr ';' '\n' | grep "/zones/$ZONE/" | xargs -n1 basename)"
+echo "MIG=$MIG"   # exactly one name; the node must be in $ZONE
+gcloud compute instance-groups managed recreate-instances "$MIG" --instances "$N" --zone "$ZONE"
 ```
 
-`MIG_NAME` is a managed instance group name from `mig-urls.txt` in step 6.
+`recreate-instances` deletes the VM and creates a new one from the group's current instance template, so the pool keeps its size. Do not use `delete-instances` here: it deletes the VM and reduces the group's target size, so no replacement node is created. `$MIG` is the pool's managed instance group in `$ZONE`; check the node is in that zone first (`kubectl get node "$N" -L topology.kubernetes.io/zone`).
 
 If one node differs from the rest of the pool, treat it as a node fault: cordon it, capture the evidence above, let the pool replace it, and see [[gke-node-notready-triage]].
 
@@ -431,6 +434,7 @@ Source-reviewed on 2026-11-01. Nothing was run and no cluster or Google Cloud pr
 
 ### Sources checked
 
+- `gcloud compute instance-groups managed recreate-instances --help` and `delete-instances --help` (SDK 570.0.0): recreate deletes the VM and creates it again from the current instance template; delete removes it and reduces the group size. Checked 2026-11-01.
 - [Schedule GPUs | Kubernetes](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/): GPUs are exposed as custom resources such as `nvidia.com/gpu` by a vendor device plugin after the administrator installs the driver; GPUs go in `limits`, `requests` may be omitted or must equal `limits`, `requests` alone is not allowed; labelling nodes by accelerator type and selecting with node selectors, and that the label key in the page is only an example. Checked 2026-11-01 against the Kubernetes website repository, commit 491f14e.
 - [Device Plugins | Kubernetes](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/): a device plugin registers with the kubelet and advertises a resource; an unhealthy device lowers the allocatable count while capacity is unchanged; plugins are expected to re-register after a kubelet restart. Checked 2026-11-01, commit 491f14e.
 - [Taints and Tolerations | Kubernetes](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/): a pod needs a matching toleration to schedule onto a tainted node; tainting special hardware with the extended resource name together with the `ExtendedResourceToleration` admission controller adds the toleration to pods that request it. Checked 2026-11-01, commit 491f14e.

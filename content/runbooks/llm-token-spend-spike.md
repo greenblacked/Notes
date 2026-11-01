@@ -168,7 +168,7 @@ q 'sum by (team, key_id) (increase(llm_gateway_tokens_total[1h])) unless sum by 
 For the requests behind the key, use the gateway log first, because it is cheap and holds the caller metadata:
 
 ```bash
-kubectl -n "$NS" logs -l app.kubernetes.io/name=llm-gateway --since=1h --max-log-requests=50 --prefix=false \
+kubectl -n "$NS" logs -l app.kubernetes.io/name=llm-gateway --since=1h --tail=-1 --max-log-requests=50 --prefix=false \
   | jq -c --arg k "$KEY_ID" 'select(.key_id==$k) | {ts, route, model, status, in_tok: .input_tokens, out_tok: .output_tokens, client: .user_agent, ip: .client_ip}' \
   | head -20
 ```
@@ -290,7 +290,7 @@ Capture before logs and traces age out, and before any restart changes state. St
 ```bash
 mkdir -p "evidence-$INCIDENT" && cd "evidence-$INCIDENT"
 q 'sum by (team, key_id, model, direction) (increase(llm_gateway_tokens_total[6h]))' > tokens-by-key-6h.tsv
-kubectl -n "$NS" logs -l app.kubernetes.io/name=llm-gateway --since=6h --max-log-requests=50 --prefix=false \
+kubectl -n "$NS" logs -l app.kubernetes.io/name=llm-gateway --since=6h --tail=-1 --max-log-requests=50 --prefix=false \
   | jq -c --arg k "$KEY_ID" 'select(.key_id==$k)' > gateway-log-key.jsonl
 test -s gateway-log-key.jsonl || echo 'EMPTY EVIDENCE'
 # Pods that restarted in the window are missing above; on GKE also export from Cloud Logging:
@@ -345,7 +345,7 @@ The factor, the floor of 500 tokens per second and the `for` duration are exampl
 q 'sum(rate(llm_gateway_tokens_total[5m]))'                       # back near the 7-day baseline
 q "sum by (key_id) (rate(llm_gateway_tokens_total{key_id=\"$KEY_ID\"}[5m]))"   # at or below its cap, or no series if disabled
 q 'sum(rate(llm_gateway_requests_total{status=~"5.."}[5m]))'        # no new error wave from the containment
-kubectl -n "$NS" logs -l app.kubernetes.io/name=llm-gateway --since=15m --max-log-requests=50 --prefix=false | jq -c --arg k "$KEY_ID" 'select(.key_id==$k)' | wc -l   # all replicas
+kubectl -n "$NS" logs -l app.kubernetes.io/name=llm-gateway --since=15m --tail=-1 --max-log-requests=50 --prefix=false | jq -c --arg k "$KEY_ID" 'select(.key_id==$k)' | wc -l   # all replicas
 ```
 
 Then confirm with the owner that their service works under the final limits, and that the next provider usage export matches the gateway counters. The incident is over when the rate is at baseline for a full day-part and the alert has resolved without a silence.
@@ -387,6 +387,7 @@ Then confirm with the owner that their service works under the final limits, and
 
 ### Sources checked
 
+- [kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/): with a label selector and no `--tail`, kubectl returns only the last 10 lines per pod even when `--since` is set; `--tail=-1` lifts that cap. Checked 2026-11-01 in the kubectl source, `pkg/cmd/logs/logs.go` (`selectorTail = 10` and the `--tail` flag help), kubernetes/kubectl commit 8f64009.
 - [OpenTelemetry semantic conventions for generative AI](https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai): span attributes `gen_ai.usage.input_tokens` (includes cached tokens), `gen_ai.usage.output_tokens`, `gen_ai.usage.cache_read.input_tokens`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.operation.name`, `gen_ai.conversation.id`, `error.type`, with `gen_ai.agent.name` as an agent-span (`invoke_agent`) and `execute_tool` attribute, not a model-call one; the metrics `gen_ai.client.inference.usage.input_tokens` and `gen_ai.client.inference.usage.output_tokens` (Counter, unit `{token}`, attribute `gen_ai.token.modality`); status Development. Checked 2026-11-01 in the local semantic-conventions checkout, commit 244465e.
 - [Prometheus querying functions](https://prometheus.io/docs/prometheus/latest/querying/functions/) and [operators](https://prometheus.io/docs/prometheus/latest/querying/operators/): `rate()`, `increase()`, `topk`, `sum by`, and the `offset` modifier in the querying basics. Checked 2026-11-01 in the Prometheus repository docs, commit ef78ff6.
 - [Prometheus alerting rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/) and promtool: `for`, `labels`, `annotations` and label templating in `alerting_rules.md`, `promtool check rules` and `promtool test rules` in `command-line/promtool.md` and `configuration/unit_testing_rules.md`. Checked 2026-11-01, commit ef78ff6. Operators docs also checked for one-to-one vector matching, which drops unmatched series.
