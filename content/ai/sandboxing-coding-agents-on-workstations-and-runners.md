@@ -62,6 +62,9 @@ The underlying commands are worth knowing, because every dev container tool ends
 set -euo pipefail
 
 REPO_DIR="$(git rev-parse --show-toplevel)"
+# The agent gets a throwaway clone, never the real .git directory (see "Git" below).
+AGENT_CLONE="$(mktemp -d /tmp/agent-clone.XXXXXX)"
+git clone --no-hardlinks "$REPO_DIR" "$AGENT_CLONE"
 AGENT_IMAGE="registry.example.com/platform/agent-sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000"  # change: your approved image digest
 PROXY_IMAGE="registry.example.com/platform/egress-proxy@sha256:0000000000000000000000000000000000000000000000000000000000000000"  # change: your Squid or proxy image digest
 
@@ -91,7 +94,7 @@ docker run --rm -it \
   --tmpfs /tmp:rw,mode=1777 \
   --tmpfs /home/agent:rw,mode=1777 \
   --env HOME=/home/agent \
-  -v "$REPO_DIR:/workspace" \
+  -v "$AGENT_CLONE:/workspace" \
   -w /workspace \
   "$AGENT_IMAGE"
 ```
@@ -99,7 +102,7 @@ docker run --rm -it \
 What each part does:
 
 - `--network agent-internal` with an `--internal` network: the container has no route to the internet. Host services listening on the bridge address (including `0.0.0.0` or `::` listeners) stay reachable unless the network is created with `-o com.docker.network.bridge.gateway_mode_ipv4=isolated` (and the `_ipv6` equivalent) or the host firewall blocks it, so keep sensitive local services off all-interface listeners. Its only way out to the internet is the proxy container, which holds the allowlist. Proxy environment variables alone are advisory (a process can ignore them); the internal network is what enforces it.
-- `-v "$REPO_DIR:/workspace"` is the only bind mount. No home directory, no `~/.kube`, no `~/.ssh`, no Docker socket.
+- `-v "$AGENT_CLONE:/workspace"` is the only bind mount, and it is a throwaway clone of the repository rather than the real working tree. No home directory, no `~/.kube`, no `~/.ssh`, no Docker socket. Mounting the real repository read-write would let the agent write `.git/hooks`, or configuration keys that run commands (such as `core.hooksPath`, `core.fsmonitor` or `core.pager`) in `.git/config`; the next Git command on the host would then run that code outside the sandbox, and the change is untracked, so a diff review would not show it.
 - `--tmpfs /home/agent` gives tools a writable, empty, throwaway home.
 - `--cap-drop ALL`, `--security-opt no-new-privileges`, `--read-only` and a non-root `--user` remove the easy escalation paths.
 - The image contains the agent CLI and the repository's toolchain, built by the platform team and pinned by digest.
@@ -226,7 +229,24 @@ Mount the generated kubeconfig read-only, set `KUBECONFIG` to it inside the sand
 
 ### Git
 
-Give the sandbox no push credentials. The agent commits locally inside `/workspace`; the engineer reviews and pushes from the host. If an agent must open merge requests, use a project access token with the narrowest scope and an expiry, as in [[securing-ai-agents-in-ci-and-cloud]].
+Give the sandbox no push credentials. The agent commits locally inside `/workspace`, which is a throwaway clone. Never run Git on the host inside that clone, and do not fetch from it directly either: a fetch from a local path runs `git upload-pack` in the clone, which reads the clone's configuration, and the agent controls that configuration. Instead, have a container with no network write the agent's commits to a bundle file, then fetch from the file. A bundle is data that Git reads like a remote, so nothing from the agent's configuration runs on the host:
+
+```bash
+AGENT_CLONE=/tmp/agent-clone.k3Xa9Q   # the directory agent-sandbox.sh created
+docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+  --user "$(id -u):$(id -g)" -v "$AGENT_CLONE:/workspace" \
+  --entrypoint git "$AGENT_IMAGE" -C /workspace bundle create /workspace/agent.bundle HEAD
+
+# In the real repository, on the host: check the bundle, fetch from it, review, then push
+git bundle verify "$AGENT_CLONE/agent.bundle"
+git fetch "$AGENT_CLONE/agent.bundle" HEAD
+git log --stat FETCH_HEAD
+rm -rf "$AGENT_CLONE"
+```
+
+Do not mount the real repository read-write (the dev container's default `workspaceMount` binds `${localWorkspaceFolder}`, so override it). If it was mounted, treat its `.git` directory as untrusted: hooks and many configuration keys run commands, including `core.hooksPath`, `core.fsmonitor`, `core.pager` and `core.editor` (both interpreted by the shell), `core.sshCommand`, `include.path` and aliases that start with `!`. Command-line `-c` overrides cannot cover them all, and reading the file by eye misses some. Before running any Git command on the host in that repository, restore `.git/config` and `.git/hooks` from a trusted copy, or clone the repository again and bring the work over as a bundle as above.
+
+If an agent must open merge requests, use a project access token with the narrowest scope and an expiry, as in [[securing-ai-agents-in-ci-and-cloud]].
 
 ## Runners: the same rules on GKE
 
@@ -348,6 +368,7 @@ Source-reviewed on 2026-11-01. Nothing was run. The review covered the documente
 - gcloud SDK 570.0.0 `--help` output (`gcloud auth print-access-token`, `gcloud config`, `gcloud container node-pools create`): `--impersonate-service-account` and `--access-token-file` are global flags; `--lifetime` defaults to 3600 seconds and requires impersonation; `auth/access_token_file` property; `--sandbox=[type=TYPE]` with `gvisor` the only supported type; `--image-type`, `--num-nodes`. Checked 2026-11-01 against the installed SDK; no credentials or API calls were used.
 - [google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster): `sandbox_config` requires the `COS_CONTAINERD` image type; an `agent_sandbox_config` add-on exists. Checked 2026-11-01 against terraform-provider-google commit c4248bd.
 - [Project access tokens](https://docs.gitlab.com/user/project/settings/project_access_tokens/): scoped to one project, selectable scopes, expiration dates. Checked 2026-11-01 against gitlabhq/gitlabhq commit d7b9a61.
+- [git-config](https://git-scm.com/docs/git-config), [githooks](https://git-scm.com/docs/githooks), [git-bundle](https://git-scm.com/docs/git-bundle) and [uploadpack settings](https://git-scm.com/docs/git-config#_uploadpack): hooks are looked up in `$GIT_DIR/hooks` or the `core.hooksPath` directory; `core.fsmonitor` can name a hook command; `core.pager` and `core.editor` are interpreted by the shell, `core.sshCommand` names a command, and an alias that starts with `!` is treated as a shell command; fetch and clone can read from a bundle file; Git respects some `uploadpack` settings only from protected configuration, as a safety measure against fetching from untrusted repositories. Checked 2026-11-01 against git/git commit 50fe5cc (config/core.adoc, config/alias.adoc, config/uploadpack.adoc, githooks.adoc, git-bundle.adoc).
 - [gitcredentials](https://git-scm.com/docs/gitcredentials): Git obtains credentials through configurable credential helpers. Checked 2026-11-01 against git/git commit 50fe5cc.
 
 ### Not verified
@@ -356,6 +377,7 @@ Source-reviewed on 2026-11-01. Nothing was run. The review covered the documente
 - Google Cloud documentation was not reachable: the need for `roles/iam.serviceAccountTokenCreator` (and that Service Account User is not enough), IAM Data Access audit logging of token creation, the GKE Sandbox requirements and limits (a node pool without the sandbox for system workloads, Autopilot behaviour, no hostPath or privileged pods, no node metadata server access, Workload Identity Federation for GKE), and the GKE Sandbox how-to itself.
 - The GitLab Runner Kubernetes executor setting `runtime_class_name`: runner documentation is not in the local GitLab docs.
 - The `docker run` flag semantics used in the script (`--cap-drop`, `--security-opt no-new-privileges`, `--read-only`, `--tmpfs`, `--user`): the Docker CLI reference is not in the local docs checkout. The Squid configuration, the curl exit codes used in the self-check, and Podman rootless mode were also not checked.
+- That reading a bundle file runs nothing from the configuration of the repository that wrote it: the Git docs describe a bundle as something fetch and clone read like a remote, but do not state this explicitly. It was tried once with Git 2.43.0 (without Docker): a planted `core.pager`, a `!` alias and a post-commit hook in the clone did not run when the host verified, fetched and logged from the bundle. The `--entrypoint git` override assumes the sandbox image has Git on its path.
 - `CLOUDSDK_*` environment variable names for gcloud properties and how client libraries consume an access token.
 - Engineering guidance, not a documented claim: the isolation-level ranking, the rollout and rollback approach, and the trade-offs section.
 - No performance figures are given because none were measured.

@@ -427,8 +427,6 @@ The incident is contained when all of these hold:
 
 Source-reviewed on 2026-11-01. Nothing was run. Scope: the Kubernetes, GitLab, Git and gcloud commands and API calls used in the steps, not the Google Cloud behaviour behind them.
 
-#
-
 ### Sources checked
 
 - [Horizontal Pod Autoscaling | Kubernetes](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/): an HPA stops adjusting a target whose desired replicas are 0 while the HPA minimum is above 0, until the target or the minimum is changed. Checked 2026-11-01 against kubernetes/website commit 491f14e.

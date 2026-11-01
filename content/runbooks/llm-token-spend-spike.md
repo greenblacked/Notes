@@ -1,6 +1,6 @@
 ---
 title: LLM token spend spike
-description: Confirm a token budget alert is real, find the key and caller behind it, classify the cause, contain it with the smallest blast radius first, and set caps that would have caught it.
+description: Confirm a token budget alert is real, find the key and caller, classify the cause, contain it with the least blast radius, and set caps to prevent a repeat.
 type: runbook
 tags:
   - runbooks
@@ -48,10 +48,14 @@ Use something else when:
 PROM=https://prometheus.example.internal
 GATEWAY=https://llm-gateway.example.internal
 NS=llm-gateway
+CALLER_NS=payments-batch
+CALLER=invoice-summariser
+CALLER_LABEL=app.kubernetes.io/name=invoice-summariser
 TEAM=payments
 KEY_ID=k-7f3a
 MODEL=example-model-large
 INCIDENT=INC-0000
+EVIDENCE_DIR="$PWD/evidence-$INCIDENT"
 # Operator tokens come from the secret manager, never from the shell history:
 #   export LLM_GATEWAY_ADMIN_TOKEN=...   (set it from your vault tooling)
 ```
@@ -169,7 +173,7 @@ For the requests behind the key, use the gateway log first, because it is cheap 
 
 ```bash
 kubectl -n "$NS" logs -l app.kubernetes.io/name=llm-gateway --since=1h --tail=-1 --max-log-requests=50 --prefix=false \
-  | jq -c --arg k "$KEY_ID" 'select(.key_id==$k) | {ts, route, model, status, in_tok: .input_tokens, out_tok: .output_tokens, client: .user_agent, ip: .client_ip}' \
+  | jq -R -c --arg k "$KEY_ID" 'fromjson? | select(.key_id==$k) | {ts, route, model, status, in_tok: .input_tokens, out_tok: .output_tokens, client: .user_agent, ip: .client_ip}' \
   | head -20
 ```
 
@@ -230,13 +234,14 @@ The admin calls below show the shape of this site's gateway API; replace them wi
 **5.0 Snapshot before you change anything.** Save the current state first. Once you cap the key or scale a caller to zero, the old limits and the caller's pod logs may be gone. This takes a minute and does not stop the spike from being contained:
 
 ```bash
-mkdir -p "evidence-$INCIDENT" && cd "evidence-$INCIDENT"
+mkdir -p "$EVIDENCE_DIR" && cd "$EVIDENCE_DIR"
 curl -sS "$GATEWAY/admin/keys/$KEY_ID/limits" \
   -H "Authorization: Bearer $LLM_GATEWAY_ADMIN_TOKEN" > "limits-before-$KEY_ID.json"
 kubectl -n "$NS" get configmap llm-gateway-policy -o yaml > policy-before.yaml
-# Logs of the caller's pods, before any scale to zero (namespace and workload are the caller's):
-#   kubectl -n CALLER_NS logs deploy/CALLER --all-containers > caller.log
-test -s "limits-before-$KEY_ID.json" || echo 'EMPTY SNAPSHOT'
+# Logs and replica count of the caller, before any scale to zero (namespace and labels are the caller's):
+kubectl -n "$CALLER_NS" logs -l "$CALLER_LABEL" --all-containers --prefix --tail=-1 --since=6h --max-log-requests=50 > caller.log
+kubectl -n "$CALLER_NS" get deploy/"$CALLER" -o jsonpath='{.spec.replicas}' > caller-replicas.txt
+test -s "limits-before-$KEY_ID.json" && test -s caller.log && test -s caller-replicas.txt || echo 'EMPTY SNAPSHOT'
 ```
 
 The limits endpoint is this site's example, like the other admin calls. Step 6 completes the evidence set.
@@ -276,22 +281,22 @@ Check that it took effect: the team's rate in the step 2 queries drops to no ser
 curl -sS -X POST "$GATEWAY/admin/kill-switch" \
   -H "Authorization: Bearer $LLM_GATEWAY_ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg r "$INCIDENT spend spike" '{enabled: true, reason: $r}')" | jq .
+  -d "$(jq -n --arg r "$INCIDENT spend spike" '{llm_enabled: false, reason: $r}')" | jq .
 ```
 
-Expected: the response shows `enabled: true`. Check that it held: `q 'sum(rate(llm_gateway_requests_total{status="503"}[5m]))'` rises while `q 'sum(rate(llm_gateway_tokens_total[5m]))'` falls to near 0.
+Expected: the response shows `llm_enabled: false`, which stops traffic (the flag name and meaning follow [[llm-api-cost-control]]). Check that it held: `q 'sum(rate(llm_gateway_requests_total{status="503"}[5m]))'` rises while `q 'sum(rate(llm_gateway_tokens_total[5m]))'` falls to near 0.
 
 If you suspect the key is leaked, disabling it is the first step of [[leaked-credential-rotation]]; follow that note for revocation, rotation and audit rather than improvising here.
 
 ### 6. Keep the evidence
 
-Capture before logs and traces age out, and before any restart changes state. Step 5.0 already saved the limits, the policy and the caller's logs; this step adds the rest. Run it from the same `evidence-$INCIDENT` folder.
+Capture before logs and traces age out, and before any restart changes state. Step 5.0 already saved the limits, the policy and the caller's logs; this step adds the rest. Run it from the same `$EVIDENCE_DIR` folder.
 
 ```bash
-mkdir -p "evidence-$INCIDENT" && cd "evidence-$INCIDENT"
+mkdir -p "$EVIDENCE_DIR" && cd "$EVIDENCE_DIR"
 q 'sum by (team, key_id, model, direction) (increase(llm_gateway_tokens_total[6h]))' > tokens-by-key-6h.tsv
 kubectl -n "$NS" logs -l app.kubernetes.io/name=llm-gateway --since=6h --tail=-1 --max-log-requests=50 --prefix=false \
-  | jq -c --arg k "$KEY_ID" 'select(.key_id==$k)' > gateway-log-key.jsonl
+  | jq -R -c --arg k "$KEY_ID" 'fromjson? | select(.key_id==$k)' > gateway-log-key.jsonl
 test -s gateway-log-key.jsonl || echo 'EMPTY EVIDENCE'
 # Pods that restarted in the window are missing above; on GKE also export from Cloud Logging:
 gcloud logging read "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"$NS\" AND jsonPayload.key_id=\"$KEY_ID\"" \
@@ -299,7 +304,7 @@ gcloud logging read "resource.type=\"k8s_container\" AND resource.labels.namespa
 sha256sum * > SHA256SUMS
 ```
 
-The log lines already carry their own `ts` field, so `--timestamps` is not used: it would put a prefix in front of each JSON line and break `jq`. Add the trace IDs of the largest calls, the provider usage export for the window and the exact limits you changed. Treat the log file as sensitive: it can contain client IPs and, depending on your gateway, request metadata. Store it in the incident folder with restricted access.
+`jq -R` reads each line as text and `fromjson?` drops lines that are not JSON, so a stray non-JSON line does not stop the pipeline early. The log lines already carry their own `ts` field, so `--timestamps` is not used: it would put a prefix in front of each JSON line and break `jq`. Add the trace IDs of the largest calls, the provider usage export for the window and the exact limits you changed. Treat the log file as sensitive: it can contain client IPs and, depending on your gateway, request metadata. Store it in the incident folder with restricted access.
 
 ### 7. Recover
 
@@ -345,7 +350,7 @@ The factor, the floor of 500 tokens per second and the `for` duration are exampl
 q 'sum(rate(llm_gateway_tokens_total[5m]))'                       # back near the 7-day baseline
 q "sum by (key_id) (rate(llm_gateway_tokens_total{key_id=\"$KEY_ID\"}[5m]))"   # at or below its cap, or no series if disabled
 q 'sum(rate(llm_gateway_requests_total{status=~"5.."}[5m]))'        # no new error wave from the containment
-kubectl -n "$NS" logs -l app.kubernetes.io/name=llm-gateway --since=15m --tail=-1 --max-log-requests=50 --prefix=false | jq -c --arg k "$KEY_ID" 'select(.key_id==$k)' | wc -l   # all replicas
+kubectl -n "$NS" logs -l app.kubernetes.io/name=llm-gateway --since=15m --tail=-1 --max-log-requests=50 --prefix=false | jq -R -c --arg k "$KEY_ID" 'fromjson? | select(.key_id==$k)' | wc -l   # all replicas
 ```
 
 Then confirm with the owner that their service works under the final limits, and that the next provider usage export matches the gateway counters. The incident is over when the rate is at baseline for a full day-part and the alert has resolved without a silence.
@@ -355,7 +360,8 @@ Then confirm with the owner that their service works under the final limits, and
 - **Key limit:** set the previous values back with the same `PATCH`; the old values are in `limits-before-$KEY_ID.json` (saved in step 5.0) or in the audit log of the admin API. Do not use a ConfigMap captured after the change.
 - **Disabled key:** re-enable it only after the cause is fixed. If the key was leaked, do not re-enable it; rotate it instead ([[leaked-credential-rotation]]).
 - **Team or route disable:** call the matching enable endpoint of your gateway (for the example above, `POST $GATEWAY/admin/teams/$TEAM/enable`).
-- **Kill switch:** flip it back with the same call and `enabled: false`, then watch for a burst of queued work and of retries from clients that backed up while it was off.
+- **Kill switch:** flip it back with the same call and `llm_enabled: true`, then check that the 503 rate (`q 'sum(rate(llm_gateway_requests_total{status="503"}[5m]))'`) returns to its baseline and that the token rate recovers, and watch for a burst of queued work and of retries from clients that backed up while it was off.
+- **Caller scaled to zero (step 5.2):** once the cause is fixed and the key's limits are back, run `kubectl -n "$CALLER_NS" scale deploy/"$CALLER" --replicas="$(cat "$EVIDENCE_DIR/caller-replicas.txt")"`, or re-run the cancelled pipeline. A GitOps controller may restore the replicas itself.
 - **Prompt or code rollback:** use the normal release process; a rollback that changes behaviour needs the checks in [[model-or-prompt-rollout-quality-regression]].
 
 ## Troubleshooting
@@ -403,6 +409,7 @@ Then confirm with the owner that their service works under the final limits, and
 - How your collector translates OpenTelemetry metric names into Prometheus names.
 - Trace-store query syntax for your tools.
 - `kubectl` behaviour: `kubectl` is not installed here and its reference is not in the local Kubernetes docs. That `kubectl logs deploy/NAME` reads one pod, the `-l`, `--max-log-requests`, `--prefix` flags and `--timestamps` output format are standard behaviour from memory, not checked locally. The pod label `app.kubernetes.io/name=llm-gateway` is an example.
+- `jq -R` with `fromjson?` was tried once with jq 1.7 on a three-line sample (two JSON lines kept, a plain-text line skipped); it was not checked against the jq manual.
 - The Cloud Logging field names (`jsonPayload.key_id`) and IAM role names.
 
 ### Environment

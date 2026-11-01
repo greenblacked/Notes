@@ -1,6 +1,6 @@
 ---
 title: LLM API rate limits and 429 retry storms
-description: Tell which layer returned a 429, which limit was hit, whether retries amplify it, then contain with Retry-After, concurrency caps and load shedding, and fix it with backoff, per-tenant buckets and quota.
+description: Tell which layer returned a 429, which limit was hit and whether retries amplify it, then contain it with Retry-After, concurrency caps and load shedding.
 type: runbook
 tags:
   - runbooks
@@ -55,6 +55,7 @@ PROVIDER_CHAT_URL=https://api.provider.example/v1/chat/completions   # only for 
 CLUSTER=prod-gke
 LOCATION=europe-west1
 HPA=invoice-summarizer   # the caller HPA, if it has one
+CJ=invoice-summarizer-nightly   # the CronJob to suspend (kubectl -n "$APP_NS" get cronjob)
 JOB=invoice-summarizer-nightly-29338560   # a running Job of the suspended CronJob (kubectl -n "$APP_NS" get jobs)
 APP_NS=payments
 APP=invoice-summarizer
