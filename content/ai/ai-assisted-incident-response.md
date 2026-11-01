@@ -8,17 +8,17 @@ tags:
   - on-call
   - kubernetes
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-01
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-01
+review-due: 2027-05-01
 ---
 
 This guide is for senior DevOps engineers and on-call responders who want to use an AI assistant during incidents without handing it the pager. It covers where an assistant helps (summaries, correlation, drafts), the actions that always stay with a human, how to give it read-only access, and how to prompt it with evidence. It does not cover the incident process itself ([[runbooks/incident-response]]), the postmortem practice ([[standards/blameless-postmortems]]), or how to secure agents in pipelines and cloud accounts ([[ai/securing-ai-agents-in-ci-and-cloud]]).
 
 > [!info] Scope and sources
-> Written for a GKE and GCP stack with Helm releases, using generic "AI assistant" wording rather than any product. The kubectl, helm and gcloud commands follow the public documentation at [kubernetes.io](https://kubernetes.io/docs/reference/kubectl/), [helm.sh](https://helm.sh/docs/helm/helm_history/) and [cloud.google.com](https://cloud.google.com/logging/docs/reference/tools/gcloud-logging). Check flags against the versions you run.
-
-> [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the exact `gcloud logging read` flags and the RBAC resource names for your cluster version. Vendor incident-tool AI features are deliberately not named because they change often. Check them before relying on them.
+> Written for a GKE and GCP stack with Helm releases, using generic "AI assistant" wording rather than any product. The kubectl, helm and gcloud commands follow the public documentation at [kubernetes.io](https://kubernetes.io/docs/reference/kubectl/quick-reference/), [helm.sh](https://helm.sh/docs/helm/helm_history/) and the `gcloud logging read` help. Check flags against the versions you run. See the Evidence section for what was and was not checked.
 
 ## Where it helps
 
@@ -58,7 +58,7 @@ Design rules:
 
 - One service account per assistant, with no cluster-admin and no `secrets` access.
 - Namespace-scoped RoleBindings where possible; bind a ClusterRole per namespace instead of granting anything cluster-wide.
-- No `pods/exec`, `pods/portforward`, `pods/attach` or `*/proxy` subresources. These read data from inside workloads and are effectively write-capable.
+- No `pods/exec`, `pods/portforward`, `pods/attach` or `*/proxy` subresources. These reach inside running workloads, so treat them as more than read access.
 - Short-lived credentials (Workload Identity, not exported keys); see [[patterns/gke-workload-identity]].
 - Log every request the assistant makes with its identity, so the postmortem can show what it saw.
 - Prefer a pre-built evidence file over live access: a script collects, a person reviews, then the assistant reads the file.
@@ -229,3 +229,26 @@ Keep the blameless rules from [[standards/blameless-postmortems]]: tell the assi
 - [[runbooks/helm-release-rollback]]: a rollback is a human action; this is how to do it.
 - [[ai/securing-ai-agents-in-ci-and-cloud]]: the wider controls for agents with cloud access.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
+
+## Evidence
+
+Source-reviewed on 2026-11-01. Nothing was run. Scope: the kubectl, RBAC, Helm and gcloud statements in this note were compared with the local documentation copies.
+
+### Sources checked
+
+- [kubectl auth can-i](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_auth/kubectl_auth_can-i/): the `--subresource` flag (example `kubectl auth can-i get pods --subresource=log`) and impersonation with `--as system:serviceaccount:<ns>:<name>`. Checked 2026-11-01 against kubernetes/website commit 491f14e (`content/en/docs/reference/kubectl/generated/kubectl_auth/kubectl_auth_can-i.md`, lines 44-45 for the `--as` impersonation example, line 132 for the `--as` flag row, and lines 54 and 111 for `--subresource`).
+- [Using RBAC Authorization](https://kubernetes.io/docs/reference/access-authn-authz/rbac/): a RoleBinding can reference a ClusterRole and bind it only within the RoleBinding's namespace (rbac.md lines 117-134); subresources such as `pods/exec` and `pods/log` are separate RBAC resources (lines 193, 220). Checked 2026-11-01, commit 491f14e.
+- [Authorization overview](https://kubernetes.io/docs/reference/access-authn-authz/authorization/): `kubectl auth can-i` with `--as system:serviceaccount:...` (lines 403-450). Checked 2026-11-01, commit 491f14e.
+- [kubectl quick reference](https://kubernetes.io/docs/reference/kubectl/quick-reference/): `kubectl rollout history deployment/<name>` (line 277) and `--sort-by` on `kubectl get` (reference/kubectl/generated/kubectl_get/_index.md line 228). Checked 2026-11-01, commit 491f14e.
+- [Port Forward to access applications](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/): `kubectl port-forward` needs `create` on `pods/portforward` (line 214). Checked 2026-11-01, commit 491f14e.
+- [helm history](https://helm.sh/docs/helm/helm_history/): `helm history RELEASE_NAME` with `--max` (default 256). Checked 2026-11-01 against helm-www commit 8920d0e (`docs/helm/helm_history.md`; the content is in the commit, not in the `content/en/docs` folder).
+- [Helm advanced techniques](https://helm.sh/docs/topics/advanced/): by default release information is stored in Secrets (`docs/topics/advanced.mdx` line 149; also `docs/topics/rbac.md` line 141). Checked 2026-11-01, helm-www commit 8920d0e.
+- [gcloud logging read](https://cloud.google.com/sdk/gcloud/reference/logging/read): `--freshness` (default 1d, works with descending order), `--limit`, and `--project`, from `gcloud logging read --help` (SDK 570.0.0); `--format` value() projections from `gcloud topic formats --help` (SDK 570.0.0). Checked 2026-11-01 against the installed gcloud help; the web page itself was not read.
+
+### Not verified
+
+- GKE and Google Cloud documentation: the `iam.gke.io/gcp-service-account` annotation, Workload Identity behaviour and the `k8s_container` log filter fields were not checked; the docs were not available.
+- That `get` and `list` on pods exposes plaintext `env` values, and that an incident-time `kubectl get events --sort-by=.lastTimestamp` ordering is oldest first, follow from the API objects and were not confirmed in a specific page.
+- Vendor incident-tool AI features are deliberately not named and were not checked.
+- Engineering guidance, not documented claims: assistant access design, prompting patterns, the automation table, postmortem drafting advice and the pitfalls list.
+- Nothing was run.

@@ -9,7 +9,10 @@ tags:
   - linux
   - gitlab-ci
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-01
+evidence: source-reviewed
+reviewed: 2026-11-01
+review-due: 2027-05-01
 draft: false
 ---
 
@@ -17,9 +20,6 @@ A coding agent started in a terminal runs as the engineer. It can read everythin
 
 > [!info] Scope
 > Linux and macOS workstations with Docker or a compatible runtime, Google Cloud and GKE, and GitLab runners with the Kubernetes executor ([[gitlab-runners-on-gke]]). No agent product is named: built-in permission modes and deny rules differ per product and are covered generically in [[ai-coding-assistant-admin-controls]].
-
-> [!note] Not verified
-> Checked at page level, on 2026-10-21, against the Dev Containers, Docker rootless, gVisor, GKE Sandbox, Pod Security Standards, IAM impersonation and `kubectl create token` documentation, through search summaries, not a full read. Not checked: the exact `devcontainer.json` syntax for `workspaceMount` and `mounts`, the GitLab Runner `runtime_class_name` setting, the GKE Sandbox node pool flags in your SDK version, and every command and expected output below, none of which was run. No performance figures are given because none were measured.
 
 ## What an agent can reach by default
 
@@ -65,8 +65,13 @@ REPO_DIR="$(git rev-parse --show-toplevel)"
 AGENT_IMAGE="registry.example.com/platform/agent-sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000"  # change: your approved image digest
 PROXY_IMAGE="registry.example.com/platform/egress-proxy@sha256:0000000000000000000000000000000000000000000000000000000000000000"  # change: your Squid or proxy image digest
 
-# An internal network has no route out; only the proxy is attached to both networks.
-docker network inspect agent-internal >/dev/null 2>&1 || docker network create --internal agent-internal
+# An internal network has no route to the internet; only the proxy is attached to both networks.
+# Gateway mode "isolated" also leaves the bridge without a host address, so the agent cannot reach
+# host services listening on 0.0.0.0. It is valid only together with --internal.
+docker network inspect agent-internal >/dev/null 2>&1 || docker network create --internal \
+  -o com.docker.network.bridge.gateway_mode_ipv4=isolated \
+  -o com.docker.network.bridge.gateway_mode_ipv6=isolated \
+  agent-internal
 docker network inspect agent-egress >/dev/null 2>&1 || docker network create agent-egress
 
 docker rm -f egress-proxy >/dev/null 2>&1 || true
@@ -93,7 +98,7 @@ docker run --rm -it \
 
 What each part does:
 
-- `--network agent-internal` with an `--internal` network: the container has no route to the internet or the host's networks. Its only way out is the proxy container, which holds the allowlist. Proxy environment variables alone are advisory (a process can ignore them); the internal network is what enforces it.
+- `--network agent-internal` with an `--internal` network: the container has no route to the internet. Host services listening on the bridge address (including `0.0.0.0` or `::` listeners) stay reachable unless the network is created with `-o com.docker.network.bridge.gateway_mode_ipv4=isolated` (and the `_ipv6` equivalent) or the host firewall blocks it, so keep sensitive local services off all-interface listeners. Its only way out to the internet is the proxy container, which holds the allowlist. Proxy environment variables alone are advisory (a process can ignore them); the internal network is what enforces it.
 - `-v "$REPO_DIR:/workspace"` is the only bind mount. No home directory, no `~/.kube`, no `~/.ssh`, no Docker socket.
 - `--tmpfs /home/agent` gives tools a writable, empty, throwaway home.
 - `--cap-drop ALL`, `--security-opt no-new-privileges`, `--read-only` and a non-root `--user` remove the easy escalation paths.
@@ -119,21 +124,31 @@ Allow the LLM gateway ([[llm-api-cost-control]]), your Git server and your packa
 
 ### devcontainer.json
 
-Dev container tooling expresses the same setup declaratively. The properties below exist in the Dev Container specification; the exact string syntax of `workspaceMount` and of `runArgs` was not verified, so check the reference before using this.
+Dev container tooling can express a similar setup declaratively; the JSON below mirrors the script's user, read-only root file system, tmpfs mounts and proxy variables, but not its two-network proxy topology, which you create separately. The properties below are defined in the Dev Container specification: `workspaceMount` (which requires `workspaceFolder`) takes the same values as the Docker `--mount` flag, `mounts` adds further mounts, and `runArgs` is an array of Docker CLI arguments.
 
-```json title=".devcontainer/devcontainer.json (syntax not verified)"
+```json title=".devcontainer/devcontainer.json"
 {
   "name": "agent-sandbox",
   "image": "registry.example.com/platform/agent-sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
   "workspaceFolder": "/workspace",
   "mounts": [],
+  "containerUser": "agent",
   "remoteUser": "agent",
   "containerEnv": {
     "HTTPS_PROXY": "http://egress-proxy:3128",
-    "HTTP_PROXY": "http://egress-proxy:3128"
+    "HTTP_PROXY": "http://egress-proxy:3128",
+    "NO_PROXY": "",
+    "HOME": "/home/agent"
   },
-  "runArgs": ["--network=agent-internal", "--cap-drop=ALL", "--security-opt=no-new-privileges"]
+  "runArgs": [
+    "--network=agent-internal",
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges",
+    "--read-only",
+    "--tmpfs=/tmp:rw,mode=1777",
+    "--tmpfs=/home/agent:rw,mode=1777"
+  ]
 }
 ```
 
@@ -148,10 +163,10 @@ With rootful Docker, the daemon runs as root, and anyone who can talk to its soc
 - **Setup:** follow the rootless installation page for your distribution, which uses the `dockerd-rootless-setuptool.sh` script. Then point the CLI at the rootless socket and confirm:
 
 ```bash
-docker info --format '{{.SecurityOptions}}'
+docker info | grep -A4 'Security Options'
 ```
 
-Expect the security options to include a rootless entry. Podman's rootless mode is an alternative with the same goal; if your workstations use it, the level 1 commands translate almost one to one.
+Expect the Security Options section of the output to include a `rootless` entry. Podman's rootless mode is an alternative with the same goal; it is not covered here.
 
 ## Level 3: a disposable VM
 
@@ -177,9 +192,9 @@ echo "token written to $TOKEN_FILE; mount it read-only into the sandbox and dele
 ```
 
 - Impersonation needs `roles/iam.serviceAccountTokenCreator` on that service account; Service Account User does not grant it.
-- The resulting access token is short-lived (one hour by default) and leaves no key file behind.
+- The resulting access token is short-lived (`gcloud auth print-access-token --lifetime` defaults to 3600 seconds, and lengthening it beyond that needs an organization policy constraint) and leaves no key file behind.
 - Token creation is written to audit logs only if IAM Data Access audit logs are enabled; enable them if you want that record.
-- Inside the sandbox, tools need to be told to use the token. How gcloud and client libraries pick up an access token from a file or variable was not verified here; look up gcloud's `--access-token-file` flag and the `CLOUDSDK_AUTH_ACCESS_TOKEN` property in the gcloud reference, and the client libraries' authentication documentation. Never mount `~/.config/gcloud` into the sandbox.
+- Inside the sandbox, tools need to be told to use the token. gcloud can read an access token from a file with the global `--access-token-file` flag or the `auth/access_token_file` property (the file contains only the token); how client libraries pick up a token is in their own authentication documentation. Never mount `~/.config/gcloud` into the sandbox.
 
 ### Kubernetes: a bound token for a namespaced service account
 
@@ -205,7 +220,7 @@ rm -f ./agent-ca.crt
 chmod 600 "$OUT"
 ```
 
-`kubectl create token` requests a bound token for the ServiceAccount; `--duration` asks for a lifetime, and the API server may return a different one. Avoid long-lived Secret-based ServiceAccount tokens. The ServiceAccount's Role is read-only and namespaced; design it with [[kubernetes-rbac-for-ai-agents]]. Clusters that use an exec credential plugin for `kubectl` (GKE does) need that plugin's credentials only on the engineer's side, not in the sandbox, because the token above is all the sandbox gets.
+`kubectl create token` requests a short-lived token for the ServiceAccount; `--duration` asks for a lifetime, and the server may return a longer or shorter one. Avoid long-lived Secret-based ServiceAccount tokens. The ServiceAccount's Role is read-only and namespaced; design it with [[kubernetes-rbac-for-ai-agents]]. Clusters that use a client-go exec credential plugin need that plugin's credentials only on the engineer's side, not in the sandbox, because the token above is all the sandbox gets.
 
 Mount the generated kubeconfig read-only, set `KUBECONFIG` to it inside the sandbox, and delete it when the session ends. Production contexts never go into an agent sandbox; production changes follow [[production-change-checklist]] with a human running them.
 
@@ -233,9 +248,9 @@ metadata:
 
 - **No Docker socket, no privileged containers**, and no image builds in the agent runner.
 - **Egress allowlist** with NetworkPolicy or firewall rules: the LLM gateway, GitLab and Artifactory ([[private-gke-and-controlled-egress]]).
-- **Optional: GKE Sandbox (gVisor).** gVisor is an application kernel that runs in user space and intercepts the container's system calls, so a kernel exploit in the container hits gVisor instead of the node's kernel. On GKE Standard, create a node pool with GKE Sandbox enabled and run agent pods with `runtimeClassName: gvisor`; the cluster must keep at least one node pool without the sandbox for system workloads. On Autopilot, gVisor is available without a separate node pool. Check the GKE Sandbox how-to for the current node pool flags:
+- **Optional: GKE Sandbox (gVisor).** gVisor is an application kernel that runs in user space and intercepts the container's system calls, so a kernel exploit in the container hits gVisor instead of the node's kernel. On GKE Standard, create a node pool with GKE Sandbox enabled and run agent pods with `runtimeClassName: gvisor`; the cluster must keep at least one node pool without the sandbox for system workloads. On Autopilot, gVisor is available without a separate node pool. The `--sandbox=type=gvisor` flag is documented in the gcloud reference (`gvisor` is its only supported type), and the Terraform provider requires the `COS_CONTAINERD` image type for a sandboxed node pool:
 
-```bash title="gke-sandbox-pool.sh (flags not verified)"
+```bash title="gke-sandbox-pool.sh"
 set -euo pipefail
 
 CLUSTER="ci-cluster"         # change
@@ -247,9 +262,9 @@ gcloud container node-pools create agents-gvisor \
   --num-nodes=1
 ```
 
-Point the agent runner's job pods at it with the runtime class. The GitLab Runner Kubernetes executor setting for this (`runtime_class_name`) was not verified; check the executor documentation for your runner version.
+Point the agent runner's job pods at it with the runtime class. The GitLab Runner Kubernetes executor setting for this (`runtime_class_name`) was not checked; read the executor documentation for your runner version.
 
-Know the limits before you rely on it: sandboxed pods support a subset of system calls, cannot be privileged and cannot use hostPath; read the GKE Sandbox limitations list for the rest before you move a job onto it. They cannot reach the node's metadata server, so cloud access needs Workload Identity Federation for GKE. Expect some performance overhead for system-call-heavy work; measure it with your own jobs. GKE also documents a newer agent-sandbox feature; read the current GKE documentation before choosing between the two.
+Know the limits before you rely on it: sandboxed pods support a subset of system calls, cannot be privileged and cannot use hostPath; read the GKE Sandbox limitations list for the rest before you move a job onto it. They cannot reach the node's metadata server, so cloud access needs Workload Identity Federation for GKE. Expect some performance overhead for system-call-heavy work; measure it with your own jobs. The Terraform provider also exposes an `agent_sandbox_config` cluster add-on; read the current GKE documentation before choosing between the two.
 
 ## Verify inside the sandbox
 
@@ -317,6 +332,34 @@ The "without proxy" line is the important one: it proves the network blocks egre
 Roll out per team: publish the image and the launcher script, make the sandbox the documented way to run agents, then turn on the managed setting that requires it where the product supports that ([[ai-coding-assistant-admin-controls]]). On runners, move agent jobs to the new runner tag first and keep the old runner for a short overlap.
 
 Rollback is configuration only: engineers can run the agent outside the sandbox again (with its permission prompts), and on GKE the agent runner can be pointed back at a normal node pool by removing the runtime class. Neither removes the egress allowlist; that stays. If the self-check ever reports a leak in production use, stop using that image, treat any credential that was reachable as exposed, and follow [[leaked-credential-rotation]].
+
+## Evidence
+
+Source-reviewed on 2026-11-01. Nothing was run. The review covered the documented behaviour of Docker rootless mode, Dev Container properties, gVisor, Pod Security Standards, `kubectl create token`, gcloud flags and GitLab project access tokens that this note relies on.
+
+### Sources checked
+
+- [Rootless mode](https://docs.docker.com/engine/security/rootless/) and its [troubleshooting](https://docs.docker.com/engine/security/rootless/troubleshoot/) page: daemon and containers run without root in a user namespace, unlike `userns-remap`, where the daemon is root; `newuidmap` and `newgidmap` (the `uidmap` package); at least 65,536 subordinate IDs in `/etc/subuid` and `/etc/subgid`; `dockerd-rootless-setuptool.sh install`; `docker info` shows `rootless` under Security Options; known limitations include AppArmor and overlay networks, privileged ports below 1024 need extra setup, and user-mode networking is listed as slow. Checked 2026-11-01 against docker/docs commit 53581df.
+- [Docker Engine security](https://docs.docker.com/engine/security/): the daemon requires root unless rootless mode is used, and anyone controlling it can share host directories into a container. [Networking overview](https://docs.docker.com/engine/network/): an `--internal` network is for containers that do not need external network access. [Port publishing](https://docs.docker.com/engine/network/port-publishing/): containers in an `internal` network can still reach host services listening on the bridge address (including `0.0.0.0` or `::`); gateway mode `isolated` assigns no bridge address. Checked 2026-11-01 against docker/docs commit 53581df.
+- [devcontainer.json reference](https://containers.dev/implementors/json_reference/): `workspaceMount` requires `workspaceFolder` and accepts Docker `--mount` values, `mounts`, `runArgs` as an array of Docker CLI arguments, `containerEnv`, `containerUser` (sets the user the container as a whole runs as) and `remoteUser` (does not). Checked 2026-11-01 against devcontainers/spec commit c95ffee.
+- [gVisor documentation](https://gvisor.dev/docs/) and [Kubernetes quick start](https://gvisor.dev/docs/user_guide/quick_start/kubernetes/): application kernel written in Go and running in user space; it does not pass system calls through to the host kernel; implements a subset of the Linux system call interface; GKE Sandbox runs pods with `runtimeClassName: gvisor` on a node pool with gVisor enabled. Checked 2026-11-01 against google/gvisor commit aa767e4.
+- [Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/) and [Pod Security admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/): the Restricted volume-type list (configMap, csi, downwardAPI, emptyDir, ephemeral, persistentVolumeClaim, projected, secret); hostPath volumes forbidden in Baseline; namespace labels of the form `pod-security.kubernetes.io/<MODE>: <LEVEL>`. Checked 2026-11-01 against kubernetes/website commit 491f14e.
+- [kubectl create token](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_token/): `--duration` is a requested lifetime and the server may return a longer or shorter one. [Service accounts](https://kubernetes.io/docs/concepts/security/service-accounts/): long-lived Secret-based tokens are discouraged. [Organizing cluster access using kubeconfig](https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/): kubectl reads `$HOME/.kube/config` by default and `KUBECONFIG` overrides it. [Authentication](https://kubernetes.io/docs/reference/access-authn-authz/authentication/): client-go credential plugins exist. Checked 2026-11-01 against kubernetes/website commit 491f14e.
+- gcloud SDK 570.0.0 `--help` output (`gcloud auth print-access-token`, `gcloud config`, `gcloud container node-pools create`): `--impersonate-service-account` and `--access-token-file` are global flags; `--lifetime` defaults to 3600 seconds and requires impersonation; `auth/access_token_file` property; `--sandbox=[type=TYPE]` with `gvisor` the only supported type; `--image-type`, `--num-nodes`. Checked 2026-11-01 against the installed SDK; no credentials or API calls were used.
+- [google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster): `sandbox_config` requires the `COS_CONTAINERD` image type; an `agent_sandbox_config` add-on exists. Checked 2026-11-01 against terraform-provider-google commit c4248bd.
+- [Project access tokens](https://docs.gitlab.com/user/project/settings/project_access_tokens/): scoped to one project, selectable scopes, expiration dates. Checked 2026-11-01 against gitlabhq/gitlabhq commit d7b9a61.
+- [gitcredentials](https://git-scm.com/docs/gitcredentials): Git obtains credentials through configurable credential helpers. Checked 2026-11-01 against git/git commit 50fe5cc.
+
+### Not verified
+
+- The minimum Docker Engine version that supports bridge gateway mode `isolated`; older engines reject the option, in which case drop it and block host services with the host firewall instead.
+- Google Cloud documentation was not reachable: the need for `roles/iam.serviceAccountTokenCreator` (and that Service Account User is not enough), IAM Data Access audit logging of token creation, the GKE Sandbox requirements and limits (a node pool without the sandbox for system workloads, Autopilot behaviour, no hostPath or privileged pods, no node metadata server access, Workload Identity Federation for GKE), and the GKE Sandbox how-to itself.
+- The GitLab Runner Kubernetes executor setting `runtime_class_name`: runner documentation is not in the local GitLab docs.
+- The `docker run` flag semantics used in the script (`--cap-drop`, `--security-opt no-new-privileges`, `--read-only`, `--tmpfs`, `--user`): the Docker CLI reference is not in the local docs checkout. The Squid configuration, the curl exit codes used in the self-check, and Podman rootless mode were also not checked.
+- `CLOUDSDK_*` environment variable names for gcloud properties and how client libraries consume an access token.
+- Engineering guidance, not a documented claim: the isolation-level ranking, the rollout and rollback approach, and the trade-offs section.
+- No performance figures are given because none were measured.
+- Nothing was run: every command, script and expected output in the note is unexecuted.
 
 ## Sources
 

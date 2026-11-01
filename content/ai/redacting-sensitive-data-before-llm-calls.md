@@ -9,8 +9,11 @@ tags:
   - audit
   - observability
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-01
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-01
+review-due: 2027-05-01
 ---
 
 Every useful LLM workflow in operations sends real data: log lines for triage ([[llm-log-analysis-and-alert-triage]]), Terraform plans for review ([[llm-assisted-terraform-plan-review]]), incident timelines, runbook excerpts. Each of those notes says "redact first", and each team then writes its own regular expressions, in its own script, with its own gaps. This note describes one shared redaction layer instead: it runs in the gateway so every caller gets it, it combines field allow-lists, deterministic secret rules and (where classification demands it) Google Cloud Sensitive Data Protection, it **fails closed**, and it is tested with a seeded corpus and canaries so you know it works rather than hope so.
@@ -18,8 +21,8 @@ Every useful LLM workflow in operations sends real data: log lines for triage ([
 > [!info] Scope
 > A platform team running one internal LLM gateway ([[llm-api-cost-control]]) in front of managed or self-hosted models. The code is a Python standard-library sketch of the gateway hook; port it to your gateway's language. What counts as personal or regulated data, and whether redaction or pseudonymisation is enough for a given purpose, is for your data protection officer and security team to decide; see [[pci-dss-and-gdpr-for-devops-logs-and-data]].
 
-> [!note] Not verified
-> The two Python files below were run locally (Python 3.13, standard library only) and their seven tests pass; nothing else was run. Not confirmed against current documentation: every Sensitive Data Protection API name, field, infoType name, transformation and limit shown below (not checked against the pages under Sources; verify there), its latency and quotas for inline use, whether its responses or logs can contain the matched value, and the accuracy of the illustrative secret patterns (take real ones from your secret scanner's maintained rule set). Detection quality of any layer, meaning its false negatives and false positives on your data, is unknown until you measure it with your own corpus.
+> [!note] Evidence
+> The request and transformation shapes below were checked against the public API definitions; the two Python files were run locally earlier (standard library only) and their seven tests passed. Service behaviour, infoType names, limits and detection quality are not confirmed; see the Evidence section.
 
 ## What must not leave
 
@@ -74,9 +77,9 @@ The module below has a few illustrative patterns to show the mechanics. They are
 
 ## Layer 3: personal data, and Sensitive Data Protection where required
 
-Regular expressions catch structured identifiers (emails, IP addresses) reasonably well and names, addresses and free-text personal data poorly. Where your data classification requires better coverage, call Google Cloud Sensitive Data Protection (the service formerly known as Cloud DLP) from the gateway to inspect and de-identify text. It detects built-in **infoTypes** and custom ones you define, and offers transformations such as masking, replacing a finding with its infoType name, and tokenization. It is a billed service; read its pricing page before sending every prompt through it.
+Regular expressions catch structured identifiers (emails, IP addresses) reasonably well and names, addresses and free-text personal data poorly. Where your data classification requires better coverage, call Google Cloud Sensitive Data Protection (the service formerly known as Cloud DLP; the API definition still uses both names) from the gateway to inspect and de-identify text. It detects built-in **infoTypes** and custom ones you define, and the API offers transformations such as character masking, redaction, replacing a finding with its infoType name, and cryptographic replacement (deterministic encryption or format-preserving encryption). It is a billed service; read its pricing page before sending every prompt through it.
 
-An illustrative de-identify request (field and infoType names not verified; check the de-identification guide and the infoType reference before use):
+An illustrative de-identify request (the field names match the public API definition; the infoType names are not verified, so check the infoType reference before use):
 
 ```json title="deidentify-request.json"
 {
@@ -109,20 +112,20 @@ curl -sS --fail-with-body -X POST \
   -d @deidentify-request.json
 ```
 
-There is no `gcloud dlp` command group in the Cloud SDK checked for this note (SDK 570.0.0 rejects it), so use the REST API, a client library or Terraform for templates. Things to settle before you depend on it:
+There is no `gcloud dlp` command group in the Cloud SDK checked for this note (SDK 570.0.0 rejects it), so use the REST API, a client library or Terraform for templates (the Terraform provider has de-identify and inspect template resources). Things to settle before you depend on it:
 
 - **Where it runs.** Choose a regional location that matches your residency decision, and check whether the service can be restricted inside the same VPC Service Controls perimeter as the model calls ([[vertex-ai-private-access-from-gke]]).
 - **Latency and quota.** An inline call adds a network round trip to every prompt. Measure it, and decide what happens when the service is slow or unavailable: under this pattern, the prompt is blocked, not sent unscanned.
-- **What it returns and logs.** Make sure inspection results that include the matched text are not written to your own logs.
+- **What it returns and logs.** The inspect configuration has an `include_quote` option that returns the matched text in findings; leave it off and make sure any result that includes matched text is not written to your own logs.
 
 ### Reversible tokenization only when needed
 
 Masking and replacing are one-way, which is what you want in most cases. Sometimes the answer must point back to the real thing ("customer 3 has the failing payments"), and only then use reversible tokenization:
 
 - Prefer an **in-memory pseudonym map per request** in the gateway (`host-1`, `customer-3`), applied in reverse to the response before it goes back to the caller. Nothing reversible ever leaves the gateway, and nothing is stored. The module below does this for internal hostnames.
-- If tokens must be stable across requests, use deterministic encryption with a key held in Cloud KMS ([[cloud-kms-key-management]]); Sensitive Data Protection documents cryptographic transformations for this. Keep the re-identification permission on a different identity from the one that de-identifies, and log every re-identification.
+- If tokens must be stable across requests, use deterministic encryption with a key held in Cloud KMS ([[cloud-kms-key-management]]); the API's deterministic cryptographic transformation accepts a KMS-wrapped key, and re-identification supports only the deterministic and format-preserving transformations. Keep the re-identification permission on a different identity from the one that de-identifies, and log every re-identification.
 
-Pseudonymised data is generally still personal data for data protection purposes; it lowers risk, it does not take the data out of scope. Ask your data protection officer.
+Treat pseudonymised data as potentially still in scope for data protection purposes: it lowers risk but may not take the data out of scope. Confirm with your data protection officer.
 
 ## Fail closed
 
@@ -313,7 +316,7 @@ Be honest with users about what this does not do:
 
 - **False negatives are certain.** New token formats, secrets split across lines or encoded in base64, personal data in free text, data in another language, data inside code. The filter reduces risk; it does not remove it. The allow-list layer is the only one that is close to complete, and only for structured input.
 - **Context leaks.** Even with every identifier removed, the remaining text can identify a customer or reveal an incident. Data classification decides which routes may send which sources at all.
-- **The provider's own retention** still applies to whatever you send; for Vertex AI see the data governance section of [[vertex-ai-private-access-from-gke]].
+- **The provider's own retention** still applies to whatever you send; for the managed model platform see the data governance section of [[vertex-ai-private-access-from-gke]].
 - **Images and documents** are out of scope here; block them unless a route is specifically designed and approved for them.
 
 ## Rollout and rollback
@@ -324,13 +327,36 @@ Be honest with users about what this does not do:
 
 Rollback is a policy change in Git: a route that breaks goes back to shadow mode for personal data rules while the rule is fixed. Credential rules and fail-closed behaviour are never rolled back to "off"; if they block a legitimate workflow, fix the rule or the workflow.
 
+## Evidence
+
+Source-reviewed on 2026-11-01. No API call was made and the Python files were not re-run; only `gcloud dlp --help` was executed. Scope: the Sensitive Data Protection request shape, transformations and re-identification limits, and the disclosure risk the filter addresses.
+
+### Sources checked
+
+- [Sensitive Data Protection API definition (dlp.proto)](https://github.com/googleapis/googleapis/blob/ff8fd20/google/privacy/dlp/v2/dlp.proto): the `content:deidentify` REST path under `projects/*/locations/*` on `dlp.googleapis.com`; `DeidentifyContentRequest` carries `deidentify_config`, `inspect_config` and `item` (with a string `value`); `infoTypeTransformations` holds `transformations` with a required `primitiveTransformation`; `replaceWithInfoTypeConfig`, character masking, redaction and deterministic and format-preserving crypto transformations exist; a deterministic crypto key can be KMS-wrapped; re-identification accepts only the deterministic and format-preserving transformations; `include_quote` returns matched text in findings; the proto text uses both the names "Sensitive Data Protection" and "Cloud DLP", and `storage.proto` at the same commit defines `CustomInfoType`; `PHONE_NUMBER` and `EMAIL_ADDRESS` appear as infoType names in comments. Checked 2026-11-01 against googleapis/googleapis commit ff8fd20.
+- [google_data_loss_prevention_deidentify_template](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/data_loss_prevention_deidentify_template): a Terraform resource for de-identify templates with `info_type_transformations` and `replace_with_info_type_config`. An inspect template resource also exists. Checked 2026-11-01 against the Terraform provider for Google docs, commit c4248bd.
+- [gcloud CLI](https://cloud.google.com/sdk/gcloud): `gcloud dlp` is rejected as an invalid choice in SDK 570.0.0. Checked 2026-11-01 with `gcloud dlp --help` only.
+- [LLM02:2025 Sensitive Information Disclosure](https://genai.owasp.org/llm-top-10/): sensitive data (personal data, credentials, business data) can be disclosed through LLM applications, and sanitization, masking and pattern-based redaction before processing are listed mitigations. Checked 2026-11-01 against OWASP Top 10 for LLM Applications 2025, commit 99f4395.
+
+### Not verified
+
+- Google Cloud documentation was not reachable: the de-identification guide, infoType reference, transformation reference and pricing pages under Sources were not read. Built-in infoType names (`PERSON_NAME` in particular), latency, quotas, regional and VPC Service Controls behaviour, billing, and the service's logging behaviour are unconfirmed.
+- The gitleaks repository and its rule format were not reachable; the sharing of a rule set with the gateway is engineering guidance.
+- The accuracy of the illustrative secret patterns, and detection quality (false negatives and positives) of any layer on your data.
+- Data governance and retention on the managed model platform, which this note defers to another note.
+- The legal status of pseudonymised data under data protection law was not checked against any source; the statement in the note is advice to confirm with your data protection officer. The rename history ("formerly known as Cloud DLP") was also not checked.
+- Fail-closed design, canaries, allow-lists, pseudonym maps, metrics and rollout steps are engineering guidance, not documented claims.
+- No API call was made, and the earlier local run of the two Python files (Python 3.13, standard library, seven tests passing) is not repeated here.
+
 ## Sources
 
-- [De-identifying sensitive data](https://cloud.google.com/sensitive-data-protection/docs/deidentify-sensitive-data), Sensitive Data Protection documentation.
+- [De-identifying sensitive data](https://cloud.google.com/sensitive-data-protection/docs/deidentify-sensitive-data), Sensitive Data Protection documentation (not readable for this review).
 - [InfoType detector reference](https://cloud.google.com/sensitive-data-protection/docs/infotypes-reference), Sensitive Data Protection documentation.
 - [Transformation reference](https://cloud.google.com/sensitive-data-protection/docs/transformations-reference), Sensitive Data Protection documentation.
 - [Sensitive Data Protection pricing](https://cloud.google.com/sensitive-data-protection/pricing): it is billed; read the current page.
-- [gitleaks](https://github.com/gitleaks/gitleaks): the scanner whose rule set the gateway can share; check its current configuration format.
+- [gitleaks](https://github.com/gitleaks/gitleaks): the scanner whose rule set the gateway can share; check its current configuration format (not readable for this review).
+- [Sensitive Data Protection API definition](https://github.com/googleapis/googleapis/blob/ff8fd20/google/privacy/dlp/v2/dlp.proto): request and transformation fields.
+- [LLM02:2025 Sensitive Information Disclosure](https://genai.owasp.org/llm-top-10/): OWASP Top 10 for LLM Applications 2025.
 
 ## Related
 

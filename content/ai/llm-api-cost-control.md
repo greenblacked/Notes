@@ -9,7 +9,10 @@ tags:
   - reliability
   - gcp
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-01
+evidence: source-reviewed
+reviewed: 2026-11-01
+review-due: 2027-05-01
 draft: false
 ---
 
@@ -18,8 +21,8 @@ LLM API bills grow in surprising ways: an agent loops, a retry storm repeats a l
 > [!info] Scope
 > Written for a platform team on GCP and GKE offering one internal gateway to teams and CI jobs. No provider is named, and no prices or limits are quoted: check each provider's current pricing and documentation, and change nothing here into a number without doing so.
 
-> [!note] Not verified
-> Not run against a real gateway or billing account. Unchecked: the `gcloud billing budgets create` flags in your SDK version, provider features for caching and batching, and the metric names your gateway emits.
+> [!note] Evidence
+> Source-reviewed, not run against a real gateway or billing account. See the Evidence section for what was checked and what was not.
 
 ## Where the spend comes from
 
@@ -52,7 +55,7 @@ Deploy it on GKE behind an internal load balancer, reachable only from your VPC 
 
 - One credential per team and per environment, issued by the gateway and revocable alone. A shared key makes it impossible to tell who caused a spike.
 - Require a `job` identifier (pipeline or tool name) on each request, and refuse requests without it.
-- Record team, model and job (as the metric label `llm_job`) as labels on every metric and log line. Keep the label values few and controlled; avoid free-text labels that create unbounded series.
+- Record team, model and job (as the metric label `llm_job`) as labels on every metric and log line. If you use OpenTelemetry, the GenAI semantic conventions define the `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` span attributes for token counts. Keep the label values few and controlled; avoid free-text labels, which can create unbounded series (general guidance, not verified here).
 - Report spend per team monthly through the same showback process as other cloud costs ([[finops-cost-allocation-and-guardrails]]).
 - Rolling out a tool to a team includes issuing its key and budget first ([[rolling-out-ai-tools-in-a-team]]).
 
@@ -134,7 +137,7 @@ groups:
           severity: warning
 ```
 
-Labels are `team`, `model` and `llm_job`. Do not name it `job`: Prometheus reserves that for the scrape job. Page only for user-facing symptoms; route cost alerts to the owning team's queue, in line with the alerting practice in the Prometheus documentation.
+Labels are `team`, `model` and `llm_job`. Do not name it `job`: Prometheus sets the `job` label of each target from its scrape configuration. Page only for user-facing symptoms; route cost alerts to the owning team's queue.
 
 ## Kill switch
 
@@ -172,7 +175,7 @@ Log a hash of the input, not the input itself, when it may contain sensitive dat
 
 - **Budget bypass.** A team calls the provider directly with a personal key. Block provider hosts at egress for everything except the gateway ([[securing-ai-agents-in-ci-and-cloud]]).
 - **Retry storms.** A provider outage turns every client's retries into a flood. Use capped backoff with jitter and a circuit breaker in the gateway.
-- **Metric label explosion.** Free-text labels such as prompt hashes blow up Prometheus. Keep `team`, `model`, `llm_job` only, and put detail in logs.
+- **Metric label explosion.** Free-text labels such as prompt hashes create unbounded series and can overload Prometheus (general guidance, not verified here). Keep `team`, `model`, `llm_job` only, and put detail in logs.
 - **Silent downgrade.** A cheaper model is substituted and quality drops. Tiering changes go through the evaluation gate and are logged.
 - **Cache poisoning or leakage.** A shared cache returns another team's answer. Namespace by team.
 - **Kill switch that nobody can use.** Test it, and make sure on-call knows where it is.
@@ -181,11 +184,34 @@ Log a hash of the input, not the input itself, when it may contain sensitive dat
 
 Caps and budgets are configuration, so roll them back like configuration: keep the gateway policy in version control, change it through reviewed merge requests, and revert the commit to restore the previous values. If a tiering change reduced quality, route the task back to the previous model and re-run the evaluation. If the gateway itself fails, clients should degrade (skip advisory AI steps), not bypass it with direct keys.
 
+## Evidence
+
+Source-reviewed on 2026-11-01. Nothing was run. Scope: the gcloud budget command, Prometheus label behaviour, the token-usage attribute names and the unbounded-consumption controls; the Google Cloud and gateway-specific statements could not be checked.
+
+### Sources checked
+
+- [gcloud billing budgets create](https://cloud.google.com/sdk/gcloud/reference/billing/budgets/create): `--billing-account`, `--display-name`, `--budget-amount` (for example `100.75USD`) and repeatable `--threshold-rule=percent=...` exist, as do `--filter-projects`, `--filter-labels`, `--notifications-rule-pubsub-topic` and `--disable-default-iam-recipients`. Checked 2026-11-01 with `gcloud billing budgets create --help` in Google Cloud SDK 570.0.0 (no credentials, no API calls).
+- [Prometheus configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/): a target's `job` label is set from the `job_name` of its scrape configuration (`docs/configuration/configuration.md:3718`), so a custom `job` label would collide. Checked 2026-11-01 against the Prometheus repository commit ef78ff6.
+- [Semantic conventions for generative AI, attribute registry](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/model/gen-ai/registry.yaml): the `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` attributes are defined at `model/gen-ai/registry.yaml:282` and `:340` (also `docs/registry/attributes/gen-ai.md:88-89`). Checked 2026-11-01 against open-telemetry/semantic-conventions-genai commit 244465e.
+- [OWASP Top 10 for LLM Applications 2025, LLM10 Unbounded Consumption](https://genai.owasp.org/llm-top-10/): denial of wallet as a risk; mitigations include input size limits, rate limiting and quotas, timeouts and throttling, logging and anomaly detection, limiting queued actions, and graceful degradation (`LLM10_UnboundedConsumption.md`). Checked 2026-11-01 against the OWASP LLM repository commit 99f4395.
+
+### Not verified
+
+- Google Cloud documentation (budgets alert but do not cap spend, notification delay and billing-data lag, Workload Identity and Secret Manager behaviour) was not available; the two Google Cloud links in Sources were not read.
+- Label-cardinality guidance (free-text labels create unbounded series and can overload Prometheus) was not checked; the Prometheus naming and instrumentation practices pages were not available locally.
+- The Prometheus alerting best-practices page was not available locally; "page only for user-facing symptoms" is not confirmed from it.
+- The `llm_gateway_tokens_total` and `llm_gateway_job_requests` metric names, the policy YAML fields and the audit-line fields are illustrative and belong to no real gateway.
+- Provider features for prompt caching, batching and pricing were not checked.
+- General engineering guidance (gateway design, per-team keys, backoff with jitter, kill-switch drills, cache namespacing, rollback through version control) is not stated by a single source.
+- Nothing was run.
+
 ## Sources
 
 - [Create and manage budgets](https://cloud.google.com/billing/docs/how-to/budgets), Google Cloud Billing documentation.
 - [Budget API overview](https://cloud.google.com/billing/docs/how-to/budget-api-overview), Google Cloud Billing documentation.
 - [Alerting best practices](https://prometheus.io/docs/practices/alerting/), Prometheus documentation.
+- [LLM10 Unbounded Consumption](https://genai.owasp.org/llm-top-10/), OWASP Top 10 for LLM Applications 2025.
+- [Semantic conventions for generative AI](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/model/gen-ai/registry.yaml), OpenTelemetry.
 
 ## Related
 

@@ -9,17 +9,20 @@ tags:
   - incident-management
   - security
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-01
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-01
+review-due: 2027-05-01
 ---
 
 During an incident, "which runbook covers this and what is step three?" is a search problem, and retrieval-augmented generation (RAG) can answer it faster than a wiki search. It also adds new ways to fail: it can show a page the asker may not read, answer from a stale page, blend two services' runbooks, or follow instructions hidden in an indexed page. This note describes a design that handles those cases, and how to test it before on-call depends on it. The incident process is in [[incident-response]] and the safe use of assistants during one is in [[ai-assisted-incident-response]].
 
 > [!info] Scope
-> Written for runbooks and postmortems kept as Markdown in repositories, with a retrieval service behind an approved model gateway. Embedding models, vector stores and frameworks are deliberately not named; the controls hold across them. Check the current OWASP LLM list for how it numbers vector and embedding weaknesses.
+> Written for runbooks and postmortems kept as Markdown in repositories, with a retrieval service behind an approved model gateway. Embedding models, vector stores and frameworks are deliberately not named; the controls hold across them. The OWASP 2025 list covers these risks as LLM01 (prompt injection) and LLM08 (vector and embedding weaknesses).
 
 > [!note] Not verified
-> The design has not been built or measured. Unchecked: the filtering features of your vector store, the OWASP numbering, and every threshold. The golden-set gate is how you verify the behaviour in your own environment.
+> The design has not been built or measured. Unchecked: the filtering features of your vector store and every threshold. The golden-set gate is how you verify the behaviour in your own environment. See the Evidence section.
 
 ## Architecture: ingest, chunk by step, index with metadata
 
@@ -90,7 +93,7 @@ Runbooks are written by people, but they also quote logs, alert text and error m
 - Give the assistant no tools beyond retrieval; it cannot call the cluster, post, or change anything, so an injected instruction has nothing to act on.
 - Review who can edit indexed repositories; CODEOWNERS on runbook paths matters here.
 - Test with planted instructions in sample pages and assert the answer ignores them, as in [[prompt-injection-test-harness-for-ci-agents]].
-- Check the current OWASP LLM Top 10 for how it covers prompt injection and vector and embedding weaknesses; the numbering has changed between editions.
+- OWASP's 2025 list treats indirect prompt injection (LLM01) and permission-aware vector stores (LLM08) as separate entries, and recommends separating and denoting untrusted external content.
 
 ## Evaluation with golden questions
 
@@ -142,6 +145,26 @@ Re-baseline deliberately, in its own merge request, after a major runbook rewrit
 - **Context stuffing.** Too many chunks dilute the answer. Cap k and prefer fewer, better-filtered chunks.
 - **Cost and latency in an incident.** Set timeouts and a fallback to plain keyword search; the assistant must degrade to "search results" and never to "nothing".
 - **Leaked sensitive pages.** Treat ACL bugs as security incidents and keep the retrieval log.
+
+## Evidence
+
+Source-reviewed on 2026-11-01. Nothing was run. Scope: the OWASP and GitLab statements this design leans on; the retrieval design itself is engineering guidance.
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications 2025: LLM08 Vector and Embedding Weaknesses](https://genai.owasp.org/llm-top-10/): the entry is numbered LLM08:2025; it names inadequate access controls on embeddings as a risk in RAG systems and recommends permission-aware vector stores with logical partitioning between user groups, tagging and classifying data to control access levels, and detailed immutable logs of retrieval activity. Checked 2026-11-01 against the OWASP LLM Top 10 repository commit 99f4395 (2_0_vulns/LLM08_VectorAndEmbeddingWeaknesses.md).
+- [OWASP Top 10 for LLM Applications 2025: LLM01 Prompt Injection](https://genai.owasp.org/llm-top-10/): indirect injection through external content; RAG does not fully mitigate prompt injection; an attacker-modified document in a RAG repository is a listed scenario; mitigation to separate and clearly denote untrusted content. Checked 2026-11-01, commit 99f4395 (2_0_vulns/LLM01_PromptInjection.md).
+- [GitLab CI/CD job rules](https://docs.gitlab.com/ci/jobs/job_rules/): `rules:if` with `$CI_PIPELINE_SOURCE == "merge_request_event"` and `rules:changes` path matching. Checked 2026-11-01 against gitlabhq/gitlabhq commit d7b9a61.
+- [GitLab job artifacts](https://docs.gitlab.com/ci/jobs/job_artifacts/): `artifacts:paths` and `artifacts:expire_in` keywords. Checked 2026-11-01, commit d7b9a61.
+
+### Not verified
+
+- The CI YAML reference (`ci/yaml`) was not in the local GitLab docs, so the exact `rules:changes` list syntax and the `expire_in: 14 days` value format were not checked against it; the job rules and artifacts pages show similar forms.
+- CODEOWNERS behaviour was not checked; that docs folder was not available.
+- The Site Reliability Engineering book chapter listed under Sources could not be read, so it is cited only as background reading.
+- The filtering features of any vector store, relevance thresholds, staleness thresholds, the 30 to 50 golden question count and the repeat count are design choices, not documented requirements.
+- Chunking, citation validation, staleness warnings, golden-set scoring and failure modes are engineering guidance.
+- Nothing was run.
 
 ## Sources
 
