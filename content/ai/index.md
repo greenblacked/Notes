@@ -30,6 +30,7 @@ How a team chooses, rolls out, measures and governs day-to-day use of assistants
 - [[ai-coding-assistant-admin-controls|Admin controls for AI coding assistants: seats, data, telemetry and deny rules]]: the settings an admin controls on coding assistants and how to verify each one.
 - [[agent-skills-and-shared-workflows|Agent skills and shared workflows for platform teams]]: treat agent instructions, skills and prompt files as versioned platform assets with review, pinned consumption, least-privilege tool lists and tests.
 - [[effective-prompting-for-operations-work|Effective prompting for operations work]]: raw evidence, stated versions, ranked hypotheses, verification commands and fixed output formats.
+- [[local-models-on-engineer-workstations|Local models on engineer workstations]]: baseline for running open-weight models locally, covering approved sources and licences, scanning, data classes, encryption, loopback binding, resource limits, updates and when local is the wrong answer.
 
 ## Running coding agents safely
 
@@ -91,6 +92,7 @@ Use assistants during on-call, triage and incident work with read-only access an
 - [[ai-assisted-runbook-authoring-and-testing|AI-assisted runbook authoring and testing]]: evidence-grounded steps, lab-verified commands, destructive-step markers, freshness reviews and game days.
 - [[llm-assisted-cloud-cost-anomaly-investigation|LLM-assisted cloud cost anomaly investigation]]: deterministic billing-export queries first, then a model that explains with cited evidence and never deletes.
 - [[runaway-or-compromised-ai-agent-response|Runbook: stopping a runaway or compromised AI agent]]: stop the agent, contain its credentials, keep the evidence, assess the blast radius and recover.
+- [[postmortems-for-ai-involved-incidents|Postmortems for AI-involved incidents]]: run blameless postmortems when an AI assistant or agent contributed, preserving evidence, fixing controls rather than prompts, and adding regression cases.
 
 ## Designing agents
 
@@ -111,6 +113,7 @@ Design agent instructions, context, tools, state and handoffs as explicit, testa
 - [[model-router-policy|Model router policy]]
 - [[multi-agent-handoff-boundaries|Multi-agent handoff boundaries]]
 - [[human-approval-state-machine|Human approval state machine]]
+- [[choosing-prompting-rag-or-fine-tuning|Choosing prompting, RAG, tool use or fine-tuning]]: classify the failure, try the cheapest reversible lever first, and test the choice on a frozen eval set before committing.
 
 ## AI security
 
@@ -133,6 +136,7 @@ Threat-model AI applications and constrain identity, tools, execution, network a
 - [[open-weight-model-risk-assessment|Risk assessment for open-weight models]]
 - [[ai-red-team-exercise-planning|Planning defensive AI red-team exercises]]
 - [[ai-agent-security-incident-evidence|Evidence collection for AI agent security incidents]]
+- [[output-guardrails-and-content-filtering|Output guardrails and content filtering]]: layer deterministic validators, classifiers and egress scanning with per-check fail-open or fail-closed policy, latency budgets, content-free logs and an adversarial test set.
 
 ## RAG and knowledge systems
 
@@ -176,6 +180,7 @@ Create representative datasets, trustworthy labels, task-specific metrics and sa
 - [[regression-testing-for-model-upgrades|Regression testing for model upgrades]]
 - [[shadow-and-canary-evaluation-for-models|Shadow and canary evaluation for models]]
 - [[eval-data-leakage-and-contamination|Evaluation data leakage and contamination]]
+- [[synthetic-data-for-ai-evaluation|Synthetic data for AI evaluation]]: generate and govern synthetic test data for LLM and RAG evaluation, covering drift, leakage, review, privacy and versioning with golden sets.
 
 ## Serving and inference platform
 
@@ -197,6 +202,7 @@ Run model serving on GKE or call managed endpoints privately, and plan capacity,
 - [[llm-serving-autoscaling-signals|LLM serving autoscaling signals]]
 - [[multi-tenant-inference-isolation|Multi-tenant inference isolation]]
 - [[inference-cold-start-mitigation|Inference cold-start mitigation]]
+- [[gpu-sharing-on-kubernetes|GPU sharing on Kubernetes]]: whole-GPU, time-slicing and hardware partitioning for inference on Kubernetes and GKE, with resource names, quotas, monitoring and when sharing is unsafe.
 
 ## Production operations and cost
 
