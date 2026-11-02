@@ -41,7 +41,7 @@ Use something else when:
 - Per-team keys, so a key identifies one owner ([[llm-api-cost-control]]). If keys are shared, step 3 stops at team level and containment is coarser.
 - An incident record; use the severity scale in [[incident-response]]. A spend spike with no writes is normally SEV3.
 - A `kubectl` context for the gateway cluster (for GKE, `gcloud container clusters get-credentials CLUSTER --region REGION --project PROJECT`), with get and list on pods, `pods/log` and configmaps in `$NS`. Check it with `kubectl auth can-i get pods/log -n "$NS"`.
-- For containment of an agent or job: rights to scale or patch the caller's Deployment in its own namespace, or access to its pipeline to cancel it. For the cronjob check in Troubleshooting: cluster-wide list on cronjobs.
+- For containment of an agent or job: rights to scale or patch the caller's Deployment in its own namespace, or access to its pipeline to cancel it. For the step 5.0 snapshot, also get and list on pods, get on `pods/log` and get on deployments in `$CALLER_NS`. Check them with `kubectl auth can-i get pods/log -n "$CALLER_NS"` and `kubectl auth can-i get deployments -n "$CALLER_NS"`. For the cronjob check in Troubleshooting: cluster-wide list on cronjobs.
 - Read access to Cloud Logging on the project (for example `roles/logging.viewer`) if pod logs have already rotated or the pods restarted.
 
 ```bash title="variables"
@@ -244,6 +244,8 @@ kubectl -n "$CALLER_NS" get deploy/"$CALLER" -o jsonpath='{.spec.replicas}' > ca
 test -s "limits-before-$KEY_ID.json" && test -s caller.log && test -s caller-replicas.txt || echo 'EMPTY SNAPSHOT'
 ```
 
+If `EMPTY SNAPSHOT` prints, fix the access or capture the caller's logs (or the Cloud Logging entries for `$CALLER_NS`, see step 6) and record its replica count by hand before any scale to zero; otherwise the restore in Rollback has no replica count to use.
+
 The limits endpoint is this site's example, like the other admin calls. Step 6 completes the evidence set.
 
 **5.1 Cap the key.** Lower its per-minute token limit to roughly its normal level. The caller degrades with clear errors and does not go dark:
@@ -393,7 +395,7 @@ Then confirm with the owner that their service works under the final limits, and
 
 ### Sources checked
 
-- [kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/): with a label selector and no `--tail`, kubectl returns only the last 10 lines per pod even when `--since` is set; `--tail=-1` lifts that cap. Checked 2026-11-01 in the kubectl source, `pkg/cmd/logs/logs.go` (`selectorTail = 10` and the `--tail` flag help), kubernetes/kubectl commit 8f64009.
+- [kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/): with a label selector and no `--tail`, kubectl returns only the last 10 lines per pod even when `--since` is set; `--tail=-1` lifts that cap. Checked 2026-11-01 by reading the kubectl source on GitHub (not locally) at [kubernetes/kubectl commit 8f64009](https://github.com/kubernetes/kubectl/blob/8f64009/pkg/cmd/logs/logs.go), `pkg/cmd/logs/logs.go`: `selectorTail int64 = 10`, applied only when a selector is set and `--tail` was not given, so an explicit `--tail=-1` returns all lines with or without `--since`. The local kubernetes/website content (commit 491f14e, `content/en/docs/reference/kubectl/generated/kubectl_logs/_index.md`) confirms `--tail` defaults to -1 with no selector and to 10 with one, and lists `-l`, `--prefix` and `--max-log-requests`.
 - [OpenTelemetry semantic conventions for generative AI](https://github.com/open-telemetry/semantic-conventions-genai/tree/244465e/docs/gen-ai): span attributes `gen_ai.usage.input_tokens` (includes cached tokens), `gen_ai.usage.output_tokens`, `gen_ai.usage.cache_read.input_tokens`, `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.operation.name`, `gen_ai.conversation.id`, `error.type`, with `gen_ai.agent.name` as an agent-span (`invoke_agent`) and `execute_tool` attribute, not a model-call one; the metrics `gen_ai.client.inference.usage.input_tokens` and `gen_ai.client.inference.usage.output_tokens` (Counter, unit `{token}`, attribute `gen_ai.token.modality`); status Development. Checked 2026-11-01 in the local semantic-conventions checkout, commit 244465e.
 - [Prometheus querying functions](https://prometheus.io/docs/prometheus/latest/querying/functions/) and [operators](https://prometheus.io/docs/prometheus/latest/querying/operators/): `rate()`, `increase()`, `topk`, `sum by`, and the `offset` modifier in the querying basics. Checked 2026-11-01 in the Prometheus repository docs, commit ef78ff6.
 - [Prometheus alerting rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/) and promtool: `for`, `labels`, `annotations` and label templating in `alerting_rules.md`, `promtool check rules` and `promtool test rules` in `command-line/promtool.md` and `configuration/unit_testing_rules.md`. Checked 2026-11-01, commit ef78ff6. Operators docs also checked for one-to-one vector matching, which drops unmatched series.
@@ -408,7 +410,7 @@ Then confirm with the owner that their service works under the final limits, and
 - Provider rate-limit headers and any behaviour of the provider console.
 - How your collector translates OpenTelemetry metric names into Prometheus names.
 - Trace-store query syntax for your tools.
-- `kubectl` behaviour: `kubectl` is not installed here and its reference is not in the local Kubernetes docs. That `kubectl logs deploy/NAME` reads one pod, the `-l`, `--max-log-requests`, `--prefix` flags and `--timestamps` output format are standard behaviour from memory, not checked locally. The pod label `app.kubernetes.io/name=llm-gateway` is an example.
+- `kubectl` behaviour: the `kubectl` binary was not run here. That `kubectl logs deploy/NAME` reads one pod and the `--timestamps` output format are standard behaviour from memory, not checked locally. The pod label `app.kubernetes.io/name=llm-gateway` is an example.
 - `jq -R` with `fromjson?` was tried once with jq 1.7 on a three-line sample (two JSON lines kept, a plain-text line skipped); it was not checked against the jq manual.
 - The Cloud Logging field names (`jsonPayload.key_id`) and IAM role names.
 

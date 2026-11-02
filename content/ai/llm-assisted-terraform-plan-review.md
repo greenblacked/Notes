@@ -146,13 +146,15 @@ Severity is advisory. There is no "approve" or "block" field on purpose: the mod
 
 ## GitLab MR wiring
 
-Run it in the merge request pipeline as a separate job after the plan job. Split the reader from the poster: the job that talks to the model has no write access to GitLab, and a small second step posts the note with a narrowly scoped token. Both jobs run with `allow_failure: true` so an outage never blocks a merge. Posting a note through the merge request notes API needs write access, so the poster's token needs the `api` scope (`read_api` is read-only); GitLab lists no narrower note-only scope for project tokens, so keep that token in the post job alone, on a project access token, and scoped to the one project. See [[securing-ai-agents-in-ci-and-cloud]] for token and egress rules.
+Run it in the merge request pipeline as a separate job after the plan job. Split the reader from the poster: the job that talks to the model has no write access to GitLab, and a small second step posts the note with a narrowly scoped token. Both jobs run with `allow_failure: true` so an outage never blocks a merge. Posting a note through the merge request notes API needs write access, so the poster's token needs the `api` scope (`read_api` is read-only); GitLab lists no narrower note-only scope for project tokens, so keep that token in the post job alone, on a project access token, and scoped to the one project. Give it the Reporter role (`access_level: 20`): the project access tokens API defaults to Maintainer (`40`), so `api` with the default role is not narrow. Set a short expiry and rotate it. See [[securing-ai-agents-in-ci-and-cloud]] for token and egress rules.
 
 ```yaml title=".gitlab-ci.yml"
 stages: [plan, review, post]
 
 plan:
   stage: plan
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - sh plan.sh
     - sh compact-plan.sh
@@ -179,7 +181,7 @@ llm-post:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   allow_failure: true
   script:
-    - sh post-mr-note.sh review-output.json # project token with api scope, post job only; updates one note
+    - sh post-mr-note.sh review-output.json # project token (api scope, Reporter role, short expiry), post job only; updates one note
 ```
 
 Update a single note in place (list the merge request notes, find yours by a marker string, then update it by note ID) rather than adding a new comment on every push, so the thread stays readable. The plan job keeps `tfplan` and `plan.json` out of its artifacts entirely because they contain secrets; only the compact `review-input.json` is published, with a short expiry. By default GitLab keeps the artifacts of the latest pipeline on each ref regardless of `expire_in`, so check that project setting if retention matters.
@@ -228,13 +230,15 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the Terraform plan JSON f
 - [GitLab CI/CD job rules](https://docs.gitlab.com/ci/jobs/job_rules/): `rules: - if: $CI_PIPELINE_SOURCE == "merge_request_event"`. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (doc/ci/jobs/job_rules.md).
 - [GitLab job artifacts](https://docs.gitlab.com/ci/jobs/job_artifacts/): `artifacts:paths`, `expire_in`, and that artifacts of the latest pipeline are kept regardless of `expire_in` by default. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
 - [GitLab token scopes](https://docs.gitlab.com/security/tokens/access_token_scopes/): `api` is read and write, `read_api` is read-only; available for project access tokens. The scope table lists no narrower write scope for project access tokens, and fine-grained restriction is documented only for personal access tokens (doc/security/tokens/access_token_scopes.md lines 36-58). That posting a merge request note needs `api` is inferred from `read_api` being read-only; the notes API page states no required scope. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [GitLab CI/CD YAML reference](https://docs.gitlab.com/ci/yaml/): a job without `only`, `except` or `rules` defaults to branches and tags (doc/ci/yaml/deprecated_keywords.md lines 117-118), so `plan` needs the same merge request `rules` as the jobs that `needs` it; a needed job (`optional: false`) that was not added to the pipeline fails the pipeline start (doc/ci/yaml/_index.md lines 4196-4197). Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [GitLab project access tokens API](https://docs.gitlab.com/api/project_access_tokens/): `access_level` values include `20` (Reporter) and `40` (Maintainer); the default is `40` (doc/api/project_access_tokens.md line 151). Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
 - [GitLab notes API](https://docs.gitlab.com/api/notes/): list, create (POST) and update (PUT) merge request notes. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): LLM01 indirect prompt injection from external content, human approval for high-risk actions and segregation of untrusted content; LLM10 rate limiting and quotas. Checked 2026-11-02 against the OWASP LLM repository commit 99f4395.
 
 ### Not verified
 
 - The HashiCorp documentation pages listed under Sources (JSON output format, `terraform show`, sensitive data in state) were not available locally; the plan format claims were checked against the Terraform source instead, and the sensitive data guidance was not checked.
-- GitLab `.gitlab-ci.yml` keyword reference (`stages`, `needs` and artifact hand-off between jobs, `allow_failure` semantics) was not in the local docs; the job syntax is unchecked against your runner version.
+- GitLab `.gitlab-ci.yml` keyword reference (`stages`, artifact hand-off between jobs, `allow_failure` semantics) was only partly read: the `rules` default and `needs` failure behaviour are under Sources checked; the rest of the job syntax is unchecked against your runner version.
 - Whether `google_sql_database_instance` replacement and the other seeded-plan resource types behave as described: the provider page for the SQL instance was not available locally.
 - The jq filter against every provider's plan shape, and all model behaviour, including the reliability numbers an evaluation would produce.
 - `tflint`, Conftest/OPA, Trivy, Checkov and the JSON Schema 2020-12 dialect were not checked.
@@ -247,7 +251,7 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the Terraform plan JSON f
 - [terraform show](https://developer.hashicorp.com/terraform/cli/commands/show), HashiCorp Terraform documentation (not read; see Evidence).
 - [Sensitive data in state](https://developer.hashicorp.com/terraform/language/state/sensitive-data), HashiCorp Terraform documentation (not read; see Evidence).
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/), OWASP GenAI Security Project.
-- [GitLab access token scopes](https://docs.gitlab.com/security/tokens/access_token_scopes/) and [notes API](https://docs.gitlab.com/api/notes/), GitLab documentation.
+- [GitLab access token scopes](https://docs.gitlab.com/security/tokens/access_token_scopes/), [project access tokens API](https://docs.gitlab.com/api/project_access_tokens/) and [notes API](https://docs.gitlab.com/api/notes/), GitLab documentation.
 
 ## Related
 

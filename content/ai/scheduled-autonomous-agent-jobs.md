@@ -105,7 +105,7 @@ agent-dep-triage:
   stage: agents
   image: registry.example.com/agent-jobs/dep-triage@sha256:REPLACE_WITH_DIGEST
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $AGENT_JOBS_ENABLED == "true" && $SCHEDULE_NAME == "dep-triage"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dep-triage"'
   resource_group: agent-dep-triage
   timeout: 30m
   variables:
@@ -117,7 +117,7 @@ agent-dep-triage:
     - ./run-job.sh
 ```
 
-`AGENT_JOBS_ENABLED` is a project or group CI variable, so disabling all agent jobs is one edit. `SCHEDULE_NAME` is a variable you set on the pipeline schedule itself, so one schedule cannot start another job's agent. Check the current docs for how your GitLab version orders `resource_group` jobs.
+`AGENT_JOBS_ENABLED` is a project or group CI variable, so disabling all agent jobs is one edit. The job does not test it in `rules:`; the wrapper does, so a disabled run still sends its `disabled` heartbeat. `SCHEDULE_NAME` is a variable you set on the pipeline schedule itself, so one schedule cannot start another job's agent. Check the current docs for how your GitLab version orders `resource_group` jobs.
 
 ## Run budgets
 
