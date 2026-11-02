@@ -451,6 +451,7 @@ for (const motion of [true, false]) {
 // is not a scroll by the reader, so the section row must stay as it is.
 const diagramPage = "/patterns/gke-blue-green-releases"
 type DiagramWindow = Window & { __drawn: (Element | null)[]; __log: string[]; __mid: boolean }
+type LockWindow = Window & { __lastChange: number; __released: number }
 
 // A finished diagram's SVG is a direct child of its block. While Mermaid draws, the block holds the
 // source text or a temporary wrapper with the SVG under construction, so `code svg` alone does not
@@ -699,7 +700,11 @@ test("a late SVG of the first redraw does not release the lock of the second", a
 
 // A link preview (popover) of another diagram page keeps an unrendered code.mermaid in the body,
 // hidden: Mermaid only draws the ones in .center. The lock on the diagram heights must not wait
-// for that block, or it lasts to its timeout and the scrolls in that time are dropped.
+// for that block, or it lasts to its 3 s idle timeout. The test times the lock itself, in the
+// page: the release must follow the redraw's last change by less than that timeout. Timing the row
+// instead (a short wait after a scroll) does not catch a held lock, since a scroll shows the row
+// while the lock holds, and it measured how busy the main thread was: it failed on a loaded WebKit
+// runner while the lock let go on time.
 test("a link preview with a diagram does not hold the section row after a theme switch", async ({
   page,
   isMobile,
@@ -713,13 +718,43 @@ test("a link preview with a diagram does not hold the section row after a theme 
   await page.mouse.move(5, 5)
   await scrollPastDiagram(page)
   await markDrawn(page)
+  await page.evaluate(() => {
+    const w = window as unknown as LockWindow
+    w.__lastChange = 0
+    w.__released = 0
+    const blocks = [...document.querySelectorAll<HTMLElement>(".center code.mermaid")]
+    const pres = blocks.map((c) => c.parentElement!)
+    // The changes the lock itself watches: those inside the pinned diagram blocks.
+    for (const code of blocks)
+      new MutationObserver(() => (w.__lastChange = performance.now())).observe(code, {
+        childList: true,
+        subtree: true,
+      })
+    let pinned = false
+    new MutationObserver(() => {
+      const now = pres.some((pre) => pre.style.minHeight !== "")
+      if (pinned && !now && !w.__released) w.__released = performance.now()
+      pinned = now
+    }).observe(document.body, { attributes: true, attributeFilter: ["style"], subtree: true })
+  })
   await tapToggle(page, isMobile)
   await expect(page.locator("html")).not.toHaveAttribute("saved-theme", "light")
   await redrawn(page)
-  await page.waitForTimeout(400)
+  // The heights are pinned during the redraw and let go once it is in: by the quiet spell after the
+  // last change (150 ms), not by the 3 s idle timeout that a wait for the preview's block would hit.
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as LockWindow).__released), {
+      timeout: 10_000,
+    })
+    .toBeGreaterThan(0)
+  const gap = await page.evaluate(() => {
+    const w = window as unknown as LockWindow
+    return w.__released - w.__lastChange
+  })
+  expect(gap, "ms from the redraw's last change to the release").toBeLessThan(2_500)
+  // With the lock gone, a scroll up shows the row again.
   await page.evaluate(() => window.scrollBy({ top: -80, behavior: "instant" }))
-  // A scroll up shows the row again at once, not after the lock's 3 s timeout.
-  await expect(page.locator("html")).not.toHaveAttribute("data-bar-tucked", { timeout: 1_000 })
+  await expect(page.locator("html")).not.toHaveAttribute("data-bar-tucked", { timeout: 5_000 })
 })
 
 // A slow device or a complex diagram redraws for longer than the lock's idle wait. While the blocks
