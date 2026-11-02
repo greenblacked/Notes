@@ -10,7 +10,7 @@ tags:
   - reliability
   - observability
 created: 2026-11-01
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -295,8 +295,11 @@ Compare the time latency changed with the start times. Look for a new image tag 
 
 ```bash
 kubectl -n "$NS" get pods -l "$APP_LABEL" -o wide
-kubectl get nodes -L cloud.google.com/gke-nodepool,node.kubernetes.io/instance-type
+kubectl get nodes -L pool,node.kubernetes.io/instance-type
+kubectl get nodes -l pool="$POOL"
 ```
+
+`pool` is a label the operator sets on the node pool, with `--node-labels=pool="$POOL"` on `gcloud container node-pools create` or `update` (or `labels` in the Terraform `node_config`); the GPU pool is also tainted with `dedicated=gpu:NoSchedule`, which the serving pods tolerate. If the pool column is empty, list the labels the nodes actually have with `kubectl get nodes --show-labels`, and label the pool with `gcloud container node-pools update ... --node-labels` before relying on the selector; `update` replaces all user-specified labels, so repeat the ones the pool already has.
 
 Set `POD` to the slow pod (from the per-pod queries in step 1), then derive `NODE` from it. Do not reuse a `POD` left over from 4b unless it is the slow pod.
 
@@ -444,7 +447,9 @@ Read the authentication header from a file as shown (curl 7.55 or newer); do not
 - [Parallelism and Scaling - vLLM](https://docs.vllm.ai/en/latest/serving/parallelism_scaling/): the `GPU KV cache size` and `Maximum concurrency` start-up log lines. Checked 2026-11-01, commit 8530a77.
 - [Deployments | Kubernetes](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/): `kubectl rollout history`, `--revision`, `rollout undo`, `--to-revision` and `rollout status`; `maxUnavailable` in the rolling update strategy. [Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/): the HPA acts on the target named in `scaleTargetRef`. [Nodes](https://kubernetes.io/docs/concepts/architecture/nodes/): `kubectl cordon`. Checked 2026-11-01, Kubernetes website repository commit 491f14e.
 - [Query functions | Prometheus](https://prometheus.io/docs/prometheus/latest/querying/functions/) and [HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/): `histogram_quantile` over `sum by (le) (rate(..._bucket[...]))` and `GET /api/v1/query`. Checked 2026-11-01, Prometheus repository commit ef78ff6.
-- `gcloud container node-pools update --help`, SDK 570.0.0, 2026-11-01: `--enable-autoscaling`, `--total-min-nodes`, `--total-max-nodes`.
+- `gcloud container node-pools create --help` and `update --help`, SDK 570.0.0, 2026-11-02: `--enable-autoscaling`, `--total-min-nodes`, `--total-max-nodes`; `--node-labels` and `--node-taints` apply Kubernetes labels and taints to the nodes of a pool, and `update` replaces all user-specified labels (help text only).
+- [Terraform google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster): `node_config` `labels` and the `taint` block (`key`, `value`, `effect` `NO_SCHEDULE`). Checked 2026-11-02, commit c4248bd.
+- [Taints and Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) and [Assigning Pods to Nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): `NoSchedule` taints and tolerations, `nodeSelector` on node labels. Checked 2026-11-02, commit 491f14e.
 
 ### Not verified
 
@@ -453,7 +458,7 @@ Read the authentication header from a file as shown (curl 7.55 or newer); do not
 - That each observation of `vllm:request_num_preemptions` is the per-request preemption count; the name suggests it, the local docs do not define it. A dedicated preemption counter may exist; the local docs do not name one.
 - How the GKE node pool autoscaler behaves when a maximum is lowered below the current node count. The gcloud help and Terraform docs only define the flags as bounds.
 - What a client receives when `--max-num-queued-reqs` or `--max-num-queued-tokens` rejects a request.
-- The effect of GPU time-slicing on a model server's inter-token latency, and the GKE labels that show a pool's sharing mode. Both are stated generically.
+- The effect of GPU time-slicing on a model server's inter-token latency, which is stated generically.
 - GPU-level telemetry such as DCGM exporter metrics (for example `DCGM_FI_DEV_FB_USED`) and throttling indicators: not available locally and not used in any command.
 - Prefix cache reset and replica-spread causes in 4c, the HPA failure patterns in 4f and the gateway caps in step 2b are operating guidance, not documented claims.
 - Nothing was run against a live cluster.

@@ -10,7 +10,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-02
 draft: false
 ---
 
@@ -42,6 +42,7 @@ CLUSTER=prod-gke
 LOCATION=europe-west1          # region for a regional cluster, zone for a zonal one
 REGION=europe-west1
 NS=app
+POOL=general              # node pool name; its nodes carry the label pool=<name> (set in step 6)
 POD=worker-7d9c6b6f4-abcde
 gcloud config set project "$PROJECT"
 gcloud container clusters get-credentials "$CLUSTER" --location "$LOCATION"
@@ -127,7 +128,7 @@ Upstream behaviour worth knowing, with the caveat that GKE may use different val
 gcloud container node-pools list --cluster "$CLUSTER" --location "$LOCATION" \
   --format="table(name,config.machineType,locations.list(),autoscaling.enabled,autoscaling.minNodeCount,autoscaling.maxNodeCount,autoscaling.totalMinNodeCount,autoscaling.totalMaxNodeCount,autoscaling.locationPolicy)"
 
-kubectl get nodes -L cloud.google.com/gke-nodepool,topology.kubernetes.io/zone --no-headers \
+kubectl get nodes -L pool,topology.kubernetes.io/zone --no-headers \
   | awk '{print $6, $7}' | sort | uniq -c
 ```
 
@@ -314,8 +315,30 @@ kubectl -n "$NS" get pod "$POD" -o json | jq '{
   volumes: [.spec.volumes[]? | select(.persistentVolumeClaim) | .persistentVolumeClaim.claimName]
 }'
 
-kubectl get nodes -o custom-columns='NODE:.metadata.name,POOL:.metadata.labels.cloud\.google\.com/gke-nodepool,TYPE:.metadata.labels.node\.kubernetes\.io/instance-type,CPU:.status.allocatable.cpu,MEM:.status.allocatable.memory,TAINTS:.spec.taints[*].key'
+kubectl get nodes -o custom-columns='NODE:.metadata.name,POOL:.metadata.labels.pool,TYPE:.metadata.labels.node\.kubernetes\.io/instance-type,CPU:.status.allocatable.cpu,MEM:.status.allocatable.memory,TAINTS:.spec.taints[*].key'
 ```
+
+The `pool` label is set by the operator on the node pool, not assumed. Set it once in Terraform (an in-place update; check that `terraform plan` does not show the pool being replaced):
+
+```hcl title="gke/node_pools.tf"
+resource "google_container_node_pool" "general" {
+  # ...
+  node_config {
+    labels = {
+      pool = "general"
+    }
+  }
+}
+```
+
+In an outage the `gcloud` equivalent is below. `--node-labels` on `update` replaces all user-specified labels of the pool, so list the existing ones first and repeat them.
+
+```bash
+gcloud container node-pools update "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
+  --node-labels=pool="$POOL"
+```
+
+Pods then select the pool with `nodeSelector: {pool: general}` (or node affinity on `pool`). If a pool does not carry the label yet, list the labels its nodes actually have with `kubectl get nodes --show-labels`, and label the pool with the command above before relying on `-l pool="$POOL"` or the `pool` column.
 
 | Blocker                                 | How to see it                                                                                            | Fix                                                                                                                                             |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -342,7 +365,7 @@ When the real fix (quota, a new range, a capacity review) takes hours, buy time 
 ```bash
 kubectl -n "$NS" get pod "$POD" -o wide                         # Running, on a node
 kubectl get events -A --field-selector reason=TriggeredScaleUp --sort-by=.lastTimestamp | tail -5
-kubectl get nodes -L cloud.google.com/gke-nodepool,topology.kubernetes.io/zone   # new nodes Ready
+kubectl get nodes -L pool,topology.kubernetes.io/zone   # new nodes Ready
 kubectl get pods -A --field-selector=status.phase=Pending -o json | jq '.items | length'   # back to the usual level; no output means the call failed
 
 while read -r url; do
@@ -391,5 +414,8 @@ Then watch the next real peak: the Pending count should return to near zero with
 - [Cluster autoscaler FAQ (upstream)](https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/FAQ.md): Pod and node event names, reasons for no scale-up, the one-pool-per-zone advice for zonal volumes, and the upstream provisioning and backoff defaults. Read 2026-10-21.
 - `gcloud` built-in help, SDK 570.0.0, 2026-10-21: `container node-pools update|create` (autoscaling, location policy, Pod range and max Pods flags), `container clusters update` (NAP limits, additional Pod ranges), `compute instance-groups managed list-errors`, `compute networks subnets update|expand-ip-range`.
 - Google API reference (discovery documents) for `container.googleapis.com` v1 and `compute` v1, 2026-10-21: the per-node Pod CIDR sizing example, `defaultPodIpv4RangeUtilization`, node pool Pod range immutability, and the superset rule for subnet expansion.
+- `gcloud` built-in help, SDK 570.0.0, checked 2026-11-02: `container node-pools update` `--node-labels` (replaces all user-specified labels; applied to existing nodes in place; usable in `nodeSelector`).
+- [Terraform google provider: google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster), commit c4248bd, checked 2026-11-02: `node_config.labels` (map of Kubernetes labels).
+- Kubernetes [taints and tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) and [assigning Pods to nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/), commit 491f14e, checked 2026-11-02: `nodeSelector` or node affinity matches node labels.
 - [Terraform google provider: google_container_node_pool](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_node_pool) and [google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster): autoscaling and `cluster_autoscaling` fields (read from the provider source).
 - See also, not read for this note: [GKE cluster autoscaler](https://cloud.google.com/kubernetes-engine/docs/concepts/cluster-autoscaler), [Viewing cluster autoscaler events](https://cloud.google.com/kubernetes-engine/docs/how-to/cluster-autoscaler-visibility), [Node auto-provisioning](https://cloud.google.com/kubernetes-engine/docs/how-to/node-auto-provisioning), [Expanding a subnet](https://cloud.google.com/vpc/docs/using-vpc#expand-subnet).

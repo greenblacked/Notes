@@ -11,17 +11,17 @@ tags:
   - ci-cd
   - cost
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-02
 draft: false
 ---
 
 A review environment is a short-lived copy of the application, deployed from a merge request, with its own URL. Reviewers click a link instead of pulling the branch, product people see the change before it merges, and end-to-end tests run against something real. The cost is a pile of namespaces, DNS names and compute that someone has to clean up, plus a new path from unreviewed code into a cluster. This note gives the full GitLab CI implementation; the reference design behind it, including the Argo CD pull model and the trade-offs, is in [[architecture/ephemeral-preview-environments-on-gke]]. It covers one namespace per merge request, the GitLab CI jobs, DNS and TLS, a least-privilege deploy identity, cleanup that does not depend on the happy path, and Spot capacity to keep the bill small.
 
 > [!info] Scope and sources
-> GitLab behaviour (environment keywords, predefined variables, stop jobs, fork and protected-variable rules, the Environments API) was checked against the GitLab documentation source on 2026-10-21. Kubernetes naming and quota rules were checked against the Kubernetes documentation source the same day. Nothing was run against a live GitLab instance or cluster.
+> GitLab behaviour (environment keywords, predefined variables, stop jobs, fork and protected-variable rules, the Environments API) was checked against the GitLab documentation source on 2026-10-21. Kubernetes naming and quota rules were checked against the Kubernetes documentation source the same day. The node label and taint on the review pool are set by you; the `gcloud` flags `--node-labels` and `--node-taints` were checked against `gcloud` help (SDK 570.0.0) on 2026-11-02, and node selection and tolerations against the Kubernetes documentation source (commit 491f14e). Nothing was run against a live GitLab instance or cluster.
 
 > [!note] Not verified
-> GKE-specific parts were not checked against current Google Cloud documentation: the Workload Identity Federation principal format for a cluster RBAC subject, GKE RBAC for federated identities, the GKE Gateway class names and the Spot node pool details (see [[gke-spot-vms-for-workloads]]). Also not verified: whether `resource_group` expands CI/CD variables in your GitLab version, the GitLab tier and minimum version of the protected-variable controls for merge request pipelines, the `ValidatingAdmissionPolicy` API version for your control plane, and any quota on namespaces or DNS records. Check them for your versions before adopting the design.
+> GKE-specific parts were not checked against current Google Cloud documentation: the Workload Identity Federation principal format for a cluster RBAC subject, GKE RBAC for federated identities, the GKE Gateway class names and the Spot VM behaviour (see [[gke-spot-vms-for-workloads]]). Also not verified: whether `resource_group` expands CI/CD variables in your GitLab version, the GitLab tier and minimum version of the protected-variable controls for merge request pipelines, the `ValidatingAdmissionPolicy` API version for your control plane, and any quota on namespaces or DNS records. Check them for your versions before adopting the design.
 
 ## When review environments pay off
 
@@ -520,7 +520,7 @@ Notes:
 
 ## Capacity and cost
 
-Review copies are idle most of the time and disposable all of the time, which makes them a good fit for Spot capacity. Put them on a tainted Spot node pool and give the review chart a matching toleration and node selector; the trade-offs and the fallback design are in [[gke-spot-vms-for-workloads]].
+Review copies are idle most of the time and disposable all of the time, which makes them a good fit for Spot capacity. Put them on a dedicated, tainted Spot node pool that you label and taint when you create it, and give the review chart a matching toleration and node selector; the trade-offs and the fallback design are in [[gke-spot-vms-for-workloads]].
 
 ```yaml title="chart/values-review.yaml (fragment)"
 replicaCount: 1
@@ -531,7 +531,7 @@ resources:
   limits:
     memory: 512Mi
 nodeSelector:
-  cloud.google.com/gke-spot: "true"
+  pool: review
 tolerations:
   - key: workload
     operator: Equal
@@ -539,7 +539,24 @@ tolerations:
     effect: NoSchedule
 ```
 
-The toleration targets a dedicated review Spot pool with its own taint `workload=review:NoSchedule`, not the shared `workload-class=spot` pool from [[gke-spot-vms-for-workloads]], so unreviewed merge request code never shares nodes with other workloads.
+The toleration targets a dedicated review Spot pool with the label `pool=review` and its own taint `workload=review:NoSchedule`, not the shared pool labelled and tainted `capacity=spot` in [[gke-spot-vms-for-workloads]], so unreviewed merge request code never shares nodes with other workloads. You set both on the pool; GKE does not add them:
+
+```bash
+set -euo pipefail
+
+CLUSTER="prod"            # change
+LOCATION="europe-west1"   # change
+PROJECT="my-project"      # change
+
+gcloud container node-pools create review \
+  --cluster "$CLUSTER" --location "$LOCATION" --project "$PROJECT" \
+  --spot \
+  --enable-autoscaling --total-min-nodes 0 --total-max-nodes 10 \
+  --node-labels=pool=review \
+  --node-taints=workload=review:NoSchedule
+```
+
+On a review pool that already exists, list the labels its nodes actually have with `kubectl get nodes --show-labels`, and label the pool before relying on the node selector. `gcloud container node-pools update` with `--node-labels` replaces all user-set labels on the pool, so first read the current ones with `gcloud container node-pools describe review --cluster "$CLUSTER" --location "$LOCATION" --format="value(config.labels)"` and pass them again together with the new label `pool=review`.
 
 Other levers:
 
@@ -632,6 +649,9 @@ Check the merge request's latest pipeline for a `stop-review` job; if it is miss
 - [GitLab: Environments API](https://docs.gitlab.com/api/environments/): list, stop, `stop_stale`, delete review apps.
 - [Kubernetes: Object names and IDs](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/)
 - [Kubernetes: Resource quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/)
+- [gcloud container node-pools create](https://cloud.google.com/sdk/gcloud/reference/container/node-pools/create) and [update](https://cloud.google.com/sdk/gcloud/reference/container/node-pools/update) (`--help`, SDK 570.0.0, checked 2026-11-02): `--node-labels` and `--node-taints` (for example `key1=val1:NoSchedule`); on `update`, labels apply to existing nodes in place and replace all user-specified labels.
+- [Kubernetes: Assigning Pods to nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/) (commit 491f14e): `nodeSelector` on node labels.
+- [Kubernetes: Taints and tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) (commit 491f14e): a `NoSchedule` taint and a matching toleration.
 - [Kubernetes: Validating admission policy](https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/)
 - [Gateway API: Gateway and route attachment](https://gateway-api.sigs.k8s.io/)
 - [Helm: helm upgrade](https://helm.sh/docs/helm/helm_upgrade/)

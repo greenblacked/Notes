@@ -11,7 +11,7 @@ tags:
   - cost
 status: accepted
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-02
 decided: 2026-10-19
 draft: false
 aliases:
@@ -37,7 +37,7 @@ We will run GitLab CI jobs with the **Kubernetes executor on GKE**, each job a s
   - `ci-untrusted`: runs merge request and unprotected-branch jobs. No Workload Identity binding to Google Cloud, no deploy credentials, restrictive network policy, egress through the controlled path in [[private-gke-and-controlled-egress]].
   - `ci-protected`: runs only jobs on protected branches and tags (runners are configured "protected"). This is the only place deploy jobs run.
 - **Identity.** Only the protected runner's pods use a Kubernetes service account bound through Workload Identity ([[gke-workload-identity]]) to a Google service account. Even then we prefer per-job federation with the job's own OIDC token ([[0026-keyless-ci-auth-with-workload-identity-federation]]) over a standing runner identity. The untrusted runner has no Google identity at all.
-- **Compute.** Build jobs run on a Spot node pool with a taint and matching toleration, so a preemption fails a retried job rather than a deployment. Deploy jobs run on regular nodes.
+- **Compute.** Build jobs run on a Spot node pool that we label `capacity=spot` and taint `capacity=spot:NoSchedule` when we create it. Build pods select the label and tolerate the taint, so a preemption fails a retried job rather than a deployment. Deploy jobs run on regular nodes.
 - **Cache and artifacts.** The distributed cache lives in a Cloud Storage bucket per runner group, with a lifecycle rule to expire old objects. Cache is never shared between the trusted and untrusted groups, so an untrusted job cannot poison a protected build.
 - **Resource requests.** Every build pod sets CPU and memory requests (through the runner's `cpu_request` and `memory_request` settings and per-job overrides within an allowed ceiling). Without requests the autoscaler cannot size nodes and one job can starve others. See [[0021-mandatory-resource-requests]].
 - **No Docker socket.** Jobs never mount the host Docker socket and runner pods are not privileged. Image builds follow [[0015-no-privileged-image-builds-in-ci]].
@@ -55,12 +55,31 @@ runners:
         memory_request = "1Gi"
         memory_limit = "2Gi"
         [runners.kubernetes.node_selector]
-          "cloud.google.com/gke-spot" = "true"
+          "capacity" = "spot"
         [runners.kubernetes.node_tolerations]
-          "cloud.google.com/gke-spot=true" = "NoSchedule"
+          "capacity=spot" = "NoSchedule"
 rbac:
   create: true
 ```
+
+The label and the taint are set by us on the node pool, not added by GKE:
+
+```bash
+set -euo pipefail
+
+PROJECT_ID="example-prod"
+CLUSTER="ci-cluster"
+LOCATION="europe-west1"
+
+gcloud container node-pools create ci-spot \
+  --cluster "${CLUSTER}" --location "${LOCATION}" --project "${PROJECT_ID}" \
+  --spot \
+  --enable-autoscaling --total-min-nodes 0 --total-max-nodes 20 \
+  --node-labels=capacity=spot,pool=ci-spot \
+  --node-taints=capacity=spot:NoSchedule
+```
+
+On a pool that already exists, `gcloud container node-pools update ci-spot --node-labels=...` applies labels to the existing nodes in place and replaces all user-specified labels, so list every label you want to keep. Before relying on the selector, list the labels the nodes actually have with `kubectl get nodes --show-labels`.
 
 ```mermaid
 flowchart TB
@@ -127,5 +146,7 @@ kubectl get pods -A -o json \
 
 - GitLab Runner Kubernetes executor: https://docs.gitlab.com/runner/executors/kubernetes/
 - GitLab Runner on Kubernetes: https://docs.gitlab.com/runner/install/kubernetes/
+- `gcloud container node-pools create --help` and `gcloud container node-pools update --help` (SDK 570.0.0, checked 2026-11-02): `--node-labels=[NODE_LABEL,...]` and `--node-taints=[NODE_TAINT,...]`; on `update`, labels are applied to existing Node objects in place and replace all user-specified labels.
+- Kubernetes, assigning Pods to nodes (https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/, commit 491f14e) and taints and tolerations (https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/, commit 491f14e): `nodeSelector` on node labels, and a `NoSchedule` taint with a matching toleration.
 - Related notes: [[gitlab-runners-on-gke]], [[private-gke-and-controlled-egress]], [[gke-workload-identity]]
 - Related ADRs: [[0015-no-privileged-image-builds-in-ci]], [[0021-mandatory-resource-requests]], [[0026-keyless-ci-auth-with-workload-identity-federation]]

@@ -9,7 +9,7 @@ tags:
   - cost
   - reliability
 created: 2026-10-21
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -92,7 +92,7 @@ gcloud container node-pools create gpu-inference \
 What each part is for:
 
 - **`--accelerator`.** `type` is required; `count` defaults to 1. `gpu-driver-version` is `default`, `latest` (Container-Optimized OS only) or `disabled` (you install drivers yourself, for example with the NVIDIA GPU Operator). The help text says `default` became the default from GKE 1.30.1-gke.1156000, and `disabled` was the default before that; check the GPU page for your version rather than relying on the default.
-- **The taint and label.** GKE documents its own `nvidia.com/gpu=present:NoSchedule` taint for GPU pools in clusters that also have non-GPU pools, and adds a matching toleration to pods that request GPUs. That keeps CPU workloads off the GPUs but lets any GPU pod in. The extra `dedicated=llm-inference` taint and `workload=llm-inference` label reserve this pool for inference, so a batch job with a GPU request cannot take its nodes.
+- **`--node-taints` and `--node-labels`.** You set both on the pool. The `dedicated=llm-inference:NoSchedule` taint keeps every pod without a matching toleration off these nodes, so CPU workloads and batch jobs with a GPU request cannot take them. The `workload=llm-inference` label is what the inference pods select on with `nodeSelector`. Taints and labels given at pool creation apply to all nodes in the pool, including nodes added later.
 - **`--workload-metadata=GKE_METADATA`.** Pods reach the GKE metadata server, which is what makes Workload Identity work for the model download ([[gke-workload-identity]]).
 - **`--ephemeral-storage-local-ssd`.** Backs the node's ephemeral storage with local SSD, so an `emptyDir` holding the weights is fast and does not fill the boot disk.
 - **`--min-nodes=0`.** No idle GPUs at night. The cost is a cold start (node creation, driver, image pull, weight load) when traffic comes back; see the autoscaling section for when a floor of one is worth paying for.
@@ -136,7 +136,6 @@ spec:
         workload: llm-inference
       tolerations:
         - { key: dedicated, operator: Equal, value: llm-inference, effect: NoSchedule }
-        - { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule }
       initContainers:
         - name: fetch-weights
           image: gcr.io/google.com/cloudsdktool/google-cloud-cli:slim  # pin by digest
@@ -324,7 +323,7 @@ Spot GPU nodes are cheaper and can be reclaimed at any time. Google's Spot VM pa
 
 A pattern that survives this:
 
-- A small **on-demand pool** sized for the minimum you must always serve, plus a **Spot pool** for burst capacity. Create the Spot pool like `gpu-inference` above, under another name, with `--spot`, the same `dedicated` taint and `workload` label, and one more of each so that only pods that opt in land on it: `--node-taints="dedicated=llm-inference:NoSchedule,capacity=spot:NoSchedule"` and `--node-labels="workload=llm-inference,capacity=spot"`. Add `capacity=on-demand` to the on-demand pool's `--node-labels`. These labels and the taint are your own, so the scheduling below does not depend on the labels and taints GKE puts on Spot nodes.
+- A small **on-demand pool** sized for the minimum you must always serve, plus a **Spot pool** for burst capacity. Create the Spot pool like `gpu-inference` above, under another name, with `--spot`, the same `dedicated` taint and `workload` label, and one more of each so that only pods that opt in land on it: `--node-taints="dedicated=llm-inference:NoSchedule,capacity=spot:NoSchedule"` and `--node-labels="workload=llm-inference,capacity=spot"`. Add `capacity=on-demand` to the on-demand pool's `--node-labels`. These labels and taints are all set by you, and the scheduling below selects and tolerates only them.
 - **Two Deployments per release, not one Deployment with an HPA.** An HPA scales one Deployment, and the scheduler places each of its pods wherever it fits: nothing makes the first replicas land on on-demand nodes, so one reclamation wave can take the whole floor. Split the release into a **baseline** Deployment with a fixed replica count, pinned to the on-demand pool and without the Spot toleration, and a **burst** Deployment that tolerates and prefers Spot and is the HPA's target. Both carry `app: llm-server` and `release: model-a-v2`, so the Service selector and the version switch below cover both; a `tier` label keeps their Deployment selectors from overlapping. The rest of each pod spec is the one in `deploy-model.sh`:
 
 ```yaml title="llm-baseline-and-burst.yaml (scheduling fields; the rest as in deploy-model.sh)"
@@ -348,7 +347,6 @@ spec:
         capacity: on-demand
       tolerations: # no capacity=spot toleration, so the Spot taint keeps these pods off Spot nodes
         - { key: dedicated, operator: Equal, value: llm-inference, effect: NoSchedule }
-        - { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule }
       # serviceAccountName, initContainers, containers, volumes: as in deploy-model.sh
 ---
 apiVersion: apps/v1
@@ -377,7 +375,6 @@ spec:
                   - { key: capacity, operator: In, values: [spot] }
       tolerations:
         - { key: dedicated, operator: Equal, value: llm-inference, effect: NoSchedule }
-        - { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule }
         - { key: capacity, operator: Equal, value: spot, effect: NoSchedule }
       # serviceAccountName, initContainers, containers, volumes: as in deploy-model.sh
 ```
@@ -495,6 +492,8 @@ For general pod failures see [[kubernetes-pod-troubleshooting]]; for nodes under
 
 - [Schedule GPUs](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/): GPUs only under `limits`, a request is copied from the limit and must be equal if set, the `nvidia.com/gpu` extended resource comes from a device plugin; [Resource management for pods and containers](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources): extended resource quantities must be whole numbers; checked 2026-11-01 (Kubernetes website checkout, commit 491f14e).
 - [Configure liveness, readiness and startup probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) and [Liveness, readiness and startup probes](https://kubernetes.io/docs/concepts/workloads/pods/probes/): liveness and readiness wait for the startup probe, which runs only at startup; the tolerated start time is `failureThreshold * periodSeconds`; checked 2026-11-01 (commit 491f14e).
+- [Taints and Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) and [Assigning Pods to Nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): a `NoSchedule` taint keeps pods without a matching toleration off the node, a toleration with `operator: Equal` matches key, value and effect, `nodeSelector` matches node labels, and node affinity `preferredDuringSchedulingIgnoredDuringExecution` with `matchExpressions` expresses a preference; checked 2026-11-02 (commit 491f14e).
+- `gcloud container node-pools create --help` (Google Cloud SDK 570.0.0): `--node-labels` applies the given Kubernetes labels and `--node-taints` the given taints (format `key=value:NoSchedule`) on all nodes in the new pool, usable with `nodeSelector` and tolerations; checked 2026-11-02 (help text only).
 - [Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/): `behavior` with `stabilizationWindowSeconds` and `policies` of type `Pods` with `periodSeconds`; scale to zero only for object and external metrics behind the `HPAScaleToZero` gate (correction made above); checked 2026-11-01 (commit 491f14e).
 - [Pod Priority and Preemption](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/): PriorityClass `value`, `globalDefault`, `description`, and preemption of lower-priority pods for a pending pod; [Volumes](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir): `emptyDir.medium: Memory` and files counting against the container memory limit; [Network policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/): the `kubernetes.io/metadata.name` namespace label; [EndpointSlices](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/): the `kubernetes.io/service-name` label; [Disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/): PodDisruptionBudgets cover voluntary disruptions; checked 2026-11-01 (commit 491f14e).
 - [vLLM server arguments](https://docs.vllm.ai/en/latest/configuration/serve_args/), [ModelOpt quantization](https://docs.vllm.ai/en/latest/features/quantization/modelopt/) and [security](https://docs.vllm.ai/en/latest/usage/security/): `vllm serve` with a local checkpoint path and `--host 0.0.0.0 --port 8000`, `host` as a long-form server argument, `--api-key` and `VLLM_API_KEY`, the protected path prefixes (`/v1`, `/v2`, `/inference` and one vendor-compatible prefix, corrected above), `/health` and `/metrics` listed as unauthenticated; checked 2026-11-01 (vLLM checkout, commit 8530a77).
@@ -502,7 +501,7 @@ For general pod failures see [[kubernetes-pod-troubleshooting]]; for nodes under
 
 ### Not verified
 
-- Everything that depends on Google Cloud or GKE documentation: GPU quota guidance, the GKE-added `nvidia.com/gpu=present:NoSchedule` taint and toleration, the Spot VM notice and graceful-shutdown timings, the autoscaling guidance (queue size target of 3 to 5), the Cloud Storage FUSE and Hyperdisk ML comparison, the labels and taints GKE puts on Spot nodes, the `gmp-system` namespace and `PodMonitoring` resource, the custom metrics adapter and the metric name it exposes, and the Workload Identity principal form.
+- Everything that depends on Google Cloud or GKE documentation: GPU quota guidance, the Spot VM notice and graceful-shutdown timings, the autoscaling guidance (queue size target of 3 to 5), the Cloud Storage FUSE and Hyperdisk ML comparison, the `gmp-system` namespace and `PodMonitoring` resource, the custom metrics adapter and the metric name it exposes, and the Workload Identity principal form.
 - The `gcloud container node-pools create` and `gcloud storage` flags: read from local `--help` text of Google Cloud SDK 570.0.0 on 2026-10-21, not from a source checkout reviewed on 2026-11-01. The GPU and machine type pair and the default driver version by GKE release are also unchecked.
 - vLLM: the exact flag set for your version (only `--host`, `--port` and `--api-key` were checked), that `/health` reports ready only after the weights load, and that the `vllm:num_requests_waiting` gauge is exposed under that exact name (only an "also `_waiting`" mention was found).
 - Container image names and tags (the vLLM image and the Cloud SDK image).
@@ -512,12 +511,12 @@ For general pod failures see [[kubernetes-pod-troubleshooting]]; for nodes under
 
 ## Sources
 
-- [Run GPUs in GKE Standard node pools](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/gpus), Google Cloud documentation: quota, driver installation, taints.
+- [Run GPUs in GKE Standard node pools](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/gpus), Google Cloud documentation: quota and driver installation.
 - [About GPUs in GKE](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/gpus), Google Cloud documentation.
 - [Best practices for autoscaling LLM inference workloads with GPUs](https://docs.cloud.google.com/kubernetes-engine/docs/best-practices/machine-learning/inference/autoscaling), Google Cloud documentation.
 - [Spot VMs in GKE](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/spot-vms), Google Cloud documentation: preemption notice and graceful shutdown.
 - [Cloud Storage FUSE CSI driver](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/cloud-storage-fuse-csi-driver), Google Cloud documentation.
-- [Schedule GPUs](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/), Kubernetes documentation.
+- [Schedule GPUs](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/), [Taints and Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) and [Assigning Pods to Nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/), Kubernetes documentation.
 - [Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/), [Pod Priority and Preemption](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/) and [Volumes](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir), Kubernetes documentation.
 - [Configure liveness, readiness and startup probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/), Kubernetes documentation.
 - [Server arguments](https://docs.vllm.ai/en/latest/configuration/serve_args/), [security](https://docs.vllm.ai/en/latest/usage/security/) and [metrics](https://docs.vllm.ai/en/latest/design/metrics/), vLLM documentation.

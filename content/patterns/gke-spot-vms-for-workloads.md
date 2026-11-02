@@ -9,17 +9,17 @@ tags:
   - cost
   - reliability
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-02
 draft: false
 ---
 
 Spot VMs are spare Compute Engine capacity at a discount that Google can reclaim at any time. On GKE that means a node can disappear with very little warning, taking every Pod on it. Workloads that are built to lose a replica at any moment get a large compute saving almost for free; workloads that are not get outages that look random. This note is the general pattern: what fits, how to set up Spot pools on GKE Standard and Spot Pods on Autopilot, how to fall back to on-demand capacity, and what preemption actually does to Pods. The CI-specific case is in [[gitlab-runners-on-gke]].
 
 > [!info] Scope and sources
-> Kubernetes behaviour (disruptions, PodDisruptionBudgets, graceful node shutdown, node affinity, taints) was checked against the Kubernetes documentation source on 2026-10-21. The Terraform fields were checked against the Google provider's documentation source and the `gcloud` flags against Google Cloud SDK 570.0.0 help on the same day. Nothing was run on a cluster.
+> Kubernetes behaviour (disruptions, PodDisruptionBudgets, graceful node shutdown, node affinity, taints) was checked against the Kubernetes documentation source on 2026-10-21. The Terraform fields were checked against the Google provider's documentation source and the `gcloud` flags against Google Cloud SDK 570.0.0 help on the same day. The node labels and taints used below are ones you set yourself; the `gcloud` flags (`--node-labels`, `--node-taints`), the Terraform `labels` and `taint` fields, and how Pods select labels and tolerate taints were checked on 2026-11-02 against `gcloud` help (SDK 570.0.0), the Terraform provider documentation source and the Kubernetes documentation source. Nothing was run on a cluster.
 
 > [!warning] Not verified: Google Cloud Spot pages
-> This note was not checked against the GKE Spot VMs, Autopilot Spot Pods and Compute Engine Spot pages. So the following are **not verified**: the length of the preemption notice and the signal the VM receives; whether GKE enables kubelet graceful node shutdown on Spot nodes by default and with which period; whether Standard Spot nodes carry an automatic taint; the exact Autopilot Spot Pod syntax and any required toleration; maximum Spot VM lifetime; eligible machine types and GPUs; quota behaviour; how the cluster autoscaler reacts to a Spot stockout; and every price or discount. Read those pages before you rely on any of it. This note gives no prices on purpose.
+> This note was not checked against the GKE Spot VMs, Autopilot Spot Pods and Compute Engine Spot pages. So the following are **not verified**: the length of the preemption notice and the signal the VM receives; whether GKE enables kubelet graceful node shutdown on Spot nodes by default and with which period; the exact Autopilot Spot Pod syntax and any required toleration; maximum Spot VM lifetime; eligible machine types and GPUs; quota behaviour; how the cluster autoscaler reacts to a Spot stockout; and every price or discount. Read those pages before you rely on any of it. This note gives no prices on purpose.
 
 ## What fits on Spot and what never does
 
@@ -45,8 +45,8 @@ Stateful workloads and how to keep them on stable capacity are covered in [[stat
 ```mermaid
 flowchart TB
   subgraph Cluster
-    OD[On-demand pool<br/>no taint, min nodes per zone]
-    SP[Spot pool<br/>taint workload-class=spot:NoSchedule<br/>min 0]
+    OD[On-demand pool<br/>label capacity=on-demand<br/>no taint, min nodes per zone]
+    SP[Spot pool<br/>label capacity=spot<br/>taint capacity=spot:NoSchedule<br/>min 0]
   end
   A[Stateless Deployment<br/>toleration + preferred affinity] -->|prefers| SP
   A -.->|falls back| OD
@@ -55,11 +55,11 @@ flowchart TB
   S[StatefulSets, controllers, ingress<br/>no toleration] --> OD
 ```
 
-- **Spot is opt-in.** The Spot pool carries a taint you define, so only workloads that tolerate it can land there. An untainted Spot pool turns every team's Deployment into a Spot workload the first time the scheduler finds room there, including the database someone forgot to pin.
+- **Spot is opt-in.** The Spot pool carries a label and a taint that you set on the pool, so only workloads that tolerate it can land there. An untainted Spot pool turns every team's Deployment into a Spot workload the first time the scheduler finds room there, including the database someone forgot to pin.
 - **An on-demand floor** carries the minimum load for the service on capacity that does not vanish. How to keep that floor is the main design choice; see below.
 - **Batch work** that is fine with waiting requires Spot (hard affinity), so it never consumes on-demand capacity.
 
-Whether GKE already adds its own taint to Spot nodes on Standard clusters is not verified (Google's sample Job manifests select Spot nodes by label without a toleration, which suggests it does not). Adding your own taint makes the behaviour explicit either way.
+The label (`capacity=spot`) and the taint (`capacity=spot:NoSchedule`) are not added by GKE for you: they are set in `node_config` (Terraform) or with `--node-labels` and `--node-taints` (`gcloud`), as shown next. Pods select the label with `nodeSelector` or node affinity and tolerate the taint.
 
 ## GKE Standard: the node pools in Terraform
 
@@ -94,7 +94,8 @@ resource "google_container_node_pool" "on_demand" {
     service_account = var.node_service_account
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
     labels = {
-      "capacity-type" = "on-demand"
+      "capacity" = "on-demand"
+      "pool"     = "on-demand"
     }
     workload_metadata_config {
       mode = "GKE_METADATA"
@@ -107,7 +108,7 @@ resource "google_container_node_pool" "on_demand" {
   }
 }
 
-# Spot pool: opt-in through a taint, scales to zero when idle.
+# Spot pool: opt-in through a label and a taint that you set, scales to zero when idle.
 resource "google_container_node_pool" "spot" {
   name    = "spot"
   cluster = var.cluster_id
@@ -124,10 +125,11 @@ resource "google_container_node_pool" "spot" {
     service_account = var.node_service_account
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
     labels = {
-      "capacity-type" = "spot"
+      "capacity" = "spot"
+      "pool"     = "spot"
     }
     taint {
-      key    = "workload-class"
+      key    = "capacity"
       value  = "spot"
       effect = "NO_SCHEDULE"
     }
@@ -154,7 +156,7 @@ What the provider documentation says about these fields:
 - `node_config.spot` is a boolean that makes the node VMs Spot; it defaults to `false`. The older `preemptible` field is a different, older model; do not set both.
 - `location_policy = "ANY"` tells the autoscaler to prioritise unused reservations and reduce preemption risk for Spot VMs; `BALANCED` tries to keep zones even. `total_min_node_count` and `total_max_node_count` (instead of per-zone counts) and `location_policy` need cluster version 1.24.1 or later.
 - `kubelet_config.shutdown_grace_period_seconds` (10 to 10000) and `shutdown_grace_period_critical_pods_seconds` (not more than the first) are only allowed on Spot or Preemptible pools.
-- The `taint` block reports drift only for keys the provider manages; GKE-managed taints show up in `effective_taints`.
+- `node_config.labels` are Kubernetes labels applied to each node (the `kubernetes.io/` and `k8s.io/` prefixes are reserved). The `taint` block takes `key`, `value` and `effect` (`NO_SCHEDULE`, `PREFER_NO_SCHEDULE` or `NO_EXECUTE`). It reports drift only for keys the provider manages; `effective_taints` lists the taints on the pool from all sources.
 - Changing `node_config` fields generally replaces the pool. Whether flipping `spot` on an existing pool forces recreation was not checked: plan it as a new pool, move workloads, then delete the old one.
 
 The CLI equivalent for a quick test pool:
@@ -172,11 +174,11 @@ gcloud container node-pools create spot \
   --machine-type e2-standard-4 \
   --enable-autoscaling --total-min-nodes 0 --total-max-nodes 20 \
   --location-policy ANY \
-  --node-labels capacity-type=spot \
-  --node-taints workload-class=spot:NoSchedule
+  --node-labels=capacity=spot,pool=spot \
+  --node-taints=capacity=spot:NoSchedule
 ```
 
-`--spot` makes every new node in the pool, including ones created by resize or recreate, a Spot VM. Check `gcloud container node-pools create --help` for the autoscaling flags in your SDK version.
+`--spot` makes every new node in the pool, including ones created by resize or recreate, a Spot VM. Check `gcloud container node-pools create --help` for the autoscaling flags in your SDK version. `gcloud container node-pools update --node-labels` replaces all user-specified labels on an existing pool and applies them to the existing Node objects in place, without recreating nodes; `--node-taints` on `update` likewise replaces the taints. Before you rely on a selector against a pool that already exists, list the labels its nodes actually have with `kubectl get nodes --show-labels`, and label the pool with `gcloud container node-pools update ... --node-labels` first.
 
 Use more than one Spot pool with different machine families when you can. A stockout usually hits a machine shape in a zone, so a second shape is a second chance at capacity.
 
@@ -204,7 +206,7 @@ spec:
     spec:
       terminationGracePeriodSeconds: 25 # keep it below the node's shutdown period, see Preemption
       tolerations:
-        - key: workload-class
+        - key: capacity
           operator: Equal
           value: spot
           effect: NoSchedule
@@ -214,9 +216,9 @@ spec:
             - weight: 100
               preference:
                 matchExpressions:
-                  - key: cloud.google.com/gke-spot
+                  - key: capacity
                     operator: In
-                    values: ["true"]
+                    values: ["spot"]
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
@@ -227,7 +229,7 @@ spec:
           matchLabelKeys:
             - pod-template-hash
         - maxSkew: 2
-          topologyKey: capacity-type
+          topologyKey: capacity
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
@@ -249,7 +251,7 @@ How this behaves:
 
 - The toleration allows Spot; the weighted preference asks the scheduler to pick Spot nodes when both fit. A preference is not a guarantee: if no Spot node has room, the Pod goes to an on-demand node.
 - `IgnoredDuringExecution` means nothing moves Pods back to Spot when Spot capacity returns. After a stockout the service stays on on-demand nodes until Pods are recreated, for example by the next rollout. A descheduler can rebalance, but it is another component to run.
-- The second spread constraint uses the `capacity-type` label set on **both** pools. Spreading on `cloud.google.com/gke-spot` would not work for this, because on-demand nodes do not carry that key and nodes without the topology key are not part of any domain.
+- The second spread constraint uses the `capacity` label set on **both** pools. Spreading on a label that only the Spot pool carries would not work for this, because on-demand nodes would not have that key and nodes without the topology key are not part of any domain.
 - `ScheduleAnyway` keeps spread a soft goal, so a Spot outage does not leave Pods pending. Spread rules are covered in [[topology-spread-constraints-gke]].
 
 > [!warning] The autoscaler does not share your preference
@@ -283,7 +285,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
-                  - key: capacity-type
+                  - key: capacity
                     operator: In
                     values: ["on-demand"]
       containers:
@@ -313,12 +315,12 @@ spec:
     spec:
       restartPolicy: Never
       tolerations:
-        - key: workload-class
+        - key: capacity
           operator: Equal
           value: spot
           effect: NoSchedule
       nodeSelector:
-        cloud.google.com/gke-spot: "true"
+        capacity: spot
 ```
 
 The `DisruptionTarget` rule keeps preempted Pods from using up `backoffLimit`; the field details and caveats are in [[patterns/kubernetes-jobs-and-cronjobs]]. The Job must checkpoint, or each preemption restarts it from zero.
@@ -329,17 +331,10 @@ When the on-demand pool is full, a Pod that fell back from Spot competes with Po
 
 ## GKE Autopilot: Spot Pods
 
-Autopilot has no node pools to configure. A workload asks for Spot capacity in its Pod spec and Autopilot provisions matching nodes. Google's own sample manifests select Spot with a node selector:
-
-```yaml title="autopilot-spot-pod (fragment)"
-spec:
-  nodeSelector:
-    cloud.google.com/gke-spot: "true"
-  terminationGracePeriodSeconds: 25
-```
+Autopilot has no node pools to configure, so there is no pool where you could set the `capacity` label and taint used above. A workload asks for Spot capacity in its Pod spec and Autopilot provisions matching nodes. This note does not state the Pod-spec syntax for that request, because it was not checked; use the Autopilot Spot Pods page for your cluster version.
 
 > [!note] Not verified
-> Whether Autopilot also requires a toleration, how it handles a Spot request combined with a compute class, and what limit it puts on `terminationGracePeriodSeconds` for Spot Pods were not checked. Follow the Autopilot Spot Pods page for your cluster version. Autopilot is the default for new clusters on this site ([[adr/0018-gke-autopilot-for-new-clusters]]).
+> The exact Pod-spec syntax for requesting Spot Pods, whether Autopilot also requires a toleration, how it handles a Spot request combined with a compute class, and what limit it puts on `terminationGracePeriodSeconds` for Spot Pods were not checked. Follow the Autopilot Spot Pods page for your cluster version. Autopilot is the default for new clusters on this site ([[adr/0018-gke-autopilot-for-new-clusters]]).
 
 On current GKE, custom compute classes (`kind: ComputeClass`, `apiVersion: cloud.google.com/v1`) let a platform team express "try these machine types on Spot first, then on-demand" as an ordered priority list that the autoscaler follows when it creates nodes. Google's samples show `spec.priorities` entries with `spot: true`, node pool auto-creation and `whenUnsatisfiable`, and mention built-in classes named `autopilot` and `autopilot-spot`. The fields and their availability on Standard and Autopilot were not verified here: read the GKE compute classes documentation before adopting them. If they fit, they solve the "autoscaler ignores my preference" problem above more cleanly than affinity weights.
 
@@ -393,7 +388,7 @@ The exact backoff and retry behaviour of the GKE cluster autoscaler during a sto
 set -euo pipefail
 
 # Age of every Spot node, youngest first.
-kubectl get nodes -l cloud.google.com/gke-spot=true \
+kubectl get nodes -l capacity=spot \
   --sort-by=.metadata.creationTimestamp \
   -o custom-columns=NAME:.metadata.name,ZONE:.metadata.labels.topology\\.kubernetes\\.io/zone,CREATED:.metadata.creationTimestamp
 
@@ -402,7 +397,7 @@ kubectl get pods -A -o json \
   | jq -r '.items[] | select(.status.message? // "" | test("node shutdown"; "i")) | "\(.metadata.namespace)/\(.metadata.name): \(.status.message)"'
 ```
 
-Compute Engine also records preemptions in the instance's system event audit logs; the exact log method name and filter are not verified, so build the Cloud Logging query from an actual preemption event in your project. With kube-state-metrics, node creation timestamps (`kube_node_created`) give a churn rate per pool if you expose the `capacity-type` label through its label allowlist; check the metric and flag names for your kube-state-metrics version.
+Compute Engine also records preemptions in the instance's system event audit logs; the exact log method name and filter are not verified, so build the Cloud Logging query from an actual preemption event in your project. With kube-state-metrics, node creation timestamps (`kube_node_created`) give a churn rate per pool if you expose the `capacity` label through its label allowlist; check the metric and flag names for your kube-state-metrics version.
 
 Drills: drain a Spot node in staging during peak traffic and watch error rate and latency. That is the closest safe imitation of a preemption; [[game-day-chaos-gke]] has the drill format.
 
@@ -415,8 +410,8 @@ NS="shop"                         # change
 APP="catalog"                     # change
 
 # Spot nodes carry the label and your taint.
-kubectl get nodes -l cloud.google.com/gke-spot=true -L capacity-type,topology.kubernetes.io/zone
-kubectl get nodes -l cloud.google.com/gke-spot=true \
+kubectl get nodes -l capacity=spot -L capacity,pool,topology.kubernetes.io/zone
+kubectl get nodes -l capacity=spot \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.taints}{"\n"}{end}'
 
 # Where the replicas run: count per capacity type and zone.
@@ -424,17 +419,17 @@ kubectl -n "$NS" get pods -l app.kubernetes.io/name="$APP" \
   -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' \
   | while read -r node; do
       [ -n "$node" ] || { echo "unscheduled"; continue; }   # a Pending Pod has no node yet
-      kubectl get node "$node" --no-headers -L capacity-type,topology.kubernetes.io/zone | awk '{print $(NF-1), $NF}'
+      kubectl get node "$node" --no-headers -L capacity,topology.kubernetes.io/zone | awk '{print $(NF-1), $NF}'
     done | sort | uniq -c
 
 # Every Pod on a Spot node with its owner kind: StatefulSets and singletons should not appear.
-for node in $(kubectl get nodes -l cloud.google.com/gke-spot=true -o jsonpath='{.items[*].metadata.name}'); do
+for node in $(kubectl get nodes -l capacity=spot -o jsonpath='{.items[*].metadata.name}'); do
   kubectl get pods -A --field-selector spec.nodeName="$node" -o json \
     | jq -r --arg node "$node" '.items[] | "\(.metadata.ownerReferences[0].kind // "none")\t\(.metadata.namespace)/\(.metadata.name)\t\($node)"'
 done | sort | { grep -v '^DaemonSet' || [ "$?" -eq 1 ]; }   # grep exits 1 when nothing is left; a kubectl error still fails
 ```
 
-Expected: Spot nodes show `capacity-type=spot` and the `workload-class=spot:NoSchedule` taint; the Spot-preferring Deployment has most replicas on Spot and the floor Deployment's replicas all on on-demand nodes, spread across zones; the last list holds only ReplicaSet and Job owners (plus workloads you deliberately allowed on Spot), never `StatefulSet` or a Pod without an owner.
+Expected: Spot nodes show `capacity=spot` and the `capacity=spot:NoSchedule` taint; the Spot-preferring Deployment has most replicas on Spot and the floor Deployment's replicas all on on-demand nodes, spread across zones; the last list holds only ReplicaSet and Job owners (plus workloads you deliberately allowed on Spot), never `StatefulSet` or a Pod without an owner.
 
 ## Troubleshooting
 
@@ -442,7 +437,7 @@ Expected: Spot nodes show `capacity-type=spot` and the `workload-class=spot:NoSc
 
 **Pods pending, autoscaler events show failed scale-up on the Spot pool.** A Spot stockout or a quota limit. Check the event message; add another Spot machine shape or zone, and let Spot-preferring workloads fall back.
 
-**All replicas ended up on one pool.** On Spot: the zone and capacity-type spread is missing or `ScheduleAnyway` lost to resource pressure; add the floor Deployment. On on-demand: Spot capacity returned after a stockout but nothing rescheduled; trigger a rollout (`kubectl rollout restart deployment/<name>`) in a quiet period.
+**All replicas ended up on one pool.** On Spot: the zone and capacity spread is missing or `ScheduleAnyway` lost to resource pressure; add the floor Deployment. On on-demand: Spot capacity returned after a stockout but nothing rescheduled; trigger a rollout (`kubectl rollout restart deployment/<name>`) in a quiet period.
 
 **Requests fail in bursts every few days.** Preemptions without a drain path. Check that readiness fails on SIGTERM, that `terminationGracePeriodSeconds` fits within the node's shutdown budget, and that clients retry idempotent calls.
 
@@ -456,7 +451,7 @@ Expected: Spot nodes show `capacity-type=spot` and the `workload-class=spot:NoSc
 
 To move a workload off Spot: remove the toleration (and the Spot affinity) from its template and roll it out. New Pods can only land on on-demand nodes; make sure that pool can grow first.
 
-To retire a Spot pool:
+To retire a Spot pool, first make sure its nodes carry the `pool` label. If the pool was created without it, list the labels its nodes actually have with `kubectl get nodes --show-labels`, and label the pool with `gcloud container node-pools update "$POOL" --node-labels=pool="$POOL",...` (include every label you want to keep, since it replaces the user-specified labels) before relying on the selector.
 
 ```bash
 set -euo pipefail
@@ -466,13 +461,16 @@ LOCATION="europe-west1"   # change
 PROJECT="my-project"      # change
 POOL="spot"
 
+# 0. Fail if the selector matches nothing, so an unlabelled pool is never deleted undrained.
+kubectl get nodes -l pool="$POOL" -o name | grep -q .
+
 # 1. Stop new Pods landing there.
-for node in $(kubectl get nodes -l cloud.google.com/gke-nodepool="$POOL" -o name); do
+for node in $(kubectl get nodes -l pool="$POOL" -o name); do
   kubectl cordon "$node"
 done
 
 # 2. Evict Pods, respecting PDBs. Repeat until it completes; investigate PDBs that block.
-for node in $(kubectl get nodes -l cloud.google.com/gke-nodepool="$POOL" -o name); do
+for node in $(kubectl get nodes -l pool="$POOL" -o name); do
   kubectl drain "$node" --ignore-daemonsets --delete-emptydir-data --timeout=10m
 done
 
@@ -499,9 +497,10 @@ gcloud container node-pools delete "$POOL" --cluster "$CLUSTER" --location "$LOC
 - [GKE: Run fault-tolerant workloads at lower costs in Spot Pods (Autopilot)](https://cloud.google.com/kubernetes-engine/docs/how-to/autopilot-spot-pods) (not readable when written)
 - [Compute Engine: Spot VMs](https://cloud.google.com/compute/docs/instances/spot) (not readable when written)
 - [Terraform google provider: google_container_node_pool](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_node_pool): `node_config.spot`, `taint`, `kubelet_config`, `autoscaling.location_policy`, total node counts.
-- [gcloud container node-pools create](https://cloud.google.com/sdk/gcloud/reference/container/node-pools/create): `--spot`.
+- [gcloud container node-pools create](https://cloud.google.com/sdk/gcloud/reference/container/node-pools/create): `--spot`. Checked with `gcloud container node-pools create --help` and `gcloud container node-pools update --help` (SDK 570.0.0, checked 2026-11-02): `--node-labels=[NODE_LABEL,...]` and `--node-taints=[NODE_TAINT,...]` (for example `key1=val1:NoSchedule`) on `create`; on `update`, `--node-labels` replaces all user-specified labels and applies them to existing Node objects in place.
+- [Terraform google provider: google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster) (commit c4248bd): `node_config.labels` (Kubernetes labels per node, reserved prefixes) and the `taint` block (`key`, `value`, `effect` of `NO_SCHEDULE`, `PREFER_NO_SCHEDULE`, `NO_EXECUTE`; `effective_taints`).
 - [Kubernetes: Disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/): voluntary and involuntary disruptions, PDB scope.
 - [Kubernetes: Node shutdowns](https://kubernetes.io/docs/concepts/cluster-administration/node-shutdown/): graceful node shutdown.
-- [Kubernetes: Assigning Pods to nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): preferred and required node affinity.
-- [Kubernetes: Taints and tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
-- [GoogleCloudPlatform/kubernetes-engine-samples](https://github.com/GoogleCloudPlatform/kubernetes-engine-samples): Spot node selector and ComputeClass examples.
+- [Kubernetes: Assigning Pods to nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/) (commit 491f14e): `nodeSelector` on node labels, preferred and required node affinity.
+- [Kubernetes: Taints and tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) (commit 491f14e): a `NoSchedule` taint keeps Pods without a matching toleration off the node; a toleration matches key, value and effect.
+- [GoogleCloudPlatform/kubernetes-engine-samples](https://github.com/GoogleCloudPlatform/kubernetes-engine-samples): ComputeClass examples.

@@ -9,7 +9,7 @@ tags:
   - security
   - audit
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-02
 draft: false
 aliases:
   - kube-bench
@@ -125,7 +125,7 @@ spec:
             path: /etc/kubernetes
 ```
 
-The Job runs on one node, chosen by the scheduler. To check each node pool, add a `nodeSelector` with the pool label (`cloud.google.com/gke-nodepool: <pool>`) and run it once per pool.
+The Job runs on one node, chosen by the scheduler. To check each node pool, give each pool a label you set yourself, add a `nodeSelector` with it under `spec.template.spec` in the Job (`nodeSelector: {pool: general}` for a pool named `general`) and run it once per pool. Set the label on the pool, for example with `gcloud container node-pools update general --cluster prod-gke --location europe-west1 --node-labels=pool=general`, or in Terraform with `node_config { labels = { pool = "general" } }`. The `--node-labels` flag replaces all user-set labels of the pool, so first read the current ones with `gcloud container node-pools describe general --cluster prod-gke --location europe-west1 --format="value(config.labels)"` and pass them again together with `pool=general`. If you are unsure whether a pool carries the label, list the labels its nodes actually have with `kubectl get nodes --show-labels` and set the label before relying on the selector.
 
 ```bash
 set -euo pipefail

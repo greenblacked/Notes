@@ -9,7 +9,7 @@ tags:
   - reliability
   - observability
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-02
 draft: false
 ---
 
@@ -38,6 +38,7 @@ LOCATION=europe-west1
 CLUSTER=prod-1
 NODE=gke-prod-1-default-pool-abc123-wxyz
 ZONE=europe-west1-b
+POOL=default-pool           # node pool name; its nodes carry the label pool=<name> (see step 2)
 gcloud config set project "$PROJECT"
 ```
 
@@ -76,7 +77,7 @@ Read it like this:
 One node, one pool, or one zone changes the diagnosis completely.
 
 ```bash
-kubectl get nodes -L topology.kubernetes.io/zone,cloud.google.com/gke-nodepool \
+kubectl get nodes -L topology.kubernetes.io/zone,pool \
   --no-headers | awk '{print $2, $(NF-1), $NF}' | sort | uniq -c
 
 kubectl get nodes -o json | jq -r '.items[] | select(([.status.conditions[]|select(.type=="Ready")][0].status)!="True") | .metadata.name'
@@ -85,6 +86,7 @@ kubectl get nodes -o json | jq -r '.items[] | select(([.status.conditions[]|sele
 - Many nodes across pools at once: suspect the control plane path, a bad DaemonSet, a network change or a platform event. Go to [[gke-control-plane-unavailable]] and check the Google Cloud status page.
 - All nodes in one zone: a zonal incident or a zone-specific network change.
 - One node: continue below.
+- To list one pool's nodes, use `kubectl get nodes -l pool="$POOL"`. The `pool` label is set by the operator on the node pool, not assumed. If the nodes do not carry it yet, list the labels they actually have with `kubectl get nodes --show-labels`, and label the pool with `gcloud container node-pools update "$POOL" --cluster "$CLUSTER" --location "$LOCATION" --node-labels=pool="$POOL"` before relying on the selector (this replaces all user-specified labels of the pool, so repeat any existing ones).
 - All nodes of one pool shortly after a change: a node image, taint or kubelet config change. Roll that back.
 
 ### 3. Check the VM
@@ -210,4 +212,6 @@ To test this path on purpose, use the node-loss scenario in [[game-day-chaos-gke
 - [GKE node auto-repair](https://cloud.google.com/kubernetes-engine/docs/how-to/node-auto-repair)
 - [Kubernetes node status](https://kubernetes.io/docs/reference/node/node-status/)
 - [Kubernetes nodes](https://kubernetes.io/docs/concepts/architecture/nodes/)
-- [Taints and tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
+- [Taints and tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/), commit 491f14e, checked 2026-11-02: the `node.kubernetes.io/not-ready` and `unreachable` taints and tolerations.
+- [Assigning Pods to nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/), commit 491f14e, checked 2026-11-02: selecting nodes by label.
+- `gcloud container node-pools update --help`, SDK 570.0.0, checked 2026-11-02: `--node-labels` replaces the user-specified labels and updates existing nodes in place.

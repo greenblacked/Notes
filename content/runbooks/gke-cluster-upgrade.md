@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - reliability
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-11-02
 draft: false
 ---
 
@@ -163,7 +163,7 @@ Validate the control plane (below) before touching nodes.
 
 ### 7. Upgrade node pools
 
-One pool at a time, least critical first:
+One pool at a time, least critical first. The `pool` label used below is set by the operator on the node pool; it is not assumed. Before starting, list the labels the nodes actually have with `kubectl get nodes --show-labels`; a pool that lacks the label must be labelled with `gcloud container node-pools update` before the upgrade starts, because the pool cannot be updated while an upgrade is running.
 
 ```bash
 gcloud container clusters upgrade "$CLUSTER" --location "$LOCATION" \
@@ -173,7 +173,7 @@ gcloud container clusters upgrade "$CLUSTER" --location "$LOCATION" \
 Without `--cluster-version`, the pool moves to the control plane version. Watch the rollout from a second terminal:
 
 ```bash
-kubectl get nodes -L cloud.google.com/gke-nodepool -w
+kubectl get nodes -l pool="$POOL" -w
 kubectl get pods -A -o wide --field-selector=status.phase!=Running,status.phase!=Succeeded
 ```
 
