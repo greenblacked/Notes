@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-02
+
+### Changed
+
+- **Ten more AI notes are source-reviewed**, the next most linked ones, so 31 AI notes now carry checked evidence. Five notes now cite the current MCP specification revision where the cited text still holds there.
+- **Notes no longer rely on GKE node labels or taints that could not be verified.** Thirteen notes selected nodes on `cloud.google.com/gke-*` labels or assumed a GPU taint GKE adds. Each pool now carries a label and taint the operator sets with `--node-labels` and `--node-taints` or Terraform `node_config`, Pods select and tolerate exactly those, and the GPU notes share one scheme with the serving pool in the self-hosted inference note.
+- **Dependencies:** wrangler 4.152.0, zizmor 1.31.1, Playwright 1.64.1 with the matching CI browser image, and eight other minor and patch updates.
+
+### Fixed
+
+- **Relabelling a node pool no longer drops its other labels.** `gcloud container node-pools update --node-labels` replaces all user-set labels on the pool; every note that adds one now reads the current labels first and passes them again, and the autoscaler runbook advises against relabelling in an outage.
+- **AI code review bots:** the sample job no longer checks out the merge request branch with the bot token in scope; it sets `GIT_STRATEGY: none` and runs its script from the pinned image.
+- **GPU out of memory runbook:** the GPU model is read from the node pool's accelerator configuration, since the machine type does not identify it.
+
 ## [0.14.0] - 2026-11-01
 
 ### Added
