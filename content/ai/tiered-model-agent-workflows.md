@@ -8,14 +8,17 @@ tags:
   - reliability
   - team-process
 created: 2026-10-27
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note covers how to split one coding-agent workflow across model tiers: a cheap, fast tier for read-only exploration, a mid tier for bounded implementation, and the strongest tier for ambiguous design and final review of risky diffs. It is for engineers and platform teams who run agent workflows by hand or in CI and want predictable cost and quality. It does not cover request-level routing for production applications ([[model-router-policy]]), provider failover ([[fallback-model-selection-and-quality-degradation]]) or per-call cost maths ([[per-request-cost-estimation]]).
 
-> [!note] Not verified
-> The sources below were found through search, but the pages could not be fetched on 2026-10-27. Before relying on this note, check: the current subagent configuration fields and model aliases in your harness docs, the current tier mapping and pricing for your provider, and whether published token-multiplier figures for multi-agent runs apply to coding work (those figures come from research tasks, not coding).
+> [!note] Tool-specific details
+> Subagent configuration fields, model aliases, tier pricing and multi-agent token multipliers vary by tool and provider. Check them in your own harness and provider docs before copying any configuration (see Evidence).
 
 ## Tier by subtask, not by project
 
@@ -37,7 +40,7 @@ Keep the model names out of prose and policy. Put them in one dated table that i
 
 ```yaml title="agent-tiers.yaml"
 # Reviewed on every model change. Tier names are stable; model IDs are not.
-reviewed: 2026-10-27
+reviewed: 2026-11-02
 tiers:
   cheap: { model: "<pinned-id-a>", use: [explore, summarise, triage] }
   mid: { model: "<pinned-id-b>", use: [implement, test-fix] }
@@ -67,7 +70,7 @@ Each subagent has its own context window and tool allowlist, so exploration nois
 
 ## Escalation rule
 
-Start at the lowest tier that has a verifiable success check (a test, a type check, a linter, a schema validation). Escalate on a failed check or when the agent flags uncertainty, and cap attempts per tier. After the cap, escalate once and then stop and hand the task to a human. Without a cap you get the worst case: repeated cheap attempts plus an expensive one. See [[bounded-agent-loops-and-stop-conditions]].
+Start at the lowest tier that has a verifiable success check (a test, a type check, a linter, a schema validation). Escalate on a failed check or when the agent flags uncertainty, and cap attempts per tier. Escalate through each tier up to its cap, then stop and hand the task to a human after the strongest tier's cap is spent. The sample script implements only the failed-check trigger; the `explicit_uncertain` trigger in the YAML is not implemented there. Without a cap you get the worst case: repeated cheap attempts plus an expensive one. See [[bounded-agent-loops-and-stop-conditions]].
 
 ```bash title="escalate.sh"
 #!/usr/bin/env bash
@@ -121,9 +124,28 @@ Record, per artifact, which tier and pinned model ID produced it, the prompt or 
 - [ ] Cost is tracked as tokens per resolved task against a single-tier baseline.
 - [ ] Routing is re-evaluated on a fixed eval set when a model changes.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the OWASP LLM Top 10 and the OpenTelemetry GenAI semantic conventions were checked locally; the rest of the note is tool- and provider-specific or engineering guidance.
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications 2025: LLM06 Excessive Agency](https://genai.owasp.org/llm-top-10/): recommends minimising extensions, functionality and permissions, and requiring human approval before high-impact actions, which supports requiring a human, or a deterministic downstream authorization check (mediation in the downstream system rather than the model), for high-impact actions. It says nothing about model tiers or about specific paths such as auth, IAM, migrations or pipelines. Checked 2026-11-02 against owasp-llm commit 99f4395 (2_0_vulns/LLM06_ExcessiveAgency.md lines 52-78).
+- [OWASP Top 10 for LLM Applications 2025: LLM10 Unbounded Consumption](https://genai.owasp.org/llm-top-10/): recommends rate limiting and user quotas, timeouts and throttling as controls against unbounded cost, and describes cost-per-use exploitation (Denial of Wallet) by attackers or users. Applying such limits to per-tier attempt caps is this note's own inference. Checked 2026-11-02 against owasp-llm commit 99f4395 (2_0_vulns/LLM10_UnboundedConsumption.md lines 17, 49-57).
+- [OpenTelemetry GenAI semantic conventions, attribute registry](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/registry/attributes/gen-ai.md): defines `gen_ai.request.model` (the model a request is made to), `gen_ai.response.model` (the model that generated the response), `gen_ai.usage.input_tokens` and `gen_ai.usage.cache_read.input_tokens`, which back logging the requested and answering model plus token usage per call. Checked 2026-11-02 against semantic-conventions-genai commit 244465e (docs/registry/attributes/gen-ai.md lines 44, 57, 83, 88).
+
+### Not verified
+
+- Subagent definition fields, per-invocation model override precedence, model aliases, and the claim that each subagent has its own context window and tool allowlist: harness documentation was not available locally.
+- Batch interface discounts, prompt caching behaviour and pricing, and published token-multiplier figures for multi-agent runs: provider documentation was not available locally. The locally available inference-server docs were searched; they describe self-hosted prefix caching but not provider pricing terms.
+- The NIST AI Risk Management Framework framing: NIST publications were not reachable.
+- Tier mapping, escalation caps (two attempts per tier), the example scripts and the failure modes (lossy handoff, weaker reviewers, hidden complexity, and that tightly coupled coding changes parallelise and delegate poorly) are engineering guidance, not documented claims. So are the routing of high-risk paths (auth, IAM, migrations, pipelines) to the strongest tier, and the claim that model names change every few months, which is opinion.
+- Nothing was run, including the example `escalate.sh` and the YAML and subagent samples.
+
 ## Sources
 
 - Your coding agent's and model provider's own documentation for per-subagent model settings, alias resolution, and batch and caching price modifiers. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
-- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance framing for deciding where model output needs independent checks and human sign-off.
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): LLM06 Excessive Agency (human approval for high-impact actions, minimised permissions) and LLM10 Unbounded Consumption (rate limits, timeouts, cost-driven abuse).
+- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): governance framing for deciding where model output needs independent checks and human sign-off. Not read for this review.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

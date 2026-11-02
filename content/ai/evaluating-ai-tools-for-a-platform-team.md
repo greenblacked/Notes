@@ -9,8 +9,11 @@ tags:
   - team-process
   - delivery
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 Vendor benchmarks measure public tasks you do not have. A better question is: which of the tools that pass our security review fix our kind of change, in our repositories, at what cost? This guide gives a two-stage method: a scorecard that can reject a tool outright, then a bake-off that replays real past changes and measures outcomes in CI. It covers the measurement method only. The pilot, rollout and go or no-go decision are in [[rolling-out-ai-tools-in-a-team]].
@@ -95,11 +98,13 @@ started=$(date +%s)
 timeout 900 "../adapters/${TOOL}.sh" "../tasks/${TASK_ID}/prompt.txt" || echo "tool exited non-zero"
 tool_seconds=$(( $(date +%s) - started ))
 
-if ../tasks/"${TASK_ID}"/check.sh; then tests=pass; else tests=fail; fi
+# change: fetch-check is your command that pulls the check script from outside the job workspace; it runs only after the tool step.
+fetch-check "$TASK_ID" > ../check.sh
+if bash ../check.sh; then tests=pass; else tests=fail; fi
 echo "{\"tool\":\"${TOOL}\",\"task\":\"${TASK_ID}\",\"tests\":\"${tests}\",\"tool_seconds\":${tool_seconds},\"seconds_to_check_done\":$(( $(date +%s) - started ))}" >> ../results.jsonl
 ```
 
-Keep known-good diffs and check scripts out of the job workspace (fetch the check only after the tool step), and run the adapter with the working directory limited to `work/`. If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
+The `tasks/` directory present while the tool runs holds only `repo-url`, `start-commit` and `prompt.txt`. Keep known-good diffs and check scripts out of the job workspace (the script fetches the check only after the tool step), and run the adapter with the working directory limited to `work/`. If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
 
 Each adapter is a thin script that feeds the prompt to the tool non-interactively; write them once and review them like production code.
 
@@ -147,9 +152,31 @@ One page for the decision-makers:
 
 Hand the result to the rollout process ([[rolling-out-ai-tools-in-a-team]]) and follow it with a before and after measurement on real work ([[measuring-ai-impact-on-delivery]]); a bake-off predicts, it does not prove. Keep the task set and results so the next evaluation can compare a new version against the same bar.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the checkable statements about git commands, GitLab job token handling in the replay script, and the OWASP risks the scorecard rows map to.
+
+### Sources checked
+
+- [Git documentation: git-clone](https://git-scm.com/docs/git-clone): `--quiet` (`-q`) is a `git clone` option. Checked 2026-11-02 against git commit 50fe5cc.
+- [Git documentation: git-switch](https://git-scm.com/docs/git-switch): `-c <new-branch>` creates a branch at the start point and switches to it; `--quiet` is supported. Checked 2026-11-02 against git commit 50fe5cc.
+- [Git documentation: git-checkout](https://git-scm.com/docs/git-checkout): `-q` is supported when checking out a commit. Checked 2026-11-02 against git commit 50fe5cc.
+- [GitLab CI/CD job token](https://docs.gitlab.com/ci/jobs/ci_job_token/): a job clones with `gitlab-ci-token` as the user and the job token as the password. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+- [GitLab predefined CI/CD variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_REPOSITORY_URL` is the clone URL with the job token embedded. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+- [Troubleshooting CI/CD variables](https://docs.gitlab.com/ci/variables/variables_troubleshooting/): with debug logging enabled (`CI_DEBUG_TRACE`), the example job log shows the runner running `git remote set-url origin` with a `gitlab-ci-token` URL. This shows the runner's own checkout stores the job token in its remote URL, which is why the harness checkout is not reused as the work directory. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): the 2025 list includes LLM02 Sensitive Information Disclosure, LLM06 Excessive Agency and LLM10 Unbounded Consumption, the risks behind the data, agent-safety and cost-cap rows. Checked 2026-11-02 against the OWASP repository commit 99f4395.
+
+### Not verified
+
+- The NIST AI Risk Management Framework page listed in Sources was not available locally and was not read; it is listed as general background only.
+- Vendor terms, retention, SSO, SCIM, audit export and subprocessor practices: the note quotes none and each must be checked per vendor.
+- Wilson interval, sign test, sample sizes (20 to 30 tasks) and the 900 second timeout are engineering guidance or starting points, not documented requirements.
+- The scorecard rows, the bake-off method and the failure modes are engineering guidance.
+- Nothing was run.
+
 ## Sources
 
-- [AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework), NIST.
+- [AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework), NIST (not read; see Not verified).
 - [OWASP Top 10 for LLM applications](https://genai.owasp.org/llm-top-10/), OWASP GenAI Security Project.
 - [GitLab CI/CD documentation](https://docs.gitlab.com/ci/).
 

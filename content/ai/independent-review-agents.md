@@ -8,14 +8,17 @@ tags:
   - reliability
   - ci-cd
 created: 2026-10-27
-modified: 2026-10-30
+modified: 2026-11-02
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 draft: false
 ---
 
 This note covers using a separate reviewer agent to check another agent's output: fresh context, a different prompt or model, adversarial framing, verified findings and a capped fix loop. It is for engineers and platform teams who already let agents write code and want a review stage that adds signal rather than agreement. It does not cover the review bot product choices in [[ai-code-review-bots]], validating a judge model ([[llm-as-judge-validation]]) or the human review baseline in [[code-review]].
 
 > [!note] Not verified
-> The sources below were found through search, but the pages could not be fetched on 2026-10-27. Before relying on this note, check: how your harness handles subagent context and tool allowlists, and whether self-preference bias in evaluator models, reported in some papers and not others, shows up on your own outputs. Reviewer catch rates are not published for these setups; measure them yourself.
+> The model-behaviour claims (self-preference bias, subagent context handling, reviewer catch rates) are not confirmed by a local primary source. See [Not verified](#not-verified) in the Evidence section, and measure them on your own setup.
 
 ## Why independence matters
 
@@ -145,6 +148,24 @@ For changes that affect production, a reviewer agent's approval is one input. A 
 - [ ] Reviewer model, prompt version and verdict are logged per change.
 - [ ] Precision is measured against known-bad diffs after any prompt or model change.
 - [ ] Human approval remains required for production-impacting changes.
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the CI variables and rule syntax used in the GitLab example; the agent-behaviour claims could not be checked against a local source.
+
+### Sources checked
+
+- [Specify when jobs run with `rules` | GitLab Docs](https://docs.gitlab.com/ci/jobs/job_rules/): `rules:` with `if: $CI_PIPELINE_SOURCE == "merge_request_event"` selects merge request pipelines, and `rules:changes` runs a job only when matching files changed. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (doc/ci/jobs/job_rules.md).
+- [Predefined CI/CD variables reference | GitLab Docs](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_PIPELINE_SOURCE`, `CI_COMMIT_SHA` and `CI_MERGE_REQUEST_DIFF_BASE_SHA` (the base SHA of the merge request diff) exist as used in the example. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (doc/ci/variables/predefined_variables.md).
+- [Job artifacts | GitLab Docs](https://docs.gitlab.com/ci/jobs/job_artifacts/): `artifacts:paths` lists the files kept from a job. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (doc/ci/jobs/job_artifacts.md).
+
+### Not verified
+
+- The GitLab keyword reference (`needs`, `stages`, `default:image`, digest-pinned images, `rules:changes` path syntax) is not in the local docs checkout, so those keywords were not checked.
+- Subagent context isolation, "forked" subagents and read-only tool allowlists depend on the harness; the coding agent documentation was not available.
+- Self-preference bias in model evaluators (the arXiv paper in Sources) and the NIST AI Risk Management Framework could not be fetched.
+- Reviewer catch rates, hallucinated-finding filtering and the two-or-three round cap are engineering guidance, not documented claims.
+- The `review/run.sh`, `author/fix.sh` and `review-loop.sh` scripts are illustrative and were not run. Nothing was run.
 
 ## Sources
 

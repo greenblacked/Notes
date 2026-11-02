@@ -8,14 +8,17 @@ tags:
   - reliability
   - team-process
 created: 2026-11-01
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note covers how to run a blameless postmortem when an AI assistant, agent or model contributed to an incident: what evidence to preserve, how to separate model behaviour from missing controls, which action items are acceptable, and how to turn the failure into a regression case. It is for platform engineers, on-call leads and reviewers who own postmortems. It extends the base process in [[blameless-postmortems]] and does not replace it. It does not cover live response or using an assistant to draft the postmortem ([[ai-assisted-incident-response]], [[runaway-or-compromised-ai-agent-response]]), forensic chain of custody ([[ai-agent-security-incident-evidence]]) or the upgrade process itself ([[regression-testing-for-model-upgrades]]).
 
-> [!note] Not verified
-> No procedure here was run. The sources below were not fetched on 2026-11-01 except where noted in the Sources list. Before use, check: the current wording of the MCP tools specification (the revision you implement may differ from the local copies compared), whether the OpenTelemetry GenAI attributes you rely on are still in development status and keep the names used here, what your own tracing and audit stores really capture, your retention and privacy rules for prompt content, and that the shell, CI and Kubernetes snippets match your tool versions and policies.
+> [!note] Scope of review
+> No procedure here was run. See the Evidence section for what was checked against primary sources and what was not.
 
 ## Treat the AI as a contributing factor
 
@@ -44,7 +47,7 @@ Start collection before the next rotation, deploy or session cleanup removes it.
 - The human approval, edit or denial, with timestamp.
 - The change records for the three things that can alter behaviour without a code change: model version, prompt template and retrieval index. Show all three on the timeline, not only the latest.
 
-Prompt and completion capture is opt-in in those conventions, and often switched off for privacy reasons. If content was not captured, say so in the postmortem and rely on the application's audit store. Do not reconstruct a transcript from memory. See [[llm-tracing-with-sensitive-data-controls]] for what to capture and redact.
+Prompt and completion capture is opt-in in those conventions, and may be left off because the content can be sensitive. If content was not captured, say so in the postmortem and rely on the application's audit store. Do not reconstruct a transcript from memory. See [[llm-tracing-with-sensitive-data-controls]] for what to capture and redact.
 
 Store the evidence in a restricted location with its own access control and retention period. The postmortem links to it and quotes only what a reader needs. A minimal snapshot script for the collecting engineer:
 
@@ -116,7 +119,7 @@ Also decide, and record, whether the tool stays approved for that workflow, with
 
 Before closing the postmortem, add the failure to the evaluation set. A useful case has the exact input (redacted as needed), the expected safe behaviour, the tool calls that must not occur, and the pinned model version it was observed on, so that later upgrades are tested against it ([[model-version-pinning-and-upgrade-evals]]). Link the case identifier in the postmortem.
 
-Run the cases in CI on every change to a prompt template, model pin or index. A GitLab job using `rules:`:
+Run the cases in CI on changes to a prompt template, model pin or retrieval index. A GitLab job using `rules:`, for merge request pipelines, the default branch and a schedule:
 
 ```yaml
 agent-regression:
@@ -126,14 +129,21 @@ agent-regression:
     - pip install -r evals/requirements.txt
     - python evals/run.py --suite incident-regressions --fail-on-forbidden-tool-call
   rules:
-    - changes:
+    # Merge request pipelines: CI_COMMIT_BRANCH is not set there, so match on the pipeline source
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: &agent-inputs
         - prompts/**/*
         - config/model-pins.yaml
+        - retrieval-index/**/*
         - evals/incident-regressions/**/*
+    # The default branch, after a merge
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes: *agent-inputs
+    # On a schedule, so a model change on the provider's side is caught too
     - if: $CI_PIPELINE_SOURCE == "schedule"
 ```
 
-The job name, paths and flags above are examples for a harness you own. The point is that the incident cases run automatically and a forbidden tool call fails the pipeline.
+The job name, paths (including the `retrieval-index/` path) and flags above are examples for a harness you own. How `changes:` picks the commit it compares against depends on the pipeline type; set `changes:compare_to` if the comparison base matters for you, after checking the GitLab `rules:changes` reference for your version. The point is that the incident cases run automatically and a forbidden tool call fails the pipeline.
 
 ## Failure modes
 
@@ -160,12 +170,38 @@ The job name, paths and flags above are examples for a harness you own. The poin
 - [ ] A regression case with a pinned model version was added and runs in CI.
 - [ ] The decision on whether the tool stays approved is recorded with criteria.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the MCP, OpenTelemetry GenAI, OWASP, Kubernetes and GitLab statements and snippets in this note.
+
+### Sources checked
+
+- [MCP specification: tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools): the sentence that there SHOULD always be a human in the loop with the ability to deny tool invocations, present in the 2025-06-18, 2025-11-25 and 2026-07-28 revisions. Checked 2026-11-02 against modelcontextprotocol/modelcontextprotocol commit d0e246e.
+- [OpenTelemetry GenAI client inference conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/client-inference.md): `gen_ai.request.model` and `gen_ai.response.model` are separate attributes; the attributes are in Development status; `gen_ai.output.messages`, `gen_ai.system_instructions` and `gen_ai.tool.definitions` are Opt-In and flagged as possibly sensitive. Checked 2026-11-02 against open-telemetry/semantic-conventions-genai commit 244465e.
+- [OpenTelemetry GenAI span conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-spans.md): content capture (instructions, prompts, completions) is gated by an explicit user opt-in. Checked 2026-11-02 against open-telemetry/semantic-conventions-genai commit 244465e.
+- [OWASP Top 10 for LLM Applications 2025: LLM06 Excessive Agency](https://github.com/OWASP/www-project-top-10-for-large-language-model-applications/blob/99f4395/2_0_vulns/LLM06_ExcessiveAgency.md): excessive agency as the risk of damaging actions from unexpected or manipulated model output, and human approval of high-impact actions as a mitigation. Checked 2026-11-02 against OWASP/www-project-top-10-for-large-language-model-applications commit 99f4395.
+- [Pod Security Standards | Kubernetes](https://kubernetes.io/docs/concepts/security/pod-security-standards/): `runAsNonRoot`, `allowPrivilegeEscalation` and dropping `ALL` capabilities as restricted-profile controls. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Configure a Security Context for a Pod or Container | Kubernetes](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/): `seccompProfile` field and `readOnlyRootFilesystem`. Checked 2026-11-02, commit 491f14e.
+- [Configure Service Accounts for Pods | Kubernetes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/): `serviceAccountName` and `automountServiceAccountToken` fields. Checked 2026-11-02, commit 491f14e.
+- [Using RBAC Authorization | Kubernetes](https://kubernetes.io/docs/reference/access-authn-authz/rbac/): least-privilege and read-only roles. Checked 2026-11-02, commit 491f14e.
+- [CI/CD job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/): `rules:` with `if:` on `$CI_PIPELINE_SOURCE` (`merge_request_event`, `schedule`) and `changes:` path lists. [Predefined CI/CD variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_COMMIT_BRANCH` is available in branch pipelines, including the default branch, and not in merge request pipelines; `CI_DEFAULT_BRANCH` is the default branch name. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Troubleshooting CI/CD jobs | GitLab](https://docs.gitlab.com/ci/jobs/job_troubleshooting/): without merge request pipelines, `changes` diffs against the previous commit, and always evaluates true for a new branch and in scheduled pipelines. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+
+### Not verified
+
+- The blameless postmortem framing (SRE book) and the NIST AI Risk Management Framework: not reachable, so the Sources entries are general references only.
+- Whether a provider-side model routing change explains a request/response model mismatch: engineering guidance.
+- The action-item rules, evidence list, regression-case advice, the snapshot script and the checklist are engineering guidance, not documented claims.
+- The pod manifest uses placeholder names and a placeholder digest; the GitLab job and eval harness flags are examples and were not run.
+- Current wording of newer MCP revisions and the OpenTelemetry attribute status may differ from the local copies.
+- Nothing was run.
+
 ## Sources
 
-- [Site Reliability Engineering book: postmortem culture](https://sre.google/sre-book/postmortem-culture/) for the blameless framing. Not fetched; paraphrased in general terms only.
-- [MCP specification: tools (2026-07-28)](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) for the human-in-the-loop SHOULD on tool invocation. Wording checked in local copies of the 2025-06-18, 2025-11-25 and 2026-07-28 revisions (commit d0e246e), which carry the same sentence; not fetched.
-- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) for the governance, measurement and monitoring framing. Not fetched.
-- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) for the excessive-agency framing behind the authorization checks. Not fetched.
-- The OpenTelemetry GenAI semantic conventions (request and response model attributes, opt-in content capture) were read from a local checkout only and are in development status; check the current published pages before citing them.
+- [Site Reliability Engineering book: postmortem culture](https://sre.google/sre-book/postmortem-culture/) for the blameless framing. Not read; see Not verified.
+- [MCP specification: tools (2026-07-28)](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) for the human-in-the-loop SHOULD on tool invocation.
+- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) for the governance, measurement and monitoring framing. Not read; see Not verified.
+- [OWASP Top 10 for LLM Applications 2025: LLM06 Excessive Agency](https://github.com/OWASP/www-project-top-10-for-large-language-model-applications/blob/99f4395/2_0_vulns/LLM06_ExcessiveAgency.md) for the excessive-agency framing behind the authorization checks.
+- [OpenTelemetry GenAI client inference conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/client-inference.md) and [span conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-spans.md) for the request and response model attributes and opt-in content capture (Development status).
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

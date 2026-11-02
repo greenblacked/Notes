@@ -9,14 +9,14 @@ tags:
   - jenkins
   - delivery
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note covers how to use a coding agent to convert Jenkinsfiles (declarative, scripted and library-driven) into GitLab CI configuration: inventory, a reviewed mapping table, lint gates on generated YAML, credential mapping, and a parallel run with parity checks. It is for platform engineers running the conversion hands-on. It does not cover programme planning and cutover ([[jenkins-to-gitlab-migration-programme]]), the target layout itself ([[gitlab-ci-pipeline-structure]]), or the generic validation of agent output ([[validating-ai-generated-infrastructure-code]]). Shared-library conversion is covered here only as a "do not do it blindly" rule; the library structure is in [[jenkins-shared-libraries]].
-
-> [!note] Not verified
-> The sources below were found through search, but the pages could not be fetched on 2026-10-27. Before relying on this note, check: the GitLab keyword behaviour (`rules`, `rules:changes`, `id_tokens`, `parallel:matrix`, `$CI_JOB_STATUS` in `after_script`) for the GitLab version your instance runs, which CI Lint endpoints and `glab ci lint` flags exist on that version, and the credential binding types of the plugins installed on your Jenkins controller.
 
 ## Principle: the agent drafts, the mapping table decides
 
@@ -45,28 +45,28 @@ Anything classed as scripted with loops, closures or dynamic stage generation, o
 
 Keep the table in the repository and give it to the agent as a constraint. Reviewers check each row once instead of rediscovering it in every diff. The rows below are a starting point; confirm each against the GitLab docs for your instance version and the side-by-side guide in the sources.
 
-| Jenkins construct            | GitLab CI target                                                        | Review note                                                                                        |
-| ---------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `stages` and `stage`         | top-level `stages:` and jobs with `stage:`                              | Jenkins stages are sequential blocks; jobs in a stage run together                                 |
-| `agent { label 'x' }`        | runner `tags: [x]`                                                      | Tags must exist on a runner with equivalent access                                                 |
-| `agent { docker { image } }` | job `image:`                                                            | Check entrypoint and user                                                                          |
-| `when { branch ... }`        | `rules:` with `if:` on `$CI_COMMIT_BRANCH`                              | Never mix `rules:` with `only:`/`except:`; `$CI_COMMIT_BRANCH` is unset in merge request pipelines |
-| `when { changeset }`         | `rules:` with `changes:`                                                | Compared with the target branch in MR pipelines, the previous push otherwise                       |
-| `parallel { }`               | jobs in the same stage, or `parallel:matrix`                            | Matrix for repeated variations only                                                                |
-| `environment { }`            | `variables:`                                                            | Secrets are not variables in YAML, see below                                                       |
-| `options { timeout }`        | `timeout:`                                                              | Job-level, not pipeline-level                                                                      |
-| `input`                      | `when: manual`, optionally with `allow_failure: false`                  | Approval semantics differ; use protected environments                                              |
-| `post { always }`            | `after_script:`                                                         | Runs in a separate shell; its failure does not fail the job                                        |
-| `post { failure }`           | a job with `when: on_failure`                                           | Or branch on `$CI_JOB_STATUS` in `after_script`; check your version                                |
-| `triggers { cron }`          | pipeline schedule plus `rules: - if: $CI_PIPELINE_SOURCE == "schedule"` | Schedules are configured outside the YAML                                                          |
-| `stash` and `unstash`        | `artifacts:` and `dependencies:` or `needs:`                            | Set `expire_in`                                                                                    |
-| Library call                 | component, `include:`/`extends:` template, or versioned script          | Human design required, see below                                                                   |
+| Jenkins construct            | GitLab CI target                                                                                        | Review note                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `stages` and `stage`         | top-level `stages:` and jobs with `stage:`                                                              | Jenkins stages are sequential blocks; jobs in a stage run together                                 |
+| `agent { label 'x' }`        | runner `tags: [x]`                                                                                      | Tags must exist on a runner with equivalent access                                                 |
+| `agent { docker { image } }` | job `image:`                                                                                            | Check entrypoint and user                                                                          |
+| `when { branch ... }`        | `rules:` with `if:` on `$CI_COMMIT_BRANCH`                                                              | Never mix `rules:` with `only:`/`except:`; `$CI_COMMIT_BRANCH` is unset in merge request pipelines |
+| `when { changeset }`         | `rules:` with `changes:`                                                                                | Set `changes: compare_to` explicitly when the comparison base matters                              |
+| `parallel { }`               | jobs in the same stage, or `parallel:matrix`                                                            | Matrix for repeated variations only                                                                |
+| `environment { }`            | `variables:`                                                                                            | Secrets are not variables in YAML, see below                                                       |
+| `options { timeout }`        | `timeout:`                                                                                              | Job-level; the project and runner maximum timeouts also apply                                      |
+| `input`                      | `when: manual`; inside `rules:` it blocks the pipeline (`allow_failure: false`), outside it is optional | Approval semantics differ; use protected environments                                              |
+| `post { always }`            | `after_script:`                                                                                         | Runs in a separate shell; its failure does not fail the job                                        |
+| `post { failure }`           | a job with `when: on_failure`                                                                           | Or branch on `$CI_JOB_STATUS` in `after_script`; check your version                                |
+| `triggers { cron }`          | pipeline schedule plus `rules: - if: $CI_PIPELINE_SOURCE == "schedule"`                                 | Schedules are configured outside the YAML                                                          |
+| `stash` and `unstash`        | `artifacts:` and `dependencies:` or `needs:`                                                            | Set `expire_in`                                                                                    |
+| Library call                 | component, `include:`/`extends:` template, or versioned script                                          | Human design required, see below                                                                   |
 
 Instruct the agent to emit `# TODO(unmapped): <construct>` in the YAML and a line in the PR description for every construct without a row, rather than guessing.
 
 ## Step 3: generate, then lint in the pipeline
 
-Constrain the agent to produce only the new `.gitlab-ci.yml` (and any referenced script files) on a branch. It must not edit the Jenkinsfile, run deploys or touch variables. Then gate with GitLab's CI Lint. The lint is a syntax and structure check, not a semantic check, so it passes pipelines that do the wrong thing.
+Constrain the agent to produce only the new `.gitlab-ci.yml` (and any referenced script files) on a branch. It must not edit the Jenkinsfile, run deploys or touch variables. Then gate with GitLab's CI Lint. Without `dry_run` it is a static check; with `dry_run` it simulates pipeline creation. Neither checks that the jobs do the right thing, so a valid pipeline can still be wrong.
 
 ```bash title="scripts/lint-ci.sh"
 #!/usr/bin/env bash
@@ -95,7 +95,7 @@ printf '%s' "${result}" | jq -r '.merged_yaml' > merged.yml
 
 Check the request fields, required token scope and the endpoint's version history against your instance's API docs. Use the project-scoped endpoint so `include:` and project context resolve, and read `merged.yml` in review, since that is what actually runs. After lint, run `shellcheck` on extracted scripts and have a second agent or human review the YAML ([[independent-review-agents]]).
 
-A compact generated job should look like this, with rules explicit, images pinned (by digest where your registry allows) and no secret values. If a job diffs against the target branch, fetch it explicitly (`git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"`), since the clone is usually shallow (`GIT_DEPTH`):
+A compact generated job should look like this, with rules explicit, images pinned (by digest where your registry allows) and no secret values. If a job diffs against the target branch, fetch it explicitly (`git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"`), since the clone can be shallow (`GIT_DEPTH`, which is 20 by default in newly created projects):
 
 ```yaml title=".gitlab-ci.yml"
 stages: [build, test, deploy]
@@ -174,7 +174,7 @@ diff <(cd "$1" && find . -type f -exec sha256sum {} + | sort -k2) \
         <(cd "$2" && find . -type f -exec sha256sum {} + | sort -k2)
 ```
 
-Compare exit status, test counts and names, artifact checksums (expect differences for embedded timestamps; normalise or explain them), image digests where builds are reproducible, rendered manifests, and notifications. Keep the Jenkins job disabled but present until parity holds for the agreed number of consecutive runs, then switch the trigger; the programme-level comparison criteria are in [[jenkins-to-gitlab-migration-programme#Parallel run and comparison criteria]]. Define "done" for each pipeline as lint green, parity green and owner accepted ([[agent-done-criteria-and-verification]]).
+Compare exit status, test counts and names, artifact checksums (expect differences for embedded timestamps; normalise or explain them), image digests where builds are reproducible, rendered manifests, and notifications. Keep the Jenkins job enabled as the system of record until parity holds for the agreed number of consecutive runs, then switch the trigger and disable the Jenkins job but keep it present; the programme-level comparison criteria are in [[jenkins-to-gitlab-migration-programme#Parallel run and comparison criteria]]. Define "done" for each pipeline as lint green, parity green and owner accepted ([[agent-done-criteria-and-verification]]).
 
 ## Failure modes
 
@@ -199,12 +199,40 @@ Compare exit status, test counts and names, artifact checksums (expect differenc
 - [ ] Parity diff is attached to the PR for the agreed number of runs.
 - [ ] One pipeline per PR, with the pipeline owner's sign-off.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI behaviours, API fields and variable rules that the mapping table, lint script and credential section rely on.
+
+### Sources checked
+
+- [CI Lint API | GitLab](https://docs.gitlab.com/api/lint/): `POST /projects/:id/ci/lint` is project-scoped and uses project CI/CD variables and `include:local`; request fields `content`, `dry_run` (pipeline creation simulation) and `include_jobs`; response fields `valid`, `errors` and `merged_yaml`. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/): `$CI_COMMIT_BRANCH` is set in branch and scheduled pipelines but not merge request pipelines; do not mix `only/except` with `rules` in one pipeline; `rules:changes:compare_to`. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Job control | GitLab](https://docs.gitlab.com/ci/jobs/job_control/): `when: manual` is optional by default outside `rules` and blocking (`allow_failure: false`) inside `rules`; protected environments restrict who can run manual jobs; matrix variables in `rules:changes`. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [CI/CD jobs | GitLab](https://docs.gitlab.com/ci/jobs/): stages run in sequence, while all jobs in a stage can run in parallel (`doc/ci/jobs/_index.md:31`). Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Job execution | GitLab](https://docs.gitlab.com/ci/jobs/job_execution/): `after_script` runs in a new shell context, always when defined, and its failure does not change the job status. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Predefined variables | GitLab](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_JOB_STATUS` for use with `after_script` (success, failed, canceled); `CI_MERGE_REQUEST_TARGET_BRANCH_NAME`. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [CI/CD variables | GitLab](https://docs.gitlab.com/ci/variables/): protected and environment-scoped variables; masking requirements (single line, no spaces, 8 characters or more) and that masking is not a guarantee. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Using ID tokens | GitLab](https://docs.gitlab.com/ci/secrets/id_token_authentication/): the `id_tokens` job keyword with a per-token `aud` claim. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Configure runners | GitLab](https://docs.gitlab.com/ci/runners/configure_runners/): runner tags control which jobs a runner takes; maximum job timeout interplay between runner and project; `GIT_DEPTH` shallow cloning, default 20 in new projects. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Job artifacts | GitLab](https://docs.gitlab.com/ci/jobs/job_artifacts/): `expire_in` and `dependencies` / `needs:artifacts` for fetching artifacts. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+
+### Not verified
+
+- The full GitLab keyword reference pages (`ci/yaml`) are not in the local docs; only the behaviour stated in the pages above was checked. Still unverified: the `timeout:` and `parallel:matrix` keyword syntax, job-level `when: on_failure` (only `artifacts:when: on_failure` appears locally), pipeline schedule configuration, `include:`, `extends:` and CI/CD components, and generated child pipelines. Confirm these for the GitLab version your instance runs.
+- The GitLab "Migrating from Jenkins" page, the Jenkins shared libraries page, and both OWASP cheat sheets could not be read; they stay in Sources as background only.
+- Jenkins step and credential binding behaviour (`input`, `post`, `stash`, plugin binding types) was not checked; confirm against the plugins on your controller.
+- The required token scope and role for CI Lint on your instance, and `glab ci lint` flags, were not checked.
+- Parity checks, runner isolation advice, inventory columns and the conversion workflow are engineering guidance, not documented claims.
+- Nothing was run.
+
 ## Sources
 
-- [GitLab: Migrating from Jenkins](https://docs.gitlab.com/ci/migration/jenkins/) — mapping of stages, agents, rules and templates.
+- [GitLab: Migrating from Jenkins](https://docs.gitlab.com/ci/migration/jenkins/) — mapping of stages, agents, rules and templates (not read, see Not verified).
 - [GitLab: CI Lint API](https://docs.gitlab.com/api/lint/) — lint endpoints, `dry_run` and merged YAML output.
-- [Jenkins: Extending with Shared Libraries](https://www.jenkins.io/doc/book/pipeline/shared-libraries/) — library layout (`vars/`, `src/`, `resources/`) and global variables.
-- [OWASP Secrets Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html) — scoped, short-lived credentials and no secrets in configuration.
-- [OWASP CI/CD Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/CI_CD_Security_Cheat_Sheet.html) — CI/CD hardening baseline for the new pipelines.
+- [GitLab: Job rules](https://docs.gitlab.com/ci/jobs/job_rules/), [job control](https://docs.gitlab.com/ci/jobs/job_control/) and [job execution](https://docs.gitlab.com/ci/jobs/job_execution/) — `rules`, manual jobs and `after_script` behaviour.
+- [GitLab: CI/CD variables](https://docs.gitlab.com/ci/variables/) and [ID token authentication](https://docs.gitlab.com/ci/secrets/id_token_authentication/) — masking, protection, environment scope and `id_tokens`.
+- [Jenkins: Extending with Shared Libraries](https://www.jenkins.io/doc/book/pipeline/shared-libraries/) — library layout (`vars/`, `src/`, `resources/`) and global variables (not read, see Not verified).
+- [OWASP Secrets Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html) — scoped, short-lived credentials and no secrets in configuration (not read, see Not verified).
+- [OWASP CI/CD Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/CI_CD_Security_Cheat_Sheet.html) — CI/CD hardening baseline for the new pipelines (not read, see Not verified).
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

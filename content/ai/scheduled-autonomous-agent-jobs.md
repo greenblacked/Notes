@@ -8,25 +8,25 @@ tags:
   - ci-cd
   - reliability
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note covers coding or operations agents that start without a person present: a nightly CI schedule, a Kubernetes CronJob, or a webhook handler. It is for platform and delivery engineers who own such jobs. It sets out identity, output, idempotency, budget, kill-switch and alerting controls. It does not cover interactive agent sessions (see [[securing-ai-agents-in-ci-and-cloud]]), generic job hygiene (see [[scheduled-jobs-standard]] and [[patterns/kubernetes-jobs-and-cronjobs]]), or chat-triggered agents (see [[chatops-ai-assistants-in-slack]]).
 
-> [!note] Not verified
-> The sources below were found through search on 2026-10-27, but the pages could not be fetched. Before relying on this note, check: the CronJob field semantics (`concurrencyPolicy`, `startingDeadlineSeconds`, `timeZone`, `suspend`) against the Kubernetes version you run; hosted-CI scheduling behaviour (default-branch requirement, delays, automatic disabling of idle schedules) and concurrency semantics in your CI vendor's current docs; and any agent-vendor CI integration, which changes quickly. Nothing here was run.
-
 ## Principle: the job proposes, a human disposes
 
-An unattended agent has no one to notice a bad judgement as it happens. Design so that the worst a run can do is open something reviewable. The job writes a draft merge request, an issue or a comment. It never pushes to a protected branch, applies infrastructure or merges its own output. Branch protection (required reviews, required status checks) is the enforcement; the job's token should not be able to bypass it. Keep the diff small enough to review, per [[agent-pull-request-size-and-reviewability]].
+An unattended agent has no one to notice a bad judgement as it happens. Design so that the worst a run can do is open something reviewable. The job writes a draft merge request, an issue or a comment. It never pushes to a protected branch, applies infrastructure or merges its own output. Protected branches with required approvals and passing pipelines are the enforcement; the job's token should not be able to bypass them. Keep the diff small enough to review, per [[agent-pull-request-size-and-reviewability]].
 
 ## Identity and credentials
 
 - One identity per job, named for the job, with the narrowest scope that works. A job that triages issues needs issue write access, not repository write access.
 - Prefer short-lived credentials from OIDC or workload identity over stored personal tokens. See [[just-in-time-agent-credentials]] and [[gcp-iam-guardrails-for-agent-service-accounts]].
 - Keep secrets out of the agent's context and out of the environment of any tool that processes untrusted text. Issue bodies, comments, PR descriptions and fetched pages can carry prompt injection.
-- Restrict triggers. Do not run an agent with write-scoped tokens on events that carry fork-controlled input (for example, GitHub's `pull_request_target`, or GitLab pipelines for fork merge requests with protected variables exposed).
+- Restrict triggers. Do not run an agent with write-scoped tokens on events that carry fork-controlled input (for example, a GitLab merge request pipeline run in the parent project for a fork's merge request, which makes all of the parent project's CI/CD variables available to it; GitHub's `pull_request_target` is a similar case).
 - Limit network egress to what the job needs ([[agent-network-egress-controls]]).
 
 ## Idempotency and overlap
@@ -69,7 +69,7 @@ spec:
                 - name: JOB_NAME
                   value: dep-triage
                 # Kill switch: one edit to this ConfigMap disables every agent job at its next run.
-                # optional: true means a missing ConfigMap or key leaves it unset, which the
+                # optional: true means a missing ConfigMap or key leaves it empty, which the
                 # wrapper treats as disabled.
                 - name: AGENT_JOBS_ENABLED
                   valueFrom:
@@ -163,7 +163,7 @@ timeout --signal=TERM --kill-after=60s 25m ./bin/agent-run \
 
 ## Kill switch
 
-Build one that works without a deploy and test it on a schedule. Options, from fastest to most granular: `suspend: true` on the CronJob, disabling the pipeline schedule, a repository or group variable read at the start of every run, and revoking the job's identity. `suspend: true` stops new runs only; a Job that is already running keeps going until it finishes or hits `activeDeadlineSeconds`, so delete the running Job as well when you need it stopped now. Record who may flip it and where, and link it from [[runaway-or-compromised-ai-agent-response]].
+Build one that works without a deploy and test it on a schedule. Options, from fastest to most granular: `suspend: true` on the CronJob, disabling the pipeline schedule, a repository or group variable read at the start of every run, and revoking the job's identity. `suspend: true` stops new runs only; it does not affect Jobs the CronJob already started, which keep going until they finish or hit `activeDeadlineSeconds`, so delete the running Job as well when you need it stopped now. Executions skipped while suspended count as missed; if the CronJob has no `startingDeadlineSeconds`, unsuspending it schedules the missed Jobs immediately, so set a deadline before relying on suspend and resume. Record who may flip it and where, and link it from [[runaway-or-compromised-ai-agent-response]].
 
 ## Alert on failure and on silence
 
@@ -178,7 +178,7 @@ Log per run: trigger, scheduler run ID, commit SHA, prompt or template version (
 - Stored personal token with write access, so a prompt-injected issue can push code.
 - `concurrencyPolicy` left at `Allow`; a slow run overlaps the next and both open proposals.
 - Late run against a stale checkout after a scheduler outage, because no deadline was set.
-- The schedule is silently disabled or paused by the platform, and nobody notices for weeks.
+- The schedule is silently disabled, paused or deleted, and nobody notices for weeks.
 - Retries multiply token spend; no daily cap.
 - Job reads untrusted text and a secret in the same context.
 - Kill switch exists but was never exercised and no longer works.
@@ -198,11 +198,37 @@ Log per run: trigger, scheduler run ID, commit SHA, prompt or template version (
 - [ ] Run logs record trigger, SHA, prompt version, tool calls and cost.
 - [ ] Untrusted input is handled apart from secrets.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the Kubernetes CronJob, Job, ConfigMap and security-context behaviour and the GitLab CI features that the examples rely on.
+
+### Sources checked
+
+- [CronJob | Kubernetes](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/): `concurrencyPolicy` defaults to `Allow` and `Forbid` skips a run while the previous one is active; `startingDeadlineSeconds` skips an execution that is too late, and with no value there is no deadline; `suspend` defaults to false and does not affect Jobs already started; suspended executions count as missed and run immediately on unsuspend without a starting deadline; `timeZone` accepts names such as `Etc/UTC`; `successfulJobsHistoryLimit` defaults to 3 and `failedJobsHistoryLimit` to 1. Checked 2026-11-02 against kubernetes/website commit 491f14e (`content/en/docs/concepts/workloads/controllers/cron-jobs.md`).
+- [Jobs | Kubernetes](https://kubernetes.io/docs/concepts/workloads/controllers/job/): `activeDeadlineSeconds` bounds the Job duration, terminates running Pods and takes precedence over `backoffLimit`; `backoffLimit` is the number of retries (default 6). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Configure a Pod to Use a ConfigMap | Kubernetes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/): an `optional` ConfigMap reference leaves the environment variable empty when the ConfigMap or key is missing. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Configure a Security Context for a Pod or Container | Kubernetes](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/): `allowPrivilegeEscalation`, `readOnlyRootFilesystem`, capabilities and `seccompProfile` type `RuntimeDefault` exist as container and pod security context settings. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Job rules | GitLab Docs](https://docs.gitlab.com/ci/jobs/job_rules/): `rules:` with `$CI_PIPELINE_SOURCE == "schedule"` selects jobs for scheduled pipelines. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [CI/CD variables | GitLab Docs](https://docs.gitlab.com/ci/variables/): variables are defined at project or group level; pipelines from forks cannot access the parent project's variables by default, but a merge request pipeline run in the parent project for a fork makes all of them available. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Pipeline schedules API | GitLab Docs](https://docs.gitlab.com/api/pipeline_schedules/): variables can be created on an individual pipeline schedule. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Resource groups API | GitLab Docs](https://docs.gitlab.com/api/resource_groups/): resource groups have a process mode (`unordered`, `oldest_first`, `newest_first`, `newest_ready_first`). Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [OIDC ID token authentication | GitLab Docs](https://docs.gitlab.com/ci/secrets/id_token_authentication/): the `id_tokens:` keyword with an `aud` value issues a job ID token for third-party services. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+
+### Not verified
+
+- Hosted-CI scheduling behaviour (default-branch requirement, delays, automatic disabling of idle schedules), the GitLab pipeline schedules guide, the `resource_group` and `timeout:` keyword pages (the YAML reference was not in the local docs), and GitHub behaviour such as `pull_request_target` and `timeout-minutes` were not checked.
+- How a given GitLab version orders jobs in a `resource_group` beyond the process-mode names above.
+- Branch protection and approval-rule behaviour on GitLab and GitHub (required reviews, status checks, whether a job token can bypass them) was not checked.
+- Whether the Kubernetes field defaults hold on the cluster version you run.
+- NIST SP 800-218 was not available, so the control framing attributed to it in Sources is unchecked.
+- The wrapper script, heartbeat and idempotency design, budgets, kill-switch testing and alerting advice are engineering guidance, not documented claims; `bin/*` tools are placeholders.
+- Nothing was run.
+
 ## Sources
 
-- [Kubernetes: CronJob](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) - `concurrencyPolicy`, `startingDeadlineSeconds`, `timeZone` and `suspend` semantics (confirm the exact wording and version matrix).
-- [GitLab Docs: Scheduled pipelines](https://docs.gitlab.com/ci/pipelines/schedules/) - pipeline schedules and schedule variables.
-- [GitLab Docs: Resource group](https://docs.gitlab.com/ci/resource_groups/) - limiting concurrency of jobs that share a resource group, and process modes.
-- [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) - risk-based secure development practices behind the control framing.
+- [Kubernetes: CronJob](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) - `concurrencyPolicy`, `startingDeadlineSeconds`, `timeZone` and `suspend` semantics.
+- [GitLab Docs: Pipeline schedules API](https://docs.gitlab.com/api/pipeline_schedules/) - pipeline schedules and schedule variables.
+- [GitLab Docs: Resource groups API](https://docs.gitlab.com/api/resource_groups/) - resource groups and process modes.
+- [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) - risk-based secure development practices behind the control framing (not read; see Not verified).
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

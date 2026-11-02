@@ -8,14 +8,14 @@ tags:
   - supply-chain
   - policy-as-code
 created: 2026-11-01
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note sets a baseline for engineers who run open-weight models on a laptop, workstation or personal dev VM. It is for platform and security engineers who write the policy and for engineers who follow it. It covers approved sources and licences, artifact scanning, data classes, disk encryption, network exposure of local servers, resource limits, updates, and the cases where local is the wrong answer. It does not cover the full risk assessment of a model ([[open-weight-model-risk-assessment]]), the artifact promotion pipeline ([[model-supply-chain-verification]], [[model-artifacts-in-artifactory]]), isolating coding agents ([[sandboxing-coding-agents-on-workstations-and-runners]]) or shared serving in a cluster ([[self-hosted-llm-inference-on-gke]]).
-
-> [!note] Not verified
-> No procedure here was run. The sources below were not all fetched, and two public URLs are path mappings from local copies. Before use, check: the current security page of your inference server (which endpoints an API key covers, defaults for inter-node traffic), the licence text of every model you approve, which scanner you will use for weight files and its supported formats, your MDM and disk encryption settings, and the GitLab CI syntax for your edition. No VRAM or performance figures are given because none were benchmarked.
 
 ## Practical guidance
 
@@ -91,8 +91,11 @@ Bind to loopback. The MCP transport specification says local servers should bind
 
 ```bash
 # Container: publish to loopback only, never "-p 8000:8000".
-# Inside the container the server listens on all of the container's
-# interfaces; the host side of the mapping is what must be loopback.
+# Docker documents publishing as reachable from outside the host unless
+# an address such as 127.0.0.1 is given.
+# The server inside the container must listen on the container's own
+# interface (for example --host 0.0.0.0 inside the container) for the
+# mapping to work; the host side of the mapping is what must be loopback.
 # Example limits only; size them for your machine.
 image_digest="${INFERENCE_IMAGE_DIGEST:?set the pinned image digest}"
 docker run --rm \
@@ -101,7 +104,7 @@ docker run --rm \
   "registry.internal.example/inference-server@sha256:${image_digest}"
 ```
 
-Two further points from the inference server security guidance. The API key option covers only the routes under some path prefixes, and other sensitive endpoints on the same server need no key, so it is not a perimeter; if a server must be shared, put an authenticating proxy that allowlists routes in front of it. Inter-node traffic in multi-node setups is insecure by default and must sit on an isolated network, so do not cluster workstations on the office network. Anything shared beyond one user is the wrong shape for a workstation (see below).
+Two further points from the inference server security guidance. The API key option covers only the routes under some path prefixes, and other sensitive endpoints on the same server need no key, so it is not a perimeter; if a server must be shared, put an authenticating proxy that allowlists routes in front of it. Inter-node traffic in multi-node setups is insecure by default and must sit on an isolated network, so do not cluster workstations on the office network. Docker documents that releases older than 28.0.0 let hosts on the same L2 segment reach ports published to localhost, so keep the container engine current. In rootless mode the `--cpus` and `--memory` flags are enforced only with cgroup v2 and systemd, and are otherwise ignored; check that `docker info` shows a Cgroup Driver other than `none` to confirm the limits apply. Anything shared beyond one user is the wrong shape for a workstation (see below).
 
 ### Resource limits
 
@@ -145,7 +148,7 @@ spec:
         sizeLimit: 2Gi
 ```
 
-The UID, sizes and scratch path are examples; the server may need further writable paths (for example a model cache) under a read-only root filesystem. Binding to loopback inside a pod only reaches that pod's own network namespace, so adjust for how you actually expose it (for example port-forward); do not switch to a wide bind to make it work.
+The UID, sizes and scratch path are examples; the server may need further writable paths (for example a model cache) under a read-only root filesystem. Containers in a pod share one network namespace, so binding to loopback inside a pod only reaches that pod's own containers, so adjust for how you actually expose it (for example port-forward); do not switch to a wide bind to make it work.
 
 ### Updates
 
@@ -190,13 +193,43 @@ Local fits individual experimentation and personal work inside the data-class li
 - [ ] Approved model and runtime versions are published, with a fast path for security fixes.
 - [ ] Engineers know the criteria for moving a workload to a central service.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the network exposure, data-at-rest, supply-chain, container and CI claims in this note were compared with local copies of the primary documentation.
+
+### Sources checked
+
+- [MCP specification, Streamable HTTP transport](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http): servers MUST validate the Origin header against DNS rebinding and SHOULD bind locally to 127.0.0.1 rather than 0.0.0.0; the 2025-06-18 transports page has the same two requirements. Checked 2026-11-02 against modelcontextprotocol commit d0e246e.
+- [Inference server security guide](https://docs.vllm.ai/en/latest/usage/security/): inter-node traffic is insecure by default and needs an isolated network; the API key covers only the /v1, /v2, /inference and /cohere prefixes while endpoints such as /invocations, /score and /rerank need no key; a reverse proxy that allowlists endpoints and adds authentication is the recommended approach. Other examples in the same documentation use `--host 0.0.0.0` and `--host 127.0.0.1`. Checked 2026-11-02 against vllm commit 8530a77.
+- [GenAI spans](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-spans.md): message content is sensitive; instrumentations SHOULD NOT capture it by default and SHOULD let users opt in. Checked 2026-11-02 against semantic-conventions-genai commit 244465e.
+- [GenAI client inference](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/client-inference.md): `gen_ai.input.messages` and `gen_ai.output.messages` are Opt-In. Checked 2026-11-02 against semantic-conventions-genai commit 244465e.
+- [Resource Quotas | Kubernetes](https://kubernetes.io/docs/concepts/policy/resource-quotas/): quotas limit aggregate resource consumption per namespace. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Pod Security Standards | Kubernetes](https://kubernetes.io/docs/concepts/security/pod-security-standards/) and [Application security checklist](https://kubernetes.io/docs/concepts/security/application-security-checklist/): `runAsNonRoot`, dropping ALL capabilities, RuntimeDefault seccomp, `automountServiceAccountToken: false` and `readOnlyRootFilesystem: true` as hardening settings. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Volumes | Kubernetes](https://kubernetes.io/docs/concepts/storage/volumes/) and [Use Port-Forwarding to Access Applications in a Cluster](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/): `emptyDir` `sizeLimit`; port-forward listens on 127.0.0.1. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Pods | Kubernetes](https://kubernetes.io/docs/concepts/workloads/pods/): containers in a Pod share the network namespace, including the IP address and ports. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Rootless mode tips | Docker](https://docs.docker.com/engine/security/rootless/tips/): `--cpus`, `--memory` and `--pids-limit` work in rootless mode only with cgroup v2 and systemd, and are otherwise ignored; `docker info` showing `none` as Cgroup Driver means the conditions are not met. Checked 2026-11-02 against docker-docs commit 53581df.
+- [Publish or expose ports | Docker](https://docs.docker.com/engine/network/port-publishing/): published ports are reachable from outside the host by default; adding 127.0.0.1 restricts them to the Docker host; releases older than 28.0.0 let same-L2 hosts reach localhost-published ports. Checked 2026-11-02 against docker-docs commit 53581df.
+- [Job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/) and [Predefined variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `rules:if` with `$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH`, the `changes` list form, and the meaning of both variables. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): LLM03 lists licensing risks; LLM04 states that malicious pickling in models from shared repositories can execute code when the model is loaded; LLM02 and LLM10 cover sensitive information disclosure and unbounded consumption. Checked 2026-11-02 against owasp-llm commit 99f4395.
+
+### Not verified
+
+- Nothing was run: the fetch script, CI job and container and pod manifests were not executed.
+- That protecting the default branch is sufficient control for the promotion job; GitLab docs were read only for the rule syntax.
+- Which scanner supports which weight formats, and that a tensor-only format such as a tensor-only weight format cannot run code on load; check the scanner and format documentation.
+- Licence terms of any model, MDM and disk-encryption settings, and the data-class mapping, which rests on the internal data classification standard, not an external source.
+- NIST AI Risk Management Framework: not reachable locally, kept as governance framing only.
+- Engineering guidance, not claim by claim: allowlists, digest pinning, mirror use, update cadence, systemd limits and the "when local is the wrong answer" questions.
+
 ## Sources
 
-- [MCP specification, Streamable HTTP transport](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http) — loopback binding and Origin validation against DNS rebinding; the same requirement appears in the 2025-06-18 and 2026-07-28 revisions.
-- [Inference server security documentation](https://docs.vllm.ai/en/latest/usage/security/) — API key scope limits, the endpoints the key does not cover, and insecure-by-default inter-node traffic; public URL is a path mapping from a local copy, not fetched.
-- [OpenTelemetry GenAI span conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/) — content attributes are opt-in and may hold personal data; public URL is a path mapping, not fetched.
-- [Kubernetes resource quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/) — the team-level resource budget analogy.
-- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance framing; cited as canonical, not fetched.
-- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) — threat framing for sensitive information disclosure, supply chain and unbounded consumption; not fetched.
+- [MCP specification, Streamable HTTP transport](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http): loopback binding and Origin validation against DNS rebinding; the same requirement appears in the 2025-06-18 revision.
+- [Inference server security guide](https://docs.vllm.ai/en/latest/usage/security/): API key scope limits, unauthenticated endpoints, insecure-by-default inter-node traffic.
+- [OpenTelemetry GenAI span conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-spans.md) and [client inference](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/client-inference.md): content attributes are opt-in and may hold personal data.
+- [Kubernetes resource quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/): the team-level resource budget analogy.
+- [Publish or expose ports | Docker](https://docs.docker.com/engine/network/port-publishing/): publishing to loopback only.
+- [Job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/): rules syntax used in the promotion job.
+- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): governance framing; not reachable for review, see Not verified.
+- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): threat framing for sensitive information disclosure, supply chain, model poisoning and unbounded consumption.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

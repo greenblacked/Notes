@@ -8,14 +8,14 @@ tags:
   - supply-chain
   - audit
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note covers using an LLM to help triage findings from SAST, SonarQube, dependency and container scanners (for example Xray or Trivy) and cloud posture tools: deduplication, reachability context, exploitability reasoning backed by evidence, and VEX statements. It is for platform and security-minded DevOps engineers who own the pipelines that produce these findings. It does not cover choosing scanners (see [[jfrog-xray-vs-trivy-vs-grype]] and [[sonarqube-vs-semgrep-vs-codeql]]), remediation SLAs ([[vulnerability-management-slas]]), or automated upgrade PRs ([[agent-assisted-dependency-upgrades]]). The rule that shapes everything below: the model proposes, a named human decides, and the model never suppresses a finding on its own.
-
-> [!note] Not verified
-> The sources below were found via search, but several pages could not be fetched on 2026-10-27 and were not read in full. Before relying on this note, check: the OpenVEX status and justification labels against the current spec, scanner ignore-file syntax and expiry support for the version you run, vendor reachability and VEX features, GitLab vulnerability policy limits and tier requirements, and SonarQube edition-specific behaviour. Products are examples only; check the current docs.
 
 ## Division of labour
 
@@ -94,7 +94,7 @@ Validate the shape and that each `ref` resolves to a real file in the evidence s
 
 ## Express decisions as VEX
 
-Record outcomes as VEX statements, not as silent scanner ignores. OpenVEX uses four statuses (`not_affected`, `affected`, `fixed`, `under_investigation`) and expects a justification or impact statement for `not_affected`; verify exact labels and the document context version against the spec you target. Store the document next to the artifact (in the repository or the artifact store) so the decision travels with the image and an auditor can read it.
+Record outcomes as VEX statements, not as silent scanner ignores. OpenVEX is described as using four statuses (`not_affected`, `affected`, `fixed`, `under_investigation`) with a justification or impact statement for `not_affected`; this was not checked against the spec, so verify exact labels and the document context version against the spec you target. Store the document next to the artifact (in the repository or the artifact store) so the decision travels with the image and an auditor can read it.
 
 The model may draft a statement; a human commits it. Make that a reviewed merge request:
 
@@ -123,7 +123,7 @@ security-gate:
     - ./scripts/policy-gate.sh # deterministic thresholds, no model involved
 ```
 
-A person reviews the draft artifact and commits the accepted statements under `security/vex/`. Scope the CODEOWNERS entry for `security/vex/` and the risk register to the security or service owners, and require code owner approval on the protected branch (check that your GitLab tier supports it), so a statement cannot merge without them. The approval flow maps onto [[human-approval-state-machine]].
+A person reviews the draft artifact and commits the accepted statements under `security/vex/`. Scope the CODEOWNERS entry for `security/vex/` and the risk register to the security or service owners, and require code owner approval on the protected branch (the `code_owner_approval_required` protected-branch setting is documented as Premium and Ultimate only), so a statement cannot merge without them. The approval flow maps onto [[human-approval-state-machine]].
 
 ## Humans own risk acceptance
 
@@ -173,11 +173,37 @@ Volume closed is the wrong metric. Track time to triage, the share of findings c
 - [ ] Ignore syntax and vendor features were checked against the versions in use.
 - [ ] Closed-by-evidence items are sampled and re-checked on a schedule.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the LLM-risk guidance, GitLab CI and protected-branch behaviour used in this note; scanner, VEX and vendor-specific claims were not available locally.
+
+### Sources checked
+
+- [LLM01:2025 Prompt Injection](https://genai.owasp.org/llm-top-10/): indirect prompt injection arises when a model accepts external content such as websites or files, and the mitigation to segregate and identify untrusted external content (supports treating finding descriptions and package metadata as untrusted). Checked 2026-11-02 against owasp-llm commit 99f4395.
+- [LLM06:2025 Excessive Agency](https://genai.owasp.org/llm-top-10/): minimum-privilege downstream access and human-in-the-loop approval for high-impact actions (supports read-only triage access and a named human deciding). Checked 2026-11-02 against owasp-llm commit 99f4395.
+- [LLM02:2025 Sensitive Information Disclosure](https://genai.owasp.org/llm-top-10/): sensitive data including credentials and confidential business data can be exposed through LLM applications, and sanitisation is a mitigation (supports redacting before model calls). Checked 2026-11-02 against owasp-llm commit 99f4395.
+- [LLM09:2025 Misinformation](https://genai.owasp.org/llm-top-10/): hallucination produces credible but fabricated content and overreliance compounds it (supports validating evidence references and sampling closed items). Checked 2026-11-02 against owasp-llm commit 99f4395.
+- [Protected branches API | GitLab](https://docs.gitlab.com/api/protected_branches/): `code_owner_approval_required` ties a protected branch to the `CODEOWNERS` file and is documented as Premium and Ultimate only. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+- [Job rules | GitLab CI/CD](https://docs.gitlab.com/ci/jobs/job_rules/): `rules` with `if:` on `$CI_PIPELINE_SOURCE == "merge_request_event"` and `changes:` entries. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+- [Job artifacts | GitLab CI/CD](https://docs.gitlab.com/ci/jobs/job_artifacts/): `artifacts:paths` selects files kept as job artifacts, and `allow_failure: true` stops a job failure from failing the pipeline. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+
+### Not verified
+
+- The OpenVEX specification (statuses, `not_affected` justification labels, document context version) was not available locally; the note says to verify them.
+- GitLab vulnerability management policy, auto-dismiss limits and false positive detection pages are outside the local GitLab docs scope; their tier and limit claims are unchecked.
+- Scanner behaviour (Xray, Trivy, SonarQube): ignore-file syntax, expiry support, quality-gate exemptions and edition differences.
+- NIST SP 800-40 Rev. 4 was not reachable.
+- The `image`, `stage` and variable syntax in the CI excerpt follows general GitLab usage and was not checked line by line.
+- Deduplication keys, the evidence schema, review cadence and the division of labour are engineering guidance, not documented claims.
+- Nothing was run.
+
 ## Sources
 
-- https://github.com/openvex/spec/blob/main/OPENVEX-SPEC.md - OpenVEX statuses, justification for `not_affected`, and document structure.
-- https://docs.gitlab.com/user/application_security/policies/vulnerability_management_policy/ - GitLab vulnerability management policy, auto-dismiss scope and limits (check tier and current limits).
-- https://docs.gitlab.com/user/application_security/vulnerabilities/false_positive_detection/ - GitLab false positive detection and dismissal of findings (check availability and tier).
-- https://doi.org/10.6028/NIST.SP.800-40r4 - NIST SP 800-40 Rev. 4, enterprise patch management planning and risk-based prioritisation.
+- [OpenVEX specification](https://github.com/openvex/spec/blob/main/OPENVEX-SPEC.md): statuses, justification for `not_affected`, and document structure (not read; see Evidence).
+- [Vulnerability management policy | GitLab](https://docs.gitlab.com/user/application_security/policies/vulnerability_management_policy/): auto-dismiss scope and limits (not read; check tier and current limits).
+- [False positive detection | GitLab](https://docs.gitlab.com/user/application_security/vulnerabilities/false_positive_detection/): dismissal of findings (not read; check availability and tier).
+- [NIST SP 800-40 Rev. 4](https://doi.org/10.6028/NIST.SP.800-40r4): enterprise patch management planning and risk-based prioritisation (not read).
+- [Protected branches API | GitLab](https://docs.gitlab.com/api/protected_branches/): code owner approval setting.
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): prompt injection, excessive agency, sensitive information disclosure and misinformation.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

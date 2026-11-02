@@ -8,18 +8,18 @@ tags:
   - reliability
   - incident-management
 created: 2026-10-27
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note covers how to write prompts for day-to-day operations work: debugging a failing deploy, reading a Terraform plan, narrowing an incident, drafting a runbook step. It is for engineers who already know the system and want the assistant to be useful instead of confidently generic. It does not cover tool permissions ([[coding-agent-permission-allowlists]]), the incident process itself ([[ai-assisted-incident-response]]) or bulk log tooling ([[llm-log-analysis-and-alert-triage]]); it also does not replace [[context-engineering-for-agents]], which covers how context is packaged for autonomous agents.
 
-> [!note] Not verified
-> The sources below were found through search on 2026-10-27, but the pages could not be fetched and read. Before relying on or quoting them, check: the current prompting guidance from your model provider or coding agent (it changes between model releases), the Google SRE postmortem chapter, and the Kubernetes "Debug Pods" page for the cluster's actual version. No OWASP primary source was confirmed, so prompt-injection numbering is deliberately not cited.
-
 ## Core principle: the colleague test
 
-Write the prompt as if handing the task to a capable engineer who joined today and has no access to your terminal. If that person would need to ask "which cluster?", "which version?" or "what did the error say?", the prompt is missing it. Vendor prompting guidance makes the same point (per the current docs at time of writing: be clear and direct, supply context rather than simplifying). The rest of this note is that test applied to ops.
+Write the prompt as if handing the task to a capable engineer who joined today and has no access to your terminal. If that person would need to ask "which cluster?", "which version?" or "what did the error say?", the prompt is missing it. This is an engineering heuristic rather than a documented requirement. The rest of this note is that test applied to ops.
 
 ## Give evidence, not summaries
 
@@ -45,13 +45,13 @@ kubernetes_server_version: "<from kubectl version>"
 terraform: "<from terraform version>, provider google <version>"
 helm_chart: "<chart>@<version>"
 runner_image: "<image:tag or digest>"
-ci: GitLab CI, shell executor on Linux
+ci: GitLab CI, Docker executor on Linux
 in_scope: [namespace payments-staging]
 out_of_scope: [production, shared-services, anything IAM]
 mode: read-only diagnosis
 ```
 
-Fill the versions from command output, not memory. Flags, defaults and API versions change across releases, and `kubectl debug` or ephemeral container behaviour is version dependent; check it against the docs for your cluster version. Any `gcloud` or `kubectl` command the assistant produces should be confirmed with `--help` on the installed version before it goes into a template.
+Fill the versions from command output, not memory. Flags, defaults and API versions change across releases, and `kubectl debug` and ephemeral container behaviour is version dependent (the Kubernetes docs mark ephemeral containers as a feature with a stable-since version); check it against the docs for your cluster version. Any `gcloud` or `kubectl` command the assistant produces should be confirmed with `--help` on the installed version before it goes into a template.
 
 ## Ask for assumptions, uncertainty and ranked hypotheses
 
@@ -83,7 +83,7 @@ kubectl describe pod -n payments-staging -l app=api | sed -n '/Events:/,$p'
 kubectl rollout status deploy/api -n payments-staging --timeout=120s
 ```
 
-Start with the basic checks the Kubernetes "Debug Pods" guidance puts first (describe the pod, look at state and restarts) before reaching for debug containers. For Terraform, ask for `terraform plan -out=plan.bin` and a review of `terraform show` rather than an apply. Generated commands still go through the controls in [[safe-shell-command-generation-for-agents]].
+Start with the basic check the Kubernetes "Debug Pods" page puts first (`kubectl describe pods`, then look at container state and recent restarts) before reaching for debug containers. For Terraform, ask for `terraform plan -out=plan.bin` and a review of `terraform show` rather than an apply. Generated commands still go through the controls in [[safe-shell-command-generation-for-agents]].
 
 ## Constrain the output format
 
@@ -98,7 +98,7 @@ Add explicit permission to say "insufficient evidence". Without it, fixed format
 
 ## Scope blast radius in the prompt
 
-State the environments, namespaces, projects and accounts in scope, and what must not be touched. Make the first turn read-only and non-production. For a GitLab CI job that asks an assistant to review a failure, mirror that scope in the pipeline rather than in prose alone. `$CI_JOB_STATUS` is only set in `after_script`, so it cannot gate a job in `rules`; use `when: on_failure` instead, and give the job a token that cannot write to the repository or deploy:
+State the environments, namespaces, projects and accounts in scope, and what must not be touched. Make the first turn read-only and non-production. For a GitLab CI job that asks an assistant to review a failure, mirror that scope in the pipeline rather than in prose alone. GitLab documents `$CI_JOB_STATUS` for use with `after_script`, so do not rely on it to gate a job in `rules`; use `when: on_failure` instead (confirm the `rules:when` semantics in the GitLab keyword reference for your version). Git push with a job token is off by default, but the job token carries the permissions of the user who started the job, so also keep deploy credentials out of the job:
 
 ```yaml title=".gitlab-ci.yml"
 triage_failure:
@@ -135,7 +135,7 @@ If two iterations do not converge, stop and re-gather evidence yourself. Repeate
 
 ## Treat pasted content as untrusted
 
-Logs, tickets, READMEs and web pages can contain instructions, deliberately or by accident. Say in the prompt that embedded text is data, wrap it in clear delimiters, and do not give a diagnosing assistant tools that can change anything. Background: [[indirect-prompt-injection-in-documents]]. Keep secrets out entirely; if a kubeconfig, token or service account key was pasted, follow [[leaked-credential-rotation]].
+Logs, tickets, READMEs and web pages can contain instructions, deliberately or by accident. Say in the prompt that embedded text is data, wrap it in clear delimiters, and do not give a diagnosing assistant tools that can change anything. The OWASP LLM01 prompt injection guidance recommends the same controls: segregate and identify external content, least privilege for the model, and human approval for high-risk actions. Background: [[indirect-prompt-injection-in-documents]]. Keep secrets out entirely; if a kubeconfig, token or service account key was pasted, follow [[leaked-credential-rotation]].
 
 ## Anti-patterns
 
@@ -169,10 +169,39 @@ Logs, tickets, READMEs and web pages can contain instructions, deliberately or b
 - [ ] Any production action has a ticket, target, impact and rollback path.
 - [ ] Reusable prompts are versioned and re-checked against current tool versions.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the Kubernetes debugging, GitLab CI and OWASP prompt injection statements in this note.
+
+### Sources checked
+
+- [Troubleshoot Applications: Debug Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/): the first debugging step is `kubectl describe pods`, then check container state and recent restarts. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Debug Running Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/): ephemeral containers are added with `kubectl debug`, are marked stable since v1.25, and `kubectl describe pod` shows them. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [kubectl logs reference](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/): `-p, --previous` prints logs of the previous container instance. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [kubectl rollout status reference](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/kubectl_rollout_status/): a `--timeout` flag exists. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [GitLab predefined CI/CD variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_JOB_STATUS` is job-only and documented for use with `after_script`. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [GitLab CI/CD job token](https://docs.gitlab.com/ci/jobs/ci_job_token/): Git push with a job token is off by default and the token has the permissions of the user who started the job. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [GitLab runners: Git submodules](https://docs.gitlab.com/ci/runners/git_submodules/): containerized executors (Docker or Kubernetes) run each job in an isolated container, while shell executors run jobs directly on the runner host. The `image:` pin in the snippet therefore assumes a container-based executor. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [GitLab job artifacts](https://docs.gitlab.com/ci/jobs/job_artifacts/): `artifacts:paths`, `expire_in` and the `.post` stage appear in documented examples. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [OWASP LLM01:2025 Prompt Injection](https://genai.owasp.org/llm-top-10/): indirect injection through external content, and the mitigations to constrain model privileges, require human approval for high-risk actions and segregate untrusted content. Checked 2026-11-02 against the OWASP LLM Top 10 repository commit 99f4395.
+
+### Not verified
+
+- The Google SRE Book postmortem chapter and the blameless framing attributed to it; the site was not reachable.
+- Current prompting guidance from model providers or coding agents; vendor documentation was not reachable, so the colleague test is presented as engineering guidance.
+- `terraform plan -out`, `terraform show` and the `# forces replacement` marker; the local Terraform checkout holds no documentation pages.
+- The `rules:when: on_failure` semantics and the `.post` stage definition; the GitLab CI keyword reference was not in the local docs, so the snippet's behaviour was not confirmed.
+- The `kubectl get events --sort-by` usage and `gcloud` command behaviour were not confirmed for a specific version.
+- General advice (ranked hypotheses, falsifying checks, anchoring, iterate rather than restart, output schemas) is engineering guidance, not a documented claim.
+- Nothing was run.
+
 ## Sources
 
-- Your model or coding-agent provider's own documentation for prompting guidance: give context and say what good output looks like. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
+- Your model or coding-agent provider's own documentation for prompting guidance. Not read for this note (see Not verified); tool-specific behaviour varies by tool and version, so check it there before copying any configuration.
 - [Google SRE Book: Postmortem culture](https://sre.google/sre-book/postmortem-culture/) - blameless framing for incident prompts and reviews.
-- [Kubernetes docs: Debug Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/) - starting with describe, state and restarts; debug container behaviour is version dependent.
+- [Kubernetes docs: Debug Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/) - starting with describe, state and restarts.
+- [Kubernetes docs: Debug Running Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/) - ephemeral debug containers are marked stable since v1.25, so check the feature against your cluster version (checked 2026-11-02 against kubernetes/website commit 491f14e).
+- [OWASP Top 10 for LLM Applications: LLM01 Prompt Injection](https://genai.owasp.org/llm-top-10/) - segregating untrusted content, least privilege, human approval.
+- [GitLab CI/CD job token](https://docs.gitlab.com/ci/jobs/ci_job_token/) - job token push default and permissions.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

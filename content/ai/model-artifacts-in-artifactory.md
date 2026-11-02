@@ -8,8 +8,11 @@ tags:
   - supply-chain
   - security
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 Teams that would never `pip install` from a random URL in production will happily call a model hub from a pod at startup and load whatever the `main` branch holds that day. Model weights are artifacts: they come from third parties, they can be swapped or typosquatted, they carry licence terms, and some formats run code when they are loaded. The rules already used for packages and images ([[artifactory-repository-design]], [[artifact-promotion-artifactory]]) apply: proxy the upstream, pin what you use, check it before promotion, record where it came from, and let production pull only from internal repositories.
@@ -17,8 +20,8 @@ Teams that would never `pip install` from a random URL in production will happil
 > [!info] Scope
 > Written for a platform team that serves open-weight models on GKE ([[self-hosted-llm-inference-on-gke]]) and runs JFrog Artifactory. The hub examples use Hugging Face because its client and Artifactory's support for it are documented; the same pattern fits any hub. No Artifactory version, JFrog plan, model or licence is named: check what your installation and contracts provide.
 
-> [!note] Not verified
-> Checked only at page level, on 2026-10-21, through search summaries of the Python, Hugging Face and JFrog documentation, not a full read. Not checked: which Artifactory version first supports Hugging Face repositories, whether copy and promotion between Hugging Face local repositories work like other package types, the JFrog CLI property flags, JFrog's statements that virtual Hugging Face repositories support downloads through `snapshot_download` only and that `jf hf` supports download and upload only, whether the `docs.jfrog.com` page addresses in Sources still resolve, whether Xray, Curation or malicious-model detection is in your licence, and the exact scanner commands. The scripts and pipeline are illustrations, not run.
+> [!note] Verification
+> Only the supply-chain risk framing was checked against a local primary source. The Python, Hugging Face and JFrog behaviour described here was not; see Not verified in the Evidence section. The scripts and pipeline are illustrations, not run.
 
 ## What can go wrong
 
@@ -31,6 +34,10 @@ Teams that would never `pip install` from a random URL in production will happil
 | Upstream disappears                | A model is deleted or made private                                                                     | Remote repository cache and promoted local copies                 |
 | Unbounded egress from serving pods | Pods download from the internet at startup                                                             | Serving pods pull from internal repositories only; egress blocked |
 
+### Weak provenance
+
+OWASP's Top 10 for LLM Applications (2025), LLM03 Supply Chain, says published models currently come with no strong provenance assurances: model cards describe a model but do not guarantee its origin, and an attacker can compromise a supplier account on a model repository or create a similar-looking one. It recommends using models only from verifiable sources, using integrity checks with signing and file hashes, maintaining an SBOM inventory (noting AI BOMs and ML SBOMs are emerging), and monitoring collaborative model development environments; it also gives a model merge or format-conversion service attack scenario (Scenario 10), whose reference link describes hijacking of safetensors conversion on Hugging Face. The allowlist, pinning, checksums and manifest below follow that guidance.[^owasp]
+
 ### Pickle runs code
 
 Python's `pickle` documentation is blunt: never unpickle data that could have come from an untrusted source or could have been tampered with, because malicious pickle data can execute arbitrary code during unpickling.[^pickle] Many checkpoint formats in the Python ecosystem use pickle inside (PyTorch's default checkpoints are commonly a zip archive with a pickled object in it), so "loading the model" can mean "running the uploader's code" with the pod's service account, network and mounted secrets.
@@ -42,7 +49,7 @@ Hugging Face's own security page repeats the warning, describes its pickle scann
 
 ### Prefer safetensors
 
-The safetensors format was designed to store tensors without pickle's code-execution risk: a file is a small JSON header followed by raw tensor bytes.[^safetensors] Hugging Face commissioned an external audit that reported no critical flaw and led to fixes of minor issues; treat that as a point-in-time review, not a guarantee. The safetensors project also recommends that downstream libraries be configured to require safetensors, so loading fails instead of silently falling back to a pickle file. Look up the option in the library you use; it differs per library and version.
+The safetensors format was designed to store tensors without pickle's code-execution risk: a file is a small JSON header followed by raw tensor bytes.[^safetensors] Hugging Face has published an external security audit of the format; treat any such audit as a point-in-time review, not a guarantee. The safetensors project also recommends that downstream libraries be configured to require safetensors, so loading fails instead of silently falling back to a pickle file. Look up the option in the library you use; it differs per library and version.
 
 Policy:
 
@@ -68,7 +75,7 @@ flowchart LR
 | `models-dev-local`  | Local, Hugging Face  | Eval and staging jobs          | The import job         |
 | `models-prod-local` | Local, Hugging Face  | Serving workloads              | The promotion job only |
 
-JFrog documents remote, local and virtual Hugging Face repository types, with `https://huggingface.co` as the supported remote upstream, and notes that the remote cache protects you against a model being removed or changed upstream.[^jfroghf] New Hugging Face repositories use a "Machine Learning" repository layout by default; check the layout and repository options your Artifactory version offers before creating them.[^jfrogml]
+JFrog documents remote, local and virtual Hugging Face repository types, with `https://huggingface.co` as the expected remote upstream, and notes that the remote cache protects you against a model being removed or changed upstream.[^jfroghf] JFrog also documents a "Machine Learning" repository layout; check the layout and repository options your Artifactory version offers before creating them.[^jfrogml]
 
 Developers and notebooks do **not** read `hf-remote` directly. If they did, the cache would fill with whatever anyone tried, and every serving path would be one configuration mistake away from unreviewed weights. They read `models-dev-local`, and request new models through the import job.
 
@@ -114,10 +121,10 @@ path = snapshot_download(
 print(path)
 ```
 
-- `revision` accepts a branch, tag or commit hash. A commit hash must be the full hash; a 7-character prefix is not accepted.[^download] Pin the full hash: a branch or tag can move.
+- `revision` accepts a branch, tag or commit hash. Use the full commit hash, not a short prefix.[^download] Pin the full hash: a branch or tag can move.
 - `allow_patterns` keeps pickle files out of the download in the first place. It is a convenience, not the control; the scan below checks what actually arrived.
-- JFrog notes that virtual Hugging Face repositories support downloads through `snapshot_download` only, and its page suggests raising the client's ETag and download timeouts for large models; check the variable names on that page.
-- `jf hf` in the JFrog CLI supports download and upload only.[^jfcli]
+- JFrog's pages may describe limits for virtual Hugging Face repositories and timeout advice for large models (not verified); check the supported client calls and variable names on those pages for your version.
+- The JFrog CLI has Hugging Face commands.[^jfcli] Check which operations your CLI version supports.
 
 ## The import and promotion gate
 
@@ -222,7 +229,7 @@ Run the scanners you have on the downloaded tree, and keep their output as a bui
 
 ### 4. Licence review
 
-Read the licence on the model card and in the repository files, record it, and follow [[open-source-license-compliance]]. Model licences are often custom (use restrictions, attribution, user thresholds, field-of-use clauses), so a licence identifier alone is not enough. Legal decides what is acceptable; engineering records what the licence says, which revision it applies to, and who approved it. A licence can change between revisions, which is one more reason to pin.
+Read the licence on the model card and in the repository files, record it, and follow [[open-source-license-compliance]]. Model licences are often custom (use restrictions, attribution, user thresholds, field-of-use clauses), so a licence identifier alone is not enough. OWASP's LLM03 supply-chain entry lists licensing risk and recommends inventorying licences through BOMs. Legal decides what is acceptable; engineering records what the licence says, which revision it applies to, and who approved it. A licence can change between revisions, which is one more reason to pin.
 
 ### 5. Record provenance and checksums
 
@@ -336,6 +343,29 @@ A model change is a change of the pinned revision in the serving configuration. 
 
 [^jfrogmal]: JFrog documentation, "Detect malicious AI models".
 
+[^owasp]: OWASP Top 10 for LLM Applications 2025, LLM03:2025 Supply Chain, risks 2 and 5, Scenario 10 and its reference link 3, and the prevention and mitigation list (mitigations 4 to 7).
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the supply-chain risk framing, provenance, hashing and licence-inventory advice; the Python, Hugging Face and JFrog behaviour could not be read locally.
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications 2025, LLM03 Supply Chain](https://genai.owasp.org/llm-top-10/): weak model provenance (model cards give no origin guarantee; supplier account compromise and lookalike repositories), licensing risk and licence inventory through BOMs, use of verifiable sources with signing and file hashes, SBOM inventory with AI BOMs and ML SBOMs as an emerging area, a model merge or format-conversion service attack scenario (Scenario 10, whose reference link 3 is titled as hijacking safetensors conversion on Hugging Face), and strict monitoring and auditing of collaborative model development environments (mitigation 7). Checked 2026-11-02 against OWASP LLM Top 10 repository commit 99f4395 (`2_0_vulns/LLM03_SupplyChain.md`).
+
+- [Init containers](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) and [ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers/), Kubernetes documentation: init containers run to completion before app containers start, and ephemeral containers are the documented route for debugging a pod whose image lacks debugging tools. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+
+### Not verified
+
+- Python behaviour: the `pickle` untrusted-data warning, `pickletools` output and its `GLOBAL` or `STACK_GLOBAL` opcodes, pickle protocol leading byte `0x80`, and `os.walk` skipping unreadable directories or a missing root unless `onerror` is set: not available locally.
+- `curl` exit codes 7 and 28, GNU coreutils `sha256sum --check --strict --quiet` flags, and the SentencePiece `.model` file being binary protobuf: not checked.
+- Hugging Face documentation: pickle scanning, safetensors format and header layout, the external audit, `revision`, `allow_patterns` and `snapshot_download` behaviour, full-hash requirement, `HF_ENDPOINT` and `HF_TOKEN`, and third-party scanner integrations on the Hub: not available locally.
+- JFrog documentation: Hugging Face and Machine Learning repository types and layout, remote upstream, the Artifactory Hugging Face API endpoint path (`api/huggingfaceml`), virtual Hugging Face repository limits and client timeout advice, cache behaviour, gated-model credentials, CLI Hugging Face commands, malicious model detection, Artifactory version support, copy and promotion behaviour, property flags and licence entitlements (Xray, Curation): not available locally. The `docs.jfrog.com` addresses in Sources were not resolved, so they are unconfirmed and may not be the exact page paths.
+- PyTorch checkpoint format and the safetensors recommendation that libraries require safetensors: not checked.
+- GKE and Google Cloud egress behaviour in the serving and egress sections: not checked here.
+- Engineering guidance, not documented claims: repository layout, promotion flow, retention policy, rollback steps and the failure-mode list.
+- Nothing was run: the scripts, manifest and pipeline are illustrations.
+
 ## Sources
 
 - [pickle: Python object serialization](https://docs.python.org/3/library/pickle.html), Python documentation: the untrusted-data warning and `pickletools`.
@@ -347,7 +377,9 @@ A model change is a change of the pinned revision in the serving configuration. 
 - [Machine learning repositories](https://docs.jfrog.com/artifactory/docs/machine-learning-repositories), JFrog Artifactory documentation.
 - [Use Hugging Face with JFrog CLI](https://docs.jfrog.com/artifactory/docs/use-hugging-face-with-jfrog-cli), JFrog documentation.
 - [Limitations and troubleshooting](https://docs.jfrog.com/security/docs/limitations-and-troubleshooting), JFrog security documentation: gated models through remote repositories.
-- [Detect malicious AI models](https://docs.jfrog.com/security/docs/detect-malicious-ai-models), JFrog security documentation (existence checked only).
+- [Detect malicious AI models](https://docs.jfrog.com/security/docs/detect-malicious-ai-models), JFrog security documentation.
+
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): LLM03 Supply Chain, on model provenance, hashes and licences.
 
 ## Related
 

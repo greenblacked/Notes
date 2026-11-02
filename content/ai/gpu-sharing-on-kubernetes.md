@@ -10,12 +10,15 @@ tags:
 created: 2026-11-01
 modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note covers how to share GPUs between inference workloads on Kubernetes and GKE: whole-GPU allocation, time-slicing and hardware partitioning, the device plugin resource names that expose them, scheduling and quotas, monitoring, and the cases where sharing is unsafe. It is for platform and ML-serving engineers who own GPU node pools and decide how tenants consume them. It does not cover tenant isolation at the model, cache and data layers ([[multi-tenant-inference-isolation]]), cost and utilisation tuning inside a serving engine ([[gpu-utilization-and-serving-efficiency]]), autoscaling signals ([[llm-serving-autoscaling-signals]]), KV cache sizing ([[kv-cache-capacity-and-paging]]) or building a dedicated GPU serving stack on GKE ([[self-hosted-llm-inference-on-gke]]).
 
 > [!note] Not verified
-> The Kubernetes, gcloud and Terraform claims were read in local copies of the documentation and help text, not on the live sites. GPU-vendor documentation and GKE concept pages could not be checked at all. Before relying on this note, check: how your GPU vendor's device plugin configures time-slicing and whether replicas get separate memory; which partition profiles and machine types your GKE version supports; GKE-specific quota names and GPU metric exposure; the feature-gate state of Dynamic Resource Allocation on your cluster version; and any latency numbers, which must be measured in your own environment.
+> The Kubernetes, gcloud, Terraform, vLLM and OpenTelemetry claims were read in local copies of the documentation and help text, not on the live sites. GPU-vendor documentation and GKE concept pages could not be checked at all. See the Evidence section. Before relying on this note, check: how your GPU vendor's device plugin configures time-slicing and whether replicas get separate memory; which partition profiles and machine types your GKE version supports; GKE-specific quota names and GPU metric exposure; the feature-gate state of Dynamic Resource Allocation on your cluster version; and any latency numbers, which must be measured in your own environment.
 
 ## The three modes
 
@@ -25,17 +28,17 @@ This note covers how to share GPUs between inference workloads on Kubernetes and
 | Time-slicing          | A share of compute time on one device           | Weakest. Test for memory and fault isolation; do not assume it exists.         | Trusted, same-team, bursty or dev workloads                           |
 | Hardware partitioning | A fixed slice of compute and memory (MIG-style) | Stronger data-plane isolation than time-slicing, but still one physical device | Several small models that each fit a slice, mixed tenants with review |
 
-The core Kubernetes model is whole devices. GPUs are extended resources, which are integers only, cannot be overcommitted, and cannot be shared between containers. Every sharing mode below is therefore something a vendor plugin or a DRA driver adds on top, and its semantics belong to that vendor. Vendor plugins can advertise time-sliced replicas of one GPU as several schedulable units; verify memory and fault behaviour with the vendor before trusting it.
+The core Kubernetes model is whole devices. GPUs are extended resources, which are integers only, cannot be overcommitted, and cannot be shared between containers. Any sharing mode below is therefore something a vendor plugin, a DRA driver or the platform adds on top, and its semantics belong to that vendor. A plugin may advertise time-sliced replicas of one GPU as several schedulable units; Kubernetes documentation does not describe this, so verify memory and fault behaviour with the vendor before trusting it.
 
 ## Resource names and what they mean
 
-A device plugin advertises `vendor-domain/resourcetype`, for example `nvidia.com/gpu` or `amd.com/gpu`. Any sharing mode you enable is usually exposed through that same name, so `nvidia.com/gpu: 1` can mean a full device on one node pool and a time-sliced replica or a partition on another. Document the meaning per node pool and enforce it, because the request alone does not tell the scheduler or a reviewer which one the tenant gets.
+A device plugin advertises `vendor-domain/resourcetype`, for example `nvidia.com/gpu` or `amd.com/gpu`. A sharing mode may be exposed through that same name, so `nvidia.com/gpu: 1` can mean a full device on one node pool and a time-sliced replica or a partition on another. Document the meaning per node pool and enforce it, because the request alone does not tell the scheduler or a reviewer which one the tenant gets.
 
 Rules that the core scheduler applies:
 
 - GPUs go in `limits`. If you also set `requests`, they must equal `limits`; `requests` alone is rejected.
 - Node selection is a separate decision. Use labels, node affinity or Node Feature Discovery to pick the GPU class, because the resource name does not say which model or partition size you get.
-- GKE-specific node pool options for enabling sharing are not covered here; take them from the current GKE documentation. What this note relies on is the label and taint you set yourself, shown next.
+- On GKE, the `gcloud container node-pools create` and `update` help list an `--accelerator` flag with `gpu-partition-size`, `gpu-sharing-strategy` and `max-shared-clients-per-gpu` sub-fields. Accepted values, supported machine types and the resulting resource names are not covered here; take them from the current GKE documentation. What this note relies on is the label and taint you set yourself, shown next.
 
 The node pool carries a label and a taint that you set when you create it or update it. On GKE Standard, `gcloud container node-pools create` takes `--node-labels` and `--node-taints` together, while `update` takes them in separate commands; in Terraform the same go in the pool's `node_config` as `labels` and a `taint` block. Pods then select the label with `nodeSelector` and tolerate the taint, as in the Deployment below.
 
@@ -122,7 +125,7 @@ spec:
               type: RuntimeDefault
 ```
 
-The digest is a placeholder. `runAsNonRoot` only passes if the image declares a numeric non-root user, and with a read-only root filesystem the server needs `emptyDir` mounts for any cache or temp paths it writes. See [[kubernetes-resource-requests-and-limits]] for the CPU and memory side.
+The digest is a placeholder. `runAsNonRoot` needs a numeric non-root UID, set either by the image or by `runAsUser`, and with a read-only root filesystem the server needs `emptyDir` mounts for any cache or temp paths it writes. See [[kubernetes-resource-requests-and-limits]] for the CPU and memory side.
 
 ## Quotas and scheduling
 
@@ -141,11 +144,11 @@ spec:
 
 This counts whatever the plugin advertises. If a shared mode turns one device into several replicas, a quota of 4 may be four slices, not four GPUs, and tenants can end up with more or less than intended. Define the quota unit with the platform team per node pool, and keep sharing and exclusive pools under different resource names or different namespaces where the plugin allows it. Namespace-level patterns are in [[kubernetes-namespace-quotas-and-limitranges]] and [[0019-namespace-per-team-tenancy]].
 
-Size memory before you share. A serving engine such as vLLM claims a fraction of device memory through `gpu_memory_utilization` (0.9 is the value in the documentation's examples and sweeps; check the default for your version). Two engines on one unpartitioned or time-sliced GPU compete for memory, not only compute, and a partition must hold weights plus KV cache with headroom for the engine.
+Size memory before you share. A serving engine such as vLLM pre-allocates GPU memory for its KV cache using the fraction set by `gpu_memory_utilization` (0.9 is the value in the documentation's examples and sweeps; check the default for your version). Two engines on one unpartitioned or time-sliced GPU compete for memory, not only compute, and a partition must hold weights plus KV cache with headroom for the engine.
 
 ## Dynamic Resource Allocation
 
-DRA is the structured alternative for partitioned devices. It adds device classes, CEL filtering and claim-based sharing across pods, which the device-plugin model does not offer. Two separately gated features cover partitioning: partitionable devices (`DRAPartitionableDevices`), where logical devices consume shared counters so the scheduler will not allocate partitions that together exceed the physical device, and device compatibility groups (`DRADeviceCompatibilityGroups`), which let a driver declare mutually exclusive modes, such as a partition mode and a virtual-GPU mode, so the scheduler rejects that combination. Each depends on your Kubernetes version and feature gates, so confirm the state on the target cluster before recommending it.
+DRA is the structured alternative for partitioned devices. It adds device classes, CEL filtering and sharing a device between containers or pods through a resource claim, whereas the device-plugin model does not share devices between containers. Two features cover partitioning, and the second builds on the first: partitionable devices (`DRAPartitionableDevices`), where logical devices consume shared counters so the scheduler will not allocate partitions that together exceed the physical device, and device compatibility groups, which exist only on partitionable devices, need both `DRAPartitionableDevices` and `DRADeviceCompatibilityGroups` enabled, and let a driver declare mutually exclusive modes, such as a partition mode and a virtual-GPU mode, so the scheduler rejects that combination. Both depend on your Kubernetes version and feature gates, so confirm the state on the target cluster before recommending it.
 
 ## Monitoring
 
@@ -163,7 +166,7 @@ kubectl get nodes -o json |
   jq -r '.items[] | [.metadata.name, (.status.allocatable["nvidia.com/gpu"] // "0")] | @tsv'
 ```
 
-A sudden jump in allocatable GPUs on a node usually means someone enabled time-slicing or partitioning there. Treat that as a change needing review.
+A sudden jump in allocatable GPUs on a node can mean someone enabled time-slicing or partitioning there. Treat that as a change needing review.
 
 ```yaml title=".gitlab-ci.yml"
 gpu-quota-check:
@@ -184,7 +187,7 @@ Server-side dry-run catches schema and admission errors before merge. Run it wit
 
 Do not share a device between tenants when any of these holds, unless a documented review accepts the residual risk:
 
-- The tenants are mutually untrusted, or the workloads handle different data classifications. Kubernetes separates hard and soft multi-tenancy and says data-plane isolation needs extra attention; time-slicing does not provide it by default.
+- The tenants are mutually untrusted, or the workloads handle different data classifications. Kubernetes describes hard multi-tenancy, where tenants do not trust each other, as often needing extra attention to data-plane isolation; do not assume time-slicing provides it.
 - One tenant's crash must not affect another. When a device goes unhealthy the kubelet lowers allocatable, but pods already on it keep their assignment and usually fail, so one fault can hit every tenant on that device.
 - A latency objective is tight and unmeasured. No local source quantifies noisy-neighbour impact, so measure with a realistic load before promising it.
 - Memory use is unpredictable, for example long-context traffic with a large KV cache.
@@ -197,7 +200,7 @@ The default for regulated or cross-tenant work is a whole GPU per tenant or a re
 - **Memory fight.** Two engines each claim most of the device memory and one fails to start or is killed under load.
 - **Quota in the wrong unit.** A namespace quota counts slices as devices and a tenant takes far more capacity than budgeted.
 - **Fault blast radius.** One device error takes down every pod on a shared GPU, and those pods stay assigned to the failed device, failing or crash-looping rather than moving.
-- **Plugin outage.** The kubelet restarts, the plugin does not detect it and re-register, and GPU capacity vanishes from the node. Treat plugin DaemonSet health as a node-level SLO.
+- **Plugin outage.** The kubelet restarts and the plugin does not detect it and re-register (the documented expectation is that it does). Treat the resulting loss of GPU capacity on the node as likely. Treat plugin DaemonSet health as a node-level SLO.
 - **Averages hide starvation.** The dashboard shows 70 percent GPU utilisation while one tenant waits behind another.
 - **Unreviewed DRA reliance.** A manifest assumes a feature gate that the cluster does not enable.
 
@@ -215,17 +218,46 @@ The default for regulated or cross-tenant work is a whole GPU per tenant or a re
 - [ ] The DRA feature-gate state was checked against the cluster version.
 - [ ] Containers run non-root with a restricted `securityContext`.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: Kubernetes GPU scheduling, device plugin, quota, DRA and tenancy behaviour, GKE node pool labels and taints, and the serving metric names quoted in the monitoring section.
+
+### Sources checked
+
+- [Schedule GPUs | Kubernetes](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/): GPU resources such as `amd.com/gpu` and `nvidia.com/gpu`; GPUs belong in `limits`; limits without requests is allowed, both must be equal, requests without limits is not allowed; node labels and Node Feature Discovery to pick GPU type. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Device Plugins | Kubernetes](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/): `vendor-domain/resourcetype` naming; extended resources are integer-only and cannot be overcommitted; devices cannot be shared between containers; plugin must re-register after a kubelet restart; unhealthy devices lower allocatable while assigned pods keep the device and usually fail or crash-loop. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Resource Quotas | Kubernetes](https://kubernetes.io/docs/concepts/policy/resource-quotas/): only `requests.`-prefixed quota items are allowed for extended resources, for example `requests.nvidia.com/gpu`. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Taints and Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) and [Assigning Pods to Nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): `NoSchedule` taint, toleration with `operator: Equal`, and `nodeSelector` on node labels. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Multi-tenancy | Kubernetes](https://kubernetes.io/docs/concepts/security/multi-tenancy/): hard versus soft multi-tenancy, extra attention to data-plane isolation for hard tenancy, and noisy-neighbour concerns. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Dynamic Resource Allocation | Kubernetes](https://kubernetes.io/docs/concepts/resource-management/dynamic-resource-allocation/) and [DRA Features](https://kubernetes.io/docs/concepts/resource-management/dynamic-resource-allocation/dra-features/): CEL device filtering, device sharing through resource claims, device classes; partitionable devices with shared counters (`DRAPartitionableDevices`); compatibility groups so the scheduler rejects incompatible modes such as MIG and vGPU; they build on partitionable devices and need both `DRAPartitionableDevices` and `DRADeviceCompatibilityGroups` enabled. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Metrics | vLLM](https://docs.vllm.ai/en/latest/design/metrics/): `vllm:kv_cache_usage_perc` is a gauge for the fraction of used KV cache blocks (0 to 1); `gpu_memory_utilization="0.9"` appears in the sample cache config output (`docs/design/metrics.md`) and in the sweeps example. [Optimization](https://docs.vllm.ai/en/latest/configuration/optimization/) says vLLM pre-allocates GPU cache using that percentage. Checked 2026-11-02 against vllm commit 8530a77.
+- [Semantic conventions for generative AI metrics | OpenTelemetry](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-metrics.md): `gen_ai.server.request.duration`, `gen_ai.server.time_per_output_token` and `gen_ai.server.time_to_first_token` are defined as histograms with Development stability (read from `docs/gen-ai/gen-ai-metrics.md` in the semantic-conventions repository; the public URL is the usual mapping of that path). Checked 2026-11-02 against semantic-conventions-genai commit 244465e.
+- [gcloud container node-pools create](https://cloud.google.com/sdk/gcloud/reference/container/node-pools/create) and [update](https://cloud.google.com/sdk/gcloud/reference/container/node-pools/update): `--node-labels` and `--node-taints` exist on both; the `key=value:NoSchedule` format; on `update` exactly one of a group of flags (including these two) may be given per call, and each replaces all user-specified labels or taints; `--accelerator` lists `gpu-partition-size`, `gpu-sharing-strategy` and `max-shared-clients-per-gpu`. Read from `gcloud ... --help` only, Google Cloud SDK 570.0.0, 2026-11-02.
+- [google_container_cluster | Terraform provider for Google](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster): `node_config` `labels` and `taint` with `key`, `value` and `effect` (`NO_SCHEDULE`). Checked 2026-11-02 against the provider documentation commit c4248bd.
+- [Job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/): `rules:if` with `$CI_PIPELINE_SOURCE == "merge_request_event"` and `rules:changes`. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+
+### Not verified
+
+- GPU-vendor behaviour was not checked: how time-slicing is configured, whether replicas get separate memory or fault isolation, which resource names a sharing mode exposes, and MIG-style partition profiles.
+- GKE documentation was not reachable: supported machine types, accelerator sub-field values, GKE-specific quota names and GPU metric exposure.
+- Feature-gate maturity of the DRA features on your cluster version was not resolved; the pages use feature-state shortcodes that were not rendered.
+- The `kubectl apply --dry-run=server` behaviour (schema and admission checks) was not confirmed against kubectl reference text beyond its use in other pages.
+- The isolation ranking in the mode table, the unsafe-sharing criteria, the failure-mode list and the review checklist are engineering guidance, not documented claims. No local source quantifies noisy-neighbour impact.
+- The `runAsNonRoot` and `emptyDir` advice in the manifest note is engineering guidance; no local Kubernetes page states the numeric-UID rule.
+- What happens to advertised GPU capacity when a plugin fails to re-register after a kubelet restart is inference; the Device Plugins page only says the plugin is expected to re-register.
+- Nothing was run.
+
 ## Sources
 
-- [Kubernetes: Schedule GPUs](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/): backs `limits` and `requests` rules and node selection for GPU type.
+- [Kubernetes: Schedule GPUs](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/): backs `limits` and `requests` rules and node selection for GPU type. Checked 2026-11-02 (commit 491f14e).
 - [Kubernetes: Taints and Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) and [Assigning Pods to Nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): back the `NoSchedule` taint, a toleration with `operator: Equal` matching key, value and effect, and `nodeSelector` on node labels. Checked 2026-11-02 (commit 491f14e).
 - `gcloud container node-pools create --help` and `update --help` (Google Cloud SDK 570.0.0): back `--node-labels` and `--node-taints`, the `key=value:NoSchedule` format, and that `update` accepts only one of them per call and replaces all user-specified labels or taints. Checked 2026-11-02 (help text only).
 - [Terraform google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster): backs `node_config` `labels` and the `taint` block with `key`, `value` and `effect` (`NO_SCHEDULE`). Checked 2026-11-02 (commit c4248bd).
-- [Kubernetes: Resource Quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/): backs `requests.`-only quota for extended resources.
-- [Kubernetes: Device Plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/): backs resource naming, integer-only extended resources, unhealthy devices and plugin re-registration after kubelet restarts.
-- [Kubernetes: Multi-tenancy](https://kubernetes.io/docs/concepts/security/multi-tenancy/): backs hard versus soft tenancy and data-plane isolation concerns.
-- [Kubernetes: Dynamic Resource Allocation](https://kubernetes.io/docs/concepts/resource-management/dynamic-resource-allocation/) and its DRA features page: back device classes, CEL filtering, claims, partitionable devices and compatibility groups. Feature-gate stages were not checked.
-- [vLLM metrics design](https://docs.vllm.ai/en/latest/design/metrics/): backs `vllm:kv_cache_usage_perc`.
-- [OpenTelemetry GenAI metrics](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-metrics/): backs the `gen_ai.server.*` metric names. The URL path is inferred and should be confirmed.
+- [Kubernetes: Resource Quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/): backs `requests.`-only quota for extended resources. Checked 2026-11-02 (commit 491f14e).
+- [Kubernetes: Device Plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/): backs resource naming, integer-only extended resources, unhealthy devices and plugin re-registration after kubelet restarts. Checked 2026-11-02 (commit 491f14e).
+- [Kubernetes: Multi-tenancy](https://kubernetes.io/docs/concepts/security/multi-tenancy/): backs hard versus soft tenancy and data-plane isolation concerns. Checked 2026-11-02 (commit 491f14e).
+- [Kubernetes: Dynamic Resource Allocation](https://kubernetes.io/docs/concepts/resource-management/dynamic-resource-allocation/) and its DRA features page: back device classes, CEL filtering, claims, partitionable devices and compatibility groups (which need both gates enabled). Feature-gate stages were not checked. Checked 2026-11-02 (commit 491f14e).
+- [vLLM metrics design](https://docs.vllm.ai/en/latest/design/metrics/): backs `vllm:kv_cache_usage_perc` and the 0.9 example value. Checked 2026-11-02 (commit 8530a77).
+- [OpenTelemetry GenAI metrics](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-metrics.md): backs the `gen_ai.server.*` metric names and their Development status. Checked 2026-11-02 (semantic-conventions-genai commit 244465e); the public URL is inferred from the repository path.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

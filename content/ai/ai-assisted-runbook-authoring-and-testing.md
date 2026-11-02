@@ -8,14 +8,17 @@ tags:
   - incident-management
   - on-call
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note covers using AI to draft and maintain operational runbooks: grounding drafts in real incidents and command output, verifying every command in a lab, marking destructive steps, reviewing freshness on a schedule and testing runbooks in game days so that a model does not leave confident but wrong steps in front of a tired on-call engineer. It is for senior DevOps and platform engineers who own runbooks. It does not cover using AI live during an incident ([[ai-assisted-incident-response]]), retrieval over runbooks ([[rag-over-runbooks-for-on-call]]) or the house runbook format ([[alert-and-runbook-standard]]).
 
-> [!note] Not verified
-> Sources were found through search on 2026-10-27, but the pages could not be fetched, so nothing here was checked against them. Check before relying on it: the NIST SP 800-61 Rev. 3 status and contents, the OWASP LLM Top 10 edition and the excessive agency wording, the chapters of the Google SRE Workbook, the Chaos Engineering chapter on Google DiRT, and every tool flag in the examples against the version in your lab. The claim that AI drafting shortens incidents is a hypothesis to test in game days, not a finding.
+> [!info] Scope and verification
+> Nothing here was run. The Kubernetes, GitLab and OWASP statements were checked against local documentation on 2026-11-02; the incident-response and reliability-book sources could not be read and are listed under [Not verified](#not-verified). The claim that AI drafting shortens incidents is a hypothesis to test in game days, not a finding.
 
 ## The core rule
 
@@ -125,7 +128,7 @@ A step is the text under a heading, so the marker on the step heading covers the
 
 ## Prefer declarative, previewable forms
 
-Ask the model for the Terraform, Helm or GitOps change that corresponds to each manual step. Where a step has no declarative equivalent, keep it but log it as debt. Prefer a server-side preview or plan before the mutating form, but check that the preview exists and behaves as you expect in your tool versions; do not accept flags from the model's memory. Avoid `kubectl edit`, console clicks and one-off `gcloud` commands where a reviewed change will do ([[validating-ai-generated-infrastructure-code]]).
+Ask the model for the Terraform, Helm or GitOps change that corresponds to each manual step. Where a step has no declarative equivalent, keep it but log it as debt. Prefer a server-side preview or plan before the mutating form. For example, `kubectl diff` uses server-side dry-run, which must be enabled on the API server, and it needs permission to patch, create and update, so a read-only role cannot run it. Check that the preview exists and behaves as you expect in your tool versions; do not accept flags from the model's memory. Avoid `kubectl edit`, console clicks and one-off `gcloud` commands where a reviewed change will do ([[validating-ai-generated-infrastructure-code]]).
 
 ## Keep the drafting agent's permissions small
 
@@ -191,12 +194,58 @@ Useful signals: steps that failed in the lab, game-day corrections per runbook, 
 - [ ] The runbook has been run by someone without prior context in a game day.
 - [ ] The result is checked against [[alert-and-runbook-standard]].
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. The review covered the Kubernetes, GitLab CI and OWASP statements in the note; the rest is engineering guidance.
+
+### Sources checked
+
+- [Persistent Volumes | Kubernetes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/): with the `Delete` reclaim policy, deletion removes both the PersistentVolume object and the storage asset in the external infrastructure, and dynamically provisioned volumes inherit the policy of their StorageClass, which defaults to `Delete` (`concepts/storage/persistent-volumes.md` lines 203-207). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Nodes | Kubernetes](https://kubernetes.io/docs/concepts/architecture/nodes/): `kubectl cordon` marks a node unschedulable, which stops new pods being placed but does not affect existing pods (`concepts/architecture/nodes.md` lines 152-159). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Declarative management of Kubernetes objects using configuration files](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/declarative-config/): `kubectl diff` uses server-side dry-run, which must be enabled on `kube-apiserver`, and requires `PATCH`, `CREATE` and `UPDATE` permissions (`tasks/manage-kubernetes-objects/declarative-config.md` lines 83-88). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Field selectors | Kubernetes](https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/): `spec.unschedulable` is a Node field (`concepts/overview/working-with-objects/field-selectors.md` line 47). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [kubectl patch | Kubernetes](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_patch/): the example sets `spec: unschedulable: true` on a node (`reference/kubectl/generated/kubectl_patch/_index.md` line 44). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [kubectl reference | Kubernetes](https://kubernetes.io/docs/reference/kubectl/): `kubectl explain TYPE` documents resource types (`reference/kubectl/_index.md` line 158). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [GitLab CI/CD job rules](https://docs.gitlab.com/ci/jobs/job_rules/): `rules:if` with `$CI_PIPELINE_SOURCE == "merge_request_event"` selects merge request pipelines, and `rules:changes` exists (`ci/jobs/job_rules.md` lines 28-35 for `merge_request_event` and 257-267 for the `if` plus `changes:` list form). Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [OWASP Top 10 for LLM Applications 2025: LLM06 Excessive Agency](https://genai.owasp.org/llm-top-10/): Excessive Agency is defined as damaging actions taken in response to unexpected, ambiguous or manipulated model output; mitigations include minimising extension permissions and requiring human approval for high-impact actions (`2_0_vulns/LLM06_ExcessiveAgency.md` lines 7, 64 and 72). Checked 2026-11-02 against the OWASP LLM Top 10 repository commit 99f4395.
+
+### Not verified
+
+- Nothing was run: the harness script, the lint job and the examples are untested sketches.
+- NIST SP 800-61 Rev. 3, the Google Cloud Well-Architected Framework, the Site Reliability Workbook and the chapter on Google DiRT in the Chaos Engineering book could not be read; they stay in Sources as background only, and no statement above depends on them.
+- GitLab CI keywords `image`, `stage` and `script`, the exact `rules:changes` path syntax and glob behaviour, and image pinning by digest: the keyword reference is not in the local GitLab docs.
+- The jsonpath output in the step 3 example (`true` when cordoned, empty when the field is unset): confirm in the lab run.
+- Shell behaviour in the harness (`read` collapsing consecutive tabs, `</dev/null` on the step command) and the awk lint logic.
+- The claim that AI drafting shortens incidents.
+- General runbook practice (grounding in evidence, lab transcripts, destructive-step markers, freshness reviews, game-day scorecards) is engineering guidance, not a documented claim.
+
+### Environment
+
+A lab cluster whose kubectl context name starts with `lab-` and matches production on Kubernetes, Helm and Terraform provider versions; see "Verify every command in a lab".
+
+### Prerequisites
+
+A steps file, the lab context name, lab-only credentials for any non-kubectl tool, and a session that cannot reach production.
+
+### Expected results
+
+Each step has a recorded transcript matching its expected-output line; destructive steps are skipped unless explicitly allowed. See "Verify every command in a lab" and the review checklist.
+
+### Failure conditions
+
+The harness refuses a non-lab context; a step output differs from its expected line, which is a runbook defect; a risky verb appears in an unmarked step and the lint job fails. See "Failure modes".
+
+### Cleanup and rollback
+
+Run destructive steps only in a disposable lab and discard it afterwards; every marked step carries a preview and a rollback line (see "Mark destructive steps"). Keep transcripts redacted.
+
 ## Sources
 
-- [NIST SP 800-61 Rev. 3](https://csrc.nist.gov/pubs/sp/800/61/r3/final): incident response playbooks, roles and lessons learned.
-- [promptfoo: OWASP LLM Top 10](https://promptfoo.dev/docs/red-team/owasp-llm-top-10/): secondary coverage of the OWASP Top 10 for LLM applications, for the excessive agency risk and least-privilege controls; check the edition on the OWASP site.
-- [Google Cloud Well-Architected Framework: operational excellence](https://docs.cloud.google.com/architecture/framework/operational-excellence): incident management and operations practice.
-- [The Site Reliability Workbook](https://research.google/pubs/the-site-reliability-workbook/): incident response and disaster recovery practice.
-- [Chaos Engineering, chapter on Google DiRT](https://oreilly.com/library/view/chaos-engineering/9781492043850/ch05.html): the game day framing of inducing failures in a controlled setting.
+- [NIST SP 800-61 Rev. 3](https://csrc.nist.gov/pubs/sp/800/61/r3/final): incident response playbooks, roles and lessons learned (not read).
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): the excessive agency risk and least-privilege controls.
+- [Persistent Volumes | Kubernetes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/): reclaim policy behaviour behind the PVC deletion example.
+- [Google Cloud Well-Architected Framework: operational excellence](https://docs.cloud.google.com/architecture/framework/operational-excellence): incident management and operations practice (not read).
+- [The Site Reliability Workbook](https://research.google/pubs/the-site-reliability-workbook/): incident response and disaster recovery practice (not read).
+- [Chaos Engineering, chapter on Google DiRT](https://www.oreilly.com/library/view/chaos-engineering/9781492043850/): the game day framing of inducing failures in a controlled setting (not read; chapter number not checked).
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
