@@ -7,7 +7,10 @@ tags:
   - security
   - networking
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-02
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 draft: false
 ---
 
@@ -54,9 +57,29 @@ When unexpected traffic occurs, stop or isolate the specific workload, preserve 
 - Do tests run inside the deployed network context and cover outages and bypass paths?
 - Is emergency containment specific, evidence-preserving, and reversible?
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the agent-risk and container-hardening statements in this note were compared with the local OWASP LLM and Docker documentation; the network-architecture advice is engineering guidance.
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications 2025, LLM06 Excessive Agency](https://genai.owasp.org/llm-top-10/): agents with tools can cause damaging actions after manipulated or unexpected model output; root causes are excessive functionality, permissions and autonomy; mitigation is to minimize extensions, for example not offering a URL-fetching capability when it is not needed. This supports treating arbitrary user-provided URLs as a separate high-risk capability. Checked 2026-11-02 against OWASP LLM Top 10 repository commit 99f4395.
+- [OWASP Top 10 for LLM Applications 2025, LLM02 Sensitive Information Disclosure](https://genai.owasp.org/llm-top-10/): sanitization, redaction and least-privilege access as data controls, which supports the point that egress rules do not replace redaction. Checked 2026-11-02 against OWASP LLM Top 10 repository commit 99f4395.
+- [Seccomp security profiles for Docker](https://docs.docker.com/engine/security/seccomp/): seccomp is a Linux kernel feature that restricts the actions available within a container by filtering system calls. The page covers syscall filtering and does not describe destination-based network policy. Checked 2026-11-02 against Docker docs repository commit 53581df.
+- [Host network driver](https://docs.docker.com/engine/network/drivers/host/): with the `host` network mode, the container's network stack is not isolated from the Docker host because it shares the host's networking namespace. This supports the host-networking bypass claim; the privileged-sidecar part of that claim was not checked against a source. Checked 2026-11-02 against Docker docs repository commit 53581df.
+
+### Not verified
+
+- NIST SP 800-207 and NIST AI 600-1 were not available locally; the zero-trust paraphrase (resource- and session-centered policy rather than location-based trust) is unchecked.
+- The OWASP Top 10 for Agentic Applications 2026 was not available locally (only the 2025 LLM list was); it stays in Sources unread.
+- Cloud metadata endpoint behaviour, provider private connectivity and service perimeters, DNS rebinding, HTTP CONNECT and WebSocket tunnelling, and IPv6 handling depend on the platform and were not checked.
+- The design advice (destination inventories, layered enforcement, fail-closed proxies, logging fields, test cases, incident handling) is engineering guidance, not a documented claim.
+- Nothing was run.
+
 ## Sources
 
 - [NIST SP 800-207, Zero Trust Architecture](https://csrc.nist.gov/pubs/sp/800/207/final): resource-focused access architecture and policy enforcement concepts.
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): security risks for agents with tools and external connectivity.
-- [Docker seccomp security profiles](https://docs.docker.com/engine/security/seccomp/): syscall restrictions as one host-level defense; seccomp is not a network egress control.
+- [Seccomp security profiles for Docker](https://docs.docker.com/engine/security/seccomp/): syscall restrictions as one host-level defense; the page describes syscall filtering, not network destination policy.
+- [OWASP Top 10 for LLM Applications 2025: LLM06 Excessive Agency](https://genai.owasp.org/llm-top-10/): excessive functionality, permissions and autonomy as root causes for agent harm.
 - [NIST AI 600-1, Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): risk management for generative AI systems.

@@ -8,8 +8,11 @@ tags:
   - leadership
   - delivery
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This guide is for an engineering manager, or an engineer moving into management, who has to decide whether AI coding and review assistants are worth adopting in a DevOps team. It covers questions to answer before a pilot, how to design the pilot, which outcomes to measure, how to track cost, which team norms to set, and how to decide. It does not define the code policy itself ([[ai/ai-generated-code-policy-and-provenance]]), the technical controls for agents ([[ai/securing-ai-agents-in-ci-and-cloud]]) or the metrics themselves in depth ([[management/dora-metrics]]).
@@ -17,8 +20,8 @@ This guide is for an engineering manager, or an engineer moving into management,
 > [!info] Scope and sources
 > Written for a platform or DevOps team of roughly five to fifteen engineers working with GitLab or Jenkins pipelines, Terraform, Helm and GKE. It uses generic "AI assistant" wording and no product names. Durations and thresholds are examples to adapt, not benchmarks. The DORA measures follow the public [DORA research programme](https://dora.dev/).
 
-> [!note] Not verified
-> The claims below were written from general experience and documentation knowledge and were not checked against a running system or the current docs: your provider's data-retention and training terms, licence terms for generated code, and the fields available in your merge request export. Check them before relying on them. No statistics or prices are quoted on purpose.
+> [!note] Unverified areas
+> Provider data-retention and training terms, licence terms for generated code, and your own merge request export are not checked here. See the Evidence section. No statistics or prices are quoted on purpose.
 
 ## Before you start
 
@@ -101,7 +104,9 @@ A sketch for review turnaround, to adapt to your data. The table and column name
 -- Data source: your own export of merge requests, loaded into a table
 -- named merge_requests (adapt table and column names to your export).
 -- Columns assumed: id, author, created_at, first_review_at, merged_at,
--- and group_name ('pilot' or 'control').
+-- and group_name ('pilot' or 'control'). The GitLab merge request API
+-- documents created_at and merged_at; derive first_review_at yourself
+-- (for example from the first review comment or approval event).
 SELECT
   group_name,
   date_trunc('week', created_at) AS week,
@@ -197,3 +202,22 @@ If the answer is go, roll out in waves rather than all at once. Add one team at 
 - [[ai/ai-generated-code-policy-and-provenance]]: the policy behind the team norms.
 - [[ai/securing-ai-agents-in-ci-and-cloud]]: technical controls for agents with access.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the PostgreSQL syntax in the review turnaround sketch and the merge request timestamp fields it relies on; the rest of the note is management guidance.
+
+### Sources checked
+
+- [PostgreSQL documentation: aggregate functions](https://www.postgresql.org/docs/current/functions-aggregate.html): `percentile_cont(fraction) WITHIN GROUP (ORDER BY double precision)` is a documented ordered-set aggregate. Checked 2026-11-02 against the PostgreSQL repository commit cc4bf6e (`doc/src/sgml/func.sgml`, `syntax.sgml`).
+- [PostgreSQL documentation: date/time functions](https://www.postgresql.org/docs/current/functions-datetime.html): `date_trunc(field, source)` exists, and `EXTRACT(EPOCH FROM interval)` returns the total number of seconds in the interval, which the sketch divides by 3600 to get hours. Checked 2026-11-02 against the PostgreSQL repository commit cc4bf6e (`doc/src/sgml/func.sgml`).
+- [GitLab merge requests API](https://docs.gitlab.com/api/merge_requests/): merge requests expose `created_at` and `merged_at` timestamps; no first-review timestamp field is documented there, so the note now says to derive it. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (`api/merge_requests.md`, lines 158 and 184).
+
+### Not verified
+
+- The DORA research programme and its four measures (dora.dev was not reachable).
+- Provider data-retention, training and licence terms for generated code: these are vendor terms and were not reachable.
+- `terraform plan` review advice, SonarQube quality gate behaviour and single sign-on or seat removal support: not checked against local sources.
+- The linked external skills catalogue (ai.szolotov.com) was not opened.
+- Engineering and management guidance (pilot length and group sizes, survey wording, cost tracking, norms, pitfalls) is judgement, not a documented claim.
+- Nothing was run.

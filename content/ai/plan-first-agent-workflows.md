@@ -8,18 +8,18 @@ tags:
   - delivery
   - reliability
 created: 2026-10-27
-modified: 2026-10-30
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note describes how to make a coding agent propose a plan, get it approved, and then implement it, so that reviewers compare the diff against something explicit. It is for engineers and team leads who run agents on feature or refactoring work. It does not cover how to size the resulting pull request ([[agent-pull-request-size-and-reviewability]]), how to package repository context ([[repository-context-packaging-for-coding-agents]]), or how to prove the work is finished ([[agent-done-criteria-and-verification]]).
 
-> [!note] Not verified
-> The sources below were found via search and the pages could not be re-fetched when this note was written on 2026-10-27, and the plan-drift heuristics are team practice, not vendor guidance. Before relying on this note, check the current docs for: how your agent's plan mode behaves in interactive and non-interactive sessions, the names of its approval options, and the configuration keys that change them. Treat any named mode or shortcut as an example.
-
 ## Why a plan step earns its cost
 
-An agent that starts editing immediately commits to an interpretation of the task before anyone has seen it. A plan step moves the first disagreement to a cheap place: a short document, not a 40-file diff. It also gives the reviewer an expected-change list to compare against. No vendor publishes evidence that plan-first beats direct implementation for every task class, so use it where the task is ambiguous, touches several modules, or is hard to revert, and skip it for one-line fixes. General agent-design guidance is to start with the simplest design and add structure only when it demonstrably helps.
+An agent that starts editing immediately commits to an interpretation of the task before anyone has seen it. A plan step moves the first disagreement to a cheap place: a short document, not a 40-file diff. It also gives the reviewer an expected-change list to compare against. This note does not claim that plan-first beats direct implementation for every task class. Our recommendation is to use it where the task is ambiguous, touches several modules, or is hard to revert, and to skip it for one-line fixes, adding structure only where it demonstrably helps.
 
 ## Separate planning from editing
 
@@ -121,7 +121,7 @@ plan-drift:
     - bash scripts/plan-drift.sh "$slug" "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
 ```
 
-With shallow clones the three-dot diff also needs the merge base, so raise `GIT_DEPTH` or deepen the fetch if it fails with "no merge base". For production-affecting work, the plan approval does not replace the change process: use [[human-approval-state-machine]] and [[production-change-checklist]].
+With shallow clones the three-dot diff also needs the merge base, so raise `GIT_DEPTH` or deepen the fetch if the diff fails because the merge base is not in the clone. GitLab documents that a depth that is too small can leave needed commits out of the cloned history. For production-affecting work, the plan approval does not replace the change process: use [[human-approval-state-machine]] and [[production-change-checklist]].
 
 ## Measure whether it helps
 
@@ -148,6 +148,26 @@ Track two numbers: how often an approved plan needed a mid-run amendment, and ho
 - [ ] Every acceptance check ran after the last edit.
 - [ ] Deviations are recorded in the plan and were re-approved.
 - [ ] Destructive or production steps have gates outside the agent loop.
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI and Git behaviour used by the drift script and pipeline job; agent plan-mode behaviour and the governance guidance could not be checked locally.
+
+### Sources checked
+
+- [CI/CD predefined variables | GitLab](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_PIPELINE_SOURCE`, `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME` and `CI_MERGE_REQUEST_TARGET_BRANCH_NAME` exist with the meanings the job relies on (doc/ci/variables/predefined_variables.md lines 116, 213, 220). Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Specify when jobs run with rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/): `rules: - if:` with `$CI_PIPELINE_SOURCE == "merge_request_event"` and `=~ /regex/` matching, where the whole pattern is wrapped in `/` and uses RE2 syntax (doc/ci/jobs/job_rules.md lines 31, 184, 430-458). Checked 2026-11-02, commit d7b9a61.
+- [GitLab Runner configuration, shallow cloning | GitLab](https://docs.gitlab.com/ci/runners/configure_runners/#shallow-cloning): `GIT_DEPTH` makes a shallow clone, new projects default to depth 20, and too small a depth can leave needed commits out (doc/ci/runners/configure_runners.md lines 880-896). Checked 2026-11-02, commit d7b9a61.
+- [git-diff | Git](https://git-scm.com/docs/git-diff): `git diff A...B` equals `git diff $(git merge-base A B) B`; `--name-only` lists changed file names (Documentation/git-diff.adoc lines 98-103, diff-options.adoc line 321). Checked 2026-11-02 against git commit 50fe5cc.
+
+### Not verified
+
+- How any coding agent's plan mode, approval options, editing of a plan before approval, or sub-agent context behaves: vendor documentation was not available locally. The note names no specific tool or option.
+- The sample `terraform validate` exit code and "1 add, 0 destroy" plan output in the example plan: the local Terraform checkout (becd281) holds no command documentation.
+- The escaped forward slash in the rules pattern `/^agent\//`: the local GitLab docs document `=~ /regex/` and RE2 syntax but never show escaping `/` inside a rules regex.
+- Pinning the CI image by digest and the NIST references (SP 800-218, AI RMF) were not checked; NIST publications were not available.
+- Engineering guidance, not documented claims: when a plan step pays off, the drift heuristics, the metrics to track and the failure modes.
+- Nothing was run, including the drift script and the CI job.
 
 ## Sources
 

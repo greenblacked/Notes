@@ -8,14 +8,14 @@ tags:
   - reliability
   - observability
 created: 2026-11-01
-modified: 2026-11-01
+modified: 2026-11-02
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 draft: false
 ---
 
 This note covers how to layer guardrails around an LLM application: deterministic validators first, classifier filters second, PII and secret scanning at egress, a refusal taxonomy, a fail-open or fail-closed decision per check, a latency budget, logging that does not leak content, and an adversarial test set. It is for platform and application engineers who run an LLM feature in production. It does not cover input-side redaction ([[redacting-sensitive-data-before-llm-calls]]), injection through retrieved content ([[indirect-prompt-injection-in-documents]]), JSON schema enforcement in depth ([[validating-model-generated-json]], [[structured-output-contracts]]) or tool permissions ([[agent-tool-authorization-boundaries]]). Where a shared gateway enforces caller and model policy, these checks usually sit in or next to it ([[ai-gateway-architecture-and-policy]]).
-
-> [!note] Not verified
-> Nothing here was run, and the public pages in Sources were not fetched. Before use, check: the current MCP specification wording on tool annotations and user approval; the current OpenTelemetry GenAI attribute names and their stability for your pinned version; every latency figure and threshold below (they are examples to measure, not benchmarks); whether your streaming path can buffer output; and that the Kubernetes and CI snippets pass your own admission and lint rules.
 
 ## Layer from cheap to expensive
 
@@ -25,7 +25,7 @@ Order checks by cost and by how well you can explain a verdict:
 2. **Classifier filters.** Small models or hosted moderation endpoints for topics, abuse and policy categories. Run them only on traffic that survived step 1.
 3. **Model-based judges.** The slowest and least predictable layer. Use for narrow questions on high-risk routes, and validate the judge itself ([[llm-as-judge-validation]]).
 
-Treat model output as untrusted input to the next system. Validate it before any tool call, write or render, because insecure handling of output is a recognised risk class.[^owasp] A schema contract is the first output guardrail, not a nicety.
+Treat model output as untrusted input to the next system. Validate it before any tool call, write or render, because improper output handling (LLM05:2025) is a named risk class in the OWASP list.[^owasp] A schema contract is the first output guardrail, not a nicety.
 
 ## Scan output for PII and secrets at egress
 
@@ -112,11 +112,11 @@ spec:
               port: 8080
 ```
 
-The memory limit is set and the CPU limit is left off deliberately, to avoid throttling latency-sensitive scans; without one the container can use spare CPU on the node, and a namespace LimitRange may still assign a default limit. Adjust to your own policy. With a read-only root filesystem, mount an `emptyDir` for any scratch path the scanner writes to.
+The memory limit is set and the CPU limit is left off deliberately, to avoid throttling latency-sensitive scans; Kubernetes enforces CPU limits by throttling, and a namespace LimitRange can apply a default limit when none is set. Adjust to your own policy. With a read-only root filesystem, mount an `emptyDir` for any scratch path the scanner writes to.
 
 ## Log decisions, not content
 
-Emit the guardrail name and version, verdict, score bucket, latency, and a hash or length of the input and output, following your field conventions ([[structured-logging-conventions]]). Full prompt and response capture should be opt-in and gated; the OpenTelemetry GenAI conventions mark content attributes as potentially sensitive and not captured by default.[^otel] See [[llm-tracing-with-sensitive-data-controls]]. Never put the matched secret, the user ID or free text in a metric label.
+Emit the guardrail name and version, verdict, score bucket, latency, and a hash or length of the input and output, following your field conventions ([[structured-logging-conventions]]). Full prompt and response capture should be opt-in and gated; the OpenTelemetry GenAI conventions describe prompt, response and system-instruction content as sensitive, say instrumentations should not capture it by default, and give the content attributes an opt-in requirement level.[^otel] See [[llm-tracing-with-sensitive-data-controls]]. Never put the matched secret, the user ID or free text in a metric label.
 
 Version policies and thresholds like code. A threshold change is a release with its own evaluation run and rollback path ([[llm-change-management-and-release-gates]]).
 
@@ -124,7 +124,7 @@ Monitor the guardrails as a service: block rate, fail-open rate, timeout rate, c
 
 ## Gate side-effecting tools
 
-Treat tool annotations and descriptions from third-party servers as untrusted. The MCP specification says clients must consider tool annotations untrusted unless they come from trusted servers, that there should always be a human in the loop able to deny tool invocations, and that clients should prompt for confirmation on sensitive operations.[^mcp] The MUST covers annotations only; distrusting descriptions too is this note's advice, not the specification's wording. Approval gates for side-effecting tools belong in the stack ([[human-approval-state-machine]], [[third-party-mcp-server-vetting]]).
+Treat tool annotations and descriptions from third-party servers as untrusted. The MCP specification says clients must consider tool annotations untrusted unless they come from trusted servers,[^mcp] that there should always be a human in the loop able to deny tool invocations, and that clients should prompt for confirmation on sensitive operations. The MUST covers annotations only; distrusting descriptions too is this note's advice, not the specification's wording. Approval gates for side-effecting tools belong in the stack ([[human-approval-state-machine]], [[third-party-mcp-server-vetting]]).
 
 ## Test with an adversarial set
 
@@ -208,17 +208,43 @@ guardrail-adversarial:
 - [ ] Block rate, fail-open rate and timeout rate are alerting.
 - [ ] The on-call bypass is logged, time-limited and rehearsed.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the OWASP, MCP, OpenTelemetry GenAI, Kubernetes and GitLab statements in this note were checked against local copies of those sources.
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): LLM05:2025 Improper Output Handling is about insufficient validation and sanitization of model output before it reaches downstream components; LLM02:2025 Sensitive Information Disclosure covers PII, financial data and credentials, and says system-prompt restrictions can be bypassed. Checked 2026-11-02 against the OWASP LLM repository commit 99f4395.
+- [MCP specification, Tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools): clients MUST consider tool annotations untrusted unless they come from trusted servers; there SHOULD always be a human in the loop able to deny tool invocations; clients SHOULD prompt for confirmation on sensitive operations. The MUST applies to annotations only. Checked 2026-11-02 against the modelcontextprotocol repository commit d0e246e.
+- [OpenTelemetry GenAI spans conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-spans.md): input, output and system-instruction content is sensitive; instrumentations SHOULD NOT capture it by default but SHOULD offer an opt-in; the content attributes carry the Opt-In requirement level and are in development status. Checked 2026-11-02 against the open-telemetry/semantic-conventions-genai repository commit 244465e. The published page at https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/ is built from a different repository (open-telemetry/semantic-conventions) and was not checked.
+- [Resource Management for Pods and Containers | Kubernetes](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/): the scheduler checks the sum of requests against node capacity; CPU limits are enforced by throttling; a missing memory limit means no upper bound on memory use. Checked 2026-11-02 against the Kubernetes website repository commit 491f14e.
+- [Limit Ranges | Kubernetes](https://kubernetes.io/docs/concepts/policy/limit-range/): a LimitRange admission controller applies default request and limit values. Checked 2026-11-02 against the kubernetes/website repository commit 491f14e.
+- [Configure Service Accounts for Pods | Kubernetes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/): `automountServiceAccountToken: false` disables token mounting, and the Pod spec takes precedence. Checked 2026-11-02 against the kubernetes/website repository commit 491f14e.
+- [Configure a Security Context for a Pod or Container | Kubernetes](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/): `readOnlyRootFilesystem` mounts the root filesystem read-only. Checked 2026-11-02 against the kubernetes/website repository commit 491f14e.
+- [Pod Security Standards | Kubernetes](https://kubernetes.io/docs/concepts/security/pod-security-standards/): `runAsNonRoot`, `allowPrivilegeEscalation` and the `RuntimeDefault` seccomp profile are fields the standards address. Checked 2026-11-02 against the kubernetes/website repository commit 491f14e.
+- [Volumes | Kubernetes](https://kubernetes.io/docs/concepts/storage/volumes/): an `emptyDir` volume starts empty and is shared by containers in the Pod. Checked 2026-11-02 against the kubernetes/website repository commit 491f14e.
+- [CI/CD job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/) and [Predefined CI/CD variables | GitLab](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_PIPELINE_SOURCE == "merge_request_event"`, `CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH` and `rules:changes` are documented rule forms. Checked 2026-11-02 against the GitLab docs commit d7b9a61.
+- [GitLab CI/CD variables](https://docs.gitlab.com/ci/variables/): variables can be defined in the UI for a project, group or instance. Checked 2026-11-02 against the gitlabhq/gitlabhq docs commit d7b9a61.
+
+### Not verified
+
+- NIST AI 600-1 (listed in Sources) could not be read; no claim in the note depends on it beyond general framing.
+- Latency budgets, thresholds and Kubernetes values in the examples are placeholders to measure, not documented figures.
+- Layering order, fail-open and fail-closed defaults, egress scanning, refusal taxonomy, streaming scan options and the adversarial test set are engineering guidance, not documented claims.
+- Shell and curl behaviour in the test runner script and the container image names in the examples were not checked.
+- Nothing was run.
+
 ## Sources
 
-- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): risk taxonomy covering prompt injection, insecure output handling and sensitive information disclosure. Not fetched; no list numbers are cited.
-- [NIST AI 600-1, Generative AI Profile](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence): risk-management framing for generative AI controls, testing and monitoring. Not fetched.
-- [MCP specification, Tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools): tool annotations are untrusted unless from trusted servers; a human should be able to deny tool invocations; clients should confirm sensitive operations. Checked against a local copy of the revision.
-- [OpenTelemetry GenAI spans conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/): sensitive content attributes are opt-in. Checked against a local copy; this public URL was not fetched.
+- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): risk taxonomy covering prompt injection, improper output handling and sensitive information disclosure.
+- [NIST AI 600-1, Generative AI Profile](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence): risk-management framing for generative AI controls, testing and monitoring. Not read; see Evidence.
+- [MCP specification, Tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools): tool annotations are untrusted unless from trusted servers; a human should be able to deny tool invocations; clients should confirm sensitive operations.
+- [OpenTelemetry GenAI spans conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-spans.md): sensitive content attributes are opt-in and not captured by default. The published version at https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/ was not checked.
 
-[^owasp]: Risk taxonomy only; see the OWASP page in Sources.
+[^owasp]: OWASP Top 10 for LLM Applications 2025, LLM05 Improper Output Handling; see the OWASP page in Sources.
 
 [^otel]: Attribute names and stability vary by version; check the registry for the version you pin.
 
-[^mcp]: This applies to tool annotations, not to all server metadata.
+[^mcp]: The MUST covers annotations; the two SHOULDs cover tool invocations generally.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

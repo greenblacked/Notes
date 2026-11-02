@@ -8,14 +8,17 @@ tags:
   - observability
   - team-process
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note describes how a platform or FinOps engineer can use a language model to help investigate cloud cost anomalies on Google Cloud, using the billing export in BigQuery, resource labels and budgets. It covers the split between deterministic detection and model explanation, the evidence package, owner routing and the controls that stop an investigation from turning into automated deletion. It does not cover the cost of the model calls themselves ([[llm-api-cost-control]]), per-workload Kubernetes allocation ([[opencost-vs-kubecost-vs-gke-cost-allocation]]), or the label scheme ([[gcp-resource-naming-and-labels-standard]]). The same shape applies to logs and alerts in [[llm-log-analysis-and-alert-triage]].
 
-> [!note] Not verified
-> The sources below were found through search, but the pages could not be fetched on 2026-10-27. Before relying on this note, check: the current billing export schema (table names, column names, label structure, standard versus detailed versus pricing export, the partitioning column, how late rows arrive and whether they are revised), whether and how Google Cloud offers built-in anomaly detection for your billing account, current budget alert and Pub/Sub behaviour, the current FinOps Framework capability names, and the current OWASP LLM Top 10 category names.
+> [!note] Check before relying on it
+> The billing export schema, built-in anomaly detection and budget behaviour on Google Cloud could not be checked against Google Cloud documentation. See the Evidence section.
 
 ## Principle: queries detect, the model explains
 
@@ -30,7 +33,7 @@ The FinOps Foundation frames anomaly management as detect (tools, alert channels
 - **Turn the export on before you need it.** Billing export to BigQuery is generally described as not backfilling earlier usage, so assume history starts around the day you enable it. Enable the detailed export as well as the standard one if you need resource-level rows, and set dataset location and retention on purpose. Check the current docs for table names.
 - **Labels decide who is asked.** Routing uses the `team`, `service`, `env` and `cost-center` keys from [[gcp-resource-naming-and-labels-standard]]. Labels are not applied retroactively: usage before a label was added carries no label in the export, and not every service passes labels through. Check the current docs for which services do. Unlabelled spend is itself a metric (see below).
 - **Governed dataset.** Keep the export in a dedicated project and dataset with least-privilege IAM ([[gcp-iam-and-service-accounts]]). The investigation identity gets read access to the export and nothing else.
-- **Allocation context.** For GKE, billing rows show node and SKU cost, not which workload caused it. Pair the export with workload allocation data when the anomaly sits in Compute Engine SKUs under a cluster project.
+- **Allocation context.** For GKE, billing rows may show only node and SKU cost unless GKE cost allocation is enabled; check current docs. Where workload attribution is missing, pair the export with workload allocation data when the anomaly sits in Compute Engine SKUs under a cluster project.
 
 ## Step 1: deterministic detection
 
@@ -66,7 +69,7 @@ WHERE d.day = @run_date
 ORDER BY d.net_cost - IFNULL(b.baseline, 0) DESC;
 ```
 
-The `LEFT JOIN` matters: with an inner join, a service that never had spend in the project (new GPU or egress spend, a newly enabled API) has no baseline row and is silently dropped, which is exactly the pattern that most often signals compromise. Billing rows arrive with a delay and can be revised, so run the query for a `@run_date` whose data has settled (for example two days back) rather than for yesterday, or a partial day will look like a drop and hide a spike. `usage_start_time` is UTC, which may not match the day boundary on your invoice.
+The `LEFT JOIN` matters: with an inner join, a service that never had spend in the project (new GPU or egress spend, a newly enabled API) has no baseline row and is silently dropped, which is a pattern that can signal compromise. Billing rows arrive with a delay and can be revised, so run the query for a `@run_date` whose data has settled (for example two days back) rather than for yesterday, or a partial day will look like a drop and hide a spike. `usage_start_time` is UTC, which may not match the day boundary on your invoice.
 
 Keep a partition filter in every query, estimate bytes with a dry run before widening the window, and do not hard-code price assumptions into the pipeline. Treat thresholds as configuration owned by FinOps, and review them when false positives accumulate.
 
@@ -172,12 +175,33 @@ The model may propose actions. It does not delete, stop, resize or detach anythi
 - [ ] Suppressions have owners and expiry dates; a resolution log is maintained.
 - [ ] Billing schema, anomaly-detection features and budget behaviour were rechecked against current docs on a stated date.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the controls borrowed from OWASP guidance and the budget notification options; the billing export, the SQL and the FinOps material could not be checked.
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications 2025: LLM06 Excessive Agency](https://genai.owasp.org/llm-top-10/): excessive agency is caused by excessive functionality, permissions or autonomy; mitigations are minimising extensions, functionality and permissions (for example read-only database access for the identity) and requiring human approval for high-impact actions. Checked 2026-11-02 against the OWASP LLM Top 10 repository commit 99f4395.
+- [OWASP Top 10 for LLM Applications 2025: LLM01 Prompt Injection](https://genai.owasp.org/llm-top-10/): indirect injection arises when a model accepts input from external sources; mitigation is to segregate and identify untrusted external content. Checked 2026-11-02, commit 99f4395.
+- [OWASP Top 10 for LLM Applications 2025: LLM02 Sensitive Information Disclosure](https://genai.owasp.org/llm-top-10/): LLM02 lists data sanitization (scrubbing or masking sensitive content before training use) and tokenization and redaction (pattern matching to detect and redact confidential content before processing) as mitigations. Checked 2026-11-02, commit 99f4395.
+- [google_billing_budget | Terraform Registry](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/billing_budget): budget threshold rules (`threshold_percent`, `spend_basis` of `CURRENT_SPEND` or `FORECASTED_SPEND`) send alerts, and notifications can go to a Pub/Sub topic or monitoring notification channels. Checked 2026-11-02 against the Terraform provider for Google docs repository commit c4248bd.
+
+### Not verified
+
+- Google Cloud billing export: table names, column names, label and credits structure, standard versus detailed export, partitioning column, late-arriving or revised rows, absence of backfill, and `usage_start_time` being UTC. The Google Cloud documentation was not reachable. The SQL is an illustration and was not run.
+- Whether Google Cloud offers built-in anomaly detection, and that budget alerts and Pub/Sub messages do not stop spend. The budget resource docs describe alerts only and do not state this either way.
+- Which services pass labels through to the export, and that labels are not applied retroactively.
+- Whether the GKE billing export rows carry workload or namespace attribution, for example via GKE cost allocation.
+- The FinOps Foundation material (detect, enable and manage structure, cause classes, capability names): the site was not reachable, so both FinOps sources in the list below are unread.
+- BigQuery dry-run and partition-filter behaviour.
+- General engineering guidance (detector design, evidence packages, routing, approvals, suppression lists, resolution logs) is not a documented claim.
+- Nothing was run.
+
 ## Sources
 
 - [FinOps Foundation: Manage anomalies](https://www.finops.org/framework/capabilities/manage-anomalies/) — detect, enable and manage structure for anomaly handling; check the current capability names.
 - [FinOps Foundation: Managing cloud cost anomalies](https://www.finops.org/wg/managing-cloud-cost-anomalies/) — working-group notes on anomaly causes and handling.
 - [Google Cloud: Export Cloud Billing data to BigQuery](https://docs.cloud.google.com/billing/docs/how-to/export-data-bigquery) — export types, lack of backfill and label fields; check the current schema before writing SQL.
-- [OWASP Top 10 for LLM Applications (2023, v0.9)](https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-2023-v09.pdf) — prompt injection and excessive agency framing; cite category names, as numbering has changed between editions.
-- [OWASP GenAI: LLM Top 10](https://genai.owasp.org/llm-top-10/) — current list of categories; verify the edition before quoting numbers.
+- [OWASP GenAI: LLM Top 10 (2025)](https://genai.owasp.org/llm-top-10/): prompt injection (LLM01) and excessive agency (LLM06) categories; numbering has changed between editions, so cite names.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

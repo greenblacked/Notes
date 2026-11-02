@@ -8,14 +8,17 @@ tags:
   - policy-as-code
   - audit
 created: 2026-10-27
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note covers the allow, ask and deny rules a coding agent checks before it runs a shell command, touches a file or calls an MCP tool: scoping, precedence and wildcards, reviewing rule changes, and auditing auto-approvals. It is for engineers who own agent configuration in shared repositories. It does not cover OS-level isolation ([[sandboxing-coding-agents-on-workstations-and-runners]]), egress filtering ([[agent-network-egress-controls]]), hook scripts ([[deterministic-hooks-for-coding-agents]]), vetting a server before you trust it ([[third-party-mcp-server-vetting]]) or organisation-wide managed policy ([[ai-coding-assistant-admin-controls]]). The wider model of what an agent may be authorised to do is in [[agent-tool-authorization-boundaries]].
 
 > [!note] Not verified
-> No tool's documentation was re-checked line by line. Rule grammar, precedence, mode names and version gates differ between tools and releases. Check your tool's current docs for: settings precedence; whether a trailing wildcard matches the bare command; handling of compound commands and leading environment assignments; MCP rule syntax; and which file rules also cover shell commands.
+> No coding agent's documentation was available to check. Rule grammar, precedence, mode names and version gates differ between tools and releases. Check your tool's current docs for: settings precedence; whether a trailing wildcard matches the bare command; handling of compound commands and leading environment assignments; MCP rule syntax; and which file rules also cover shell commands.
 
 ## Principles
 
@@ -23,7 +26,7 @@ A permission rule list is an access policy, so apply the usual rules.
 
 - **Least privilege.** Each allowed prefix needs a use case someone can name. Start from reads only and add entries from observed need, not from a broad "allow shell" grant.
 - **Three outcomes.** `allow` for cheap, reversible commands, `ask` for actions that need a human glance (push, install, apply), and `deny` for actions an agent session should never take.
-- **Deny wins, at least in some tools.** In the tool documented in Sources, evaluation runs deny, then ask, then allow, and the first match wins regardless of specificity, so a narrower allow cannot punch through a broad deny. Other systems pick the most specific rule, and Kubernetes RBAC has no deny rules at all; confirm the model your tool uses.
+- **Deny wins, at least in some tools.** Some agent tools evaluate deny, then ask, then allow, and let the first match win regardless of specificity, so a narrower allow cannot punch through a broad deny. Other systems may pick the most specific rule, and Kubernetes RBAC permissions are purely additive with no deny rules at all; confirm the model your tool uses.
 - **Rules are a filter, not a boundary.** Command-text rules cannot see what a program does after it starts. Pair them with a sandbox and egress control.
 
 ## Scopes and who owns what
@@ -87,7 +90,7 @@ Scope MCP rules to one server and, where supported, one tool (one tool's form is
 
 ## Reviewing allowlist changes
 
-Treat each new `allow` line like an IAM binding diff. Add the settings files to CODEOWNERS so platform or security reviews them (see [[code-review]]), and add a CI lint so reviewers do not rely on eyes alone. The job below runs a lint script you write and keep in the repository; pin the image by digest in your registry.
+Treat each new `allow` line like an access-grant diff. Add the settings files to CODEOWNERS so platform or security reviews them (see [[code-review]]), and add a CI lint so reviewers do not rely on eyes alone. The job below runs a lint script you write and keep in the repository; pin the image by digest in your registry.
 
 ```yaml title=".gitlab-ci.yml"
 agent-permissions-lint:
@@ -148,10 +151,36 @@ Set expectations in [[team-norms-for-ai-assisted-engineering]]: who may add rule
 - [ ] Rule syntax and precedence were checked against the current docs for the tool version in use.
 - [ ] Local rule sets are compared with the baseline, auto-approvals are sampled, and stale rules are removed.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the general design claims, the Git force-push spellings, the GitLab CI example and the contrast with Kubernetes RBAC; coding-agent rule syntax is not covered.
+
+### Sources checked
+
+- [Using RBAC Authorization | Kubernetes](https://kubernetes.io/docs/reference/access-authn-authz/rbac/): permissions are purely additive and there are no deny rules (rbac.md line 58). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [git-push | Git](https://git-scm.com/docs/git-push): `-f` and `--force` are the same force option, a leading `+` on a refspec does the same as `--force`, and `--force-with-lease` is a separate option, so a deny on one spelling does not cover the others. Checked 2026-11-02 against git commit 50fe5cc.
+- [Job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/) and [Predefined variables | GitLab](https://docs.gitlab.com/ci/variables/predefined_variables/): `rules:if` with `$CI_PIPELINE_SOURCE == "merge_request_event"`, `rules:changes`, and the `CI_COMMIT_BRANCH` and `CI_DEFAULT_BRANCH` variables used in the example job. `CI_COMMIT_BRANCH` is not available in merge request pipelines, which is why the example has two rules. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Protected branches API | GitLab](https://docs.gitlab.com/api/protected_branches/): protected branches carry an `allow_force_push` setting, supporting server-side force-push protection. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Tools | Model Context Protocol](https://modelcontextprotocol.io/specification/2026-07-28/server/tools): the spec says there SHOULD be a human in the loop with the ability to deny tool invocations. Checked 2026-11-02 against modelcontextprotocol commit d0e246e.
+- [LLM06:2025 Excessive Agency | OWASP](https://genai.owasp.org/llm-top-10/): minimise extensions, functionality and permissions, avoid open-ended extensions such as running a shell command, and require user approval for high-impact actions. Checked 2026-11-02 against owasp-llm commit 99f4395.
+
+### Not verified
+
+- Every coding-agent rule behaviour: evaluation order, wildcard and trailing-wildcard matching, compound-command and environment-assignment handling, file-deny coverage of shell commands, symlinks, bare-tool-name denies, the `mcp__<server>__<tool>` form and the settings file layout. Also unchecked: whether and where "do not ask again" choices are saved, whether a tool has a permissions view that lists every rule, and whether it warns about unknown rule names at startup. The agent's own documentation was not available; the note presents these as things to confirm per tool.
+- That other authorisation systems pick the most specific rule: not checked.
+- NIST SP 800-53 Rev. 5 controls AC-5 and AC-6: not available locally.
+- CODEOWNERS behaviour and the `node:22-alpine` image tag: not checked.
+- Engineering guidance, not documented claims: scoped file layout, review and audit routines, the lint rules, and the rule-design pitfalls.
+- Nothing was run.
+
 ## Sources
 
 - Your coding agent's own documentation for rule syntax, precedence, wildcard matching, compound commands, MCP rules and OS-level sandboxing. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [NIST SP 800-53 Rev. 5](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) — the least-privilege control (AC-6) and separation of duties (AC-5) used as the policy frame.
 - [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) — an allow-only authorisation model, as a contrast to deny-first precedence.
+- [git-push](https://git-scm.com/docs/git-push) — force-push spellings.
+- [GitLab job rules](https://docs.gitlab.com/ci/jobs/job_rules/) — the CI rules used in the lint job.
+- [MCP tools specification](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) — human in the loop for tool calls.
+- [OWASP LLM06:2025 Excessive Agency](https://genai.owasp.org/llm-top-10/) — least privilege and approval for agent actions.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

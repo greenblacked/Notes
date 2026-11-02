@@ -6,8 +6,11 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 Just-in-time (JIT) credentials replace standing secrets with credentials issued for a defined task, principal, resource, and time window. They reduce the period in which a leaked token can be reused, but expiry alone does not make a credential least-privileged. An agent that can repeatedly mint broad credentials still has durable authority. This note focuses on credential lifecycle and issuance rather than general runner isolation, which is covered in [[ai/sandboxing-coding-agents-on-workstations-and-runners]].
@@ -54,6 +57,24 @@ Review the configured trust chain from workload identity to broker to cloud role
 - Has actual provider expiry and revocation behavior been verified?
 - Does cancellation stop renewal and prevent post-task reuse?
 - Is there a documented containment path for issuer or workload compromise?
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the token lifetime, audience, impersonation and least-privilege statements that the locally available specifications and documentation can confirm.
+
+### Sources checked
+
+- [Model Context Protocol: Authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization): servers must validate that tokens were issued for them as the audience and must not pass tokens through to downstream services; authorization servers should issue short-lived access tokens to reduce the impact of leaks. Checked 2026-11-02 against modelcontextprotocol commit d0e246e.
+- [OWASP Top 10 for LLM Applications 2025: LLM06 Excessive Agency](https://genai.owasp.org/llm-top-10/): excessive functionality, permissions and autonomy as root causes; use the minimum privileges and scope, executing downstream actions in the context of the specific user. Checked 2026-11-02 against owasp-llm commit 99f4395.
+- [Service Accounts | Kubernetes](https://kubernetes.io/docs/concepts/security/service-accounts/): API-requested and projected service account tokens expire and are rotated, while Secret-based tokens do not expire. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- gcloud 570.0.0 built-in help (`gcloud auth print-access-token --help`, `gcloud config --help`): service account impersonation through `--impersonate-service-account` or the `auth/impersonate_service_account` property; impersonated access tokens default to 3600 seconds, extendable up to 43200 seconds only when an organization policy constraint allows it. Checked 2026-11-02 against the installed SDK, no API calls.
+
+### Not verified
+
+- Google Cloud service account impersonation documentation, AWS STS temporary credential documentation, RFC 9700 and NIST SP 800-207 were not available locally; the provider-specific statements about lifetimes, audit events and revocation, and the guidance attributed to those sources in the Sources list, are unchecked.
+- Revocation behavior of any specific provider or resource server was not checked.
+- Broker design, issuance policy, renewal limits, logging and testing advice is engineering guidance, not a documented claim.
+- Nothing was run.
 
 ## Sources
 

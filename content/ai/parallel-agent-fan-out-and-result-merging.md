@@ -8,18 +8,21 @@ tags:
   - cost
   - reliability
 created: 2026-10-27
-modified: 2026-11-01
+modified: 2026-11-02
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 draft: false
 ---
 
 This note covers running several agents in parallel on independent subtasks and merging their results safely: when to fan out, how to isolate writers, how to merge, and how to bound cost and concurrency. It is for engineers who orchestrate coding agents by hand, from scripts or from CI. It does not cover the isolation mechanics of a single agent ([[coding-agent-branch-and-worktree-isolation]]), handoff contracts between agents ([[multi-agent-handoff-boundaries]]) or sizing of the resulting changes ([[agent-pull-request-size-and-reviewability]]).
 
-> [!note] Not verified
-> The sources below were found through search, but the pages could not be fetched on 2026-10-27. Before relying on this note, check: your harness's current default concurrency and the setting that changes it, worktree naming and cleanup behaviour for your version, what is shared between worktrees (settings, plugins, permission approvals), and your provider's rate-limit tiers.
+> [!note] Scope of review
+> Git behaviour was checked against the Git documentation. Harness-specific defaults and provider limits were not; see the Evidence section before relying on them.
 
 ## Fan out only over independent work
 
-Parallel agents pay off when subtasks have disjoint file sets, no shared generated artifacts and no ordering dependency. Typical good splits: the same mechanical change applied to separate services, one test file per agent, independent documentation pages, read-only audits of different modules. In practice most coding tasks have fewer independent pieces than research or audit tasks, so default to serial work and fan out only when the split is obvious. If two subtasks both touch a lockfile, a route table, a generated client or an index file, they are not independent.
+Parallel agents pay off when subtasks have disjoint file sets, no shared generated artifacts and no ordering dependency. Typical good splits: the same mechanical change applied to separate services, one test file per agent, independent documentation pages, read-only audits of different modules. Default to serial work and fan out only when the split is obvious. If two subtasks both touch a lockfile, a route table, a generated client or an index file, they are not independent.
 
 Write the split down before launching, as a manifest the orchestrator can check:
 
@@ -52,9 +55,9 @@ done < <(yq -r '.tasks[].id' fanout.yaml)
 git worktree list
 ```
 
-Some harnesses create and name worktrees for you and lock them while an agent runs; a clean worktree may be removed automatically while one with changes is kept. Check how yours behaves and plan cleanup for failed runs: `git worktree remove "../wt-$id"` refuses a worktree with uncommitted changes (only `--force` discards them), `git worktree prune` clears entries whose directory is gone, and `git branch -D "fanout/$id"` deletes unmerged commits, so run it only after the result is merged or deliberately abandoned.
+Some harnesses create and name worktrees for you and lock them while an agent runs; a clean worktree may be removed automatically while one with changes is kept. Check how yours behaves and plan cleanup for failed runs: `git worktree remove "../wt-$id"` refuses a worktree with untracked files or modified tracked files (`--force` overrides this), `git worktree prune` clears entries whose directory is gone, and `git branch -D "fanout/$id"` deletes unmerged commits, so run it only after the result is merged or deliberately abandoned.
 
-Worktrees isolate files, not the world around them. Agents still share local ports, databases, caches, credentials and any remote service. Shared repository state also leaks: the `.git` directory is common, and in some harnesses project-scope plugins and saved permission approvals are shared across worktrees, so a permission granted in one run can apply to the others. Run each agent under least privilege ([[sandboxing-coding-agents-on-workstations-and-runners]]) and give each a separate test database or namespace.
+Worktrees isolate files, not the world around them. Agents still share local ports, databases, caches, credentials and any remote service. Shared repository state also leaks: the repository's refs under `refs/` and, by default, its `config` are shared across linked worktrees (only `HEAD` and per-worktree refs are not), and in some harnesses project-scope plugins and saved permission approvals are shared across worktrees, so a permission granted in one run can apply to the others. Run each agent under least privilege ([[sandboxing-coding-agents-on-workstations-and-runners]]) and give each a separate test database or namespace.
 
 ## Return structured results
 
@@ -105,7 +108,7 @@ Set stop conditions per agent: a maximum wall-clock time and a maximum number of
 
 ## Fan out in CI
 
-For CI-based fan-out, use parallel jobs with explicit `needs` and a single integration job that collects artifacts. Each agent job must push its `fanout/<id>` branch, because the integration job runs in a fresh clone and has no local branches from the other jobs; fetch them before merging. Cap concurrency through the matrix size and runner limits, not `resource_group`, which would run the matrix jobs one at a time.
+For CI-based fan-out, use parallel jobs with explicit `needs` and a single integration job that collects artifacts. Each agent job must push its `fanout/<id>` branch, because the integration job may not have the other jobs' branches locally (its checkout depends on `GIT_STRATEGY` and `GIT_DEPTH`, and a re-used working copy may also hold stale `fanout/*` branches); it must fetch them before merging, so the sample sets `GIT_STRATEGY: clone` and `GIT_DEPTH: 0` on `integrate`. Cap concurrency through the matrix size and runner limits, not `resource_group`, which would run the matrix jobs one at a time.
 
 ```yaml title=".gitlab-ci.yml"
 default:
@@ -126,6 +129,9 @@ agent-task:
 integrate:
   stage: test
   needs: [agent-task]
+  variables:
+    GIT_STRATEGY: clone # change: pristine working copy, no stale fanout/* branches
+    GIT_DEPTH: 0 # change: full history so merges have their merge bases
   script:
     - git fetch origin 'refs/heads/fanout/*:refs/heads/fanout/*'
     - ./fanout-merge.sh svc-a svc-b svc-c
@@ -157,9 +163,32 @@ integrate:
 - [ ] Cleanup of worktrees and branches is scripted for failed and abandoned runs.
 - [ ] The integrated diff gets independent review before merge.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the git worktree, merge, switch and branch behaviour the scripts rely on; harness behaviour, provider limits and CI keyword semantics were not checked.
+
+### Sources checked
+
+- [git-worktree](https://git-scm.com/docs/git-worktree): `add` refuses a branch already checked out in another worktree unless `--force`; `remove` only removes clean worktrees (no untracked files, no modified tracked files) unless `--force`, and a locked one needs `--force` twice; `prune` removes administrative data for worktrees whose directory is missing; worktrees can be locked; `-b` creates a new branch; most refs under `refs/` and, by default, the repository `config` are shared across worktrees, while `HEAD` and per-worktree refs are not. Checked 2026-11-02 against git commit 50fe5cc (Documentation/git-worktree.adoc).
+- [git-merge](https://git-scm.com/docs/git-merge): `git merge --abort` aborts a conflicted merge and tries to reconstruct the pre-merge state. Checked 2026-11-02 against git commit 50fe5cc.
+- [git-switch](https://git-scm.com/docs/git-switch): `-c <new-branch> [<start-point>]` creates a branch. Checked 2026-11-02 against git commit 50fe5cc.
+- [git-branch](https://git-scm.com/docs/git-branch): `-D` is shorthand for `--delete --force`, which deletes a branch regardless of merged status. Checked 2026-11-02 against git commit 50fe5cc.
+- [GitLab runner configuration](https://docs.gitlab.com/ci/runners/configure_runners/): `GIT_STRATEGY` takes `clone`, `fetch`, `none` or `empty`; unset, jobs use the project's pipeline setting; `clone` starts from scratch while `fetch` re-uses the local working copy; `GIT_DEPTH` makes a shallow clone, and new projects default to a depth of 20. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+- [GitLab variables in job keywords](https://docs.gitlab.com/ci/variables/where_variables_can_be_used/): `artifacts:paths` can be expanded with variables, expanded by the runner. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+- [GitLab CI job control](https://docs.gitlab.com/ci/jobs/job_control/): `parallel:matrix` jobs exist as a GitLab CI feature. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+
+### Not verified
+
+- GitLab CI keyword semantics used in the sample pipeline (`needs`, `timeout`, and `resource_group` serialising matrix jobs): the full YAML keyword reference (ci/yaml) is not in the local checkout.
+- Any harness behaviour: default concurrency and the setting that changes it, worktree naming, automatic locking and cleanup, and which settings, plugins and permission approvals are shared across worktrees. The harness documentation was not available.
+- Provider rate-limit tiers, and the claim that multi-agent runs can use many times the tokens of a single session; no local source states these.
+- That subagent output returns to the parent as a summary: harness-specific, not checked.
+- Engineering guidance, not documented claims: the independence criteria for fan-out (and the default to serial work unless the split is obvious), manifest and ownership checks, sequential merging with full gates, treating conflicts as a wrong split, and budget, attempt and wall-clock caps.
+- Nothing was run.
+
 ## Sources
 
 - Your coding agent's own documentation for parallel subagents, worktree naming, concurrency limits and cleanup. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
-- [git-worktree documentation](https://git-scm.com/docs/git-worktree) — linked worktrees share history; add, list, lock, prune and remove; a branch is not normally checked out in two worktrees.
+- [git-worktree documentation](https://git-scm.com/docs/git-worktree): linked worktrees share history; add, list, lock, prune and remove; a branch is not normally checked out in two worktrees.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

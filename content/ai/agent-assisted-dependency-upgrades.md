@@ -8,14 +8,14 @@ tags:
   - ci-cd
   - delivery
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note describes how to combine a dependency bot with a coding agent so that breaking upgrades get a proposed code fix without weakening review or supply-chain controls. It is for teams already running Renovate or Dependabot. It does not cover choosing a bot ([[renovate-vs-dependabot]]), the baseline update process ([[automated-dependency-updates]], [[dependency-update-policy]]), or agents that install packages on their own ([[ai-agent-package-installation-risks]]).
-
-> [!note] Not verified
-> The sources were found through search on 2026-10-27, but the pages could not be fetched. Check against current docs before use: the Renovate option names and defaults (`minimumReleaseAge`, `dependencyDashboardApproval`, `separateMajorMinor`) for the version you pin; Dependabot ignore syntax and `dependabot.yml` keys, including any cooldown option; how your platform limits auto-merge by update type; and how an agent product is triggered on a bot PR and what token it receives. Nothing here was run.
 
 ## Division of labour
 
@@ -54,7 +54,7 @@ Do not start an agent on every release. Use bot policy to hold majors until some
 }
 ```
 
-The three-day delay is an example policy, not a recommendation. A release-age delay gives time for a malicious or yanked version to be caught; depending on `internalChecksFilter`, Renovate either waits to create the branch or creates it with a pending status check (check the current docs for the default). Where the package manager has an equivalent setting, set it there too. If you auto-merge anything, limit it to patch and minor updates that pass full CI; never majors. Team-wide Dependabot ignores (for example ignoring `version-update:semver-major`) belong in `dependabot.yml`, because comment-command ignores are per-PR state.
+The three-day delay is an example policy, not a recommendation. A release-age delay gives time for a malicious or yanked version to be caught; the bot holds the update, or flags it as pending, until the age has passed (check the bot's current docs for exact behaviour). Where the package manager has an equivalent setting, set it there too. If you auto-merge anything, limit it to patch and minor updates that pass full CI; never majors. Team-wide Dependabot ignores (for example ignoring `version-update:semver-major`) belong in `dependabot.yml`, because comment-command ignores are per-PR state.
 
 A label such as `agent-eligible` is a convenient trigger condition. In GitLab CI:
 
@@ -65,6 +65,7 @@ agent-fix-upgrade:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /agent-eligible/ && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^renovate\//'
       when: manual
+      # explicit: manual jobs inside rules default to allow_failure: false (blocking)
       allow_failure: true
   # needs: [] keeps the job runnable after the test job has failed;
   # a needs on the failed job would skip it. The script fetches the failing job log.
@@ -73,7 +74,7 @@ agent-fix-upgrade:
     - ./ci/agent-fix.sh
 ```
 
-`when: manual` keeps a human choosing to spend agent time. Check the current docs for your CI's variable names and fork-MR behaviour, and do not expose write tokens to fork-controlled pipelines.
+`when: manual` keeps a human choosing to spend agent time. Pipelines from forked projects cannot access the parent project's CI/CD variables by default, but running a merge request pipeline in the parent project for a fork makes all variables available to it, so do not expose write tokens to fork-controlled pipelines. `CI_MERGE_REQUEST_LABELS` is a comma-separated list and exists only when the merge request has at least one label.
 
 ## What the agent gets
 
@@ -158,11 +159,40 @@ Track time from release to merged upgrade, share of agent fixes accepted without
 - [ ] Agent token cannot merge; a human reviews every upgrade MR.
 - [ ] Acceptance, rejection, rollback and cost are tracked.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI trigger example, the diff-range command in the guard script, and the prompt-injection, privilege and component-risk framing; the bot and package-manager behaviour could not be checked.
+
+### Sources checked
+
+- [GitLab CI/CD job control](https://docs.gitlab.com/ci/jobs/job_control/): `when: manual` makes a job run only when a user starts it; manual jobs default to `allow_failure: true` outside `rules` and `false` inside `rules`, so the explicit `allow_failure: true` in the example is needed. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [GitLab CI/CD job rules](https://docs.gitlab.com/ci/jobs/job_rules/): `rules` accepts `when: manual` to make a manual job. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [GitLab CI/CD predefined variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_MERGE_REQUEST_LABELS` (comma-separated, set only when the merge request has labels), `CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`, and `CI_PIPELINE_SOURCE`. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [GitLab CI/CD variables](https://docs.gitlab.com/ci/variables/): fork pipelines cannot access parent-project variables by default; a parent-project merge request pipeline for a fork exposes all variables. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [git-diff](https://git-scm.com/docs/git-diff): `git diff A...B` equals `git diff $(git merge-base A B) B`; `--name-only` lists changed file names. Checked 2026-11-02 against git commit 50fe5cc.
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): LLM01 indirect injection from external content and the advice to segregate untrusted content and require human approval for high-risk actions; LLM06 minimum extension permissions; LLM03 outdated third-party components. Checked 2026-11-02 against owasp-llm commit 99f4395.
+
+### Not verified
+
+- Renovate option names, defaults and behaviour (`minimumReleaseAge`, `dependencyDashboardApproval`, `separateMajorMinor`, `config:recommended`, how a pending release-age check works): the Renovate docs were not available locally.
+- Dependabot ignore syntax, `dependabot.yml` keys and comment commands: not available locally.
+- The GitLab `needs: []` behaviour after a failed job: the CI keyword reference was not in the local docs, and no `needs: []` example appears in the local ci/ docs.
+- Provenance attestation support per ecosystem, and the SLSA framing: the SLSA spec was not available locally.
+- The NIST SSDF reference: NIST publications were not available.
+- Pinning CI images or actions to digests, and how an agent product is triggered on a bot branch and which token it receives: no local source.
+- Hand-edited lockfile, package-manager checksum and registry behaviour: not checked.
+- General engineering guidance (division of labour, scope caps, metrics, failure modes, checklist) is not a documented claim.
+- Nothing was run.
+
 ## Sources
 
-- [Renovate docs: minimum release age](https://docs.renovatebot.com/key-concepts/minimum-release-age/) - release-age hold with a pending check.
-- [Renovate docs: FAQ](https://docs.renovatebot.com/faq) - default separation of major and minor branches.
-- [GitHub Docs: Dependabot pull request comment commands](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands) - ignoring major, minor and patch versions via comments.
-- [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) - risk-based practices behind the supply-chain framing.
+- [GitLab CI/CD job control](https://docs.gitlab.com/ci/jobs/job_control/) - manual jobs and `allow_failure` defaults.
+- [GitLab CI/CD variables](https://docs.gitlab.com/ci/variables/) - fork pipeline access to variables.
+- [git-diff](https://git-scm.com/docs/git-diff) - three-dot range semantics.
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) - injection, excessive agency and supply-chain risks.
+- [Renovate docs: minimum release age](https://docs.renovatebot.com/key-concepts/minimum-release-age/) - release-age hold; not read, see Not verified.
+- [Renovate docs: FAQ](https://docs.renovatebot.com/faq) - separation of major and minor branches; not read, see Not verified.
+- [GitHub Docs: Dependabot pull request comment commands](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands) - ignoring versions via comments; not read, see Not verified.
+- [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) - risk-based practices behind the supply-chain framing; not read, see Not verified.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

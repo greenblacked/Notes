@@ -8,14 +8,14 @@ tags:
   - delivery
   - reliability
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note covers how to use a coding agent to prepare and run a Kubernetes or GKE minor-version upgrade where the risk is deprecated or removed APIs: finding them in manifests, Helm charts and live clients, proposing mechanical fixes, validating against the target version, and rolling out in stages with a rollback plan. It is for platform and DevOps engineers who own clusters and chart repositories. It does not cover the node and control plane mechanics ([[gke-cluster-upgrade]], [[gke-node-pool-upgrade-strategies]]), the policy for deprecating your own APIs ([[api-deprecation-policy]]), or general dependency bumps ([[agent-assisted-dependency-upgrades]]).
-
-> [!note] Not verified
-> The sources below were found through search on 2026-10-27, but the pages could not be fetched. Check before relying on them: which APIs are removed in your target version, the current GKE auto-upgrade pause and resume behaviour, Pluto and kubent flags and output formats, and the kubeconform schema options. Removal lists change with every release, so no list is reproduced here.
 
 ## Principle: detectors find, agents propose, gates decide
 
@@ -76,7 +76,7 @@ kubent's detection depends on the original manifest stored by kubectl or Helm, u
 
 ### Find the real offending clients
 
-Manifests in git can be clean while a controller, CI job or older Helm release still calls a removed API. On GKE, deprecation insights and audit logs are based on observed calls, so filter by user agent and by the deprecation audit annotations (upstream Kubernetes uses `k8s.io/deprecated` and `k8s.io/removed-release`; check the current docs for your platform) to find the caller. The fix is then to upgrade that controller or chart, not to edit a manifest. Give the agent the audit log extract as input and ask it to map each caller to an owning repository or Helm release.
+Manifests in git can be clean while a controller, CI job or older Helm release still calls a removed API. On GKE, deprecation insights and audit logs are based on observed calls, so filter by user agent and by the deprecation audit annotation (upstream Kubernetes adds `"k8s.io/deprecated":"true"` to the audit event for requests to deprecated endpoints, and sets a `Warning` response header and the `apiserver_requested_deprecated_apis` metric, which has a `removed_release` label; check the current docs for your platform) to find the caller. The fix is then to upgrade that controller or chart, not to edit a manifest. Give the agent the audit log extract as input and ask it to map each caller to an owning repository or Helm release.
 
 ## Step 2: give the agent the spec, not its memory
 
@@ -110,7 +110,7 @@ Bound the loop as described in [[bounded-agent-loops-and-stop-conditions]], and 
 
 ### What counts as a mechanical change
 
-Allowed: bumping `apiVersion` where the schema is identical, or moving a field exactly as the guide states. Reject and escalate: renamed fields with different meaning (the Event API migration is a known example where a field maps to a differently named one), changed defaults, new required fields, and anything touching selectors, which are immutable on many workload kinds. A diff that "also tidies" unrelated fields fails review.
+Allowed: bumping `apiVersion` where the schema is identical, or moving a field exactly as the guide states. Reject and escalate: renamed fields with different meaning (the Event API migration is a known example where a field maps to a differently named one), changed defaults, new required fields, and anything touching selectors, which are immutable after creation on a Deployment and on other kinds (check each kind). A diff that "also tidies" unrelated fields fails review.
 
 ## Step 3: validate against the target version
 
@@ -140,7 +140,7 @@ k8s-upgrade-validate:
 
 Treat these as two separate gates. kubeconform catches schema errors, not semantic ones, and the scanner catches removed APIs, not malformed fields. Flag syntax above is illustrative; check each tool's current docs.
 
-Add a server-side check where you can: a `kubectl apply --dry-run=server` against a target-version test cluster catches admission and CRD problems no static tool sees. Further CI gates for charts are in [[helm-chart-ci-quality-gates]].
+Add a server-side check where you can: a `kubectl apply --dry-run=server` against a target-version test cluster runs the API server's full validation and admission-time checks, which schema-based static tools do not. Further CI gates for charts are in [[helm-chart-ci-quality-gates]].
 
 ## Step 4: staged rollout
 
@@ -150,7 +150,7 @@ Add a server-side check where you can: a `kubectl apply --dry-run=server` agains
 
 On GKE, automatic upgrades may be paused when the platform observes calls to APIs removed in the next minor version, and may resume after a quiet period. This is not a guarantee and the details change, so check the current GKE documentation, and use maintenance exclusions when you need a hard freeze rather than relying on the pause.
 
-Merge the manifest migration before the control plane upgrade, since new API versions are generally served by the older version too. That ordering is what makes rollback possible.
+Merge the manifest migration before the control plane upgrade, provided the current control plane already serves the new API versions (confirm in the migration guide). That ordering is what makes rollback possible.
 
 ## Rollback plan, written before starting
 
@@ -204,9 +204,35 @@ Keep detector output, each diff with its cited guide entry, validation results a
 - [[ai-assisted-ci-failure-triage]] for diagnosing pipeline failures during the migration.
 - [[team-norms-for-ai-assisted-engineering]] for team expectations on agent-authored changes.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. The review covered the Kubernetes behaviours this note relies on (deprecation signals, server-side dry run, kubectl annotations, selector immutability); third-party tools and managed-platform behaviour were not checked.
+
+### Sources checked
+
+- [Kubernetes Deprecation Policy](https://kubernetes.io/docs/reference/deprecation-policy/): from v1.19 a request to a deprecated endpoint returns a `Warning` header, adds the `"k8s.io/deprecated":"true"` annotation to the audit event, and sets the `apiserver_requested_deprecated_apis` gauge with a `removed_release` label (reference/deprecation-policy.md:288-303). The note previously named a `k8s.io/removed-release` annotation; the source has no such annotation, so it was corrected to the metric label. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [The Kubernetes API](https://kubernetes.io/docs/concepts/overview/kubernetes-api/): `kubectl apply --dry-run=server` runs all applicable validation and admission-time checks, while OpenAPI validation may be incomplete (concepts/overview/kubernetes-api.md:194-200). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Declarative management of Kubernetes objects using configuration files](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/declarative-config/): `kubectl apply` sets the `kubectl.kubernetes.io/last-applied-configuration` annotation holding the applied configuration (tasks/manage-kubernetes-objects/declarative-config.md:64). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/): a Deployment's label selector is immutable after creation (concepts/workloads/controllers/deployment.md:355). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [kubectl api-versions](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_api-versions/): `kubectl api-versions` prints the supported API versions on the server, in the form `group/version` (reference/kubectl/generated/kubectl_api-versions/_index.md:27). Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Deprecated API Migration Guide](https://kubernetes.io/docs/reference/using-api/deprecation-guide/): the `batch/v1beta1` CronJob API is no longer served as of v1.25 and `batch/v1` is available since v1.21 (reference/using-api/deprecation-guide.md:89-91); in `events.k8s.io/v1`, for example, `source.component` is renamed `deprecatedSource.component` and `reportingController` is used instead (reference/using-api/deprecation-guide.md:108-126). The page is in the commit but outside the sparse working tree, so it was read with `git show`. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [helm template](https://helm.sh/docs/helm/helm_template/): the `--kube-version` flag sets the Kubernetes version used for `Capabilities.KubeVersion` (docs/helm/helm_template.md:53). Checked 2026-11-02 against helm/helm-www commit 8920d0e.
+- [Deprecated Kubernetes APIs (Helm)](https://helm.sh/docs/topics/kubernetes_apis/): never roll a release back to a version before the one that moved to supported APIs, and an upgrade fails with "current release manifest contains removed kubernetes api(s)" when the deployed release uses a removed API (docs/topics/kubernetes_apis.md:84-108). Checked 2026-11-02 against helm/helm-www commit 8920d0e.
+
+### Not verified
+
+- That an older control plane serves each new API version has to be checked per kind against the guide's "available since" lines (only CronJob `batch/v1` since v1.21 and Event `events.k8s.io/v1` since v1.19 were read). Per-release removal lists are deliberately not reproduced.
+- Helm: the behaviour of `helm history`, `helm rollback` and `.Capabilities` beyond the `--kube-version` flag and the rollback warning cited above was not read.
+- Pluto, kubent and kubeconform flags, output formats, exit codes and schema options; the kubent stale-annotation false positive (only the annotation itself was confirmed above).
+- GKE behaviour: deprecation insights, the auto-upgrade pause and resume, maintenance exclusions, and rollback options. Google Cloud documentation was not available.
+- The CNCF post and the kube-no-trouble issue listed in Sources were not read.
+- The GitLab CI snippet is illustrative and was not checked against GitLab documentation.
+- General engineering guidance (detector-first workflow, task limits, staged rollout, rollback preparation, review checklist) is not stated by a source.
+- Nothing was run.
+
 ## Sources
 
-- [Kubernetes Deprecated API Migration Guide](https://kubernetes.io/docs/reference/using-api/deprecation-guide/) - per-release removed API versions and replacements, used as the agent's spec.
+- [Kubernetes Deprecated API Migration Guide](https://kubernetes.io/docs/reference/using-api/deprecation-guide/) - the two examples above were read; per-release removed API versions and replacements, used as the agent's spec.
 - [GKE deprecations](https://docs.cloud.google.com/kubernetes-engine/docs/deprecations) - GKE-specific deprecation notes, deprecation insights and the auto-upgrade pause behaviour.
 - [CNCF: detecting and dealing with deprecated APIs](https://www.cncf.io/blog/2020/09/01/kubernetes-how-to-automatically-detect-and-deal-with-deprecated-apis-2/) - why to combine static and live detection (2020, tool advice is dated).
 - [kube-no-trouble issue 276](https://github.com/doitintl/kube-no-trouble/issues/276) - the last-applied-configuration false positive.

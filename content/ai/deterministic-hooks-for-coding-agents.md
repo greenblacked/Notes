@@ -8,14 +8,16 @@ tags:
   - policy-as-code
   - reliability
 created: 2026-10-27
-modified: 2026-10-30
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note covers hooks that run outside the model: pre- and post-tool-use hooks in coding-agent CLIs, and git hooks with the pre-commit framework. It is for engineers who need some rules to hold every time, such as blocking destructive commands, denying secret files and enforcing formatting. It does not cover sandbox design ([[sandboxing-coding-agents-on-workstations-and-runners]]), command generation ([[safe-shell-command-generation-for-agents]]) or credential scoping ([[agent-tool-authorization-boundaries]]), though hooks should sit alongside all three.
 
-> [!note] Not verified
-> Sources were found via search on 2026-10-27, but the pages could not be fetched, so no claim here was checked against live documentation. Before use, check for your tool and version: the hook event names and matcher syntax, which exit codes block a call, whether the model sees stdout or stderr, where project, user and managed settings are loaded from, the project-hook trust prompt, and the stage names and bypass variables of the pre-commit framework.
+The agent-tool hook contract described here (event names, matcher syntax, blocking exit codes, timeout behaviour) is illustrative and was not checked against any tool's documentation; see Evidence below.
 
 ## Hooks versus instructions
 
@@ -97,7 +99,7 @@ Keep these fast and scoped to the touched file. Slow hooks get disabled. Treat t
 
 ## Git hooks are a separate, skippable layer
 
-`pre-commit` and `commit-msg` hooks run on the developer's or agent's machine. They can be skipped with `git commit --no-verify` or, in the pre-commit framework, a skip environment variable. So the same policy must be enforced server-side. Use the framework for the fast local check:
+`pre-commit` and `commit-msg` hooks run on the developer's or agent's machine. They can be skipped with `git commit --no-verify`, which bypasses the `pre-commit` and `commit-msg` hooks, or, in the pre-commit framework, with a skip environment variable. So the same policy must be enforced server-side. Use the framework for the fast local check:
 
 ```yaml
 # .pre-commit-config.yaml
@@ -120,7 +122,7 @@ secret-scan:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   script:
-    - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - git fetch origin "+refs/heads/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}:refs/remotes/origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
     # A separate command, so a failed diff (no merge base in a shallow clone) fails the job
     # instead of running the scanner with no files. -z keeps file names with spaces intact.
     - git diff --name-only -z --diff-filter=d "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"...HEAD > changed.z
@@ -165,10 +167,33 @@ Run the script-level test in CI. Run the end-to-end agent canary after every set
 - [ ] Hook output is short and contains no secrets.
 - [ ] Each hook has an owner and is code-reviewed.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the git hook, `git diff` and GitLab CI statements in this note were checked against local copies of the documentation; the agent-tool hook contract was not.
+
+### Sources checked
+
+- [githooks](https://git-scm.com/docs/githooks): `pre-commit` and `commit-msg` hooks abort the command on a non-zero exit and can be bypassed with `--no-verify`; server-side hooks such as `pre-receive` exist for enforcement on the receiving side. Checked 2026-11-02 against git commit 50fe5cc (Documentation/githooks.adoc).
+- [git-commit](https://git-scm.com/docs/git-commit): `--no-verify` bypasses the `pre-commit` and `commit-msg` hooks. Checked 2026-11-02 against git commit 50fe5cc.
+- [git-diff](https://git-scm.com/docs/git-diff) and [diff options](https://git-scm.com/docs/git-diff#_options): `A...B` compares from the merge base of both commits to B; `--diff-filter` lowercase letters exclude that status (so `d` drops deleted files); `-z` with `--name-only` uses NUL separators and does not quote unusual pathnames. Checked 2026-11-02 against git commit 50fe5cc.
+- [git-fetch](https://git-scm.com/docs/git-fetch): a refspec with a destination (`+refs/heads/<branch>:refs/remotes/origin/<branch>`) updates that remote-tracking ref explicitly, rather than relying on `remote.<repository>.fetch`. Checked 2026-11-02 against git commit 50fe5cc.
+- [GitLab CI/CD predefined variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_MERGE_REQUEST_TARGET_BRANCH_NAME` and `CI_PIPELINE_SOURCE`. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+- [GitLab CI/CD job rules](https://docs.gitlab.com/ci/jobs/job_rules/): `rules: - if: $CI_PIPELINE_SOURCE == "merge_request_event"` selects merge request pipelines. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+- [GitLab runner configuration](https://docs.gitlab.com/ci/runners/configure_runners/#shallow-cloning): `GIT_DEPTH` makes shallow clones (default depth 20), so only part of the Git history is present. That a missing merge base can follow in the example job is the author's inference, not a statement of the source. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+
+### Not verified
+
+- Coding-agent hook behaviour: event names, matcher syntax, the exit code that blocks a call, whether timeouts or missing hooks fail open, stdin JSON field names, what the model sees from stdout or stderr, settings layers and any project-hook trust prompt. No local source covers any agent tool; the examples are illustrative.
+- The pre-commit framework (stage names, the skip environment variable): no local source.
+- That a non-zero exit from a GitLab `script` command fails the job (the comment in the CI example relies on it): not found in the local GitLab docs subset.
+- The GitLab `stage: test` default and `image:` digest pinning in the CI job were not located in the local GitLab docs subset.
+- Secret scanner choice and bypass patterns of regex guards are engineering guidance, not documented claims.
+- Nothing was run, including the guard, canary and CI snippets.
+
 ## Sources
 
-- Your coding agent's own documentation for hook events, matchers, the exit code that blocks a call, and timeout and failure behaviour. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
+- Your coding agent's own documentation for hook events, matchers, the exit code that blocks a call, and timeout and failure behaviour. This was not read for this note; the tool-specific behaviour given as an example varies by tool and version, so check it there before copying any configuration.
 - [githooks documentation](https://git-scm.com/docs/githooks) - which client-side hooks exist, that a non-zero exit aborts pre-commit and commit-msg, and that `--no-verify` skips them.
-- [pre-commit framework](https://pre-commit.com/) - the official home for installing and configuring pre-commit hooks.
+- [pre-commit framework](https://pre-commit.com/) - not read for this note; the official home for installing and configuring pre-commit hooks.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

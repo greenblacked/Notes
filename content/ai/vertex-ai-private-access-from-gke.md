@@ -9,7 +9,10 @@ tags:
   - security
   - networking
 created: 2026-10-21
-modified: 2026-11-01
+modified: 2026-11-02
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 draft: false
 ---
 
@@ -18,8 +21,8 @@ The managed path on GCP is Vertex AI: no GPUs to run, and the same project, IAM 
 > [!info] Scope
 > GKE Standard or Autopilot with Workload Identity Federation for GKE, calling generative models on Vertex AI from one gateway workload. Self-hosting instead is in [[self-hosted-llm-inference-on-gke]]. No quotas, request rates, prices, model names or region lists are quoted: they change per model and per region, so read them from the current pages under Sources.
 
-> [!note] Not verified
-> Nothing was run against a real project. The `gcloud access-context-manager` and `gcloud compute addresses` and `forwarding-rules` flags were read from the local `--help` text of Google Cloud SDK 570.0.0; the rest comes from official pages read only as search excerpts on 2026-10-21 (some of them from translated copies). Not confirmed: what `roles/aiplatform.user` contains in full, whether `aiplatform.endpoints.predict` alone covers every call your models need, the exact Data Access log type for prediction calls and whether those entries hold prompt text, whether CMEK covers prompts and responses, which other services (Cloud Storage, Logging, Artifact Registry, GKE) your perimeter must also restrict, the DNS names for a Private Service Connect endpoint, the `gcloud dns` and egress firewall commands, per-model quota names, Google's recommended backoff values, the exact text of the VPC Service Controls error, the `generateContent` REST path for your model family, and whether the Cloud SDK `slim` image ships `curl` and `getent`. Test each step in a sandbox project first.
+> [!note] Evidence
+> Google Cloud documentation pages were not available for review; the Google-specific statements below that rest on them are listed under Not verified in the Evidence section.
 
 ## The three layers
 
@@ -116,7 +119,7 @@ gcloud compute firewall-rules create allow-egress-google-apis-restricted --proje
 
 A private zone for all of `googleapis.com` captures every Google API name in that VPC, including the ones that are not supported behind the restricted VIP. Run it in a test VPC first and check every workload there still works.
 
-The Private Service Connect alternative, from the `gcloud` help examples. The endpoint cannot be changed after creation (delete and recreate it), and each one counts toward a per-VPC quota:
+The Private Service Connect alternative. The address reservation follows the `gcloud compute addresses create` help example; the forwarding rule uses the `--target-google-apis-bundle` flag described in `gcloud compute forwarding-rules create --help` (the rule name `pscvpcsc` is a choice, not from the help):
 
 ```bash title="psc-google-apis.sh"
 set -euo pipefail
@@ -132,7 +135,7 @@ gcloud compute forwarding-rules create pscvpcsc --project="$PROJECT_ID" \
   --target-google-apis-bundle=vpc-sc
 ```
 
-You still need DNS records that send the API names to the endpoint; follow the Private Service Connect for Google APIs page for the names it expects. Endpoint names have their own format rules; check the page if `forwarding-rules create` rejects the name.
+You still need DNS records that send the API names to the endpoint; follow the Private Service Connect for Google APIs page for the names it expects.
 
 ## VPC Service Controls: dry run, then enforce
 
@@ -160,7 +163,7 @@ gcloud access-context-manager perimeters dry-run create "$PERIMETER" \
 gcloud access-context-manager perimeters dry-run describe "$PERIMETER" --policy="$POLICY_ID"
 ```
 
-`gcloud` keeps the dry-run configuration in the perimeter's `spec`. Two details from the help text matter: without an explicit dry-run configuration, the enforced configuration is used as the dry-run one and no dry-run audit logs appear; and `dry-run enforce` copies the dry-run configuration into enforcement and clears it, refusing to run when there is none. Whether to add `storage.googleapis.com`, `logging.googleapis.com` or other services to the same perimeter is a design decision; check each against the [supported products](https://docs.cloud.google.com/vpc-service-controls/docs/supported-products) list (`gcloud access-context-manager supported-services list` shows it too). Adding a service changes behaviour for every caller of that service in the project.
+`gcloud` keeps the dry-run configuration in the perimeter's `spec`. Three details from the help text matter: a perimeter created with `dry-run create` under a new name has no enforcement configuration, so all violations are only logged; for a perimeter without an explicit dry-run configuration, the enforced configuration is used as the dry-run one and no audit logs are generated; and `dry-run enforce` copies the dry-run configuration into enforcement and unsets it, refusing to run when there is none. Whether to add `storage.googleapis.com`, `logging.googleapis.com` or other services to the same perimeter is a design decision; check each against the [supported products](https://docs.cloud.google.com/vpc-service-controls/docs/supported-products) list (`gcloud access-context-manager supported-services list` shows it too). Adding a service changes behaviour for every caller of that service in the project.
 
 While in dry run, violating requests succeed and are logged. Read them for at least a full business cycle (nightly jobs, month-end jobs):
 
@@ -304,10 +307,30 @@ The REST path above follows the documented `generateContent` pattern for publish
 
 ## Rollback
 
-- **Perimeter.** While in dry run, nothing is blocked: delete the dry-run configuration (`gcloud access-context-manager perimeters dry-run delete`) to stop it. After enforcement, revert the Terraform change that added the restricted service, or remove it with `gcloud access-context-manager perimeters update` (check the `--remove-restricted-services` flag in the current help), then put it back in dry run while you fix the cause.
+- **Perimeter.** While in dry run, nothing is blocked: mark the perimeter as deleted in dry-run mode (`gcloud access-context-manager perimeters dry-run delete`, which leaves the enforced configuration untouched) to stop it. After enforcement, revert the Terraform change that added the restricted service, or remove it with `gcloud access-context-manager perimeters update --remove-restricted-services`, then put it back in dry run while you fix the cause.
 - **Network.** Keep the old egress path (Cloud NAT and its firewall rule) disabled but defined until the private path has run a full cycle; re-enabling it is a single change. Removing the private DNS zone sends names back to public resolution.
 - **Identity.** If the custom role is too narrow, add the missing permission to it; do not fall back to a key or to a broad role on the project.
 - **Region.** Changing region is a gateway configuration change; revert the commit. Remember that residency commitments may forbid the old region.
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the gcloud commands and flags, the `generateContent` REST path and the dry-run and enforcement semantics of VPC Service Controls perimeters were checked against local sources; Google Cloud documentation was not available.
+
+### Sources checked
+
+- [prediction_service.proto, Vertex AI v1](https://github.com/googleapis/googleapis/blob/ff8fd20/google/cloud/aiplatform/v1/prediction_service.proto): `GenerateContent` is bound to `POST /v1/{model=projects/*/locations/*/publishers/*/models/*}:generateContent`, matching the REST path in the validation script. Checked 2026-11-02 against googleapis commit ff8fd20.
+- [google_access_context_manager_service_perimeter](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/access_context_manager_service_perimeter): the enforced configuration is `status`, the dry-run configuration is `spec`, and `use_explicit_dry_run_spec` controls whether an explicit dry-run spec exists (otherwise the implicit spec equals `status`). Checked 2026-11-02 against terraform-provider-google docs commit c4248bd.
+- [gcloud access-context-manager perimeters dry-run](https://cloud.google.com/sdk/gcloud/reference/access-context-manager/perimeters/dry-run): `create` with `--perimeter-title`, `--perimeter-type`, `--perimeter-resources`, `--perimeter-restricted-services`; a new name gets no enforcement configuration and violations are logged; without an explicit dry-run configuration the enforced one is used and no audit logs are generated; `enforce` copies the dry-run configuration to enforcement, unsets it and refuses when none exists; `describe` shows a diff; `delete` marks it deleted in dry-run mode and leaves enforcement untouched. Checked 2026-11-02 against Google Cloud SDK 570.0.0 `--help`.
+- [gcloud access-context-manager perimeters update](https://cloud.google.com/sdk/gcloud/reference/access-context-manager/perimeters/update) and [supported-services list](https://cloud.google.com/sdk/gcloud/reference/access-context-manager/supported-services/list): `--remove-restricted-services` exists and `supported-services list` lists VPC Service Controls supported services. Checked 2026-11-02 against SDK 570.0.0.
+- [gcloud compute addresses create](https://cloud.google.com/sdk/gcloud/reference/compute/addresses/create) and [forwarding-rules create](https://cloud.google.com/sdk/gcloud/reference/compute/forwarding-rules/create): `--purpose=PRIVATE_SERVICE_CONNECT` with `--global`, `--addresses`, `--network`; `--target-google-apis-bundle` accepts `all-apis` (all Google APIs) or `vpc-sc` (only APIs supporting VPC Service Controls). Checked 2026-11-02 against SDK 570.0.0.
+- gcloud `dns managed-zones create`, `dns record-sets create`, `compute routes create`, `compute firewall-rules create`, `compute networks subnets update`, `iam roles create`, `projects add-iam-policy-binding` and `logging read` ([reference](https://cloud.google.com/sdk/gcloud/reference)): the flags used in the scripts exist, including `--enable-private-ip-google-access`, `--condition=None` and `--freshness`. Checked 2026-11-02 against SDK 570.0.0.
+
+### Not verified
+
+- Nothing was run against a real project; no credentials or API calls were available.
+- Google Cloud documentation was not reachable, so these are unconfirmed: the VIP ranges `199.36.153.4/30` and `199.36.153.8/30` and their API coverage; what `roles/aiplatform.user` and `roles/aiplatform.admin` contain and that `aiplatform.endpoints.predict` alone suffices (the permission name does not appear in the local API definitions); the Vertex AI VPC Service Controls statements (blocked public access, protected artifacts, features needing extra setup, Pipelines and PyPI); regional versus global endpoint residency behaviour; data governance, caching and CMEK statements, including whether CMEK covers prompts; 429 causes and Provisioned Throughput behaviour; Data Access log types, the `roles/logging.privateLogViewer` requirement, the VPC-SC audit log type URL and field names, and the violation error texts and codes; the principal identifier format and shared pool behaviour of Workload Identity Federation for GKE and the metadata server token flow; whether the Cloud SDK `slim` image ships `curl` and `getent`; the DNS names a Private Service Connect endpoint needs; that some APIs may not accept federated principals so impersonating a Google service account is the fallback; that private GKE nodes have no external addresses; that either VIP needs DNS resolving `*.googleapis.com`, a route and an egress firewall rule; that the VPC-SC dry-run log is `cloudaudit.googleapis.com%2Fpolicy` and can be routed to BigQuery; that Admin Activity audit logs are always on and cannot be disabled; that `set-iam-policy` replaces the whole policy and a kept `etag` makes a concurrent write fail.
+- Terraform behaviour when a perimeter is changed outside state follows from the provider docs only in outline; it was not exercised.
+- General engineering guidance (retry with capped backoff and jitter, circuit breakers, never retrying 400 or 403, rollout timing, keeping retries in the gateway) is not a documented claim.
 
 ## Sources
 
@@ -322,6 +345,10 @@ The REST path above follows the documented `generateContent` pattern for publish
 - [Throughput and quotas](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/resources/throughput-quota), Vertex AI documentation: 429 handling.
 - [Enable audit logs](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/enable-audit-logs), Vertex AI documentation, and [configure Data Access audit logs](https://docs.cloud.google.com/logging/docs/audit/configure-data-access), Cloud Logging documentation.
 - `gcloud access-context-manager perimeters dry-run --help`, `gcloud compute addresses create --help` and `gcloud compute forwarding-rules create --help`, Google Cloud SDK 570.0.0.
+- [Cloud AI Platform v1 API definitions](https://github.com/googleapis/googleapis/blob/ff8fd20/google/cloud/aiplatform/v1/prediction_service.proto): the `generateContent` REST bindings.
+- [access_context_manager_service_perimeter](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/access_context_manager_service_perimeter), Terraform provider for Google: `spec`, `status` and `use_explicit_dry_run_spec`.
+
+The Google Cloud documentation pages above could not be read during review; see Not verified.
 
 ## Related
 

@@ -6,7 +6,10 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-02
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 draft: false
 ---
 
@@ -57,8 +60,27 @@ Review the actual OAuth configuration in each environment, including redirect UR
 - Have wrong-audience, missing-scope, expired-token, and tenant tests passed?
 - Are provider-specific assumptions checked against the exact deployed service?
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the OAuth requirements that the Model Context Protocol authorization spec states for clients and servers, checked against the claims in this note about scopes, audience, token forwarding, PKCE, redirects and token lifetime.
+
+### Sources checked
+
+- [Authorization - Model Context Protocol (2025-11-25)](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization): clients SHOULD follow least privilege, using the `scope` from the 401 `WWW-Authenticate` challenge or else all of `scopes_supported` (meant to be the minimal set), and request more scopes through step-up authorization (lines 335-348, `insufficient_scope` at 509-546); clients must use the RFC 8707 `resource` parameter, and servers must accept only tokens issued for them as the audience (lines 402, 471); access tokens must not be sent in the URI query string (line 457); clients must not send tokens other than those issued by the server's authorization server, and servers must not accept or transit other tokens (lines 478-483); token passthrough is forbidden (line 570); authorization servers should issue short-lived access tokens and must rotate refresh tokens for public clients (lines 581-582); redirect URIs must be localhost or HTTPS, registered and exactly matched, and clients should use and verify `state` (lines 591-619); clients must implement PKCE (line 598); resource indicators bind tokens to audiences only when the authorization server supports them (line 565). Checked 2026-11-02 against modelcontextprotocol commit d0e246e.
+- [Tools - Model Context Protocol (2025-11-25)](https://modelcontextprotocol.io/specification/2025-11-25/server/tools): clients must treat tool annotations as untrusted unless they come from trusted servers (lines 213-214). Checked 2026-11-02 against modelcontextprotocol commit d0e246e.
+
+### Not verified
+
+- RFC 9700 and RFC 8693 were not available locally, so their publication dates and the note's statements about them (current BCP status, token-exchange scope) were not checked.
+- The Google Cloud service account impersonation page and the AWS temporary credentials page were not available.
+- The statement that public clients cannot keep embedded secrets confidential, and the advice on nonce handling, sender-constrained tokens and revocation semantics, rest on the OAuth RFCs, which were not read; the MCP spec only states state, PKCE and redirect rules.
+- The owner's AI skills catalogue link was not checked.
+- Engineering guidance (keeping tokens out of model context, trusted confirmation UI, fail-closed behavior, audit metadata, test lists) is not stated by any local source and was not claim-checked.
+- Nothing was run.
+
 ## Sources
 
+- [Authorization - Model Context Protocol](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization): scope selection, resource indicators, audience validation, no token passthrough, PKCE and redirect requirements for MCP clients and servers.
 - [IETF RFC 9700: Best Current Practice for OAuth 2.0 Security](https://www.rfc-editor.org/rfc/rfc9700.html): OAuth threat model and security recommendations; published January 2025.
 - [IETF RFC 8693: OAuth 2.0 Token Exchange](https://www.rfc-editor.org/rfc/rfc8693.html): token-exchange framework for delegation and impersonation scenarios; published January 2020.
 - [Google Cloud service account impersonation](https://docs.cloud.google.com/iam/docs/service-account-impersonation): provider-specific example of principal-to-service-account impersonation; verify current permissions and token behavior in the target environment.

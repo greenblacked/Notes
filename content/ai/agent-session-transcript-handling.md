@@ -8,14 +8,14 @@ tags:
   - audit
   - team-process
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 A coding-agent session leaves a transcript: prompts, file contents, shell output, tool results and often environment details. This note is for engineers and platform teams who run agents on workstations and runners and need to decide where those transcripts live, how long they stay, who may read them and how to share one safely. It does not cover redaction of prompts sent to a model API ([[redacting-sensitive-data-before-llm-calls]]), tracing of production LLM calls ([[llm-tracing-with-sensitive-data-controls]]) or what an agent remembers across sessions ([[agent-memory-retention-and-deletion]]).
-
-> [!note] Not verified
-> The sources were found through search on 2026-10-27, but the pages could not be fetched, so no quoted wording was checked against the primary document. Check before relying on this note: the current OWASP Logging Cheat Sheet and the current revision of NIST SP 800-92, where each tool stores its transcripts and for how long, whether a bug-report flow uploads a transcript, and the flags of your secret scanner. Retention periods are left to the compliance owner.
 
 ## Classify the transcript by what it touched
 
@@ -42,9 +42,9 @@ Put the numbers in the standard and review them with [[data-retention-and-deleti
 
 Three leak paths come up repeatedly:
 
-- Git. A transcript directory inside a repository, or an export dropped into the working tree, gets committed. Add the directories to `.gitignore` and to a global ignore file.
+- Git. A transcript directory inside a repository, or an export dropped into the working tree, gets committed. Add the directories to `.gitignore` and to a global ignore file (the `core.excludesFile` setting).
 - Home-directory sync. Cloud sync or backup of a home directory copies the agent's log directory to a place with different access rules. Exclude it.
-- Shared runners. A job that uploads its whole workspace as an artifact publishes whatever the agent wrote there. Set `artifacts:expire_in` and list paths explicitly.
+- Shared runners. A job that uploads its whole workspace as an artifact publishes whatever the agent wrote there. Set `artifacts:expire_in` and list paths explicitly; without `expire_in` the instance default applies. `expire_in` does not apply to the latest artifacts on each ref while the project setting "Keep artifacts from most recent successful jobs" is enabled, which is the default, so a 3-day expiry can still leave the newest audit artifact in place until you clear that setting under Settings > CI/CD > Artifacts.
 
 ```yaml title=".gitlab-ci.yml"
 agent-task:
@@ -61,7 +61,7 @@ agent-task:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 ```
 
-The audit file is a structured summary. Do not treat the job log as a safe home for the full transcript either: job logs are readable by everyone who can see the pipeline and often outlive artifacts unless an expiry is configured. Keep verbose agent output out of the log where the tool allows it, and mask CI variables.
+The audit file is a structured summary. Do not treat the job log as a safe home for the full transcript either: job logs are visible to every role that may view the project's pipelines, and on a public project with pipeline visibility enabled, to non-members too. Check how long your instance keeps them. Keep verbose agent output out of the log where the tool allows it, and mask CI variables; masking replaces a variable's exact value in the log, so it does not catch a secret that the agent read from a file.
 
 ## Keep an audit record apart from the transcript
 
@@ -123,15 +123,38 @@ Deleting the file does not revoke the credential. Rotate it ([[leaked-credential
 - [ ] For each allowed tool, the transcript location, format and retention were checked against its current docs.
 - [ ] Transcript directories are in `.gitignore`, backup exclusions and sync exclusions.
 - [ ] CI jobs that run agents list artifact paths explicitly and set an expiry.
+- [ ] In projects that run agents, "Keep artifacts from most recent successful jobs" is cleared, or the latest artifacts per ref are otherwise accounted for.
 - [ ] A separate audit record exists and does not contain raw tool input.
 - [ ] Retention for full transcripts and for audit records is set by policy, not by tool defaults.
 - [ ] Sharing a transcript requires a secret scan, a manual review and a check of the recipient's terms.
 - [ ] The incident process says to rotate any credential that appeared in a shared or leaked transcript.
 - [ ] Access to stored transcripts is owner-only, with a documented route for incident responders.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. The review covered the GitLab CI, Git ignore and OWASP statements in this note; tool-specific transcript behaviour and the log-management standards were not available.
+
+### Sources checked
+
+- [Job artifacts | GitLab](https://docs.gitlab.com/ci/jobs/job_artifacts/): `artifacts:paths` lists what is uploaded and `expire_in` sets how long it is kept, with the instance default expiration used when it is not set; artifacts from the latest pipeline and most recent successful pipeline on each ref are kept regardless of `expire_in` unless the "Keep artifacts from most recent successful jobs" setting is cleared; `artifacts:when: always` uploads regardless of job status (default is on success only); job logs are stored internally as separate artifacts. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [CI/CD variables | GitLab](https://docs.gitlab.com/ci/variables/): masking replaces a variable's value in the job log with `[MASKED]`; variables can be accidentally exposed in a job log; file-type variables and external secrets help stop `env` or `printenv` from printing secrets. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Roles and permissions | GitLab](https://docs.gitlab.com/user/permissions/): viewing job logs is allowed to project roles, and to non-members only on public projects with project-based pipeline visibility enabled. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/): `rules:if` with `$CI_PIPELINE_SOURCE == "merge_request_event"` as used in the sample. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [gitignore | Git](https://git-scm.com/docs/gitignore): patterns can come from `.gitignore` files and from outside the working tree via `core.excludesFile`. Checked 2026-11-02 against git commit 50fe5cc.
+- [LLM02:2025 Sensitive Information Disclosure | OWASP](https://genai.owasp.org/llm-top-10/): security credentials and confidential data are listed as sensitive information that LLM applications can expose through output, with least-privilege access and data sanitization as mitigations. Checked 2026-11-02 against the OWASP LLM Top 10 repository commit 99f4395.
+
+### Not verified
+
+- The OWASP Logging Cheat Sheet and NIST SP 800-92 listed under Sources could not be read (not reachable); they are kept as background reading only and no statement in this note depends on their wording.
+- Where each agent tool stores its transcripts, in what format, for how long, and whether a bug-report flow uploads a transcript: tool documentation was not available. The hook event field names in the sample script are an assumption.
+- How long GitLab keeps job logs relative to artifacts: not stated in the pages read.
+- The flags and behaviour of a secret scanner such as gitleaks, and the `jq`, `sha256sum` and HMAC details in the sample script.
+- Engineering guidance, not documented claims: the transcript classification, lifecycle table, audit-record design, sharing steps, rotation-before-deletion and the failure modes. Retention periods are left to the compliance owner.
+- Nothing was run.
+
 ## Sources
 
-- [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) - what not to log (passwords, tokens, session identifiers, personal data); not fetched, check before relying on it.
+- [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) - what not to log (passwords, tokens, session identifiers, personal data); could not be read for this review, see Not verified.
 - [NIST SP 800-92, Guide to Computer Security Log Management](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-92.pdf) - log retention and protection of logs; the URL is the legacy edition, check which revision is current.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

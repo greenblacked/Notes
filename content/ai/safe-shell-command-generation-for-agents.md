@@ -8,7 +8,10 @@ tags:
   - ci-cd
   - linux
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-02
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 draft: false
 ---
 
@@ -17,6 +20,8 @@ draft: false
 Shell commands combine parsing, variable expansion, quoting, pipelines, redirection, environment inheritance, and program-specific options. A command that looks harmless in a chat can delete files, expose credentials, contact an unintended host, or leave a long-running process. Treat generated commands as untrusted code; the model cannot grant itself authority or certify the safety of its own output.
 
 Prefer a supported API, task runner, or narrowly scoped script with typed inputs over a free-form shell string. If shell is necessary, require the agent to provide one command at a time, explain its purpose and expected effects, identify the working directory and inputs, and wait for the required approval before execution. Do not turn a request for diagnosis into permission to install packages, change system configuration, or publish artifacts.
+
+For example, `git clean --dry-run` is documented to show what would be removed without deleting anything; check each tool's own documentation in the same way.
 
 Command generation intersects with [[coding-agent-branch-and-worktree-isolation]]: isolated workspaces reduce the blast radius but do not make a dangerous command acceptable. Refer to [[sandboxing-coding-agents-on-workstations-and-runners]] for execution containment.
 
@@ -53,6 +58,22 @@ If not, do not execute. Return the proposed command for a human to review, or as
 ## Related
 
 - [Owner’s AI skills catalogue](https://ai.szolotov.com).
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the note's claims about shell command risks and execution controls were compared with the local primary sources available; none of the listed Sources could be read.
+
+### Sources checked
+
+- [git-clean documentation](https://git-scm.com/docs/git-clean): `-n` / `--dry-run` for `git clean` shows what would be removed without deleting, an example of a tool-specific documented dry-run mode. Checked 2026-11-02 against git/git commit 50fe5cc (Documentation/git-clean.adoc:51-53). No other claim in the note names a product flag, default or limit, so nothing else was available to confirm or correct, and no claim was changed.
+- [OWASP LLM05:2025 Improper Output Handling](https://genai.owasp.org/llmrisk/llm052025-improper-output-handling/): model output entered directly into a system shell (exec or eval) can result in remote code execution, and the model should be treated like any other user with zero-trust validation of its responses. This supports treating generated commands as untrusted. Checked 2026-11-02 against OWASP/www-project-top-10-for-large-language-model-applications commit 99f4395 (2_0_vulns/LLM05_ImproperOutputHandling.md:19,27).
+- [OWASP LLM06:2025 Excessive Agency](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/): avoid open-ended extensions such as running a shell command in favor of granular ones, use the minimum privileges necessary, and use human-in-the-loop approval of high-impact actions. This supports preferring narrow tools over free-form shell, least privilege and human approval. Checked 2026-11-02 against OWASP/www-project-top-10-for-large-language-model-applications commit 99f4395 (2_0_vulns/LLM06_ExcessiveAgency.md:62,70,74).
+
+### Not verified
+
+- [OWASP OS Command Injection Defense Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html), [Python subprocess documentation](https://docs.python.org/3/library/subprocess.html) and [GitHub Docs: Secure use reference](https://docs.github.com/en/actions/reference/security/secure-use) are listed in Sources but were not reachable locally and were not read; the statements attributed to them (parameterization, argument sequences versus shell execution, untrusted inputs and permission boundaries) are unconfirmed.
+- Shell parsing, expansion and quoting risks, and the claim that the model cannot grant itself authority or certify its own output, are not confirmed by a source read here. The remaining workflow, failure-mode list and decision checklist items (allowlists over denylists, one command at a time, independent read-only verification, process termination by exact identity) are engineering guidance, not documented claims. Narrow tools over shell, least privilege and human approval of high-impact actions are covered by the OWASP LLM06 source above.
+- Nothing was run.
 
 ## Sources
 

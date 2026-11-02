@@ -8,17 +8,17 @@ tags:
   - team-process
   - security
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 Agent instructions, skills and prompt files decide what an AI agent may do in your repositories and pipelines, yet teams often keep them as untracked files on laptops. This pattern treats them like any other platform asset: one shared repository, review through CODEOWNERS, versions, pinned consumption, a least-privilege tool list per skill, tests and distribution next to shared CI templates. It is for senior DevOps engineers and platform teams. It does not cover runtime controls for agents in CI and cloud ([[ai/securing-ai-agents-in-ci-and-cloud]]) or the structure of CI itself ([[patterns/gitlab-ci-pipeline-structure]]).
 
-> [!info] Scope and sources
-> Examples use GitLab CI and a generic skill manifest. The `include` syntax follows the [GitLab CI documentation](https://docs.gitlab.com/ci/yaml/includes/) and CODEOWNERS follows [GitLab code owners](https://docs.gitlab.com/user/project/codeowners/). The manifest is an illustrative format of this note, not a product schema.
-
-> [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: any specific agent product's skill file format (formats vary by tool, so map the ideas to yours), the exact GitLab syntax and version behaviour, and which GitLab tier offers code owner sections, protected tags and required code owner approval. Check them before relying on them.
+> [!info] Scope
+> Examples use GitLab CI and a generic skill manifest. The manifest is an illustrative format of this note, not a product schema; formats for agent skill files vary by tool, so map the ideas to yours. See the Evidence section for what was and was not checked.
 
 ## Why version agent instructions
 
@@ -106,7 +106,7 @@ Route every change through merge requests, and require the owners to approve cha
 /ci-templates/    @my-org/ci-owners
 ```
 
-Code owner approval must be turned on for the protected default branch, otherwise the file is only advisory. The CODEOWNERS file is listed in its own sections so nobody can change the owners without the owners approving.
+Turn on code owner approval for the protected default branch so the CODEOWNERS file is enforced. In GitLab this is the `code_owner_approval_required` protected-branch setting, which the GitLab API reference describes as requiring code owner approval for pushes to the branch and marks as Premium and Ultimate only; how it applies to merge requests was not checked. The CODEOWNERS file is listed in its own sections so nobody can change the owners without the owners approving.
 
 Make the review checklist short and specific:
 
@@ -119,7 +119,7 @@ Make the review checklist short and specific:
 
 Use semantic versions and tag the repository. A common rule is that a new tool, a removed forbidden action or any widening of access is a major change; new instructions or examples are minor; wording fixes are patch. Consumers pin to a tag and update on purpose, through a merge request that someone reviews ([[patterns/automated-dependency-updates]] can propose the bump). Automate tags and changelogs the way you do for software ([[patterns/release-versioning-and-changelog-automation]]).
 
-Protect the release tags (`v*`) in the shared project, so only maintainers or the release job can create them and nobody can move or delete them. A tag that is not protected can be moved, which changes every consumer without review. For the highest assurance, pin `ref:` to a commit SHA and record the tag in a comment.
+Protect the release tags (`v*`) in the shared project. GitLab protected tags control who can create tags (the Allowed to create list, which can name roles and, in Premium and Ultimate, groups or users) and guard against accidental update or deletion; to create or delete a protected tag you must be in the Allowed to create list (deleting also needs the Maintainer or Owner role), so keep the list short and include the user, group or deploy key the release job uses to create tags, because a job token has the access of the user who started the job. Maintainers and Owners can also remove the protection rule, after which any Developer can delete matching tags, so keep that group small too. A tag that is not protected can be replaced locally (`git tag --force`) and force-pushed to the server, which changes what every consumer resolves without review. For the highest assurance, pin `ref:` to a commit SHA and record the tag in a comment.
 
 Never consume `main` or a branch name from a pipeline or an agent runner. A mutable reference lets a change go live without review in the consuming project.
 
@@ -240,7 +240,7 @@ For ideas on what skills and workflows to share, see [the owner's AI skills cata
 
 ## Pitfalls
 
-- **Unprotected tags.** A tag that can be moved or deleted is as mutable as a branch. Protect `v*` so a pinned tag stays what was reviewed.
+- **Unprotected tags.** A tag that can be moved or deleted is as mutable as a branch. Protect `v*` and keep the Allowed to create list short so a pinned tag stays what was reviewed.
 - **Unpinned includes.** `ref: main` means any merge changes every consumer immediately. Pin tags.
 - **Shell access by default.** A general shell tool turns every skill into a remote command runner. List specific commands instead.
 - **Embedded tokens.** Examples with real tokens or internal URLs get copied. Scan skills and keep credentials in the runtime.
@@ -269,3 +269,27 @@ Move consumers back to the previous tag in their `include` and agent runner conf
 - [[patterns/release-versioning-and-changelog-automation]]: tags and changelogs for the skills repository.
 - [[management/platform-team-operating-model]]: who owns shared platform assets.
 - [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. The review covered the GitLab protected-tag, protected-branch, job-token and CI job documentation and the Git tag documentation that this note relies on.
+
+### Sources checked
+
+- [Protected tags | GitLab Docs](https://docs.gitlab.com/user/project/protected_tags/): protected tags control who can create tags and prevent accidental update or deletion; wildcards such as `v*` are supported; the Allowed to create list can hold roles in all tiers and groups or users in Premium and Ultimate; to create or delete a protected tag you must be in the list, deleting also needs the Maintainer or Owner role, and a Maintainer or Owner can unprotect the rule, after which any Developer can delete matching tags; deploy keys can also be allowed to create. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Protected branches API | GitLab Docs](https://docs.gitlab.com/api/protected_branches/): the `code_owner_approval_required` setting exists on protected branches and is documented as requiring code owner approval for pushes to the branch and as Premium and Ultimate only. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [CI/CD job token | GitLab Docs](https://docs.gitlab.com/ci/jobs/ci_job_token/): jobs authenticate to GitLab features with a short-lived job token exposed as `CI_JOB_TOKEN`, which has the access level of the user who started the job. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [CI/CD jobs | GitLab Docs](https://docs.gitlab.com/ci/jobs/): hidden jobs (names starting with a dot) are not processed and serve as templates reused with `extends`. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Job rules | GitLab Docs](https://docs.gitlab.com/ci/jobs/job_rules/): `rules:changes` with path lists is available for running a job only when matching files change. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [git-tag Documentation](https://git-scm.com/docs/git-tag): `--force` replaces an existing tag with the same name, so a tag can be replaced locally; the same page says changing your own tag does not change it for others. Checked 2026-11-02 against git commit 50fe5cc.
+- [git-push Documentation](https://git-scm.com/docs/git-push): updates to `refs/tags/*` are rejected unless forced, so moving a tag consumers see needs a forced push. Checked 2026-11-02 against git commit 50fe5cc.
+
+### Not verified
+
+- The GitLab CI `include` keyword syntax (`project`, `ref`, `file`, pinning `ref` to a tag or commit SHA) was not checked; the CI YAML reference pages are not in the local documentation copy. See the [includes documentation](https://docs.gitlab.com/ci/yaml/includes/).
+- GitLab CODEOWNERS behaviour was not checked (that CODEOWNERS is advisory unless code owner approval is required, that code owners appear as required merge request approvers, section syntax, one approval per section, several owners on one line meaning any one is enough, behaviour of the same path in several sections); the code owners pages are not in the local copy. See [GitLab code owners](https://docs.gitlab.com/user/project/codeowners/).
+- Which GitLab tier offers code owner sections beyond the protected-branch setting noted above.
+- Any specific agent product's skill file format, and the manifest fields; the manifest is illustrative.
+- Workload Identity on GKE (Google Cloud documentation was not available), the PyYAML and `python:3.12-slim` image details, and the Jenkins shared-library comparison.
+- Engineering guidance, not documented claims: semantic-versioning rules for skills, least-privilege tool lists, test strategy for skills, review checklist, and treating catalogue content as untrusted.
+- Nothing was run, including the validation script and the CI template.
