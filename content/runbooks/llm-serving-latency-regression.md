@@ -299,7 +299,7 @@ kubectl get nodes -L pool,node.kubernetes.io/instance-type
 kubectl get nodes -l pool="$POOL"
 ```
 
-`pool` is a label the operator sets on the node pool, with `--node-labels=pool="$POOL"` on `gcloud container node-pools create` or `update` (or `labels` in the Terraform `node_config`); the GPU pool is also tainted with `dedicated=gpu:NoSchedule`, which the serving pods tolerate. If the pool column is empty, list the labels the nodes actually have with `kubectl get nodes --show-labels`, and label the pool with `gcloud container node-pools update ... --node-labels` before relying on the selector; `update` replaces all user-specified labels, so repeat the ones the pool already has.
+`pool` is a label the operator sets on the node pool, with `--node-labels=pool="$POOL"` on `gcloud container node-pools create` or `update` (or `labels` in the Terraform `node_config`); the GPU pool built in [[self-hosted-llm-inference-on-gke]] is also tainted with `dedicated=llm-inference:NoSchedule`, which the serving pods tolerate; read the taint your nodes actually carry with `kubectl describe node "$NODE" | grep -A3 Taints`. If the pool column is empty, list the labels the nodes actually have with `kubectl get nodes --show-labels`, and label the pool with `gcloud container node-pools update ... --node-labels` before relying on the selector; `update` replaces all user-specified labels, so repeat the ones the pool already has.
 
 Set `POD` to the slow pod (from the per-pod queries in step 1), then derive `NODE` from it. Do not reuse a `POD` left over from 4b unless it is the slow pod.
 

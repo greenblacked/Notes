@@ -83,7 +83,7 @@ gcloud container node-pools create gpu-inference \
   --machine-type="$MACHINE_TYPE" \
   --accelerator="type=${GPU_TYPE},count=1,gpu-driver-version=default" \
   --node-taints="dedicated=llm-inference:NoSchedule" \
-  --node-labels="workload=llm-inference" \
+  --node-labels="workload=llm-inference,pool=gpu-inference" \
   --workload-metadata=GKE_METADATA \
   --ephemeral-storage-local-ssd=count=1 \
   --enable-autoscaling --min-nodes=0 --max-nodes="$MAX_NODES"
@@ -92,7 +92,7 @@ gcloud container node-pools create gpu-inference \
 What each part is for:
 
 - **`--accelerator`.** `type` is required; `count` defaults to 1. `gpu-driver-version` is `default`, `latest` (Container-Optimized OS only) or `disabled` (you install drivers yourself, for example with the NVIDIA GPU Operator). The help text says `default` became the default from GKE 1.30.1-gke.1156000, and `disabled` was the default before that; check the GPU page for your version rather than relying on the default.
-- **`--node-taints` and `--node-labels`.** You set both on the pool. The `dedicated=llm-inference:NoSchedule` taint keeps every pod without a matching toleration off these nodes, so CPU workloads and batch jobs with a GPU request cannot take them. The `workload=llm-inference` label is what the inference pods select on with `nodeSelector`. Taints and labels given at pool creation apply to all nodes in the pool, including nodes added later.
+- **`--node-taints` and `--node-labels`.** You set both on the pool. The `dedicated=llm-inference:NoSchedule` taint keeps every pod without a matching toleration off these nodes, so CPU workloads and batch jobs with a GPU request cannot take them. The `workload=llm-inference` label is what the inference pods select on with `nodeSelector`; `pool=gpu-inference` is what the runbooks use to list this pool's nodes. Taints and labels given at pool creation apply to all nodes in the pool, including nodes added later.
 - **`--workload-metadata=GKE_METADATA`.** Pods reach the GKE metadata server, which is what makes Workload Identity work for the model download ([[gke-workload-identity]]).
 - **`--ephemeral-storage-local-ssd`.** Backs the node's ephemeral storage with local SSD, so an `emptyDir` holding the weights is fast and does not fill the boot disk.
 - **`--min-nodes=0`.** No idle GPUs at night. The cost is a cold start (node creation, driver, image pull, weight load) when traffic comes back; see the autoscaling section for when a floor of one is worth paying for.

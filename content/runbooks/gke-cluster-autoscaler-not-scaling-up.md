@@ -128,11 +128,12 @@ Upstream behaviour worth knowing, with the caveat that GKE may use different val
 gcloud container node-pools list --cluster "$CLUSTER" --location "$LOCATION" \
   --format="table(name,config.machineType,locations.list(),autoscaling.enabled,autoscaling.minNodeCount,autoscaling.maxNodeCount,autoscaling.totalMinNodeCount,autoscaling.totalMaxNodeCount,autoscaling.locationPolicy)"
 
-kubectl get nodes -L pool,topology.kubernetes.io/zone --no-headers \
-  | awk '{print $6, $7}' | sort | uniq -c
+kubectl get nodes --no-headers \
+  -o custom-columns='POOL:.metadata.labels.pool,ZONE:.metadata.labels.topology\.kubernetes\.io/zone' \
+  | sort | uniq -c
 ```
 
-Adjust the `awk` columns if your `kubectl get nodes` output has a different number of columns. Points that trip people up:
+A node without the `pool` label shows `<none>` in that column instead of shifting the others. Points that trip people up:
 
 - `--min-nodes` and `--max-nodes` are **per zone**. A regional pool in three zones with `--max-nodes=5` stops at 15 nodes, and at 5 in a zone where the other two cannot take the Pod (for example a zonal disk). `--total-min-nodes` and `--total-max-nodes` set the limit for the whole pool instead; the two styles are mutually exclusive.
 - `--location-policy` is `BALANCED` (best-effort balance across zones) or `ANY` (prefer unused reservations and lower Spot preemption risk). Which one is the default for your pool type is **not verified**; read it from the describe output above.
@@ -331,14 +332,18 @@ resource "google_container_node_pool" "general" {
 }
 ```
 
-In an outage the `gcloud` equivalent is below. `--node-labels` on `update` replaces all user-specified labels of the pool, so list the existing ones first and repeat them.
+Avoid relabelling a pool in the middle of an outage: the change is applied to the live nodes, and `--node-labels` on `update` replaces all user-set labels of the pool, so a label that workloads select on is removed unless you pass it again. If you must, read the current labels first and pass every one of them together with `pool`:
 
 ```bash
+# 1. The labels the pool has now
+gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
+  --format="yaml(config.labels)"
+# 2. All of them again, plus pool. Example for a pool that already had capacity=spot:
 gcloud container node-pools update "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
-  --node-labels=pool="$POOL"
+  --node-labels=capacity=spot,pool="$POOL"
 ```
 
-Pods then select the pool with `nodeSelector: {pool: general}` (or node affinity on `pool`). If a pool does not carry the label yet, list the labels its nodes actually have with `kubectl get nodes --show-labels`, and label the pool with the command above before relying on `-l pool="$POOL"` or the `pool` column.
+Pods then select the pool with `nodeSelector: {pool: general}` (or node affinity on `pool`). If a pool does not carry the label yet, list the labels its nodes actually have with `kubectl get nodes --show-labels`, and label the pool as above, with all its existing labels, before relying on `-l pool="$POOL"` or the `pool` column.
 
 | Blocker                                 | How to see it                                                                                            | Fix                                                                                                                                             |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |

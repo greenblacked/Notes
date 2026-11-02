@@ -51,30 +51,31 @@ POOL="gpu-inference"        # change: the GPU node pool
 gcloud container node-pools update "$POOL" \
   --cluster="$CLUSTER" \
   --location="$LOCATION" \
-  --node-labels=pool=gpu-inference,gpu-sharing=exclusive
+  --node-labels=workload=llm-inference,pool=gpu-inference,gpu-sharing=exclusive
 
 gcloud container node-pools update "$POOL" \
   --cluster="$CLUSTER" \
   --location="$LOCATION" \
-  --node-taints=dedicated=gpu:NoSchedule
+  --node-taints=dedicated=llm-inference:NoSchedule
 ```
 
 ```hcl title="gpu-pool-node-config.tf (fragment)"
 node_config {
   labels = {
+    workload    = "llm-inference"
     pool        = "gpu-inference"
     gpu-sharing = "exclusive"
   }
 
   taint {
     key    = "dedicated"
-    value  = "gpu"
+    value  = "llm-inference"
     effect = "NO_SCHEDULE"
   }
 }
 ```
 
-`update` takes labels and taints in separate commands, and each replaces the pool's whole set of that kind, so list every label and every taint the pool should keep. Check what the nodes actually carry with `kubectl get nodes --show-labels` before relying on a selector.
+`update` takes labels and taints in separate commands, and each replaces the pool's whole set of that kind, so list every label and every taint the pool should keep. The labels and taint here match the serving pool built in [[self-hosted-llm-inference-on-gke]]; run the commands against that pool only with all of them, or its serving pods stop scheduling. Check what the nodes actually carry with `kubectl get nodes --show-labels` before relying on a selector.
 
 ```yaml title="inference-deployment.yaml"
 apiVersion: apps/v1
@@ -99,7 +100,7 @@ spec:
       tolerations:
         - key: dedicated
           operator: Equal
-          value: gpu
+          value: llm-inference
           effect: NoSchedule
       containers:
         - name: server
