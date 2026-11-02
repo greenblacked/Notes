@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - reliability
 created: 2026-11-01
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -50,6 +50,7 @@ PROJECT=example-project
 CLUSTER=prod-gke
 LOCATION=europe-west1
 NS=llm-serving
+POOL=gpu-inference   # the value of the pool label your platform sets on the GPU node pool
 DEPLOY=vllm-llama-8b
 APP_LABEL=app=llm-server
 CONTAINER=vllm   # the model server container name in the pod
@@ -112,10 +113,13 @@ Kubernetes records `OOMKilled` when the kernel's OOM killer ended a process in t
 If you are unsure which GPU you have, read it from the node. For a pod that is not running (crash loop), `exec` fails because no container is running, so use node-level views; they also show other GPU consumers on the node:
 
 ```bash
-kubectl get node "$NODE" -L cloud.google.com/gke-accelerator
+kubectl get node "$NODE" -L pool,node.kubernetes.io/instance-type
+kubectl get nodes -l pool="$POOL"
 kubectl get pods -A -o wide --field-selector spec.nodeName="$NODE"
 kubectl describe node "$NODE" | grep nvidia.com/gpu
 ```
+
+`pool` is a label the operator sets on the GPU node pool, with `--node-labels=pool=gpu-inference` on `gcloud container node-pools create` or `update` (or `labels` in the Terraform `node_config`); the GPU pool is also tainted with `dedicated=gpu:NoSchedule`, which the serving pods tolerate. The machine type in the last column (`INSTANCE-TYPE`) tells you the GPU family. If the pool column is empty, list the labels the nodes actually have with `kubectl get nodes --show-labels`, and label the pool with `gcloud container node-pools update ... --node-labels` before relying on the selector; `update` replaces all user-specified labels, so repeat the ones the pool already has.
 
 Only for a pod that is currently `Running`, and if `nvidia-smi` is present in the image, you can also run `kubectl -n "$NS" exec "$POD" -c "$CONTAINER" -- nvidia-smi`; it shows only that pod's own GPU view, not a time-sliced co-tenant.
 
@@ -354,6 +358,9 @@ Run the load that failed (a replay of the peak, or a load test through the gatew
 - [Parallelism and Scaling - vLLM](https://docs.vllm.ai/en/latest/serving/parallelism_scaling/): the `GPU KV cache size` and `Maximum concurrency` log lines and their meaning; tensor parallel size for a single node. Checked 2026-11-01, commit 8530a77.
 - [Using Kubernetes - vLLM](https://docs.vllm.ai/en/latest/deployment/k8s/): `/dev/shm` as a memory-backed `emptyDir` for tensor parallel inference, `nvidia.com/gpu` limits, `/health` probes, and the startup probe failure that kills the container with `KeyboardInterrupt: terminated` in the log. Checked 2026-11-01, commit 8530a77.
 - [Weight transfer - vLLM](https://docs.vllm.ai/en/latest/training/weight_transfer/sharded_rdt/): NCCL and NIXL internals do not count against `gpu_memory_utilization`. [Troubleshooting - vLLM](https://docs.vllm.ai/en/latest/usage/troubleshooting/): model load can use a lot of host RAM; `VLLM_LOG_STATS_INTERVAL`. [Quantized KV Cache - vLLM](https://docs.vllm.ai/en/latest/features/quantization/quantized_kvcache/): `--kv-cache-dtype fp8`. [Data Parallel Deployment - vLLM](https://docs.vllm.ai/en/latest/serving/data_parallel_deployment/): `--max-num-queued-reqs` and `--max-num-queued-tokens`, counted across all in-flight requests. [Per-request metrics - vLLM](https://docs.vllm.ai/en/latest/features/per_request_metrics/): server-side statistics logging is on by default and is turned off by `--disable-log-stats`. Checked 2026-11-01, commit 8530a77.
+- `gcloud container node-pools create --help` and `update --help` (Google Cloud SDK 570.0.0): `--node-labels` and `--node-taints` apply Kubernetes labels and taints to the nodes of a pool, `update` replaces all user-specified labels. Checked 2026-11-02 (help text only).
+- [Terraform google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster): `node_config` `labels` and the `taint` block (`key`, `value`, `effect` `NO_SCHEDULE`). Checked 2026-11-02, commit c4248bd.
+- [Taints and Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) and [Assigning Pods to Nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): `NoSchedule` taints and tolerations, `nodeSelector` on node labels. Checked 2026-11-02, commit 491f14e.
 - [Resource Management for Pods and Containers | Kubernetes](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/): memory limits enforced by kernel OOM kills; pages in memory-backed volumes and `tmpfs` `emptyDir` count as container memory. [Assign Memory Resources to Containers and Pods](https://kubernetes.io/docs/tasks/configure-pod-container/assign-memory-resource/): `OOMKilled` reason and exit code 137 in the container's last state. [Node-pressure Eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/): node OOM behaviour and `oom_score_adj` by QoS class. [Volumes](https://kubernetes.io/docs/concepts/storage/volumes/): `emptyDir.medium: Memory`. [Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/): `rollout history`, `undo`, `status`. [Nodes](https://kubernetes.io/docs/concepts/architecture/nodes/): `kubectl cordon`. Checked 2026-11-01, Kubernetes website repository commit 491f14e.
 
 ### Not verified

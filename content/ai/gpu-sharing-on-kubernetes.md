@@ -8,14 +8,14 @@ tags:
   - gke
   - reliability
 created: 2026-11-01
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
 ---
 
 This note covers how to share GPUs between inference workloads on Kubernetes and GKE: whole-GPU allocation, time-slicing and hardware partitioning, the device plugin resource names that expose them, scheduling and quotas, monitoring, and the cases where sharing is unsafe. It is for platform and ML-serving engineers who own GPU node pools and decide how tenants consume them. It does not cover tenant isolation at the model, cache and data layers ([[multi-tenant-inference-isolation]]), cost and utilisation tuning inside a serving engine ([[gpu-utilization-and-serving-efficiency]]), autoscaling signals ([[llm-serving-autoscaling-signals]]), KV cache sizing ([[kv-cache-capacity-and-paging]]) or building a dedicated GPU serving stack on GKE ([[self-hosted-llm-inference-on-gke]]).
 
 > [!note] Not verified
-> The Kubernetes and serving-engine claims were read in local copies of the documentation, not on the live sites. GKE and GPU-vendor documentation could not be checked at all. Before relying on this note, check: how your GPU vendor's device plugin configures time-slicing and whether replicas get separate memory; which partition profiles and machine types your GKE version supports; GKE-specific quota names and GPU metric exposure; the feature-gate state of Dynamic Resource Allocation on your cluster version; and any latency numbers, which must be measured in your own environment.
+> The Kubernetes, gcloud and Terraform claims were read in local copies of the documentation and help text, not on the live sites. GPU-vendor documentation and GKE concept pages could not be checked at all. Before relying on this note, check: how your GPU vendor's device plugin configures time-slicing and whether replicas get separate memory; which partition profiles and machine types your GKE version supports; GKE-specific quota names and GPU metric exposure; the feature-gate state of Dynamic Resource Allocation on your cluster version; and any latency numbers, which must be measured in your own environment.
 
 ## The three modes
 
@@ -35,7 +35,46 @@ Rules that the core scheduler applies:
 
 - GPUs go in `limits`. If you also set `requests`, they must equal `limits`; `requests` alone is rejected.
 - Node selection is a separate decision. Use labels, node affinity or Node Feature Discovery to pick the GPU class, because the resource name does not say which model or partition size you get.
-- GKE-specific node pool options for sharing are unverified here. [[self-hosted-llm-inference-on-gke]] lists the flag names it read (`gpu-sharing-strategy`, `gpu-partition-size`); take their meaning from the current GKE documentation.
+- GKE-specific node pool options for enabling sharing are not covered here; take them from the current GKE documentation. What this note relies on is the label and taint you set yourself, shown next.
+
+The node pool carries a label and a taint that you set when you create it or update it. On GKE Standard, `gcloud container node-pools create` takes `--node-labels` and `--node-taints` together, while `update` takes them in separate commands; in Terraform the same go in the pool's `node_config` as `labels` and a `taint` block. Pods then select the label with `nodeSelector` and tolerate the taint, as in the Deployment below.
+
+```bash title="label-and-taint-gpu-pool.sh"
+set -euo pipefail
+
+CLUSTER="example-cluster"   # change: your GKE Standard cluster
+LOCATION="europe-west4"     # change: the cluster's region
+POOL="gpu-inference"        # change: the GPU node pool
+
+# Each call replaces that kind of setting on the pool; update accepts
+# only one of these flags per call.
+gcloud container node-pools update "$POOL" \
+  --cluster="$CLUSTER" \
+  --location="$LOCATION" \
+  --node-labels=pool=gpu-inference,gpu-sharing=exclusive
+
+gcloud container node-pools update "$POOL" \
+  --cluster="$CLUSTER" \
+  --location="$LOCATION" \
+  --node-taints=dedicated=gpu:NoSchedule
+```
+
+```hcl title="gpu-pool-node-config.tf (fragment)"
+node_config {
+  labels = {
+    pool        = "gpu-inference"
+    gpu-sharing = "exclusive"
+  }
+
+  taint {
+    key    = "dedicated"
+    value  = "gpu"
+    effect = "NO_SCHEDULE"
+  }
+}
+```
+
+`update` takes labels and taints in separate commands, and each replaces the pool's whole set of that kind, so list every label and every taint the pool should keep. Check what the nodes actually carry with `kubectl get nodes --show-labels` before relying on a selector.
 
 ```yaml title="inference-deployment.yaml"
 apiVersion: apps/v1
@@ -55,10 +94,12 @@ spec:
     spec:
       automountServiceAccountToken: false
       nodeSelector:
-        gpu-sharing: exclusive # a label your platform team defines per node pool
+        pool: gpu-inference # labels your platform team sets per node pool
+        gpu-sharing: exclusive
       tolerations:
-        - key: nvidia.com/gpu
-          operator: Exists
+        - key: dedicated
+          operator: Equal
+          value: gpu
           effect: NoSchedule
       containers:
         - name: server
@@ -176,6 +217,9 @@ The default for regulated or cross-tenant work is a whole GPU per tenant or a re
 ## Sources
 
 - [Kubernetes: Schedule GPUs](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/): backs `limits` and `requests` rules and node selection for GPU type.
+- [Kubernetes: Taints and Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) and [Assigning Pods to Nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): back the `NoSchedule` taint, a toleration with `operator: Equal` matching key, value and effect, and `nodeSelector` on node labels. Checked 2026-11-02 (commit 491f14e).
+- `gcloud container node-pools create --help` and `update --help` (Google Cloud SDK 570.0.0): back `--node-labels` and `--node-taints`, the `key=value:NoSchedule` format, and that `update` accepts only one of them per call and replaces all user-specified labels or taints. Checked 2026-11-02 (help text only).
+- [Terraform google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster): backs `node_config` `labels` and the `taint` block with `key`, `value` and `effect` (`NO_SCHEDULE`). Checked 2026-11-02 (commit c4248bd).
 - [Kubernetes: Resource Quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/): backs `requests.`-only quota for extended resources.
 - [Kubernetes: Device Plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/): backs resource naming, integer-only extended resources, unhealthy devices and plugin re-registration after kubelet restarts.
 - [Kubernetes: Multi-tenancy](https://kubernetes.io/docs/concepts/security/multi-tenancy/): backs hard versus soft tenancy and data-plane isolation concerns.

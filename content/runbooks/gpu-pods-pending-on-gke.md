@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - reliability
 created: 2026-11-01
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -49,6 +49,7 @@ ZONE=europe-west1-b            # a zone where the GPU pool runs
 NS=llm-serving
 POD=llm-chat-7d9c6b6f4-abcde
 POOL=gpu-inference
+POOL_LABEL="pool=$POOL"          # label the operator sets on the pool's nodes
 GPU_TYPE=nvidia-l4             # a name from: gcloud compute accelerator-types list
 DEPLOY=llm-chat
 APP_LABEL='app=llm-chat'
@@ -116,7 +117,7 @@ Also rule out two non-capacity causes: an unbound PersistentVolumeClaim (`kubect
 
 ```bash
 # Every node that has an accelerator, with what it advertises
-kubectl get nodes -o custom-columns='NODE:.metadata.name,POOL:.metadata.labels.cloud\.google\.com/gke-nodepool,ZONE:.metadata.labels.topology\.kubernetes\.io/zone,GPU_CAP:.status.capacity.nvidia\.com/gpu,GPU_ALLOC:.status.allocatable.nvidia\.com/gpu,TAINTS:.spec.taints[*].key'
+kubectl get nodes -o custom-columns='NODE:.metadata.name,POOL:.metadata.labels.pool,ZONE:.metadata.labels.topology\.kubernetes\.io/zone,GPU_CAP:.status.capacity.nvidia\.com/gpu,GPU_ALLOC:.status.allocatable.nvidia\.com/gpu,TAINTS:.spec.taints[*].key'
 
 # What is using them
 kubectl get pods -A -o json | jq -r '
@@ -130,7 +131,7 @@ gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$L
   --format="yaml(name,config.machineType,config.accelerators,config.spot,config.taints,config.labels,locations,autoscaling,status)"
 ```
 
-Expected on a healthy pool: each GPU node shows the same non-empty `GPU_CAP` and `GPU_ALLOC`, and the second command lists the Pods that hold them. If every GPU is allocated, the cluster is simply full: go to step 6. If the node pool list is empty, or shows no `config.accelerators`, go to step 3. If `GPU_CAP` is empty or `GPU_ALLOC` is `0` on a node of the GPU pool, go to step 4.
+Expected on a healthy pool: each GPU node shows the same non-empty `GPU_CAP` and `GPU_ALLOC`, and the second command lists the Pods that hold them. If every GPU is allocated, the cluster is simply full: go to step 6. If the node pool list is empty, or shows no `config.accelerators`, go to step 3. If `GPU_CAP` is empty or `GPU_ALLOC` is `0` on a node of the GPU pool, go to step 4. The commands below select the pool's nodes with `$POOL_LABEL`; if the pool does not carry that label yet, list the labels the nodes actually have with `kubectl get nodes --show-labels`, and adjust `$POOL_LABEL` to match before relying on the selector.
 
 ### 3. Check the accelerator, the taint and the toleration
 
@@ -141,10 +142,10 @@ gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$L
   --format="yaml(config.accelerators,config.taints)"
 ```
 
-Read the taints from this output, not from memory. Whether GKE adds its own `nvidia.com/gpu` taint to GPU pools, and whether it adds a matching toleration to Pods that request GPUs, is **not verified** here. The Kubernetes documentation describes the general mechanism: taint the nodes with the extended resource name, and the `ExtendedResourceToleration` admission controller adds the matching toleration to Pods that request that resource. Upstream, that controller is disabled by default (admission controllers reference); whether GKE turns it on is **not verified**, so unless it does, the Pod needs an explicit toleration. So compare the node taints with the Pod's tolerations directly:
+Read the taints from this output, not from memory: whatever taints the nodes carry, the Pod must tolerate each one. Compare the node taints with the Pod's tolerations directly:
 
 ```bash
-kubectl get nodes -l cloud.google.com/gke-nodepool="$POOL" -o json \
+kubectl get nodes -l "$POOL_LABEL" -o json \
   | jq '.items[0].spec.taints'
 kubectl -n "$NS" get pod "$POD" -o json | jq '.spec.tolerations'
 ```
@@ -159,9 +160,6 @@ spec:
         - key: dedicated
           operator: Equal
           value: llm-inference
-          effect: NoSchedule
-        - key: nvidia.com/gpu
-          operator: Exists
           effect: NoSchedule
       containers:
         - name: server
@@ -181,18 +179,18 @@ gcloud container node-pools create gpu-inference-2 \
   --machine-type "$MACHINE_TYPE" \
   --accelerator "type=${GPU_TYPE},count=1,gpu-driver-version=default" \
   --node-taints "dedicated=llm-inference:NoSchedule" \
-  --node-labels "workload=llm-inference" \
+  --node-labels "workload=llm-inference,pool=gpu-inference-2" \
   --num-nodes 1 --enable-autoscaling --min-nodes 0 --max-nodes 2
 ```
 
 `--num-nodes` is set because gcloud otherwise defaults to 3 nodes per zone, above `--max-nodes`. Then validate the pool before moving any Pods to it. A healthy node shows `READY=True` and a non-empty `GPU_ALLOC`:
 
 ```bash
-kubectl get nodes -l cloud.google.com/gke-nodepool=gpu-inference-2 \
+kubectl get nodes -l pool=gpu-inference-2 \
   -o custom-columns='NODE:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status,GPU_ALLOC:.status.allocatable.nvidia\.com/gpu'
 ```
 
-The new pool has a new name, so a Deployment that selects `cloud.google.com/gke-nodepool=gpu-inference` never lands on it. Select on `workload=llm-inference` instead and confirm the Deployment's nodeSelector and affinity match the new pool's labels.
+The new pool has a new name, so a Deployment that selects `pool=gpu-inference` never lands on it. Select on `workload=llm-inference` instead and confirm the Deployment's nodeSelector and affinity match the new pool's labels.
 
 Write the same pool into Terraform right after, with an owner and a removal date for the old one. Which machine types go with which GPU types is **not verified**; the node pool create call rejects an invalid pair.
 
@@ -210,7 +208,7 @@ gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$L
 The `--accelerator` flag takes `gpu-driver-version` with these values (from the `gcloud` help): `default` installs the default driver for the GKE version; `latest` installs the newest available for that version and works only on Container-Optimized OS; `disabled` skips installation, and you must install a driver yourself. The help says `default` is the default from GKE 1.30.1-gke.1156000, and `disabled` was the default before that, so a pool created on an older version may have no driver at all. The provider docs say the same (`GPU_DRIVER_VERSION_UNSPECIFIED` installs the default driver; before GKE `1.30.1-gke.1156000` no driver is installed; `LATEST` is COS only). How the installation status shows up in the output above is **not verified**.
 
 ```bash
-NODE=$(kubectl get nodes -l cloud.google.com/gke-nodepool="$POOL" -o name | head -1)
+NODE=$(kubectl get nodes -l "$POOL_LABEL" -o name | head -1)
 kubectl describe "$NODE" | sed -n '/Capacity:/,/System Info:/p'
 kubectl get pods -A -o wide --field-selector spec.nodeName="${NODE#node/}" \
   | grep -iE 'nvidia|gpu|device-plugin'
@@ -251,14 +249,14 @@ If one node differs from the rest of the pool, treat it as a node fault: cordon 
 
 ### 5. Check the node selector and the accelerator label
 
-A Pod that selects a GPU type needs a node label that exists. The Kubernetes "Schedule GPUs" page shows the generic approach: label nodes by accelerator type, then select on that label from the Pod; the label key in its example is only an example. What labels GKE puts on GPU nodes, and whether `cloud.google.com/gke-accelerator` is one of them, is **not verified**: the `gcloud` help and the provider documentation available for this review do not show it. List what your nodes carry and select on that:
+A Pod that selects a GPU type needs a node label that exists. The Kubernetes "Schedule GPUs" page shows the generic approach: label nodes by accelerator type, then select on that label from the Pod; the label key in its example is only an example. Select on a label you set yourself on the pool, and list what your nodes actually carry before you rely on it:
 
 ```bash
-kubectl get nodes -l cloud.google.com/gke-nodepool="$POOL" --show-labels | tr ',' '\n' | sort -u | grep -iE 'accel|gpu|pool|zone'
+kubectl get nodes -l "$POOL_LABEL" --show-labels | tr ',' '\n' | sort -u | grep -iE 'accel|gpu|pool|zone'
 kubectl -n "$NS" get pod "$POD" -o jsonpath='{.spec.nodeSelector}{"\n"}{.spec.affinity.nodeAffinity}{"\n"}'
 ```
 
-If the selector asks for a label no node has (a typo, a value that differs by one character, or a label from another cloud), correct the Deployment. A label you set yourself with `--node-labels` is under your control and does not depend on GKE; for example `workload=llm-inference`, set on the pool in Terraform and selected on in the Pod, survives a pool re-creation. The `gcloud` help for `node-pools update --node-labels` says labels are applied to existing nodes in place and to new nodes.
+If the selector asks for a label no node has (a typo, a value that differs by one character, or a label from another cloud), correct the Deployment. A label you set yourself with `--node-labels` is under your control; for example `workload=llm-inference`, set on the pool in Terraform and selected on in the Pod, survives a pool re-creation. The `gcloud` help for `node-pools update --node-labels` says the labels are applied to existing nodes in place, and that the flag replaces all user-set labels on the pool, so pass the existing ones again when you add one.
 
 ### 6. No GPU is free and none can be created: capacity
 
@@ -317,7 +315,7 @@ With GPU sharing, one physical GPU appears as several schedulable units. That ch
 ```bash
 gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
   --format="yaml(config.accelerators)"
-kubectl get nodes -l cloud.google.com/gke-nodepool="$POOL" \
+kubectl get nodes -l "$POOL_LABEL" \
   -o custom-columns='NODE:.metadata.name,GPU_CAP:.status.capacity.nvidia\.com/gpu,GPU_ALLOC:.status.allocatable.nvidia\.com/gpu'
 ```
 
@@ -356,8 +354,8 @@ The `gcloud container node-pools create` help also lists `--flex-start` and `--e
 ```bash
 kubectl -n "$NS" get pod "$POD" -o wide                                  # Running, on a GPU node, Ready
 kubectl -n "$NS" get pods -l "$APP_LABEL"                                # all replicas Ready
-kubectl get nodes -L cloud.google.com/gke-nodepool                       # new GPU nodes Ready
-kubectl get nodes -l cloud.google.com/gke-nodepool="$POOL" \
+kubectl get nodes -L pool                                                  # new GPU nodes Ready
+kubectl get nodes -l "$POOL_LABEL" \
   -o custom-columns='NODE:.metadata.name,GPU_ALLOC:.status.allocatable.nvidia\.com/gpu'   # non-empty on every node
 kubectl get pods -A --field-selector=status.phase=Pending -o json | jq '.items | length'  # back to the usual level
 
@@ -390,7 +388,7 @@ Then check the service, not only the Pod: run one request through the gateway an
   Use the values from `strategy-before.json` if they differ from 25%; `rollout undo` reverts only the Pod template. If Argo CD manages the Deployment, revert the Git commit instead, and re-enable auto-sync and self-heal if you turned them off. Undoing a rollout that stalled for lack of GPUs does not need any capacity.
 
 - **Scaled-down batch workloads:** restore the replica counts saved in `batch-replicas.txt`.
-- **A new node pool:** if it is the fix (it replaced a broken pool in step 3 or 4), this is not a rollback; deleting it removes your only working GPU capacity. Otherwise confirm the serving Pods are Ready on another pool with free GPU allocatable, then `kubectl cordon -l cloud.google.com/gke-nodepool=gpu-inference-2` and `kubectl drain -l cloud.google.com/gke-nodepool=gpu-inference-2 --ignore-daemonsets --delete-emptydir-data --timeout=10m`, wait for Pods to move, then delete the pool: `gcloud container node-pools delete gpu-inference-2 --cluster "$CLUSTER" --location "$LOCATION"`. Deleting a pool deletes its nodes and any data on local disks; weights should live in object storage or a persistent volume. Remove the pool from Terraform at the same time.
+- **A new node pool:** if it is the fix (it replaced a broken pool in step 3 or 4), this is not a rollback; deleting it removes your only working GPU capacity. Otherwise confirm the serving Pods are Ready on another pool with free GPU allocatable, then `kubectl cordon -l pool=gpu-inference-2` and `kubectl drain -l pool=gpu-inference-2 --ignore-daemonsets --delete-emptydir-data --timeout=10m`, wait for Pods to move, then delete the pool: `gcloud container node-pools delete gpu-inference-2 --cluster "$CLUSTER" --location "$LOCATION"`. Deleting a pool deletes its nodes and any data on local disks; weights should live in object storage or a persistent volume. Remove the pool from Terraform at the same time.
 - **Raised maximums or an on-demand fallback pool:** revert in Terraform. Lowering a maximum below the current size lets the autoscaler scale down over time; it does not delete nodes at once. An on-demand fallback raises cost until it is removed.
 - **A reservation or a quota increase:** a reservation is billed whether or not it is used; deleting it releases the capacity and may not be recoverable in a stocked-out zone. A granted quota increase is not normally rolled back; how to reduce one is **not verified**.
 - **Gone for good:** a Spot node that was reclaimed, a deleted GPU node (it may not be replaced during a stockout or once quota is used), and the GPU capacity you held on it. A zone that stocked out may not give the capacity back when you want it, so do not delete a working GPU pool to "re-create it cleanly" unless you have capacity lined up.
@@ -441,6 +439,8 @@ Source-reviewed on 2026-11-01. Nothing was run and no cluster or Google Cloud pr
 - [Resource Management for Pods and Containers | Kubernetes](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/): the API server restricts quantities of extended resources to whole numbers. Checked 2026-11-01, commit 491f14e.
 - [Admission Controllers Reference | Kubernetes](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/): `ExtendedResourceToleration` is disabled by default. Checked 2026-11-01, commit 491f14e.
 - Terraform provider for Google docs, commit c4248bd, `container_cluster.html.markdown` (`guest_accelerator` block; `type`, `count` and `gpu_partition_size` changes re-create the pool while `gpu_driver_installation_config` and `gpu_sharing_config` update in place; driver modes and the pre-1.30.1-gke.1156000 default; sharing strategies `TIME_SHARING` and `MPS`; `max_shared_clients_per_gpu`; `cluster_autoscaling.resource_limits`) and `container_node_pool.html.markdown` (autoscaling `max_node_count` per zone, `total_max_node_count`, `reservation_affinity`).
+- `gcloud container node-pools create --help` and `update --help` (SDK 570.0.0, checked 2026-11-02): `--node-labels` replaces all user-set Kubernetes labels on the pool's nodes and applies them in place on existing nodes for `update`, and the labels can be used in `nodeSelector`.
+- [Assigning Pods to Nodes | Kubernetes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): `nodeSelector` matches node labels. Checked 2026-11-02, commit 491f14e.
 - `gcloud` built-in help, SDK 570.0.0, checked 2026-11-01: `container node-pools create` and `update` (`--accelerator` with `type`, `count`, `gpu-driver-version` values `default`, `latest` and `disabled` and their stated defaults, `gpu-partition-size`, `gpu-sharing-strategy`, `max-shared-clients-per-gpu`; `--node-taints`, `--node-labels`, `--node-locations`, `--spot`, `--enable-autoscaling`, `--max-nodes` per zone, `--total-max-nodes`, `--reservation`, `--reservation-affinity`, `--flex-start`, `--enable-queued-provisioning`), `compute accelerator-types list` (zone filter), `compute regions describe`, `compute reservations list`, `compute instance-groups managed list-errors` (names the `compute.instanceGroupManagers.list` permission and Compute Viewer role), `container clusters update` (`--max-accelerator`).
 
 ### Not verified
@@ -450,7 +450,6 @@ Source-reviewed on 2026-11-01. Nothing was run and no cluster or Google Cloud pr
 - The permission names `container.clusters.get`, `compute.regions.get` and `logging.logEntries.list`, and the exact permissions for node pool changes.
 - That node auto-provisioning will not create a GPU pool without an accelerator resource limit.
 - Whether an in-place update of driver or sharing settings replaces the nodes.
-- The labels GKE puts on GPU nodes, including whether `cloud.google.com/gke-accelerator` exists and what its value is; the note tells the reader to list node labels instead.
 - GPU quota metric names and how Spot or preemptible GPU quota is counted, whether a global GPU quota also applies, and the `GPU` filter in the quota command.
 - The error codes and message text for a GPU stockout or quota failure in the managed instance group; the two codes borrowed from the autoscaler runbook are not confirmed for GPUs.
 - How GKE reports driver installation status, the names of the driver and device plugin DaemonSets, and whether a driver version or node image combination is rejected.

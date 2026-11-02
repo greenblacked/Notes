@@ -10,17 +10,17 @@ tags:
   - reliability
   - cost
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-02
 draft: false
 ---
 
 This note describes how to run scheduled and batch work on GCP: which of the three common platforms to choose, how to configure each so runs neither overlap nor go missing silently, how to make re-runs safe, and how to monitor freshness rather than only failures. It is for platform and service teams that own nightly exports, reconciliations, report builds, clean-ups and fan-out processing. Event-triggered work is in [[architecture/pubsub-event-driven-messaging]]; how alerts reach the on-call team is in [[architecture/alerting-and-paging-pipeline]]; host-level cron and systemd timers are taught in [[learn/linux-services-packages-and-scheduled-jobs]]. The field-by-field Job and CronJob baseline is in [[patterns/kubernetes-jobs-and-cronjobs]], and the rules every scheduled job must meet are in [[standards/scheduled-jobs-standard]].
 
 > [!info] Scope and sources
-> Written against the Kubernetes CronJob and Job documentation, the kube-state-metrics metric reference and the Google API definitions (protos) for Cloud Run jobs, Cloud Scheduler and Batch, read on 2026-10-21. Not checked against the Google Cloud product pages and the `gcloud` reference, so behaviour documented only there is hedged; verify there.
+> Written against the Kubernetes CronJob and Job documentation, the kube-state-metrics metric reference and the Google API definitions (protos) for Cloud Run jobs, Cloud Scheduler and Batch, read on 2026-10-21. The Spot node label and taint used below are ones you set on the node pool; the `gcloud` flags for them were checked against `gcloud` help (SDK 570.0.0) and the Kubernetes documentation source on 2026-11-02. Otherwise not checked against the Google Cloud product pages and the `gcloud` reference, so behaviour documented only there is hedged; verify there.
 
 > [!note] Not verified
-> Nothing here was run. Check before relying on it: every quota and maximum (task timeout, task count, parallelism, job duration) for Cloud Run jobs and Batch; pricing and scale-to-zero claims; all `gcloud` flags shown (use `--help`); the IAM roles that let Cloud Scheduler run a Cloud Run job and that Batch needs; GKE Spot node labels and taints and Autopilot behaviour for Jobs; how cluster autoscaling evicts Job pods; the feature state of `podFailurePolicy` on your Kubernetes version; daylight saving behaviour of `.spec.timeZone`; and the Batch JSON field spellings.
+> Nothing here was run. Check before relying on it: every quota and maximum (task timeout, task count, parallelism, job duration) for Cloud Run jobs and Batch; pricing and scale-to-zero claims; all `gcloud` flags shown other than `--node-labels` and `--node-taints` (use `--help`); the IAM roles that let Cloud Scheduler run a Cloud Run job and that Batch needs; Autopilot behaviour for Jobs; how cluster autoscaling evicts Job pods; the feature state of `podFailurePolicy` on your Kubernetes version; daylight saving behaviour of `.spec.timeZone`; and the Batch JSON field spellings.
 
 ## Workload classes
 
@@ -109,11 +109,11 @@ spec:
           restartPolicy: Never # required by podFailurePolicy
           priorityClassName: batch
           nodeSelector:
-            cloud.google.com/gke-spot: "true" # change: check the Spot label for your cluster mode
-          tolerations: # change: match the taint on your Spot nodes, if any
-            - key: cloud.google.com/gke-spot
+            capacity: spot # change: the label you set on your Spot node pool
+          tolerations: # change: match the taint you set on your Spot node pool
+            - key: capacity
               operator: Equal
-              value: "true"
+              value: spot
               effect: NoSchedule
           containers:
             - name: export
@@ -136,6 +136,25 @@ Why each setting:
 
 > [!warning] Long jobs on autoscaled nodes
 > Cluster autoscaling and node upgrades evict pods when they consolidate or drain nodes. A two-hour job without checkpoints restarts from zero each time. Keep long jobs on a node pool that is not scaled down aggressively, checkpoint progress, and check how your autoscaler treats Job pods ([[patterns/kubernetes-autoscaling]]). PodDisruptionBudgets help serving workloads ([[patterns/pod-disruption-budgets-for-stateless-services]]) but do not stop Spot preemption.
+
+The Spot pool carries the label and taint because you set them when you create it, not because GKE adds them:
+
+```bash
+set -euo pipefail
+
+PROJECT="team-billing-prod"   # change
+REGION="europe-west1"         # change
+CLUSTER="prod"                # change
+
+gcloud container node-pools create batch-spot \
+  --cluster "$CLUSTER" --location "$REGION" --project "$PROJECT" \
+  --spot \
+  --enable-autoscaling --total-min-nodes 0 --total-max-nodes 20 \
+  --node-labels=capacity=spot,pool=batch-spot \
+  --node-taints=capacity=spot:NoSchedule
+```
+
+On an existing pool, list the labels its nodes actually have with `kubectl get nodes --show-labels`, and label the pool before relying on the `nodeSelector`. `gcloud container node-pools update` with `--node-labels` replaces all user-set labels on the pool, so first read the current ones with `gcloud container node-pools describe batch-spot --cluster "$CLUSTER" --location "$REGION" --format="value(config.labels)"` and pass them again together with the new labels `capacity=spot,pool=batch-spot`.
 
 On Autopilot ([[adr/0018-gke-autopilot-for-new-clusters]]), node selection works through workload requests and compute classes rather than node pools; check the Autopilot docs for Spot Pods and long-running job guidance.
 
@@ -336,6 +355,9 @@ Expected: the manual Job completes and `lastSuccessfulTime` moves; the Cloud Run
 - Execute Cloud Run jobs on a schedule: https://cloud.google.com/run/docs/execute/jobs-on-schedule
 - Cloud Scheduler: https://cloud.google.com/scheduler/docs
 - Batch: https://cloud.google.com/batch/docs/get-started
+- `gcloud container node-pools create --help` and `gcloud container node-pools update --help` (SDK 570.0.0, checked 2026-11-02): `--node-labels=[NODE_LABEL,...]`, `--node-taints=[NODE_TAINT,...]`; on `update`, labels apply to existing nodes in place and replace all user-specified labels.
+- Kubernetes assigning Pods to nodes (`nodeSelector`), commit 491f14e: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+- Kubernetes taints and tolerations (`NoSchedule` and matching toleration), commit 491f14e: https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
 - Google API definitions for Cloud Run v2, Cloud Scheduler v1 and Batch v1: https://github.com/googleapis/googleapis
 
 ## Related
