@@ -56,10 +56,11 @@ No change to other jobs. No Terraform state moves.
 1. Add the IAM binding. Check: `terraform validate` exits 0 and the plan shows 1 add, 0 destroy.
 2. Switch the job to the identity token. Check: pipeline job `billing-sync` is green on the branch.
 3. Remove the key variable. Check: `git grep BILLING_SA_KEY` returns nothing.
+4. After step 3 is released, disable the old key, watch for authentication failures for the agreed period (for example 7 days), then delete it: `gcloud iam service-accounts keys disable 3f9a1c0d7b2e4a65 --iam-account=billing-sync@acme-billing-prod.iam.gserviceaccount.com`, later `gcloud iam service-accounts keys delete 3f9a1c0d7b2e4a65 --iam-account=billing-sync@acme-billing-prod.iam.gserviceaccount.com`. Check: `gcloud iam service-accounts keys list --iam-account=billing-sync@acme-billing-prod.iam.gserviceaccount.com --managed-by=user` no longer lists `3f9a1c0d7b2e4a65` (other user-managed keys may remain).
 
 ## Rollback
 
-Revert the merge commit; the old key is still valid until step 3 is released.
+Revert the merge commit. Before step 4 the old key still works. During the disable window, re-enable it with `gcloud iam service-accounts keys enable 3f9a1c0d7b2e4a65 --iam-account=billing-sync@acme-billing-prod.iam.gserviceaccount.com`. After deletion, rollback needs a new key.
 
 ## Deviations
 
@@ -167,6 +168,7 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI and Git beh
 - The escaped forward slash in the rules pattern `/^agent\//`: the local GitLab docs document `=~ /regex/` and RE2 syntax but never show escaping `/` inside a rules regex.
 - Pinning the CI image by digest and the NIST references (SP 800-218, AI RMF) were not checked; NIST publications were not available.
 - Engineering guidance, not documented claims: when a plan step pays off, the drift heuristics, the metrics to track and the failure modes.
+- The IAM key lifecycle in step 4 of the example plan: the `gcloud iam service-accounts keys disable`, `enable`, `delete` and `list --managed-by=user` commands and flags were confirmed with `gcloud --help` only; the key ID and service account are example values, and nothing was run.
 - Nothing was run, including the drift script and the CI job.
 
 ## Sources

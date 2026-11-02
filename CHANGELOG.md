@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-02
+
+### Changed
+
+- **The 40 high-risk AI notes are source-reviewed**, the ones with runnable commands, configuration, tokens, IAM or security claims, chosen by a risk scan of the unreviewed notes. 71 AI notes now carry checked evidence.
+- **OpenTelemetry GenAI citations** now point at the repository and commit that were actually read, including in earlier notes and runbooks.
+
+### Fixed
+
+- **CI tokens and variables:** a CI job token carries the permissions of the user who started the job, and a fork merge request pipeline run in the parent project gets all of its CI/CD variables; the notes no longer understate either.
+- **Plan-first agent workflows:** the example key-to-workload-identity plan now disables and then deletes the old service account key instead of only removing the CI variable, which left the key valid.
+- **LLM-assisted Terraform plan review:** the `plan` job now runs in merge request pipelines, so the review job that needs it no longer stops the pipeline from starting, and the comment token is given the Reporter role instead of the Maintainer default.
+- **Incident regression CI gate:** runs in merge request, default-branch and scheduled pipelines again.
+- **Quality regression runbook:** the Git revert path can no longer run against an empty configuration directory on the fast rollback path.
+- **Token spend runbook:** the preconditions now include read access to the caller's namespace, which the evidence capture needs before the caller is scaled to zero.
+- **Scheduled agent jobs:** turning the GitLab kill switch off no longer silences the heartbeat and pages on-call.
+- **Browser test:** the link preview theme-switch test now times the diagram lock itself; the old version passed with the bug present and failed on loaded runners.
+
 ## [0.15.0] - 2026-11-02
 
 ### Changed

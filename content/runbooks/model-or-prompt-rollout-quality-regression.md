@@ -53,6 +53,7 @@ BEFORE_START="2026-10-30T00:00:00Z"        # start of the known-good comparison 
 BEFORE_END="2026-10-31T00:00:00Z"
 REVISION=41                                # Helm revision to roll back to, from "helm history"
 CONFIG_REPO=git@git.example.com:ai/gateway-config.git
+CONFIG_DIR=$(mktemp -d) && git clone --quiet "$CONFIG_REPO" "$CONFIG_DIR"   # local clone used by Step 2 and Path C
 BAD_COMMIT=abc1234                         # the configuration commit to revert
 REDIS_HOST=cache.example.internal          # only if you purge a Redis response cache
 CACHE_PREFIX='chat:answer:prompt-v27:*'    # key pattern of the affected entries
@@ -126,7 +127,6 @@ kubectl -n "$NS" rollout history deployment/"$APP"
 
 # The live configuration, and who last changed it
 kubectl -n "$NS" get configmap "$GATEWAY_CONFIG" -o yaml | grep -E 'model|prompt|temperature|top_p|max_tokens|seed|guardrail|fallback'
-CONFIG_DIR=$(mktemp -d) && git clone --quiet "$CONFIG_REPO" "$CONFIG_DIR"
 git -C "$CONFIG_DIR" log --since="3 days ago" --format='%h %an %ad %s' --date=iso -- gateway/
 
 # Prompt and system-instruction history
@@ -215,6 +215,7 @@ kubectl -n "$NS" rollout resume deployment/"$APP"
 kubectl -n "$NS" rollout undo deployment/"$APP"
 
 # Path C: GitOps (Argo CD owns the release). Revert in Git only, through a merge request.
+: "${CONFIG_DIR:?clone CONFIG_REPO first (see the variables block)}"
 git -C "$CONFIG_DIR" revert --no-edit "$BAD_COMMIT"
 git -C "$CONFIG_DIR" push origin HEAD:revert-"$BAD_COMMIT"
 # Open a merge request, get the named approver to merge it, then sync (or re-enable auto-sync).
@@ -367,7 +368,7 @@ Source-reviewed on 2026-11-01. Nothing was run and no live system was used. Read
 
 ### Sources checked
 
-- [OpenTelemetry semantic conventions for generative AI: attribute registry](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/registry/attributes/gen-ai.md): the attributes `gen_ai.request.model` ("the name of the GenAI model a request is being made to"), `gen_ai.response.model` ("the name of the model that generated the response"), `gen_ai.response.finish_reasons`, `gen_ai.prompt.name`, `gen_ai.prompt.version` ("the version of the prompt template used"), `gen_ai.request.temperature`, `gen_ai.request.top_p`, `gen_ai.request.max_tokens`, `gen_ai.request.seed` and `gen_ai.data_source.id`, and that these are marked as being in development stability. Checked 2026-11-01 against the semantic-conventions repository, commit 244465e (`model/gen-ai/registry.yaml` and `docs/registry/attributes/gen-ai.md`).
+- [OpenTelemetry semantic conventions for generative AI: attribute registry](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/registry/attributes/gen-ai.md): the attributes `gen_ai.request.model` ("the name of the GenAI model a request is being made to"), `gen_ai.response.model` ("the name of the model that generated the response"), `gen_ai.response.finish_reasons`, `gen_ai.prompt.name`, `gen_ai.prompt.version` ("the version of the prompt template used"), `gen_ai.request.temperature`, `gen_ai.request.top_p`, `gen_ai.request.max_tokens`, `gen_ai.request.seed` and `gen_ai.data_source.id`, and that these are marked as being in development stability. Checked 2026-11-01 against the open-telemetry/semantic-conventions-genai repository, commit 244465e (`model/gen-ai/registry.yaml` and `docs/registry/attributes/gen-ai.md`).
 - [Kubernetes Deployment concept page](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/): `kubectl rollout history`, `undo` and `pause` exist; a paused Deployment cannot be rolled back until resumed, and pod-template changes do not roll out while it is paused. Checked against the Kubernetes website repository, commit 491f14e (`deployment.md`).
 - `gcloud container clusters get-credentials --location` confirmed with `gcloud ... --help`, SDK 570.0.0.
 
