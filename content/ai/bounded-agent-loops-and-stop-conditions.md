@@ -7,8 +7,11 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 An agent loop commonly asks a model for a next action, executes a tool, appends the result and asks again. Without a hard budget and clear termination contract, a harmless task can repeat calls, consume a budget, flood an upstream service or keep running after the user has lost interest. The correct loop limit is an application control, not a request that the model “stop after a few steps.” This note focuses on runtime bounds, complementing the incident response in [[runaway-or-compromised-ai-agent-response]].
@@ -55,10 +58,29 @@ A per-turn timeout without a total deadline allows infinite retries. A model tok
 - [ ] Telemetry supports capacity and runaway detection without prompt content.
 - [ ] Tests cover each limit and confirm no call occurs after termination.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the security-risk framing for runaway consumption and agent permissions, and the protocol-level timeout and cancellation rules that the note's stop conditions build on.
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): LLM10 Unbounded Consumption lists rate limiting and quotas, dynamic resource allocation management, and timeouts and throttling as mitigations, and names denial of wallet as a risk (`2_0_vulns/LLM10_UnboundedConsumption.md`, lines 15, 49-59); LLM06 Excessive Agency recommends minimizing extensions, functionality and permissions, requiring user approval for high-impact actions, and rate limiting to limit damage (`2_0_vulns/LLM06_ExcessiveAgency.md`, lines 52-87). Checked 2026-11-02 against owasp-llm commit 99f4395.
+- [Model Context Protocol: Lifecycle (timeouts)](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle): implementations SHOULD set timeouts on all sent requests, SHOULD send a cancellation notification and stop waiting when a timeout expires, and MAY reset the timeout on progress notifications while still enforcing a maximum timeout (`docs/specification/2025-11-25/basic/lifecycle.mdx`, lines 246-260). Checked 2026-11-02 against modelcontextprotocol commit d0e246e.
+- [Model Context Protocol: Cancellation](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/cancellation): receivers SHOULD stop processing and free resources for a cancelled request, MAY ignore cancellation if processing already completed, and the sender SHOULD ignore a late response; this supports recording in-flight uncertainty after cancellation (`docs/specification/2025-11-25/basic/utilities/cancellation.mdx`, lines 28-46). Checked 2026-11-02 against modelcontextprotocol commit d0e246e.
+
+### Not verified
+
+- The OWASP Top 10 for Agentic Applications 2026 page and the NIST AI Risk Management Framework were not reachable locally, so the Sources list carries only the NIST link as unchecked context; the Agentic page was removed. The revision status of AI RMF 1.0 was also not checked, because NIST publications were unreachable, so the note makes no claim about it.
+- Provider-specific retry guidance, limits and pricing were not checked; no model provider documentation was available.
+- Prometheus guidance on keeping run IDs out of metric labels was not found in the local Prometheus docs; the cardinality advice is engineering guidance.
+- Engineering guidance, not a documented claim: independent budgets, trusted-runtime limit configuration, no-progress detection, structured stop outcomes, jittered retries, idempotency keys, circuit breakers and the review checklist.
+- Nothing was run.
+
 ## Sources
 
 - Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
-- [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) — risk context for autonomous systems and excessive agency.
-- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — monitoring and governance framing; AI RMF 1.0 is being revised according to NIST.
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) — unbounded consumption and excessive agency risk context.
+- [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle) — request timeout and cancellation rules.
+- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — monitoring and governance framing (not checked locally).
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

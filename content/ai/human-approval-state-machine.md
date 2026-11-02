@@ -7,8 +7,11 @@ tags:
   - security
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 “Ask a human before acting” is incomplete until the system defines what the human sees, how identity is checked, what exact action the approval covers, how long it lasts, and what happens if the proposed action changes. A safe approval is a durable state transition over a specific action, not a conversational “yes.” This applies to agentic systems alongside the human gate for infrastructure plans in [[llm-assisted-terraform-plan-review]].
@@ -46,10 +49,27 @@ Weak patterns include approval of a mutable plan pointer; broad approval reusabl
 - [ ] Model output cannot mint or alter approval state.
 - [ ] Tests cover stale, duplicate, unauthorized and concurrent approval cases.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the published guidance that human approval of high-impact agent actions is expected, and that authorization belongs in downstream systems rather than in the model.
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications 2025: LLM06 Excessive Agency](https://genai.owasp.org/llm-top-10/): mitigation "Require user approval" (human-in-the-loop approval of high-impact actions, implementable in a downstream system or in the extension itself); "Execute extensions in user's context" (track user authorization so actions run as that user, with minimum privileges); "Complete mediation" (enforce authorization in downstream systems instead of relying on the model to decide). LLM01 Prompt Injection also lists human approval for high-risk actions. Checked 2026-11-02 against the OWASP LLM repository commit 99f4395, 2_0_vulns/LLM06_ExcessiveAgency.md lines 70-78 and LLM01_PromptInjection.md line 52.
+- [Model Context Protocol specification: Tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools): there SHOULD always be a human in the loop with the ability to deny tool invocations (a general statement), and applications SHOULD present confirmation prompts, provide UI showing which tools are exposed to the model, and show visual indicators when tools are invoked. Checked 2026-11-02 against the Model Context Protocol repository commit d0e246e, docs/specification/2025-11-25/server/tools.mdx lines 22-34.
+
+### Not verified
+
+- The OWASP Top 10 for Agentic Applications 2026, the NIST AI Risk Management Framework and the Google Cloud Workflows documentation, listed under Sources, were not available locally and were not read.
+- The approval object fields, state names and transitions, single-use and atomic consumption, expiry, separation of duties, emergency-path and verification advice, invalidating an approval when the plan changes, rejection and re-ask handling (including not requiring sensitive narrative), and the weak-pattern and reviewer-pressure list (repeated prompts, mutable plan pointers) are engineering guidance, not documented claims from the sources above.
+- Nothing was run.
+
 ## Sources
 
-- [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) — agentic risk guidance for authority and human oversight.
-- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance, accountability and risk management; AI RMF 1.0 is being revised.
-- [Google Cloud Workflows documentation](https://cloud.google.com/workflows/docs) — official orchestration reference for explicit workflow transitions; map semantics to the runtime you operate.
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): LLM06 Excessive Agency and LLM01 Prompt Injection guidance on human approval and downstream authorization.
+- [Model Context Protocol specification: Tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools): human-in-the-loop expectations for tool invocation.
+- [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): agentic risk guidance for authority and human oversight; not read, see Not verified.
+- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): governance, accountability and risk management; not read, see Not verified.
+- [Google Cloud Workflows documentation](https://cloud.google.com/workflows/docs): orchestration reference for explicit workflow transitions; not read, see Not verified.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

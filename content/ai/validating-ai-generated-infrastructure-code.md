@@ -9,7 +9,10 @@ tags:
   - policy-as-code
   - ci-cd
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-02
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 draft: false
 ---
 
@@ -17,9 +20,6 @@ Generated infrastructure code fails in a recognisable way: it looks right. The r
 
 > [!info] Scope
 > Terraform with the Google provider, Kubernetes manifests, Helm charts, Prometheus rules and shell scripts in GitLab CI. The ladder is the same whoever wrote the code; it matters more for generated code because the failures are plausible. No tool versions are named: pin the versions your platform supports and check each tool's `--help` against what is shown here.
-
-> [!note] Not verified
-> Command behaviour was checked at page level, on 2026-10-21, against the Terraform, TFLint, kubeconform, Kubernetes, Helm and Prometheus documentation through search summaries, not a full read. Not checked: the exact error text each tool prints (the outputs below are illustrative), that `terraform validate` rejects every invented argument name, the descriptions of kubeconform's `-strict` and `-ignore-missing-schemas` (check `kubeconform -h`), and the CI template, which was not run in a pipeline.
 
 ## Typical failures in generated config
 
@@ -34,7 +34,7 @@ Generated infrastructure code fails in a recognisable way: it looks right. The r
 | PromQL that parses but matches nothing   | A label name that the real metric does not have                                      | Live series query only                           |
 | Shell that works on the author's machine | Unquoted variables, `set -e` missing, a GNU-only flag                                | `bash -n`, `shellcheck`                          |
 
-The last column is the point: every class has a cheap deterministic check, and only one (the query that matches nothing) needs a live system.
+The last column is the point: every class has a cheap deterministic check, but two need a live system: the query that matches nothing, and admission or Pod Security rejection, which only a server-side dry run exercises (`conftest` approximates admission policy offline).
 
 ## Principles of the ladder
 
@@ -59,7 +59,7 @@ terraform -chdir="$TF_DIR" init -backend=false -input=false
 terraform -chdir="$TF_DIR" validate -no-color
 ```
 
-`terraform validate` checks syntax and internal consistency without reading variables or state, and it does not contact remote services such as the state backend or provider APIs. It needs an initialised directory, which is why the documentation suggests `init -backend=false` for CI and pre-commit. `terraform plan` repeats the validation, so validate is the cheap early copy of a check you get anyway.
+`terraform validate` checks syntax and internal consistency without reading variables or state, and it does not contact remote services such as the state backend or provider APIs. It needs an initialised directory, which is why `init -backend=false` is the usual way to prepare CI and pre-commit runs. `terraform plan` repeats the validation, so validate is the cheap early copy of a check you get anyway.
 
 Know what it does not catch: it checks that a value has the right type, not that the provider will accept it. A region that does not exist, or a machine type unavailable in a zone, passes validate.
 
@@ -168,9 +168,9 @@ A manifest on a removed API version fails here with a missing-schema error. To f
 kubectl --context=ci-staging apply --dry-run=server -f deploy/k8s/
 ```
 
-With `--dry-run=server` the request goes to the API server and through validation and admission (including Pod Security admission and validating webhooks), but nothing is persisted. `--dry-run=client` does not contact the server and catches far less. Run this against a non-production cluster on the target version, with an identity that has only the permissions a dry run needs. It is the rung that catches a Pod the namespace's Pod Security level would reject ([[pod-security-admission]]).
+With `--dry-run=server` the request goes to the API server and through validation and admission (admission-time checks, including validating webhooks), but nothing is persisted. `--dry-run=client` does not contact the server and catches far less. Run this against a non-production cluster on the target version, with an identity that has only the permissions a dry run needs. It is the rung that catches a Pod the namespace's Pod Security level would reject ([[pod-security-admission]]).
 
-Admission webhooks matter here: a server-side dry run is rejected when a matching webhook does not declare that it has no side effects on dry runs (`sideEffects: None` or `NoneOnDryRun`). If a dry run fails for that reason, check the webhook's configuration against the Kubernetes dynamic admission control documentation rather than skipping the rung.
+Admission webhooks matter here: a webhook must declare that it has no side effects on dry runs (`sideEffects: None` or `NoneOnDryRun`); otherwise the dry-run request is not sent to the webhook and the API request fails. If a dry run fails for that reason, check the webhook's configuration against the Kubernetes dynamic admission control documentation rather than skipping the rung.
 
 ### 3. Policy
 
@@ -237,7 +237,7 @@ echo "selectors with no series: ${missing}"
 [ "$missing" -eq 0 ]
 ```
 
-The regex is a heuristic, not a PromQL parser: it misses selectors without braces and can pick up text that only looks like a selector. A selector with a regex matcher that legitimately has no series right now (no 5xx errors at the moment) also reports `NO SERIES`, so check the label names in that case rather than failing blindly. Use the Prometheus HTTP API (`/api/v1/query`, and `/api/v1/series` or `/api/v1/labels` to see which labels a metric really has); read the API page for the parameters before automating it. Add authentication the way your Prometheus requires, with a read-only token from a CI variable.
+The regex is a heuristic, not a PromQL parser: it misses selectors without braces and can pick up text that only looks like a selector. A selector with a regex matcher that legitimately has no series right now (no 5xx errors at the moment) also reports `NO SERIES`, so check the label names in that case rather than failing blindly. Use the Prometheus HTTP API (`/api/v1/query`, and `/api/v1/series` or `/api/v1/labels` to see which labels a metric really has; both may include names from series with no samples in the requested time range, so treat them as a hint); read the API page for the parameters before automating it. Add authentication the way your Prometheus requires, with a read-only token from a CI variable.
 
 ## Shell scripts
 
@@ -426,6 +426,33 @@ In production this alert would never fire: the numerator matches no series, so t
 ## Rollback
 
 The ladder changes nothing in infrastructure, so there is nothing to roll back there. If adding the template job blocks merges unexpectedly, revert the `include` in the affected repository, fix the rung, and re-enable it; do not weaken a rung (dropping `-strict`, adding `-ignore-missing-schemas`) to unblock a merge. If a change that passed the ladder still caused a problem, add the missing check as a rung so the same class cannot pass again.
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the Kubernetes, Prometheus, GitLab CI and Terraform provider claims in this guide were compared with local copies of their documentation.
+
+### Sources checked
+
+- [kubectl apply](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_apply/): `--dry-run` accepts `none`, `server` or `client`; the client strategy only prints the object, the server strategy submits the request without persisting it. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [The Kubernetes API](https://kubernetes.io/docs/concepts/overview/kubernetes-api/): OpenAPI schema validation is usually incomplete, and `kubectl apply --dry-run=server` runs all applicable validation and admission-time checks. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Dynamic Admission Control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/): webhooks must declare `sideEffects` as `None` or `NoneOnDryRun`, or the dry-run request is not sent to the webhook and the API request fails. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/): Pod Security is a built-in admission controller that enforces the Pod Security Standards. Checked 2026-11-02 against kubernetes/website commit 491f14e.
+- [Alerting rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/): an alert is active only when its expression returns one or more vector elements, so an empty result does not alert. Checked 2026-11-02 against prometheus commit ef78ff6.
+- [Unit testing for rules](https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/): `rule_files`, `evaluation_interval`, `input_series` with expanding notation such as `a+bxn`, `alert_rule_test`, and an empty `exp_alerts` asserting that an alert does not fire. Checked 2026-11-02 against prometheus commit ef78ff6.
+- [promtool](https://prometheus.io/docs/prometheus/latest/command-line/promtool/): the `check rules` and `test rules` subcommands exist. Checked 2026-11-02 against prometheus commit ef78ff6.
+- [HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/): `/api/v1/query`, `/api/v1/series` and `/api/v1/labels` with `match[]`; label and series results may include series with no samples in the requested range. Checked 2026-11-02 against prometheus commit ef78ff6.
+- [google_storage_bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket): versioning is configured by a `versioning` block with a required `enabled` argument, so a flat `versioning_enabled` argument is not documented. Checked 2026-11-02 against the Terraform provider for Google docs commit c4248bd.
+- [Job rules](https://docs.gitlab.com/ci/jobs/job_rules/): `rules: - if: $CI_PIPELINE_SOURCE == "merge_request_event"` is the documented form for merge request pipelines. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+
+### Not verified
+
+- Terraform CLI behaviour (`fmt -check`, `init -backend=false`, `validate` scope, `providers schema -json` output and `format_version`, `terraform test` with `mock_provider` and `command = plan`): the local Terraform repository holds source code and a changelog only, not the CLI documentation, so these were not checked.
+- Helm behaviour (`helm lint --strict`, `--kube-version`, `helm template`, `helm test`): the Helm documentation was not available locally.
+- TFLint, its plugin configuration and the Google ruleset, kubeconform flags and defaults (`-strict`, `-ignore-missing-schemas`, `-kubernetes-version`, `-schema-location`), conftest, ShellCheck and bash: no local source. Check each tool's `--help` for the version you pin.
+- The Kubernetes Deprecated API Migration Guide is listed in Sources but is not in the local documentation copy; its content was not read.
+- The exact output text shown for each tool is illustrative. The CI script and job template were not run in a pipeline.
+- Engineering guidance (ladder ordering, read-only identities, toolbox image, what still needs a human) is advice, not a documented claim.
+- Nothing was run.
 
 ## Sources
 

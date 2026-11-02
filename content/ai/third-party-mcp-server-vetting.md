@@ -15,7 +15,7 @@ draft: false
 An MCP server gives an agent new tools, and the server's text tells the model how to use them. A server you did not write is therefore both a dependency and a source of instructions. This note is for platform and security engineers who approve external or community MCP servers for coding agents. It does not cover building your own servers ([[internal-mcp-servers-for-platform-tools]]), the general authorisation model for tools ([[agent-tool-authorization-boundaries]]) or installing packages an agent suggests ([[ai-agent-package-installation-risks]]).
 
 > [!note] Not verified
-> The sources were found through search on 2026-10-27, but the pages could not be fetched. Check before relying on this note: the current MCP specification revision (this note refers to 2025-06-18; newer dated revisions exist and may change authorisation and transport rules), the transports page for how stdio servers receive credentials, each client's tool-disable and `list_changed` behaviour, and any attack-success figures, which are vendor or benchmark claims and are not quoted here.
+> The sources were found through search on 2026-10-27, but the pages could not be fetched. Check before relying on this note: the current MCP specification revision (this note refers to 2026-07-28, the current revision when checked; older revisions differ and may change authorisation and transport rules), the transports page for how stdio servers receive credentials, each client's tool-disable and `list_changed` behaviour, and any attack-success figures, which are vendor or benchmark claims and are not quoted here.
 
 ## The threat in one paragraph
 
@@ -54,7 +54,7 @@ Every field answers a later question: who to ask, what was reviewed, what exactl
 2. **Read the code that handles credentials and network calls.** Look for outbound requests to hosts that the stated purpose does not need, shell execution, and reading of files outside the stated scope.
 3. **Capture `tools/list`.** Run the server in a throwaway sandbox and save names, descriptions and input schemas, following `nextCursor` if the list is paginated. Read every description as you would read a pull request, looking for instructions aimed at the model rather than documentation for a person. Hash the normalised output (the same `jq -S -c '.tools | sort_by(.name)'` form the runtime check below uses) and store the hash in the approval record.
 4. **Decide the tool allowlist.** Enable the read tools you need. Keep write and delete tools off, and put a human approval in front of any that you enable ([[human-approval-state-machine]]).
-5. **Choose the transport deliberately.** A local stdio server runs with the user's privileges, so wrap it in a container, separate user or sandbox with filesystem and network scoping ([[code-execution-agent-sandboxing]]). A remote server should be vendor-operated by a party you already trust and must use the authorisation flow the spec defines for HTTP. In the 2025-06-18 revision, servers act as OAuth resource servers and clients send resource indicators (RFC 8707) so a token issued for one server cannot be replayed against another. Verify against the revision you run ([[delegated-oauth-for-agent-tools]]).
+5. **Choose the transport deliberately.** A local stdio server runs with the user's privileges, so wrap it in a container, separate user or sandbox with filesystem and network scoping ([[code-execution-agent-sandboxing]]). A remote server should be vendor-operated by a party you already trust and must use the authorisation flow the spec defines for HTTP. In the 2026-07-28 revision, servers act as OAuth resource servers and clients send resource indicators (RFC 8707) so a token issued for one server cannot be replayed against another. Verify against the revision you run ([[delegated-oauth-for-agent-tools]]).
 6. **Issue a dedicated, narrow credential.** One credential per server, least scope, short expiry, no personal admin tokens ([[just-in-time-agent-credentials]]).
 7. **Restrict egress.** Enforce an allowlist at the network layer, not in the prompt ([[agent-network-egress-controls]]).
 
@@ -156,7 +156,7 @@ Record server name, pinned version, tool name and a hash of the arguments for ev
 
 ## Sources
 
-- [Model Context Protocol specification, 2025-06-18 revision](https://modelcontextprotocol.io/specification/2025-06-18) - the revision referred to for authorisation and transport; check the live spec and newer revisions.
+- [MCP authorization, 2026-07-28 revision](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization) - the revision referred to for the OAuth resource server role and RFC 8707 resource indicators (checked in local copy, commit d0e246e); check the live spec for newer revisions.
 - [OWASP: MCP tool poisoning](https://owasp.org/www-community/attacks/MCP_Tool_Poisoning) - tool poisoning defined as indirect prompt injection carried in tool metadata.
 - [Trail of Bits: Jumping the line](https://blog.trailofbits.com/2025/04/21/jumping-the-line-how-mcp-servers-can-attack-you-before-you-ever-use-them/) - server-side behaviour that acts before a tool is invoked, supporting review before approval.
 

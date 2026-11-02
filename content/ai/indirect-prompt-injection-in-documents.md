@@ -6,8 +6,11 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 Indirect prompt injection occurs when an application processes content an attacker or unrelated contributor can influence: a PDF, email, issue, source file, transcript, retrieved chunk, or ordinary record. It need not look like an “attack”; the key is lower-trust text entering a workflow where it may influence actions. This note addresses document ingestion, not the broader CI-agent controls in [[ai/prompt-injection-test-harness-for-ci-agents]].
@@ -22,7 +25,7 @@ At ingestion, attach source, document ID, owner, access labels, time, version or
 
 ## Keep retrieved content in a data lane
 
-Represent retrieved passages as quoted or otherwise structurally distinct untrusted evidence. Make source boundaries explicit and provide the model only the minimum relevant material. Avoid concatenating retrieved prose into a privileged instruction string or allowing document metadata to populate a tool name, endpoint, or authorization parameter. Delimiters and labels can improve model behavior, but are not security boundaries by themselves; a robust design assumes a model may still follow an embedded instruction.
+Represent retrieved passages as quoted or otherwise structurally distinct untrusted evidence. Make source boundaries explicit and provide the model only the minimum relevant material. Avoid concatenating retrieved prose into a privileged instruction string or allowing document metadata to populate a tool name, endpoint, or authorization parameter. Separating and denoting untrusted content limits its influence but does not prevent it, and OWASP says fool-proof prevention is unclear; a robust design assumes a model may still follow an embedded instruction.
 
 When a model proposes an action based on a document, convert the proposal into a typed request and validate it independently. Resolve the target object from trusted application state, check current user authority, apply business rules, and ask for explicit approval when the operation is consequential. Keep read-only retrieval separate from write-capable tools. Never grant a tool broad credentials because a document claims that its author is an administrator or that the action is urgent. For more on the action boundary, see [[ai/agent-tool-authorization-boundaries]].
 
@@ -36,7 +39,7 @@ Limit the model’s context size and tool surface. Give each workflow a fixed se
 
 Build benign fixtures with marked instruction-like text requesting a forbidden, harmless action. Verify enforcement, not model resistance. Cover uploads, search results, email threads, split chunks, tool results, permission changes, and deletion after indexing.
 
-Measure more than answer quality. Assert that inaccessible documents are not retrieved, the system does not invoke disallowed tools, output is labeled as derived from sources, and all denied attempts produce useful audit records. Test fail-closed behavior when provenance metadata is missing, a policy service is unavailable, or a source permission cannot be resolved. A graceful response should say it cannot safely continue rather than silently widening access. OWASP and provider safety documentation emphasize layered defenses; no classifier or prompt instruction should be treated as a complete detector.
+Measure more than answer quality. Assert that inaccessible documents are not retrieved, the system does not invoke disallowed tools, output is labeled as derived from sources, and all denied attempts produce useful audit records. Test fail-closed behavior when provenance metadata is missing, a policy service is unavailable, or a source permission cannot be resolved. A graceful response should say it cannot safely continue rather than silently widening access. The OWASP LLM Top 10 says it is unclear whether fool-proof prevention exists for prompt injection and lists layered mitigations instead; treat no classifier or prompt instruction as a complete detector.
 
 ## Failure cases and response
 
@@ -54,6 +57,24 @@ On a suspected incident, stop the affected automated action path, preserve the s
 - Are missing metadata and policy-service failures safely denied?
 - Do tests cover stale ACLs, chunking, deletion, and downstream side effects?
 - Can responders preserve provenance and decisions without over-retaining content?
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the note's statements about indirect injection, separating untrusted content, least privilege, human approval, authorization outside the model and permission-aware retrieval, checked against the OWASP LLM Top 10 2025 text.
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) (LLM01 Prompt Injection): indirect injection occurs when a model accepts input from external sources such as websites or files, intentional or not; a RAG document modified by an attacker is a listed scenario; RAG does not fully mitigate injection; it is unclear whether fool-proof prevention exists; mitigations include privilege control and least privilege, human approval for high-risk actions, segregating and identifying external content, output format validation with deterministic code, and treating the model as an untrusted user in testing. Checked 2026-11-02 against owasp-llm commit 99f4395 (2_0_vulns/LLM01_PromptInjection.md).
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) (LLM06 Excessive Agency): execute actions in the user's context with minimum privileges, require human approval for high-impact actions, and enforce authorization in downstream systems instead of relying on the model. Checked 2026-11-02, commit 99f4395 (LLM06_ExcessiveAgency.md).
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) (LLM08 Vector and Embedding Weaknesses): permission-aware vector stores, logical partitioning, tagging and classifying data to control access, validating knowledge sources, and context leakage between users in shared stores. Checked 2026-11-02, commit 99f4395 (LLM08_VectorAndEmbeddingWeaknesses.md).
+
+### Not verified
+
+- NIST AI 600-1 and the OWASP Top 10 for Agentic Applications 2026 are listed under Sources but were not available locally; they are cited for context only and none of the note's claims depend on them.
+- The model provider documentation entry is generic; provider data retention and processing terms were not checked.
+- MITRE ATLAS data for the indirect injection technique was not present in the local checkout.
+- Engineering guidance, not a documented claim: that delimiters and labels are not a security boundary by themselves (LLM01 only says to separate and denote untrusted content to limit its influence), ingestion metadata, deletion propagation, size and rate limits, parser isolation, safe handling of active content, fixture design, fail-closed testing and the incident evidence steps.
+- Nothing was run.
 
 ## Sources
 

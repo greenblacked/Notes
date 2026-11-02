@@ -163,7 +163,7 @@ The job name, paths and flags above are examples for a harness you own. The poin
 ## Sources
 
 - [Site Reliability Engineering book: postmortem culture](https://sre.google/sre-book/postmortem-culture/) for the blameless framing. Not fetched; paraphrased in general terms only.
-- [MCP specification: tools (2025-06-18)](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) for the human-in-the-loop SHOULD on tool invocation. Wording checked in local copies of the 2025-06-18, 2025-11-25 and 2026-07-28 revisions, which carry the same sentence; not fetched.
+- [MCP specification: tools (2026-07-28)](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) for the human-in-the-loop SHOULD on tool invocation. Wording checked in local copies of the 2025-06-18, 2025-11-25 and 2026-07-28 revisions (commit d0e246e), which carry the same sentence; not fetched.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) for the governance, measurement and monitoring framing. Not fetched.
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) for the excessive-agency framing behind the authorization checks. Not fetched.
 - The OpenTelemetry GenAI semantic conventions (request and response model attributes, opt-in content capture) were read from a local checkout only and are in development status; check the current published pages before citing them.

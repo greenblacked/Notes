@@ -8,17 +8,17 @@ tags:
   - gitlab-ci
   - team-process
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 This note describes how to add an AI reviewer to merge requests (GitLab) or pull requests (GitHub) so that it helps humans without replacing the checks that gate a merge. It is written for senior DevOps engineers who own the pipeline. The general review practice is in [[standards/code-review]]; the credential and isolation rules for the bot are in [[ai/securing-ai-agents-in-ci-and-cloud]].
 
 > [!info] Scope and sources
-> Written for GitLab CI merge request pipelines, with the same ideas applying to GitHub pull requests. Products are named generically (built-in assistants of the platform, third-party review apps, or a script calling a model gateway). Based on the GitLab merge request and CI documentation at https://docs.gitlab.com.
-
-> [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: any product's tier, rule-file name or ability to block merges, and the GitLab API endpoints used in the examples (diffs and notes). Check them before relying on them.
+> Written for GitLab CI merge request pipelines, with the same ideas applying to GitHub pull requests. Products are named generically (built-in assistants of the platform, third-party review apps, or a script calling a model gateway). The GitLab API, token and role statements were checked against the GitLab docs; see the Evidence section for what was and was not verified.
 
 ## What AI review is good and bad at
 
@@ -44,7 +44,7 @@ So the bot is a second pair of eyes, not a gate.
 2. Humans approve. Approval rules are the same with or without the bot ([[standards/code-review]]).
 3. Required checks stay deterministic: tests, linters, the SonarQube quality gate ([[patterns/sonarqube-quality-gates]]) and policy checks. A bot's opinion is never a required check.
 4. The bot job is advisory in the pipeline: `allow_failure: true`, so an outage or a timeout cannot block delivery.
-5. It does not run on fork merge requests, and it holds a token with no write access to code and no deploy or cloud credentials: a GitLab bot token with the `api` scope at the Reporter role, which can comment but cannot push or merge (see [[ai/securing-ai-agents-in-ci-and-cloud]]).
+5. It is configured not to run on fork merge requests (a `rules:` expression in CI config is not a guarantee: if the project runs parent-project pipelines for fork merge requests, all variables, including the unprotected bot token, become available to them), and it holds a token with no write access to code and no deploy or cloud credentials: a GitLab bot token with the `api` scope at the Reporter role, which can comment but cannot push code (see [[ai/securing-ai-agents-in-ci-and-cloud]]). Reporters can approve merge requests only if the project enables approval permissions for additional users, so keep that setting off for the bot's role.
 6. It posts one summary note per push, updated in place, not a stream of inline comments.
 7. Its output is labelled as automated so nobody mistakes it for a teammate.
 
@@ -76,18 +76,21 @@ ai-review:
   tags:
     - ephemeral-agent # change: runner pool with an egress allowlist
   variables:
+    GIT_STRATEGY: "none" # do not check out the MR branch: its code would run with the bot token
     REVIEW_COMMAND: "review-tool --stdin" # change: your integration point
     MAX_DIFF_CHARS: "60000"
   script:
     # REVIEW_BOT_TOKEN: masked, not protected, project access token, Reporter role.
     # Creating and updating notes needs the api scope (read_api is not enough). At the Reporter
-    # role the bot can comment but cannot push or merge. Check the scope against your version.
-    - python3 scripts/ai_review.py
+    # role the bot can comment but cannot push code.
+    # Do not run this job for fork MRs in the parent project: that exposes this unprotected token.
+    # The script ships in the pinned image, not in the repository, so the MR cannot change it.
+    - python3 /opt/ai-review/ai_review.py
 ```
 
 The script is a skeleton. The review command is a placeholder you replace with your integration; no vendor API is called here.
 
-```python title="scripts/ai_review.py"
+```python title="ai_review.py (built into the review image at /opt/ai-review/)"
 #!/usr/bin/env python3
 """Collect the MR diff, run a review command, post or update one advisory note."""
 import json
@@ -120,7 +123,8 @@ def call(method, url, payload=None):
 
 
 def collect_diff():
-    # Endpoint and pagination: check against your GitLab version (diffs vs changes).
+    # /diffs replaces the deprecated /changes endpoint. Files can come back collapsed or
+    # too_large with their diff excluded; this skeleton does not handle that.
     files = call("GET", f"{BASE}/diffs?per_page=100")
     parts = []
     for item in files:
@@ -179,7 +183,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-Notes on the skeleton: it reads the diff through the API instead of checking out untrusted code, it truncates input so cost is bounded, and it updates one note instead of adding a new one per push. Pagination of notes and diffs is simplified: the script says so in the note when 100 files are returned, and you can follow the `X-Next-Page` header if your merge requests are large. It edits only a note written by the bot's own user, so a pasted marker cannot hijack it.
+Notes on the skeleton: it takes its diff input from the API and sets `GIT_STRATEGY: none`, so the job does not check out the merge request's branch, and it runs the script from the pinned image rather than from the repository. Without both, the author's own code would run with `REVIEW_BOT_TOKEN` in the environment. With `none`, the runner can still leave an old working copy in the build directory, so never run anything from it. The job definition itself still comes from the merge request's `.gitlab-ci.yml`, which the author can edit; if the bot token must be out of the author's reach, run the job from pipeline configuration the merge request cannot change, as in [[ai-generated-code-policy-and-provenance]]. It truncates input so cost is bounded, and it updates one note instead of adding a new one per push. Pagination of notes and diffs is simplified: the script says so in the note when 100 files are returned, and you can follow the `x-next-page` response header if your merge requests are large. It edits only a note written by the bot's own user, so a pasted marker cannot hijack it.
 
 On GitHub the same shape uses two jobs in a `pull_request` workflow, never `pull_request_target`. GitHub Actions permissions are set per workflow or per job, not per step. A review job with `contents: read` uploads the findings as an artifact; a second job with `pull-requests: write` downloads it and comments, and it runs no agent. See the example in [[ai/securing-ai-agents-in-ci-and-cloud]].
 
@@ -241,3 +245,30 @@ Be careful when relating this to the delivery measures in [[management/dora-metr
 - [[management/dora-metrics]]: delivery metrics to watch alongside review numbers.
 - [[patterns/gitlab-ci-pipeline-structure]]: where the advisory job fits in the pipeline.
 - [The owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. The scope is the GitLab API, token and role statements; the pipeline keywords and GitHub parts could not be checked locally.
+
+### Sources checked
+
+- [Merge requests API](https://docs.gitlab.com/api/merge_requests/): `GET /projects/:id/merge_requests/:merge_request_iid/diffs` lists changed-file diffs with `old_path`, `new_path` and `diff`; `per_page` defaults to 20; files can be `collapsed` or `too_large` with diffs excluded; the older `/changes` endpoint is deprecated in favour of `/diffs`. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (api/merge_requests.md:2196-2400).
+- [Notes API](https://docs.gitlab.com/api/notes/): merge request notes are listed, created (`POST`) and updated (`PUT .../notes/:note_id`) with a `body` parameter; results are paginated at 20 by default. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (api/notes.md:45-50, 379-500).
+- [REST API](https://docs.gitlab.com/api/rest/): `per_page` default 20, max 100; pagination headers include `x-next-page`. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (api/rest/_index.md:318, 355-377).
+- [Users API](https://docs.gitlab.com/api/users/): `GET /user` returns the current user. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (api/users.md:583, 657).
+- [REST API authentication](https://docs.gitlab.com/api/rest/authentication/): the `PRIVATE-TOKEN` header is the recommended way to pass a token. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (api/rest/authentication.md:119).
+- [Token scopes](https://docs.gitlab.com/security/tokens/access_token_scopes/): `api` grants complete read and write API access; `read_api` is read-only, so it cannot create or update notes. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (security/tokens/access_token_scopes.md:41-42).
+- [Project access tokens](https://docs.gitlab.com/user/project/settings/project_access_tokens/): a role and scopes are chosen when the token is created. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (user/project/settings/project_access_tokens.md:55-65).
+- [Roles and permissions](https://docs.gitlab.com/user/permissions/): the Reporter role cannot push code and can comment on merge requests; creating merge requests needs Developer; Reporter approval exists only if enabled for the project. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (user/permissions.md:62, 602-606, footnote on approvals).
+- [Predefined CI/CD variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_API_V4_URL`, `CI_PROJECT_ID`, `CI_MERGE_REQUEST_IID` and `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` exist with the meanings used here. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (ci/variables/predefined_variables.md:46, 123, 206, 216).
+- [CI/CD variables](https://docs.gitlab.com/ci/variables/): the Protect variable option limits a variable to protected branches and tags, so an unprotected variable is available in merge request pipelines on other branches; visibility Masked is available (default since 18.3); pipelines from forks cannot access the parent project's variables by default, but if you run a merge request pipeline in the parent project for a merge request from a fork, all variables become available to the pipeline. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (ci/variables/_index.md:119-121, 150-152).
+- [Git strategy](https://docs.gitlab.com/ci/runners/configure_runners/#git-strategy): `GIT_STRATEGY` takes `clone`, `fetch`, `none` or `empty`; without a value, jobs use the project's pipeline setting; `none` skips Git operations but re-uses the local working copy, and repository data may be present but out of date. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61 (ci/runners/configure_runners.md:496-506, 522-530).
+
+### Not verified
+
+- The `.gitlab-ci.yml` keywords `rules`, `allow_failure`, `timeout` and `tags` and the rule expression syntax: the CI YAML reference is not in the local copy. Only the general behaviour of `allow_failure` was seen (ci/jobs/job_control.md:41-48).
+- That `$CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID` is a sufficient fork check, and how fork merge request pipelines behave: the merge request pipelines page is not in the local copy.
+- GitHub Actions statements (`pull_request` versus `pull_request_target`, permissions set per workflow or per job, two-job artifact hand-off): GitHub documentation was not available.
+- SonarQube quality gates, any specific review product's tier, rule files or ability to block merges, and the model gateway: no local source.
+- Engineering guidance, not a documented claim: bot scope and noise rules, triage categories, usefulness metrics, data-handling advice and the pitfalls list.
+- Nothing was run, including the skeleton script and pipeline job.

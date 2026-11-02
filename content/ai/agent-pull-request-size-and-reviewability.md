@@ -8,7 +8,10 @@ tags:
   - ci-cd
   - delivery
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-02
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 draft: false
 ---
 
@@ -55,6 +58,22 @@ If a reviewer cannot form a reliable view of impact, the right next step is a sm
 ## Related
 
 - [Owner’s AI skills catalogue](https://ai.szolotov.com).
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the repository-enforced review controls and diff tooling this note mentions, checked against GitLab and Git documentation.
+
+### Sources checked
+
+- [GitLab Docs: Protected branches API](https://docs.gitlab.com/api/protected_branches/): a protected branch can require code owner approval (`code_owner_approval_required`), which supports routing changes to owners through repository settings rather than agent instructions. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [GitLab Docs: Merge request approval settings API](https://docs.gitlab.com/api/merge_request_approval_settings/): approvals can be configured to be retained or not on a new push (`retain_approvals_on_push`), and, at project level only, code owner approvals can be reset when their files change (`selective_code_owner_removals`, which works only when `retain_approvals_on_push` is disabled; the group update endpoint does not list it), which supports tying approval to the exact revision reviewed. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [Git: git-diff](https://git-scm.com/docs/git-diff): the `--stat` option (from Documentation/diff-options.adoc, included in the git-diff page) generates a diffstat, which supports checking changed-file lists. Checked 2026-11-02 against git commit 50fe5cc.
+
+### Not verified
+
+- The Google engineering practices page and the GitHub Docs pages listed under Sources were not available locally; the reviewer-focus and protected-branch statements attributed to them were not checked. GitHub-specific behavior was not checked at all.
+- The workflow itself (scope budgets, splitting, staged review, summary requirements, failure-mode names) is engineering guidance, not a documented claim.
+- Nothing was run.
 
 ## Sources
 

@@ -165,7 +165,7 @@ Record retrieval and tool steps in traces so you can see which lever misbehaves.
 
 ## Sources
 
-- [Model Context Protocol, tools specification (revision 2025-11-25)](https://modelcontextprotocol.io/specification/2025-11-25/server/tools): servers must validate inputs, rate-limit and sanitize outputs; clients should keep a human in the loop for sensitive calls.
+- [Model Context Protocol, tools specification (revision 2026-07-28)](https://modelcontextprotocol.io/specification/2026-07-28/server/tools): servers must validate inputs, rate-limit and sanitize outputs; clients should keep a human in the loop for sensitive calls.
 - [OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/): retrieval, tool and evaluation attribute names and their Development stability; URL inferred from the checkout layout.
 - [vLLM tool calling documentation](https://docs.vllm.ai/en/latest/features/tool_calling/): one listed function-calling model is designed to be fine-tuned for a specific function-calling task; URL inferred from the checkout layout.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): risk framing for choosing and measuring a system design.

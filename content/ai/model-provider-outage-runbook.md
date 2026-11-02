@@ -8,7 +8,10 @@ tags:
   - reliability
   - incident-management
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-02
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 draft: false
 ---
 
@@ -50,8 +53,45 @@ Communicate what users may see, which functions are affected, and when the next 
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the procedure's factual claims were searched for in the local primary sources; the runbook is almost entirely operating practice, and the provider-specific claims could not be reached.
+
+### Sources checked
+
+- The linked notes [[ai-assisted-incident-response]], [[fallback-model-selection-and-quality-degradation]] and [[llm-slo-definition-and-error-budgets]] exist on this site and are the targets of the references in the text. Read 2026-11-02.
+- Confirmed: the [OpenTelemetry GenAI semantic conventions, gen-ai-spans.md](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-spans.md) (checked 2026-11-02 against open-telemetry/semantic-conventions-genai commit 244465e) define a GenAI span as a logical operation as observed by the caller, covering the duration of the operation with all automatic retries. This supports the distinction in the triage section between per-attempt outcomes and logical user requests. Time-to-first-chunk is likewise measured from before the first attempt and includes failed attempts and retry backoff (client-inference.md in the same directory).
+- Searched, with no claim confirmed or contradicted, for provider outages, quota responses, idempotency keys and retry amplification: the [Kubernetes docs](https://kubernetes.io/docs/) (checked 2026-11-02 against kubernetes/website commit 491f14e), the [Prometheus docs](https://prometheus.io/docs/) (checked 2026-11-02 against prometheus/prometheus commit ef78ff6) and the vLLM docs (checked 2026-11-02 against vllm-project/vllm commit 8530a77). None states or contradicts a claim in this note, so nothing was corrected.
+
+### Not verified
+
+- The three entries under Sources (two provider quota pages and one article on timeouts, retries and backoff) are vendor websites that were not reachable. The statements about provider quota behaviour, quota scope and retry amplification attributed to them are unchecked. Their stated page titles, URLs and descriptions are unchecked as well.
+- Whether any given provider supports idempotency keys, and how provider status pages and quota responses behave; the text only says "where supported".
+- The incident process (roles, snapshot contents, communication cadence, rollback conditions, operator checklist) is general engineering guidance, not a documented claim.
+- Nothing was run.
+
+### Environment
+
+An external or self-hosted model endpoint reached through a model gateway, with dashboards for per-attempt outcomes, a routing policy, and an incident channel. No versions were recorded because nothing was run.
+
+### Prerequisites
+
+Authority to change routing, an approved fallback policy, access to gateway and provider dashboards, and an incident record. See the Scope and trigger and Stabilize through known options sections.
+
+### Expected results
+
+Traffic is served by the primary or an approved alternate route with success rate and latency back near normal, quality samples valid, and queued work accounted for. See the Recovery and communication section.
+
+### Failure conditions
+
+Error rate or latency rises after a routing change, output quality falls below the accepted floor, data location or cost leaves the guardrail, or duplicated jobs appear. See the rollback conditions in Stabilize through known options.
+
+### Cleanup and rollback
+
+Restore the recorded previous routing configuration, return traffic in measured steps, and keep the rollback path until the primary route has had a representative observation period. See Recovery and communication.
+
 ## Sources
 
-- [Quotas for Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html): provider quota behavior and quota scope; values can change.
-- [Generative AI on Agent Platform quotas and system limits](https://cloud.google.com/vertex-ai/generative-ai/docs/quotas): provider quota categories; verify current project and region limits.
-- [Timeouts, retries, and backoff with jitter](https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/): dependency failure and retry-amplification principles.
+- [Provider A quota documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html): provider quota behavior and quota scope; values can change.
+- [Provider B quota and limits documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/quotas): provider quota categories; verify current project and region limits.
+- [Article on timeouts, retries and backoff with jitter](https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/): dependency failure and retry-amplification principles.

@@ -8,7 +8,10 @@ tags:
   - audit
   - team-process
 created: 2026-10-19
-modified: 2026-11-01
+modified: 2026-11-02
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 draft: false
 ---
 
@@ -20,8 +23,8 @@ A policy that says "do not feed secrets to AI assistants" is only as good as the
 > [!info] Scope
 > Written for organisation-managed use of coding assistants in IDEs, CLIs and CI. It names no vendor values on purpose. Retention periods, training use of your data, regions and telemetry options differ by vendor and plan and change over time. Read the vendor's current trust, privacy and admin pages at every renewal, and record the date you read them.
 
-> [!note] Not verified
-> Not checked against any product. Setting names, file locations and precedence rules vary and move; check the current vendor pages, whose paths move. Everything here is a checklist of questions to answer from the current documentation, plus the verification method.
+> [!note] Not verified against any product
+> Setting names, file locations and precedence rules vary and move; check the current vendor pages, whose paths move. Everything here is a checklist of questions to answer from the current documentation, plus the verification method.
 
 ## Control inventory
 
@@ -125,10 +128,30 @@ Some teams will need a different setting, such as a repository where the assista
 
 Review the whole register at each renewal and whenever a vendor announces a terms, region or telemetry change. Put a dated reminder on the owner so the check does not depend on someone remembering. When a control fails verification, treat it like any other control failure: fix, re-test, record.
 
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the general control themes (human approval, least privilege, extension supply chain, sensitive data) were compared with the OWASP and MCP texts; no vendor product was examined.
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications 2025: LLM06 Excessive Agency](https://genai.owasp.org/llm-top-10/): mitigations to minimize extensions, minimize extension functionality and permissions, and require user approval (human-in-the-loop) for high-impact actions, which support the explicit short list of commands run without asking and the "ask" default. Checked 2026-11-02 against owasp-llm commit 99f4395 (2_0_vulns/LLM06_ExcessiveAgency.md, mitigation items 1, 2, 4 and 6).
+- [OWASP Top 10 for LLM Applications 2025: LLM02 Sensitive Information Disclosure](https://genai.owasp.org/llm-top-10/): security credentials are listed among sensitive information; opt-out of data being used for training is recommended. Checked 2026-11-02, commit 99f4395 (LLM02_SensitiveInformationDisclosure.md lines 5 and 9).
+- [OWASP Top 10 for LLM Applications 2025: LLM03 Supply Chain](https://genai.owasp.org/llm-top-10/): third-party components are a supply-chain risk for LLM applications, which supports treating extensions as third-party code. Checked 2026-11-02, commit 99f4395 (LLM03_SupplyChain.md).
+- [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2026-07-28): tools represent arbitrary code execution; hosts must obtain explicit user consent before invoking any tool; there SHOULD be a human in the loop able to deny invocations; tool descriptions are untrusted unless from a trusted server. Checked 2026-11-02 against modelcontextprotocol commit d0e246e (docs/specification/2026-07-28/index.mdx lines 107-113; server/tools.mdx lines 32-34).
+
+### Not verified
+
+- Vendor-specific behaviour: retention, training use, regions, telemetry, SSO/SCIM, managed-settings precedence and deny-rule semantics. Vendor sites were not reachable, and the note deliberately gives no vendor values.
+- That a read deny rule does not stop a shell command from reading the file: depends on the tool and was not checked.
+- Specific practices such as CODEOWNERS for allowlists, pinning container images by digest, and why state and key files are on the deny list: not found in the local sources, kept as engineering guidance.
+- The rest (group-driven seats, idle reclaim, verification tests, review cadence) is engineering guidance, not a documented claim.
+- Nothing was run.
+
 ## Sources
 
-- Your coding agent's own documentation for settings files, permissions, managed policy and admin controls. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
-- [OWASP Top 10 for LLM applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/), OWASP.
+- Your coding agent's own documentation for settings files, permissions, managed policy and admin controls.
+- [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/), OWASP: excessive agency, sensitive information disclosure and supply chain entries.
+- [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2026-07-28), tool safety and user consent principles.
 
 ## Related
 

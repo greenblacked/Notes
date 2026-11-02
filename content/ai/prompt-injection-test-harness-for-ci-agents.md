@@ -11,7 +11,7 @@ tags:
 created: 2026-10-19
 modified: 2026-10-20
 evidence: source-reviewed
-reviewed: 2026-10-20
+reviewed: 2026-11-02
 review-due: 2027-04-20
 draft: false
 ---
@@ -178,8 +178,8 @@ Prompt wording is a weak control and a useful extra. Any fix that depends on the
 ### Sources checked
 
 - [MCP specification, tools (revision 2026-07-28)](https://modelcontextprotocol.io/specification/2026-07-28/server/tools): clients must treat tool annotations as untrusted unless from trusted servers, checked 2026-10-20 (read through a search excerpt, the page itself could not be fetched from the lab).
-- [MCP changelog for revision 2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26/changelog): tool annotations and the OAuth 2.1 based authorization framework were added in that revision, checked 2026-10-20 (search excerpt).
-- [MCP authorization (revision 2025-11-25)](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization): servers act as OAuth 2.1 resource servers, checked 2026-10-20 (search excerpt).
+- [MCP changelog for revision 2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26/changelog): tool annotations and the OAuth 2.1 based authorization framework were added in that revision (a historical claim about 2025-03-26, so the link stays on that revision), checked 2026-11-02 against commit d0e246e.
+- [MCP authorization (revision 2026-07-28)](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization): servers act as OAuth 2.1 resource servers, checked 2026-11-02 against `modelcontextprotocol` repository commit d0e246e.
 - [GitLab job rules](https://docs.gitlab.com/ci/jobs/job_rules/) and [predefined variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_PIPELINE_SOURCE` values `schedule` and `merge_request_event`, and `rules:` with `if:` and `changes:`, checked 2026-10-20 (search excerpts).
 - [GitLab CI/CD YAML reference](https://docs.gitlab.com/ci/yaml/): `artifacts:when: always`, `artifacts:expire_in` and `artifacts:paths`, checked 2026-10-20 (search excerpt). The same page says `rules:changes` for merge request pipelines compares against the target branch, and that a matching rule must be defined in `.gitlab-ci.yml` itself, not only in an include.
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): the 2025 list uses LLM01 Prompt Injection and LLM06 Excessive Agency, checked 2026-10-20 (search results; the list page could not be fetched).
