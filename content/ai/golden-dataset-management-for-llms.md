@@ -7,8 +7,11 @@ tags:
   - audit
   - reliability
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-02
 draft: false
+evidence: source-reviewed
+reviewed: 2026-11-02
+review-due: 2027-05-02
 ---
 
 ## Why golden data needs management
@@ -58,6 +61,25 @@ Common failures include leakage of holdout answers into prompts; revision of rub
 - Can a reviewer reproduce the release without exposing private raw data?
 
 The owner's agent skills and workflows are listed in [the AI skills catalogue](https://ai.szolotov.com).
+
+## Evidence
+
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the note is almost entirely engineering guidance on dataset governance; only the sensitive-data handling points could be compared with local sources.
+
+### Sources checked
+
+- [OWASP Top 10 for LLM Applications 2025: LLM02 Sensitive Information Disclosure](https://genai.owasp.org/llm-top-10/): the source recommends scrubbing or masking sensitive content before it is used in training, detecting and redacting confidential content before processing, least-privilege access, and clear policies on data retention, usage and deletion framed as transparency to users. It does not mention evaluation datasets or separating raw-data access from evaluation access; applying these points to evaluation-set governance (redaction, access separation, retention and removal rules) is this note's own analogy, not a statement in the source. Checked 2026-11-02 against the OWASP LLM Top 10 repository commit 99f4395 (`2_0_vulns/LLM02_SensitiveInformationDisclosure.md`).
+- [OWASP Top 10 for LLM Applications 2025: LLM04 Data and Model Poisoning](https://genai.owasp.org/llm-top-10/): data from external sources can be unverified or malicious and tampering with data is an integrity risk, and the source recommends tracking data origins and transformations and using data version control to track changes in datasets and detect manipulation. This supports tracking provenance and versioning of examples; the note's specific release design (immutable releases, manifest fields) is its own engineering guidance. Checked 2026-11-02, commit 99f4395 (`2_0_vulns/LLM04_DataModelPoisoning.md`).
+- [Git documentation: git](https://git-scm.com/docs/git): all objects are named by the SHA-1 hash of their contents, which supports the note's content-addressed storage remark. Checked 2026-11-02 against git/git commit 50fe5cc (`Documentation/git.adoc`).
+- [Git documentation: git-filter-branch](https://git-scm.com/docs/git-filter-branch): shows how to remove a file containing confidential information from all commits, and warns that mixing old and new history leaves copies of commits with unwanted or sensitive files. This supports keeping sensitive data out of ordinary Git history. Checked 2026-11-02 against git/git commit 50fe5cc (`Documentation/git-filter-branch.adoc`).
+
+### Not verified
+
+- The NIST AI RMF Playbook and NIST AI 600-1 listed under Sources, including the statement that AI RMF 1.0 is being updated: NIST publications were not reachable. The Sources entries are kept as pointers only.
+- The Git sources support only object naming by content hash and the difficulty of removing sensitive files from history; hashing canonical serialized records and manifests and attaching the hash to reports is the note's own engineering guidance.
+- General guidance (release manifest fields, immutable-release practice, holdout separation, coverage and duplicate diagnostics, synthetic versus human-written trade-offs, retirement of stale examples, the review checklist) is engineering guidance, not a documented claim.
+- The provider documentation entry in Sources is generic and was not checked.
+- Nothing was run.
 
 ## Sources
 
