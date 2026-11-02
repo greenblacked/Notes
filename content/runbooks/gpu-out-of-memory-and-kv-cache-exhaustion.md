@@ -117,9 +117,12 @@ kubectl get node "$NODE" -L pool,node.kubernetes.io/instance-type
 kubectl get nodes -l pool="$POOL"
 kubectl get pods -A -o wide --field-selector spec.nodeName="$NODE"
 kubectl describe node "$NODE" | grep nvidia.com/gpu
+# The GPU model and count come from the node pool's accelerator configuration, not from the machine type
+gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
+  --format="yaml(config.accelerators)"
 ```
 
-`pool` is a label the operator sets on the GPU node pool, with `--node-labels=pool=gpu-inference` on `gcloud container node-pools create` or `update` (or `labels` in the Terraform `node_config`); the GPU pool is also tainted with `dedicated=gpu:NoSchedule`, which the serving pods tolerate. The machine type in the last column (`INSTANCE-TYPE`) tells you the GPU family. If the pool column is empty, list the labels the nodes actually have with `kubectl get nodes --show-labels`, and label the pool with `gcloud container node-pools update ... --node-labels` before relying on the selector; `update` replaces all user-specified labels, so repeat the ones the pool already has.
+`pool` is a label the operator sets on the GPU node pool, with `--node-labels=pool=gpu-inference` on `gcloud container node-pools create` or `update` (or `labels` in the Terraform `node_config`); the GPU pool is also tainted with `dedicated=gpu:NoSchedule`, which the serving pods tolerate. The machine type does not identify the GPU: some machine families accept more than one GPU model, so read `acceleratorType` and `acceleratorCount` from the `node-pools describe` output instead. `nvidia.com/gpu` on the node only gives the count. If the pool column is empty, list the labels the nodes actually have with `kubectl get nodes --show-labels`, and label the pool with `gcloud container node-pools update ... --node-labels` before relying on the selector; `update` replaces all user-specified labels, so repeat the ones the pool already has.
 
 Only for a pod that is currently `Running`, and if `nvidia-smi` is present in the image, you can also run `kubectl -n "$NS" exec "$POD" -c "$CONTAINER" -- nvidia-smi`; it shows only that pod's own GPU view, not a time-sliced co-tenant.
 
@@ -352,6 +355,7 @@ Run the load that failed (a replay of the peak, or a load test through the gatew
 
 ### Sources checked
 
+- [GKE API: NodeConfig](https://github.com/googleapis/googleapis/blob/ff8fd20/google/container/v1/cluster_service.proto): a node pool's `config.accelerators` lists `AcceleratorConfig` entries with `accelerator_count` and `accelerator_type`. Checked 2026-11-02 against googleapis/googleapis commit ff8fd20 (lines 1508, 6150-6156).
 - [Conserving Memory - vLLM](https://docs.vllm.ai/en/latest/configuration/conserving_memory/): tensor parallelism splits the model across GPUs and each process reads the whole checkpoint (a sharded checkpoint keeps load time constant); quantization; `max_model_len` and `max_num_seqs`; CUDA graph memory and `enforce_eager`; `mm_processor_cache_gb` with a 4 GiB default; `limit_mm_per_prompt`. Checked 2026-11-01, vLLM repository commit 8530a77.
 - [Optimization and Tuning - vLLM](https://docs.vllm.ai/en/latest/configuration/optimization/): preemption in V1 uses recompute, the warning text, the guidance to raise `gpu_memory_utilization` or tensor or pipeline parallel size and lower `max_num_seqs` or `max_num_batched_tokens`, `disable_log_stats`; the `--kv-cache-memory` start-up shortcut and its validity limits. Checked 2026-11-01, commit 8530a77.
 - [Metrics - vLLM](https://docs.vllm.ai/en/latest/design/metrics/) and [Production Metrics](https://docs.vllm.ai/en/latest/usage/metrics/): `vllm:kv_cache_usage_perc` as a 0 to 1 fraction, `vllm:num_requests_running` and its `_waiting` variant, `vllm:request_num_preemptions` (a histogram, listed in the Custom Histogram Buckets table), `vllm:admission_rejections_total`, `vllm:request_prompt_tokens`, `vllm:request_generation_tokens`, `vllm:time_to_first_token_seconds`. Checked 2026-11-01, commit 8530a77.
