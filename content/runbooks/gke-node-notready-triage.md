@@ -77,8 +77,9 @@ Read it like this:
 One node, one pool, or one zone changes the diagnosis completely.
 
 ```bash
-kubectl get nodes -L topology.kubernetes.io/zone,pool \
-  --no-headers | awk '{print $2, $(NF-1), $NF}' | sort | uniq -c
+kubectl get nodes --no-headers \
+  -o custom-columns='READY:.status.conditions[?(@.type=="Ready")].status,ZONE:.metadata.labels.topology\.kubernetes\.io/zone,POOL:.metadata.labels.pool' \
+  | sort | uniq -c
 
 kubectl get nodes -o json | jq -r '.items[] | select(([.status.conditions[]|select(.type=="Ready")][0].status)!="True") | .metadata.name'
 ```
