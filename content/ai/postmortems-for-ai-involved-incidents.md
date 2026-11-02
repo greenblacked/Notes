@@ -119,7 +119,7 @@ Also decide, and record, whether the tool stays approved for that workflow, with
 
 Before closing the postmortem, add the failure to the evaluation set. A useful case has the exact input (redacted as needed), the expected safe behaviour, the tool calls that must not occur, and the pinned model version it was observed on, so that later upgrades are tested against it ([[model-version-pinning-and-upgrade-evals]]). Link the case identifier in the postmortem.
 
-Run the cases in CI on changes to a prompt template, model pin or retrieval index. A GitLab job using `rules:` with `changes:compare_to`, so a multi-commit push is diffed against the default branch instead of only the previous commit:
+Run the cases in CI on changes to a prompt template, model pin or retrieval index. A GitLab job using `rules:`, for merge request pipelines, the default branch and a schedule:
 
 ```yaml
 agent-regression:
@@ -129,17 +129,21 @@ agent-regression:
     - pip install -r evals/requirements.txt
     - python evals/run.py --suite incident-regressions --fail-on-forbidden-tool-call
   rules:
-    - if: $CI_COMMIT_BRANCH
-      changes:
-        compare_to: "refs/heads/main"
-        paths:
-          - prompts/**/*
-          - config/model-pins.yaml
-          - retrieval-index/**/*
-          - evals/incident-regressions/**/*
+    # Merge request pipelines: CI_COMMIT_BRANCH is not set there, so match on the pipeline source
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: &agent-inputs
+        - prompts/**/*
+        - config/model-pins.yaml
+        - retrieval-index/**/*
+        - evals/incident-regressions/**/*
+    # The default branch, after a merge
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes: *agent-inputs
+    # On a schedule, so a model change on the provider's side is caught too
+    - if: $CI_PIPELINE_SOURCE == "schedule"
 ```
 
-The job name, paths (including the `retrieval-index/` path) and flags above are examples for a harness you own. Without `compare_to`, `changes:` on a branch pipeline diffs only against the previous commit, and it always matches on a new branch or in a scheduled pipeline. The point is that the incident cases run automatically and a forbidden tool call fails the pipeline.
+The job name, paths (including the `retrieval-index/` path) and flags above are examples for a harness you own. How `changes:` picks the commit it compares against depends on the pipeline type; set `changes:compare_to` if the comparison base matters for you, after checking the GitLab `rules:changes` reference for your version. The point is that the incident cases run automatically and a forbidden tool call fails the pipeline.
 
 ## Failure modes
 
@@ -180,7 +184,7 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the MCP, OpenTelemetry Ge
 - [Configure a Security Context for a Pod or Container | Kubernetes](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/): `seccompProfile` field and `readOnlyRootFilesystem`. Checked 2026-11-02, commit 491f14e.
 - [Configure Service Accounts for Pods | Kubernetes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/): `serviceAccountName` and `automountServiceAccountToken` fields. Checked 2026-11-02, commit 491f14e.
 - [Using RBAC Authorization | Kubernetes](https://kubernetes.io/docs/reference/access-authn-authz/rbac/): least-privilege and read-only roles. Checked 2026-11-02, commit 491f14e.
-- [CI/CD job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/): `rules:` with `if:` on `$CI_PIPELINE_SOURCE == "schedule"` and `changes:` path lists and `changes:compare_to`. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
+- [CI/CD job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/): `rules:` with `if:` on `$CI_PIPELINE_SOURCE` (`merge_request_event`, `schedule`) and `changes:` path lists. [Predefined CI/CD variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_COMMIT_BRANCH` is available in branch pipelines, including the default branch, and not in merge request pipelines; `CI_DEFAULT_BRANCH` is the default branch name. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
 - [Troubleshooting CI/CD jobs | GitLab](https://docs.gitlab.com/ci/jobs/job_troubleshooting/): without merge request pipelines, `changes` diffs against the previous commit, and always evaluates true for a new branch and in scheduled pipelines. Checked 2026-11-02 against gitlabhq/gitlabhq commit d7b9a61.
 
 ### Not verified
