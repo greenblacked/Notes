@@ -22,6 +22,7 @@ export const SECTIONS = [
   "patterns",
   "tools",
   "runbooks",
+  "experiences",
   "compliance",
   "ai",
   "management",
