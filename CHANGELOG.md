@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Added
+
+- **An Experiences section, for cases rather than procedures.** `content/experiences/` holds notes about something that actually happened — a production incident written by the person who was there, or a lab experiment with recorded output — and each one names the runbook or pattern it produced. The section has an index, a template and its own entry in the top bar. The rule behind it is [Experience and evidence](content/standards/experience-and-evidence.md) and [ADR 0063](content/adr/0063-notes-are-grounded-in-real-experience.md).
+- **A Postgres lock queue runbook, from a real lab run.** `postgres-lock-queue-triage` finds the head of a blocking chain, cancels the session that restores service without losing a transaction, then removes the holder. It came from `postgres-lock-queue-lab`, a `postgres:17-alpine` run that reproduced one idle transaction blocking an `ALTER` and every later reader, with the commands and output recorded. Both notes are `lab-tested`.
+- **A risk scan for the unrated notes.** `npm run scan:unrated` ranks the notes with no evidence level (501 today) by how much a wrong claim would cost — runnable commands, destructive steps, security and IAM claims, type, and inbound links. It reports and never fails, so review batches are chosen by risk rather than by convenience.
+- **A `postgres` tag** in the taxonomy, for the platform notes that had no tag of their own.
+
+### Changed
+
+- **An operational claim must name its case.** A note that declares `operationally-verified` and is not itself in `content/experiences/` now needs an `### Operational check` that links to the case recording it; `npm run check:notes` fails otherwise. Before this the subsection only had to be non-empty, so a paragraph of confident prose passed. The check is in `scripts/check-notes.mjs` with tests, and the rule is written into the note contract.
+
 ## [0.16.0] - 2026-11-02
 
 ### Changed
