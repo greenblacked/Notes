@@ -201,7 +201,7 @@ The first rule is the one that a diagram does not teach. The second is the one t
 
 ### Sources checked
 
-- [PostgreSQL 17: Client Connection Defaults](https://www.postgresql.org/docs/17/runtime-config-client.html): the behaviour and zero defaults of `lock_timeout`, `idle_in_transaction_session_timeout` and `statement_timeout`, and that `transaction_timeout` exists in 17 and is ignored when it is shorter than the other two; checked 2026-11-22.
+- [PostgreSQL 17: Client Connection Defaults](https://www.postgresql.org/docs/17/runtime-config-client.html): the behaviour and zero defaults of `lock_timeout`, `idle_in_transaction_session_timeout`, `statement_timeout` and `transaction_timeout`, including timeout precedence; checked 2026-11-22.
 - [PostgreSQL 17: Lock Management](https://www.postgresql.org/docs/17/runtime-config-locks.html): `deadlock_timeout` and `log_lock_waits`, which determine when a lock wait is logged; checked 2026-11-22.
 - [PostgreSQL 17: Monitoring Database Activity](https://www.postgresql.org/docs/17/monitoring-stats.html): `pg_stat_activity` columns used above (`state`, `wait_event_type`, `wait_event`, `state_change`); checked 2026-11-22.
 - [PostgreSQL 17: System Administration Functions](https://www.postgresql.org/docs/17/functions-admin.html): `pg_blocking_pids`, `pg_cancel_backend`, `pg_terminate_backend` and `pg_reload_conf`; checked 2026-11-22.
@@ -211,7 +211,7 @@ The first rule is the one that a diagram does not teach. The second is the one t
 - The lock mode names (`AccessShareLock`, `RowExclusiveLock`, `AccessExclusiveLock`) and their conflict matrix were read from the run's own `pg_locks` output, not re-derived from the concurrency chapter.
 - Only the `idle in transaction` holder was reproduced. An `active` holder mid-statement behaves the same way in this lab, but the `state` value differs and that was not recorded as a separate case.
 - Timings are from a local container with no other load; they say nothing about how long a queue takes to build on a busy server.
-- `transaction_timeout` was not exercised. The docs say it is ignored when it is shorter than `statement_timeout` or `idle_in_transaction_session_timeout`; that was read, not run.
+- The lab did not exercise `transaction_timeout`. PostgreSQL 17 gives an enabled `transaction_timeout` precedence over each `statement_timeout` or `idle_in_transaction_session_timeout` that is equal to or longer than it.
 - The behaviour of `pg_cancel_backend` on a session inside a multi-statement transaction, and whether the client sees an error or a silent rollback, was not tested beyond the single case above.
 
 ### Environment

@@ -176,6 +176,12 @@ These are configuration changes, so they belong in a reviewed change, not in the
 ```sql
 -- Server-wide: end sessions that sit idle inside a transaction.
 ALTER SYSTEM SET idle_in_transaction_session_timeout = '60s';
+SELECT pg_reload_conf();
+```
+
+After the reload, run `SHOW idle_in_transaction_session_timeout;` in a fresh application connection. Expect `1min` if no role, database, or session setting overrides the cluster default.
+
+```sql
 -- Per migration session: fail fast instead of queueing readers behind the DDL.
 SET lock_timeout = '3s';
 ```
@@ -183,7 +189,7 @@ SET lock_timeout = '3s';
 `idle_in_transaction_session_timeout` is the setting that removes this class of holder. `lock_timeout` belongs on the migration path, as [[postgres-expand-contract-migrations]] describes. Both default to `0`, which disables them.
 
 > [!note] PostgreSQL 17
-> `transaction_timeout` also exists from 17 and caps the whole transaction, but the docs say it is ignored when it is shorter than `statement_timeout` or `idle_in_transaction_session_timeout`. Set one of those rather than relying on it alone.
+> `transaction_timeout` caps the total time spent in a transaction. When enabled, it takes precedence over each `statement_timeout` or `idle_in_transaction_session_timeout` that is equal to or longer than it. Use `idle_in_transaction_session_timeout` to limit time spent idle within a transaction.
 
 ## Validation
 
@@ -204,7 +210,7 @@ Then confirm the application recovered, not just the database: the failing endpo
 
 - `pg_cancel_backend` cannot be undone: the cancelled statement's transaction rolls back. For a DDL that is the intended outcome; the migration re-runs.
 - `pg_terminate_backend` ends the session and rolls back its transaction. If that transaction was a customer's, the work is lost; this is why step 5 reads the statement first.
-- `ALTER SYSTEM SET` can be reverted with `ALTER SYSTEM RESET <setting>` and `SELECT pg_reload_conf();`. A reload does not affect sessions that are already connected; the timeout applies to sessions that go idle after the reload.
+- Restore the previous `idle_in_transaction_session_timeout` value with `ALTER SYSTEM SET`, or use `ALTER SYSTEM RESET idle_in_transaction_session_timeout` if there was no previous `ALTER SYSTEM` override. Run `SELECT pg_reload_conf();` and verify the restored value with `SHOW idle_in_transaction_session_timeout;`. Existing sessions also pick up the reloaded default unless they have an override.
 - If a cancelled migration leaves a partially applied change, re-run it through the normal migration path rather than repairing by hand.
 
 ## Troubleshooting
@@ -223,6 +229,7 @@ Then confirm the application recovered, not just the database: the failing endpo
 ### Sources checked
 
 - [PostgreSQL 17: Client Connection Defaults](https://www.postgresql.org/docs/17/runtime-config-client.html): `lock_timeout`, `idle_in_transaction_session_timeout`, `statement_timeout` and `transaction_timeout`, their scope and their zero defaults; checked 2026-11-22.
+- [PostgreSQL 17: ALTER SYSTEM](https://www.postgresql.org/docs/17/sql-altersystem.html) and [Setting Parameters](https://www.postgresql.org/docs/17/config-setting.html) describe how to apply and reload cluster defaults.
 - [PostgreSQL 17: Monitoring Database Activity](https://www.postgresql.org/docs/17/monitoring-stats.html): the `pg_stat_activity` columns and the `state` and `wait_event_type` values used above; checked 2026-11-22.
 - [PostgreSQL 17: System Administration Functions](https://www.postgresql.org/docs/17/functions-admin.html): `pg_blocking_pids`, `pg_cancel_backend`, `pg_terminate_backend`, `pg_reload_conf`; checked 2026-11-22.
 - [PostgreSQL 17: Lock Management](https://www.postgresql.org/docs/17/runtime-config-locks.html): `deadlock_timeout` and `log_lock_waits`; checked 2026-11-22.
