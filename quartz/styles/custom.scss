@@ -115,6 +115,7 @@ $unicode-ranges: (
   --graph-architecture: #1f5f8b;
   --graph-patterns: #2f7a3a;
   --graph-tools: #8a5a00;
+  --graph-experiences: #8b351f;
   --graph-runbooks: #6b3fa0;
   --graph-compliance: #0f7470;
   --graph-ai: #b02a6b;
@@ -159,6 +160,7 @@ $unicode-ranges: (
   --graph-architecture: #7fb6e6;
   --graph-patterns: #8fd08f;
   --graph-tools: #e3b55a;
+  --graph-experiences: #f8ad93;
   --graph-runbooks: #c3a2ef;
   --graph-compliance: #6cc9c2;
   --graph-ai: #f08cbc;
@@ -2554,6 +2556,7 @@ article h2:has(> a.tag-link) {
   &[data-section="architecture"] { background: var(--graph-architecture); }
   &[data-section="patterns"] { background: var(--graph-patterns); }
   &[data-section="tools"] { background: var(--graph-tools); }
+  &[data-section="experiences"] { background: var(--graph-experiences); }
   &[data-section="runbooks"] { background: var(--graph-runbooks); }
   &[data-section="compliance"] { background: var(--graph-compliance); }
   &[data-section="ai"] { background: var(--graph-ai); }
