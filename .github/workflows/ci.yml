@@ -55,6 +55,11 @@ jobs:
       - name: Check note metadata and print the review queue
         run: npm run check:notes -- --summary "$GITHUB_STEP_SUMMARY"
 
+      # Ranks the notes that declare no evidence level by risk. Reporting only: it never fails the
+      # job, so the queue is visible without gating a merge on the backlog.
+      - name: Rank the unrated notes by risk
+        run: npm run scan:unrated -- --top 20 --summary "$GITHUB_STEP_SUMMARY"
+
       - name: Build
         run: npm run build
 

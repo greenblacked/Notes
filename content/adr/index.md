@@ -5,7 +5,7 @@ tags:
   - adr
   - meta
 created: 2026-10-10
-modified: 2026-10-21
+modified: 2026-11-22
 draft: false
 ---
 
@@ -16,7 +16,7 @@ An Architecture Decision Record (ADR) captures one significant decision: the con
 - Files are named `NNNN-short-kebab-title.md`, for example `0001-gitops-with-argocd.md`.
 - `NNNN` is a four-digit, zero-padded sequence number. Numbers are never reused or renumbered, even if a record is rejected or superseded.
 - The note `title` is the decision in sentence case without the number, and the file stem (for example `0001-gitops-with-argocd`) is what wikilinks use. Optional `aliases` such as `ADR-0001` add short names.
-- Start from [[template|the ADR template]].
+- Start from [[adr/template|the ADR template]].
 
 ## Lifecycle
 
@@ -99,3 +99,4 @@ An ADR has exactly one status at a time, written in lowercase in the `status` fr
 | [[0060-renovate-for-automated-dependency-updates\|0060]]            | Renovate opens dependency, image digest and Terraform provider updates              |
 | [[0061-jenkins-controllers-as-code-with-ephemeral-agents\|0061]]    | Jenkins controllers run from configuration as code with ephemeral pod agents        |
 | [[0062-helm-charts-rendered-by-argo-cd\|0062]]                      | Applications are Helm charts rendered by Argo CD; Kustomize only patches            |
+| [[0063-notes-are-grounded-in-real-experience\|0063]]                | Notes are grounded in real experience, and an operational claim must name its case  |

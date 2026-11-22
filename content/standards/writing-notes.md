@@ -6,7 +6,7 @@ tags:
   - standards
   - meta
 created: 2026-10-10
-modified: 2026-11-01
+modified: 2026-11-22
 verified: 2026-10-11
 draft: false
 ---
@@ -16,7 +16,7 @@ This is the contract every note follows. It is deliberately short.
 ## File naming and layout
 
 - Lowercase kebab-case file names: `gke-workload-identity.md`, not `GKE Workload Identity.md`.
-- One note per file, in the folder that says what **kind** of note it is: `adr/`, `architecture/`, `patterns/`, `tools/`, `runbooks/`, `compliance/`, `ai/`, `management/`, `standards/`, `learn/`.
+- One note per file, in the folder that says what **kind** of note it is: `adr/`, `architecture/`, `patterns/`, `tools/`, `runbooks/`, `experiences/`, `compliance/`, `ai/`, `management/`, `standards/`, `learn/`.
 - Each folder has an `index.md` that introduces the section and links to its notes.
 - ADRs use `NNNN-short-kebab-title.md` (see [[adr/index|the ADR index]]).
 - Images and attachments go next to the note that uses them, in a folder named after the note; avoid binary files when text or Mermaid will do.
@@ -155,6 +155,8 @@ Restore from the backup taken in the prerequisites.
 
 `operationally-verified` needs evidence from a real environment that only the owner can supply, so agents and contributors without that access never set it. If a lab or review is not actually done, the level is not claimed; unrated is better than overstated.
 
+An operational claim must be traceable to a case. A note **outside** `content/experiences/` that declares `operationally-verified` must have an `### Operational check` subsection containing a wikilink to a note in `content/experiences/`; a note inside that folder is itself the case and needs no such link. `npm run check:notes` enforces this. The provenance model and the experience section are described in [[experience-and-evidence]].
+
 ### Review queue
 
 `npm run check:notes` enforces the machine-checkable parts and CI runs it: for a note that declares any evidence field, the required base fields of the table above (`title`, `description`, `tags` with at least one non-empty tag, `created` and `modified` as valid dates, `draft` as a boolean, and a `type` from the list; not the description length or whether a tag is in the taxonomy), and for the evidence fields, the fields and dates, the required subsections and that they are not empty, the https link, the reviewed date, the Lab run fences and the destructive callout. The content of each Sources bullet, the host OS, versions and date in a Lab run, the position of the Evidence section and whether a claim is true are left to review. It also prints a review queue and, in CI, puts it in the run summary: reviews overdue, reviews due within 30 days, notes modified after their review, and the notes that declare no level. The queue only informs; it never fails the build and never edits a note. `node scripts/check-notes.mjs --queue` prints just the queue.
@@ -168,12 +170,12 @@ Restore from the backup taken in the prerequisites.
 
 Tags are lowercase and hyphen-separated. Use the existing ones before inventing new ones.
 
-| Kind     | Tags                                                                                                                                                                                 |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Type     | `adr`, `patterns`, `tools`, `standards`, `runbooks`, `architecture`, `compliance`, `ai`, `management`, `learning`, `meta`                                                            |
-| Platform | `kubernetes`, `gitops`, `gke`, `gcp`, `terraform`, `helm`, `docker`, `gitlab-ci`, `jenkins`, `artifactory`, `sonarqube`, `prometheus`, `spinnaker`, `chef`, `opentelemetry`, `linux` |
-| Concern  | `security`, `networking`, `observability`, `reliability`, `ci-cd`, `incident-management`, `on-call`, `cost`, `supply-chain`, `policy-as-code`, `audit`                               |
-| People   | `leadership`, `hiring`, `career`, `team-process`, `delivery`                                                                                                                         |
+| Kind     | Tags                                                                                                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Type     | `adr`, `patterns`, `tools`, `standards`, `runbooks`, `experiences`, `architecture`, `compliance`, `ai`, `management`, `learning`, `meta`                                                         |
+| Platform | `kubernetes`, `gitops`, `gke`, `gcp`, `terraform`, `helm`, `docker`, `gitlab-ci`, `jenkins`, `artifactory`, `sonarqube`, `prometheus`, `spinnaker`, `chef`, `opentelemetry`, `linux`, `postgres` |
+| Concern  | `security`, `networking`, `observability`, `reliability`, `ci-cd`, `incident-management`, `on-call`, `cost`, `supply-chain`, `policy-as-code`, `audit`                                           |
+| People   | `leadership`, `hiring`, `career`, `team-process`, `delivery`                                                                                                                                     |
 
 Add a new tag by adding it to this table in the same change that first uses it. See [[tags|the tags page]] for browsing.
 
@@ -228,4 +230,4 @@ Add `verified` only when the commands were actually run, and give the distro and
 
 ## ADR lifecycle
 
-ADRs follow `proposed` -> `accepted` and then end in one of `rejected`, `deprecated` or `superseded`. Accepted ADRs are immutable apart from status and links. To change a decision, write a new ADR that supersedes the old one and set the old one to `superseded` with a link in both directions. The full rules are in [[adr/index]]; start new records from [[template]].
+ADRs follow `proposed` -> `accepted` and then end in one of `rejected`, `deprecated` or `superseded`. Accepted ADRs are immutable apart from status and links. To change a decision, write a new ADR that supersedes the old one and set the old one to `superseded` with a link in both directions. The full rules are in [[adr/index]]; start new records from [[adr/template|the ADR template]].

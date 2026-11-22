@@ -8,6 +8,11 @@
 // (title, description, type, tags, created, modified, draft). Notes that declare no `evidence`
 // are only checked for stray evidence fields.
 //
+// One rule goes further: a note that declares `operationally-verified` and is not itself in
+// content/experiences/ must have an `### Operational check` that links to the case in that
+// section which records it, so an operational claim is always traceable to something that
+// happened (content/standards/experience-and-evidence.md).
+//
 // The review queue is information only: overdue reviews, reviews due within 30 days, notes
 // modified after their review, and notes that declare no level. It never changes the exit code.
 //
@@ -62,6 +67,40 @@ export function isoDay(value) {
 const dayNumber = (iso) => Date.parse(`${iso}T00:00:00Z`) / 86400000
 const addDays = (iso, days) =>
   new Date((dayNumber(iso) + days) * 86400000).toISOString().slice(0, 10)
+
+// A wikilink: `[[target]]`, `[[target|text]]`, `[[target#heading]]`. The target stops at `|` or `#`.
+const WIKILINK = /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g
+const EXPERIENCE_FOLDER = "experiences"
+const RESERVED_EXPERIENCE_NAMES = new Set(["index", "template"])
+
+/** True when a note path lives in the experiences section. */
+export function isExperienceNote(path) {
+  return /(^|[\\/])experiences[\\/]/.test(path)
+}
+
+/** Removes fenced code so a wikilink shown as an example does not count as a link. */
+function stripFences(text) {
+  return text.replace(/^([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1\2[ \t]*$/gm, "")
+}
+
+/**
+ * True when `text` links to a case in content/experiences/. Accepts `[[experiences/<slug>]]` and a
+ * bare `[[<slug>]]` when `<slug>` is one of `experienceSlugs`. `index` and `template` never count:
+ * they are the section's index and its template, not cases.
+ */
+export function linksToExperiences(text, experienceSlugs = new Set()) {
+  for (const match of stripFences(text).matchAll(WIKILINK)) {
+    const target = match[1].trim().replace(/\\$/, "")
+    const prefix = `${EXPERIENCE_FOLDER}/`
+    if (target.startsWith(prefix)) {
+      const slug = target.slice(prefix.length)
+      if (slug && !RESERVED_EXPERIENCE_NAMES.has(slug)) return true
+    } else if (experienceSlugs.has(target)) {
+      return true
+    }
+  }
+  return false
+}
 
 /**
  * Splits a note into frontmatter and body. Only a leading `---` fence counts; CRLF is accepted.
@@ -204,7 +243,7 @@ function baseProblems(fm) {
 }
 
 /** Problems with one parsed note, as plain strings. `today` is `YYYY-MM-DD`. */
-export function checkNote(note, { today }) {
+export function checkNote(note, { today, experienceSlugs = new Set() }) {
   if (note.parseError) return [`frontmatter does not parse: ${note.parseError}`]
   const fm = note.frontmatter ?? {}
   const has = (key) => Object.hasOwn(fm, key) && fm[key] !== null && fm[key] !== undefined
@@ -296,8 +335,14 @@ export function checkNote(note, { today }) {
       )
     }
   }
-  if (level === "operationally-verified" && isEmpty(sub("Operational check"))) {
-    problems.push("`### Operational check` is missing or empty")
+  if (level === "operationally-verified") {
+    const check = sub("Operational check")
+    if (isEmpty(check)) problems.push("`### Operational check` is missing or empty")
+    else if (!isExperienceNote(note.path) && !linksToExperiences(check.text, experienceSlugs)) {
+      problems.push(
+        "`### Operational check` must link to the note in content/experiences/ that records the case, for example [[experiences/your-case]]",
+      )
+    }
   }
 
   if (destructive === true) {
@@ -426,9 +471,12 @@ function main(argv) {
   }
 
   const notes = loadNotes(opts.content)
+  const experienceSlugs = new Set(
+    notes.filter((note) => isExperienceNote(note.path)).map((note) => basename(note.path, ".md")),
+  )
   let errors = 0
   for (const note of notes) {
-    for (const problem of checkNote(note, { today })) {
+    for (const problem of checkNote(note, { today, experienceSlugs })) {
       errors++
       console.log(`::${opts.queue ? "warning" : "error"} file=${note.path}::${problem}`)
     }

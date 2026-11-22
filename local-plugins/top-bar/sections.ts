@@ -43,6 +43,13 @@ export const SECTIONS: Section[] = [
     description: "Step-by-step operational procedures: release, roll back, recover.",
   },
   {
+    folder: "experiences",
+    title: "Experiences",
+    label: "Experiences",
+    description:
+      "What actually happened: real incidents and real lab experiments, and the rule or procedure each one produced.",
+  },
+  {
     folder: "compliance",
     title: "Compliance",
     label: "Compliance",

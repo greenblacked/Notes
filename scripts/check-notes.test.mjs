@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url"
 import {
   EVIDENCE_LEVELS,
   checkNote,
+  isExperienceNote,
   isoDay,
+  linksToExperiences,
   loadNotes,
   parseNote,
   reviewQueue,
@@ -30,7 +32,7 @@ const SECTION_TEXT = {
   "Failure conditions": "Exit code not 0.",
   "Cleanup and rollback": "Restore the backup.",
   "Lab run": `Host: Linux.\n\n${FENCE}bash\ntool --version\n${FENCE}\n\n${FENCE}text\ntool 1.0\n${FENCE}`,
-  "Operational check": "Checked on a real system, 2026-10-20.",
+  "Operational check": "Checked on a real system, 2026-10-20. See [[experiences/example-case]].",
 }
 
 /** A note's source. `fm` overrides frontmatter lines, `sections` lists the `###` names to emit. */
@@ -234,6 +236,66 @@ test("a callout inside a code fence does not count for destructive", () => {
 test("destructive: a string fails", () => {
   const text = note({ fm: { destructive: '"yes"' }, sections: RUNBOOK, extra: "> [!danger] X\n" })
   assert.ok(has(problems(text), /`destructive` must be true or false/))
+})
+
+test("operationally-verified outside experiences must link to its case", () => {
+  const fm = { evidence: "operationally-verified", verified: "2026-10-20" }
+  const sections = [...LAB, "Operational check"]
+  const text = note({ fm, sections })
+  const withCheck = (custom) => text.replace(SECTION_TEXT["Operational check"], custom)
+  const opProblems = (t, slugs) =>
+    checkNote(parseNote("content/runbooks/x.md", t), { today: TODAY, experienceSlugs: slugs })
+
+  // No link: the claim cannot be traced to a case.
+  assert.ok(
+    has(
+      opProblems(withCheck("Checked on a real system.")),
+      /must link to the note in content\/experiences/,
+    ),
+  )
+
+  // An explicit folder link is enough, with no slug set.
+  assert.deepEqual(opProblems(withCheck("Checked. See [[experiences/checkout-outage]].")), [])
+
+  // A bare link counts only when the slug is a known experience note.
+  assert.ok(
+    has(opProblems(withCheck("Checked. See [[checkout-outage]].")), /must link to the note/),
+  )
+  assert.deepEqual(
+    opProblems(withCheck("Checked. See [[checkout-outage]]."), new Set(["checkout-outage"])),
+    [],
+  )
+
+  // The section index and the template are not cases.
+  assert.ok(has(opProblems(withCheck("See [[experiences/index]].")), /must link to the note/))
+  assert.ok(has(opProblems(withCheck("See [[experiences/template]].")), /must link to the note/))
+
+  // A link shown inside a code fence is an example, not a link.
+  const fenced = `${FENCE}text\nSee [[experiences/checkout-outage]].\n${FENCE}`
+  assert.ok(has(opProblems(withCheck(fenced)), /must link to the note/))
+  const tilde = `~~~text\nSee [[experiences/checkout-outage]].\n~~~`
+  assert.ok(has(opProblems(withCheck(tilde)), /must link to the note/))
+
+  // The experience note itself is the case, so it needs no link.
+  const inSection = checkNote(
+    parseNote("content/experiences/checkout-outage.md", withCheck("Checked on a real system.")),
+    {
+      today: TODAY,
+    },
+  )
+  assert.deepEqual(inSection, [])
+})
+
+test("isExperienceNote and linksToExperiences", () => {
+  assert.equal(isExperienceNote("content/experiences/a.md"), true)
+  assert.equal(isExperienceNote("C:/repo/content/experiences/a.md"), true)
+  assert.equal(isExperienceNote("content/experiences.md"), false)
+  assert.equal(isExperienceNote("content/runbooks/a.md"), false)
+  assert.equal(linksToExperiences("[[experiences/a|the case]]"), true)
+  assert.equal(linksToExperiences("[[experiences/a#Context]]"), true)
+  assert.equal(linksToExperiences("[[a]]", new Set(["a"])), true)
+  assert.equal(linksToExperiences("[[a]]"), false)
+  assert.equal(linksToExperiences("[[experiences/index]]"), false)
 })
 
 test("operationally-verified without verified fails", () => {
