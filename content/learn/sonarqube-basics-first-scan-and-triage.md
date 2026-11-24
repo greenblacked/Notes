@@ -8,7 +8,7 @@ tags:
   - ci-cd
   - security
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
@@ -186,10 +186,10 @@ You need Docker on the lab VM. All screens and output are illustrative; this les
 3. **Create a token and store it.** Generate a project analysis token (or the narrowest type your version offers) and save it:
 
    ```bash
-   ( umask 077; read -rs -p 'Token: ' t && printf '%s' "$t" > ~/.lab-sonar-token )
+   ( umask 077; printf 'Token: ' >&2; IFS= read -rs t && printf '%s' "$t" > ~/.lab-sonar-token; printf '\n' >&2 )
    ```
 
-   Expected: a file readable only by you.
+   Expected: a file readable only by you. The prompt is printed with `printf` because `read -p` means something else in zsh; `read -rs` works in Bash and zsh (not run in zsh for this page).
    If you see something else: never paste the real token into a shared terminal history or a note; if you did, revoke it in the UI and create another.
 
 4. **Create a small project to scan.**
@@ -314,4 +314,4 @@ To go deeper:
 - Docker Hub, official `sonarqube` image (https://hub.docker.com/_/sonarqube), for current tags and editions.
 - CWE, Common Weakness Enumeration (https://cwe.mitre.org/).
 - OWASP Top Ten project (https://owasp.org/www-project-top-ten/).
-- Not verified: all output (illustrative), image tag naming, the `vm.max_map_count` and file-limit values, edition and feature tiers, token type names, the newer quality and Clean Code taxonomy and its modes, the default gate's conditions, and hotspot and issue status names. Check the current docs.
+- Not verified: all output (illustrative), image tag naming, the `vm.max_map_count` and file-limit values, edition and feature tiers, token type names, the newer quality and Clean Code taxonomy and its modes, the default gate's conditions, and hotspot and issue status names, and the token prompt (`read -rs`) in zsh. Check the current docs.
