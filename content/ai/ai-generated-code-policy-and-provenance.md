@@ -8,7 +8,7 @@ tags:
   - audit
   - team-process
 created: 2026-10-17
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -35,7 +35,7 @@ This note is a template policy for teams whose engineers write code with AI assi
 
 ## Rules
 
-Put the policy in one place and link it from the contribution guide. [The owner's AI skills catalogue](https://ai.szolotov.com) holds reusable skills and workflows that teams can adapt, but a policy is only useful if the team agrees the wording itself.
+Put the policy in one place and link it from the contribution guide. A policy is only useful if the team agrees the wording itself.
 
 - The person who submits the change is the author of record and answers for it.
 - No self-approval: an agent or assistant never approves a change, and the same agent that wrote code does not provide its only review. On GitLab Premium or Ultimate, the project approval setting `allow_author_approval` (set it to `false`) blocks author self-approval; the settings API is not listed for Free, so on Free this rule needs a team norm instead.
@@ -58,14 +58,14 @@ Provenance means recording that a change was written or assisted by an AI tool. 
 | Merge request label | A label such as `ai-assisted` set by the author  | Low to medium: enforceable by a CI check   | Low                          | Visible to project members, not in git history    |
 | Generation-time log | Tool-side log of prompts and outputs per session | Medium: produced by the tool, not the dev  | High; needs retention policy | Private, but may hold sensitive prompts and code  |
 
-Some organisations forbid any tool attribution in public repositories, for example in commit messages and pull request text. That is a legitimate choice. In that case use the label or the internal log, and keep the attribution out of anything published. Decide per repository and write the choice in its contribution guide.
+Some organisations forbid any tool attribution in public repositories, for example in commit messages and pull request text. That is a legitimate choice. The per-repository options (no tool names, a trailer on every assisted commit, or a field in the merge request) and the CI job that enforces the choice are in [[tooling-attribution-in-git-history]]. Pick one there and write it in the contribution guide. A trailer is only for repositories that chose that option. Decide per repository and write the choice in its contribution guide.
 
 Whatever you pick, treat it as a convention, not as proof. A trailer shows what the author said, not what happened.
 
 ## Review requirements
 
 - Use the same approval rules for AI-assisted and manual changes. Do not create a lighter path.
-- For a merge request labelled `ai-assisted`, require at least one approval from a human who is not the author (the example check below enforces this).
+- Every merge request needs at least one approval from a human who is not the author, labelled `ai-assisted` or not. The label records provenance; it is not the trigger for the check, because the author can remove it (the example check below enforces this).
 - Reviewers check the things generated code tends to get wrong: invented APIs or flags, outdated syntax, missing error handling, insecure defaults, copied licence headers and silently dropped edge cases.
 - Reviewers run or read the tests, and confirm the tests fail without the change.
 - Large generated diffs are split. If a reviewer cannot hold the change in their head, it is too big to approve.
@@ -96,7 +96,7 @@ What to keep for AI-assisted changes:
 
 ## CI check example
 
-A commit with an optional internal-convention trailer, shown as an example only:
+Only in a repository that chose the trailer option in [[tooling-attribution-in-git-history]], a commit might look like this:
 
 ```text title="commit message"
 fix(helm): set resource limits on the worker deployment
@@ -107,13 +107,17 @@ Reviewed and tested by the author before submitting.
 Assisted-by: ai-assistant
 ```
 
-The trailer name is an internal convention example, not a standard. Use your own, or none.
+The trailer name is an internal convention example, not a standard. In a repository that forbids tool attribution, the attribution CI job rejects it.
 
-The script below fails when a merge request labelled `ai-assisted` has no approval from a human other than its author. It uses only the Python standard library.
+The script below fails when a merge request has fewer approvals than required from humans who are not its author. It does not read the `ai-assisted` label, so removing the label changes nothing. It uses only the Python standard library.
 
 ```python title="scripts/check_ai_mr_approval.py"
 #!/usr/bin/env python3
-"""Fail if an MR labelled ai-assisted lacks a human approval from a non-author."""
+"""Fail unless every merge request has enough approvals from humans who are not its author.
+
+The gate does not read the ai-assisted label: the author controls the label, so a gate that
+depends on it can be switched off by removing it. The label stays as a provenance record only.
+"""
 import json
 import os
 import sys
@@ -123,9 +127,11 @@ import urllib.request
 API = os.environ["CI_API_V4_URL"]  # set by GitLab CI
 PROJECT_ID = os.environ["CI_PROJECT_ID"]
 MR_IID = os.environ["CI_MERGE_REQUEST_IID"]
-TOKEN = os.environ["POLICY_CHECK_TOKEN"]  # read_api project access token (Reporter role, expiry set); masking only hides it in logs
-LABEL = os.environ.get("AI_LABEL", "ai-assisted")
+TOKEN = os.environ["POLICY_CHECK_TOKEN"]  # read_api project access token (Reporter role, expiry set)
 MIN_HUMAN_APPROVALS = int(os.environ.get("MIN_HUMAN_APPROVALS", "1"))
+# Usernames of agent and bot accounts, maintained by the platform team in the policy project,
+# not in the merge request. Their approvals never count.
+AGENT_USERNAMES = {u.strip() for u in os.environ.get("AGENT_USERNAMES", "").split(",") if u.strip()}
 
 
 def get(path):
@@ -140,31 +146,36 @@ def get(path):
 def main():
     try:
         mr = get("")
-        approvals = get("/approvals")  # field names below: check against your GitLab version
-    except urllib.error.URLError as error:
-        print(f"cannot reach the GitLab API: {error}", file=sys.stderr)
+        approvals = get("/approvals")
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        print(f"cannot read the merge request or its approvals: {error}", file=sys.stderr)
+        return 2  # any non-zero exit fails the job: the check fails closed
+
+    author = mr.get("author") or {}
+    entries = approvals.get("approved_by")
+    if not author.get("id") or not isinstance(entries, list):
+        print("unexpected API response; failing closed", file=sys.stderr)
         return 2
 
-    if LABEL not in mr.get("labels", []):
-        print(f"MR is not labelled {LABEL}; nothing to check")
-        return 0
+    human_approvers = []
+    for entry in entries:
+        user = (entry or {}).get("user") or {}
+        if not user.get("id") or user["id"] == author["id"]:
+            continue
+        if user.get("username") in AGENT_USERNAMES or user.get("bot", False):
+            continue
+        human_approvers.append(user["username"])
 
-    author_id = mr["author"]["id"]
-    human_approvers = [
-        entry["user"]["username"]
-        for entry in approvals.get("approved_by", [])
-        if entry["user"]["id"] != author_id and not entry["user"].get("bot", False)  # bot flag on approvers is undocumented; see note
-    ]
-
+    labelled = "ai-assisted" in mr.get("labels", [])
     if len(human_approvers) < MIN_HUMAN_APPROVALS:
         print(
-            f"MR labelled {LABEL} needs {MIN_HUMAN_APPROVALS} approval(s) from a human "
-            f"who is not the author; found {len(human_approvers)}",
+            f"needs {MIN_HUMAN_APPROVALS} approval(s) from a human who is not the author; "
+            f"found {len(human_approvers)} (ai-assisted label: {labelled})",
             file=sys.stderr,
         )
         return 1
 
-    print(f"OK: approved by {', '.join(human_approvers)}")
+    print(f"OK: approved by {', '.join(human_approvers)} (ai-assisted label: {labelled})")
     return 0
 
 
@@ -177,19 +188,19 @@ Wire it into the merge request pipeline:
 ```yaml title=".gitlab-ci.yml"
 ai-mr-approval-check:
   stage: test
-  image: python:3.12-slim # change: pin to the digest you have reviewed
+  image: python:3.12-slim@sha256:<digest> # change: the digest you have reviewed
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   variables:
-    AI_LABEL: "ai-assisted"
+    AGENT_USERNAMES: "review-bot,agent-renovate" # change: your agent and bot accounts
     MIN_HUMAN_APPROVALS: "1"
   script:
     - python3 scripts/check_ai_mr_approval.py
 ```
 
-This job runs code from the merge request branch, so anyone who can push a branch, an agent included, can read `POLICY_CHECK_TOKEN` or edit the job so it passes. Use a project access token for this project only, never a personal one. GitLab can limit a variable to protected branches and tags, but merge request pipelines can optionally access protected variables, so check that setting. To keep the check out of MR-controlled code, run it from pipeline configuration the merge request cannot change, such as a pipeline execution policy.
+This job runs code from the merge request branch, so anyone who can push a branch, an agent included, can read `POLICY_CHECK_TOKEN` or edit the job so it passes. Use a project access token for this project only, never a personal one. GitLab can limit a variable to protected branches and tags, but merge request pipelines can optionally access protected variables, so check that setting. To keep the check out of MR-controlled code, run it from pipeline configuration the merge request cannot change, such as a pipeline execution policy. Make the job required. Enable "Pipelines must succeed" so a failed or skipped check blocks the merge, and do not set `allow_failure`. Run the job from a pipeline execution policy or another configuration the merge request cannot edit, so the author cannot delete the job or change `AGENT_USERNAMES`. On Premium and Ultimate, approval rules with `allow_author_approval: false` are the merge-time control; the job is the evidence and the early warning.
 
-Things to check before relying on it: the approvals endpoint and its `approved_by[].user` object (the documented example has no `bot` flag; the `author.bot` attribute is documented on the merge request object, not on approvers, so the bot filter may not exclude anything), and that the check re-runs when approvals change (a pipeline may not re-run on approval; this was not checked; use the approval rules and a merge-time gate as the real control, and treat this job as an early warning). A label is also set by the author, so pair it with a team norm and spot checks.
+Things to check before relying on it: the approvals endpoint and its `approved_by[].user` object (the documented example has no `bot` flag; the `author.bot` attribute is documented on the merge request object, not on approvers, so the bot filter may not exclude anything), and that the check re-runs when approvals change (a pipeline may not re-run on approval; this was not checked; use the approval rules and a merge-time gate as the real control, and treat this job as an early warning). The label is still useful as provenance, but nothing depends on it.
 
 ## Checklist
 
@@ -197,6 +208,7 @@ Things to check before relying on it: the approvals endpoint and its `approved_b
 [ ] Policy is written, versioned and linked from the contribution guide
 [ ] Author of record owns the change; no self-approval by the same agent
 [ ] Human non-author approval required, same rules as manual changes
+[ ] The approval check runs on every merge request, is required, and does not depend on the label
 [ ] Generated tests are read by a human before they count as evidence
 [ ] Provenance option chosen per repository (none, trailer, label, log)
 [ ] Public repositories: attribution choice agrees with the organisation's rules
@@ -214,7 +226,6 @@ Things to check before relying on it: the approvals endpoint and its `approved_b
 - [[compliance/open-source-license-compliance]]: dependency and licence checks that apply to generated code.
 - [[ai/securing-ai-agents-in-ci-and-cloud]]: how to give agents the least access.
 - [[standards/production-change-checklist]]: production gate for changes of any origin.
-- [The owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
 
 ## Evidence
 
@@ -238,4 +249,5 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the GitLab API and CI var
 - Legal status and ownership of generated code, provider terms, and audit or control wording: counsel and the auditor decide; no local source covers them.
 - Whether a GitLab pipeline re-runs when approvals change: not found in the local documentation.
 - Engineering guidance (review rules, generated-test handling, provenance trade-offs, checklist) is general practice, not a documented claim.
-- Nothing was run, including the example script and pipeline job.
+- That the approvals endpoint is available on every GitLab tier (the approvals API page was not re-read on 2026-11-24), that the "Pipelines must succeed" setting has that name in your version, and that a pipeline execution policy prevents the merge request from removing the job.
+- Nothing was run. The example script was compiled, not run, and the pipeline job was not executed.
