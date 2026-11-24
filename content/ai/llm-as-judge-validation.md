@@ -27,6 +27,90 @@ Where the decision is pairwise preference, randomize answer order and test for p
 
 Set acceptance rules based on the decision's risk and human-review capacity, not a universal agreement number. For a low-risk triage queue, a judge may prioritize work while humans decide. For a safety release gate, false acceptance may demand a stricter design or no automated judge gate at all. Explain the costs of false positive and false negative classifications.
 
+## Worked example: agreement and false passes
+
+Export the validation set as `item_id,human,judge` with labels `pass` or `fail` (the judge may also `abstain`), then gate on the upper bound of the false-pass rate rather than on overall agreement. The script uses the Python standard library only and is a sketch to adapt.
+
+```python title="judge_agreement.py"
+#!/usr/bin/env python3
+"""Compare judge labels with adjudicated human labels.
+
+Input: a CSV with columns item_id, human, judge. Labels are pass, fail or abstain
+(abstain is allowed for the judge only). Exits 1 when the upper bound of the
+false-pass rate is above the limit, or when the input is unusable.
+"""
+import csv
+import math
+import sys
+from collections import Counter
+
+LABELS = ("pass", "fail")
+
+
+def wilson_upper(k: int, n: int, z: float = 1.96) -> float:
+    if n == 0:
+        return 1.0
+    p = k / n
+    centre = p + z * z / (2 * n)
+    margin = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return min(1.0, (centre + margin) / (1 + z * z / n))
+
+
+def main(path: str, max_false_pass: float) -> int:
+    pairs = Counter()
+    seen = set()
+    with open(path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            item, human, judge = row["item_id"], row["human"].strip(), row["judge"].strip()
+            if item in seen:
+                print(f"duplicate item_id {item!r}", file=sys.stderr)
+                return 1
+            seen.add(item)
+            if human not in LABELS or judge not in LABELS + ("abstain",):
+                print(f"{item}: unexpected label human={human!r} judge={judge!r}", file=sys.stderr)
+                return 1
+            pairs[(human, judge)] += 1
+
+    total = sum(pairs.values())
+    if total == 0:
+        print("no rows", file=sys.stderr)
+        return 1
+    agree = pairs[("pass", "pass")] + pairs[("fail", "fail")]
+    abstain = pairs[("pass", "abstain")] + pairs[("fail", "abstain")]
+    human_fail = pairs[("fail", "pass")] + pairs[("fail", "fail")] + pairs[("fail", "abstain")]
+    false_pass = pairs[("fail", "pass")]
+    upper = wilson_upper(false_pass, human_fail)
+
+    print("human\\judge   pass   fail abstain")
+    for h in LABELS:
+        print(f"{h:<12}{pairs[(h, 'pass')]:>6}{pairs[(h, 'fail')]:>7}{pairs[(h, 'abstain')]:>8}")
+    print(f"items={total} exact_agreement={agree / total:.3f} abstention={abstain / total:.3f}")
+    print(f"false_pass={false_pass}/{human_fail} upper95={upper:.3f} limit={max_false_pass}")
+    return 0 if upper <= max_false_pass else 1
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        sys.exit("usage: judge_agreement.py <labels.csv> <max-false-pass-rate>")
+    sys.exit(main(sys.argv[1], float(sys.argv[2])))
+```
+
+```bash
+python3 -I judge_agreement.py labels.csv 0.10
+```
+
+Illustrative output for 200 synthetic items, 40 of them human `fail`:
+
+```text
+human\judge   pass   fail abstain
+pass           149      9       2
+fail             0     37       3
+items=200 exact_agreement=0.930 abstention=0.025
+false_pass=0/40 upper95=0.088 limit=0.1
+```
+
+Zero observed false passes in 40 failing items still allows a true rate near 9 % at 95 % confidence. A stricter limit needs more failing items in the validation set, not a better-looking agreement figure. The limit itself is a policy choice for the decision the judge gates.
+
 ## Limitations and controls
 
 Judge quality changes with its model version, prompt, rubric, decoding configuration and input serialization. Pin these dependencies, version the evaluator and rerun its validation when any changes. Log judge outputs and samples under the same privacy policy as user content. Avoid sending data to a judge provider without approved data handling and retention controls.

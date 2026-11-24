@@ -29,6 +29,40 @@ Classify content before editing: API reference, configuration example, architect
 
 Repository instruction files can help agents find the right docs, but they do not make the docs correct. See [[repository-context-packaging-for-coding-agents]] for ways to provide source paths and distinguish policy from examples.
 
+## Worked example: a claim map and a drift gate
+
+A claim map for a short change to a runbook, kept in the merge request description:
+
+| Claim in the draft                                | Source of truth                       | Checked by                |
+| ------------------------------------------------- | ------------------------------------- | ------------------------- |
+| `--timeout` defaults to 30 seconds                | `cmd/flags.go` at the merged commit   | Reviewer read the code    |
+| The restore step needs the `backup-operator` role | IAM module in the infrastructure repo | Owner confirmed in review |
+| The example config validates                      | `docs/examples/restore.yaml`          | CI job `docs-examples`    |
+
+For generated reference pages, regenerate in CI and fail when the committed copy differs. This sketch was not run; the generator script and paths are yours to replace.
+
+```yaml title=".gitlab-ci.yml"
+docs-drift:
+  stage: test
+  image: registry.example.com/ci/docs-toolbox@sha256:<digest> # change: an image with your doc generator, pinned by digest
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - api/**/*
+        - docs/reference/**/*
+        - scripts/gen-reference-docs.sh
+  script:
+    - ./scripts/gen-reference-docs.sh docs/reference
+    - |
+      if [ -n "$(git status --porcelain -- docs/reference)" ]; then
+        git status --porcelain -- docs/reference
+        echo "docs/reference is out of date: run scripts/gen-reference-docs.sh and commit the result" >&2
+        exit 1
+      fi
+```
+
+`git status --porcelain` also catches new files that the generator created and nobody committed, which `git diff --exit-code` misses.
+
 ## Failure modes and response
 
 **Silent drift:** a runbook's command changes behavior after a tool upgrade. **Version blending:** the draft combines current syntax with obsolete defaults. **Circular validation:** an example is generated from the same incorrect description that it is meant to validate. **Link rot:** a redirect or deleted page hides a changed product contract. **Overconfident summaries:** a caveat about eligibility or retention disappears from a short explanation.
