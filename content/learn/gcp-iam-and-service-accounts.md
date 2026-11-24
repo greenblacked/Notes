@@ -426,7 +426,7 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
 
    ```hcl title="main.tf"
    terraform {
-     required_version = ">= 1.9" # Change: the oldest Terraform version you have tested with.
+     required_version = ">= 1.5" # Change: the Terraform version you installed. This exercise was not run, so the minimum is not tested.
      required_providers {
        google = {
          source  = "hashicorp/google"
