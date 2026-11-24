@@ -62,16 +62,16 @@ Keep one manifest for the golden set and the synthetic extension, so a score alw
 set_version: 2026.11.1
 golden:
   path: golden/support-rag.jsonl
-  sha256: REPLACE_WITH_DIGEST # change: digest of the golden file
+  sha256: <digest> # change: digest of the golden file
 synthetic:
   path: synthetic/support-rag-2026.11.1.jsonl
-  sha256: REPLACE_WITH_DIGEST # change: digest of the synthetic file
+  sha256: <digest> # change: digest of the synthetic file
   generator:
     id: REPLACE_WITH_GENERATOR_ID # change: pinned model identifier or template name
-    prompt_sha256: REPLACE_WITH_DIGEST # change: digest of the generator prompt
+    prompt_sha256: <digest> # change: digest of the generator prompt
     seed: 1234
     params: { temperature: 0.7 }
-  seed_corpus_sha256: REPLACE_WITH_DIGEST # change: digest of the seed documents
+  seed_corpus_sha256: <digest> # change: digest of the seed documents
   data_owner_approval: REPLACE_WITH_TICKET # change: reference, required if any real text was used
   human_review: { sample_size: 100, agreement: REPLACE_WITH_VALUE } # change: record the measured value
 splits:
