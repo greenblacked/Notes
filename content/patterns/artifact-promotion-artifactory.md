@@ -9,7 +9,7 @@ tags:
   - gitlab-ci
   - delivery
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-11-24
 draft: false
 ---
 
@@ -91,7 +91,7 @@ build-image:
   stage: build
   # your builder image with docker CLI and jf, pinned by tag and digest
   image: $BUILDER_IMAGE
-  services: [docker:dind]
+  services: ["docker:<tested-version>-dind@sha256:<digest>"]
   variables:
     DOCKER_HOST: tcp://docker:2376
     DOCKER_TLS_VERIFY: "1"
@@ -148,6 +148,8 @@ promote-prod:
       jf rt build-promote "$JFROG_CLI_BUILD_NAME" "$JFROG_CLI_BUILD_NUMBER" docker-prod-local
       --status="released" --comment="Approved for production" --source-repo=docker-staging-local --copy=true
 ```
+
+Tag names are examples: look up the current tag, then pin its digest.
 
 Notes:
 

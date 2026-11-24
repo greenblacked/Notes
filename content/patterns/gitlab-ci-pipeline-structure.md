@@ -11,7 +11,7 @@ tags:
   - helm
   - docker
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-11-24
 draft: false
 ---
 
@@ -185,9 +185,9 @@ lint:
 
 docker-build:
   stage: package
-  image: docker:cli
+  image: docker:<tested-version>-cli@sha256:<digest>
   services:
-    - docker:dind
+    - docker:<tested-version>-dind@sha256:<digest>
   needs: [build, unit-test]
   variables:
     DOCKER_TLS_CERTDIR: /certs
@@ -267,6 +267,8 @@ deploy-production:
       when: manual
       allow_failure: false
 ```
+
+Tag names are examples: look up the current tag, then pin its digest.
 
 Notes on the example:
 
