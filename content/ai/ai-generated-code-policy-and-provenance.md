@@ -58,7 +58,7 @@ Provenance means recording that a change was written or assisted by an AI tool. 
 | Merge request label | A label such as `ai-assisted` set by the author  | Low to medium: enforceable by a CI check   | Low                          | Visible to project members, not in git history    |
 | Generation-time log | Tool-side log of prompts and outputs per session | Medium: produced by the tool, not the dev  | High; needs retention policy | Private, but may hold sensitive prompts and code  |
 
-Some organisations forbid any tool attribution in public repositories, for example in commit messages and pull request text. That is a legitimate choice. The per-repository options (no tool names, a trailer on every assisted commit, or a field in the merge request) and the CI job that enforces the choice are in [[tooling-attribution-in-git-history]]. Pick one there and write it in the contribution guide. A trailer is only for repositories that chose that option. Decide per repository and write the choice in its contribution guide.
+Some organisations forbid any tool attribution in public repositories, for example in commit messages and pull request text. That is a legitimate choice. The per-repository options (no tool names, a trailer on every assisted commit, or a field in the merge request) and the CI job that enforces the choice are in [[tooling-attribution-in-git-history]]. Pick one there and write it in the contribution guide. A trailer is only for repositories that chose that option.
 
 Whatever you pick, treat it as a convention, not as proof. A trailer shows what the author said, not what happened.
 
@@ -107,7 +107,7 @@ Reviewed and tested by the author before submitting.
 Assisted-by: ai-assistant
 ```
 
-The trailer name is an internal convention example, not a standard. In a repository that forbids tool attribution, the attribution CI job rejects it.
+The trailer name is an internal convention example, not a standard. In a repository that forbids tool attribution, the attribution CI job rejects it only if its `FORBIDDEN_PATTERN` includes the trailer key (for example add `Assisted-by:`); the pattern in the linked job does not match it as written.
 
 The script below fails when a merge request has fewer approvals than required from humans who are not its author. It does not read the `ai-assisted` label, so removing the label changes nothing. It uses only the Python standard library.
 
@@ -229,7 +229,7 @@ Things to check before relying on it: the approvals endpoint and its `approved_b
 
 ## Evidence
 
-Source-reviewed on 2026-11-01. Nothing was run. Scope: the GitLab API and CI variables used in the example check, and the commit trailer convention.
+Source-reviewed on 2026-11-01. Nothing was run; the example script was compiled only. Scope: the GitLab API and CI variables used in the example check, and the commit trailer convention.
 
 ### Sources checked
 

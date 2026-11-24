@@ -212,7 +212,7 @@ Compare exit status, test counts and names, artifact checksums (expect differenc
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI behaviours, API fields and variable rules that the mapping table, lint script and credential section rely on.
+Source-reviewed on 2026-11-02. Nothing was run apart from a helper check of `hash_tree` and a shell syntax check on 2026-11-24 (see Not verified). Scope: the GitLab CI behaviours, API fields and variable rules that the mapping table, lint script and credential section rely on.
 
 ### Sources checked
 

@@ -297,7 +297,7 @@ Be careful when relating this to the delivery measures in [[management/dora-metr
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. The scope is the GitLab API, token and role statements; the pipeline keywords and GitHub parts could not be checked locally.
+Source-reviewed on 2026-11-02. Nothing was run apart from a `render_findings` check with sample output on 2026-11-24 (see Not verified). The scope is the GitLab API, token and role statements; the pipeline keywords and GitHub parts could not be checked locally.
 
 ### Sources checked
 

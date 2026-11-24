@@ -135,7 +135,7 @@ Deleting the file does not revoke the credential. Rotate it ([[leaked-credential
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. The review covered the GitLab CI, Git ignore and OWASP statements in this note; tool-specific transcript behaviour and the log-management standards were not available.
+Source-reviewed on 2026-11-02. Nothing was run apart from a helper check of the audit script on 2026-11-24 (see Not verified). The review covered the GitLab CI, Git ignore and OWASP statements in this note; tool-specific transcript behaviour and the log-management standards were not available.
 
 ### Sources checked
 
@@ -153,7 +153,7 @@ Source-reviewed on 2026-11-02. Nothing was run. The review covered the GitLab CI
 - How long GitLab keeps job logs relative to artifacts: not stated in the pages read.
 - The flags and behaviour of a secret scanner such as gitleaks, and the `jq` details in the sample script. The Python `hmac` documentation was not re-read on 2026-11-24; the audit script ran once with a sample event on that date and printed an HMAC line.
 - Engineering guidance, not documented claims: the transcript classification, lifecycle table, audit-record design, sharing steps, rotation-before-deletion and the failure modes. Retention periods are left to the compliance owner.
-- Nothing was run.
+- Nothing else was run: no pipeline and no real agent session.
 
 ## Sources
 

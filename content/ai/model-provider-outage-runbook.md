@@ -79,7 +79,7 @@ Confirm recovery using sustained successful requests, normal latency distributio
 
 Communicate what users may see, which functions are affected, and when the next update will arrive. Distinguish confirmed facts from provider-reported status and internal hypotheses. Avoid promising a recovery time that the team does not control. At resolution, record impact, mitigations, model/region transitions, decisions, and open follow-up items. Feed recurring failure patterns into [[llm-slo-definition-and-error-budgets]] and dependency tests.
 
-**Rollback check.** After restoring the saved routing configuration, `request_error_ratio` and `p95_latency` for the route return to their pre-incident values within one observation window, and `attempt_error_ratio` for the fallback model drops to zero traffic. If not, the restore did not take; compare the live router configuration with the saved one.
+**Rollback check.** After restoring the saved routing configuration, `request_error_ratio` and `p95_latency` for the route return to their pre-incident values within one observation window, and the fallback model's attempt rate returns to its pre-incident level (zero if it was idle). If not, the restore did not take; compare the live router configuration with the saved one.
 
 ## Operator checklist
 
@@ -132,5 +132,5 @@ Restore the recorded previous routing configuration, return traffic in measured 
 ## Sources
 
 - [Quotas for Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html): provider quota behaviour and scope; values can change.
-- [Generative AI on Agent Platform quotas and system limits](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/quotas): provider quota categories; verify current project and region limits. The old Vertex AI quotas URL is reported to redirect here (not re-read for this revision).
+- [Vertex AI generative AI quotas and limits](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/quotas): provider quota categories; verify current project and region limits. The old cloud.google.com URL answered with a 301 to this address; the final page was not re-read for this revision.
 - [Timeouts, retries, and backoff with jitter](https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/): dependency failure and retry-amplification principles.

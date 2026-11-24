@@ -138,7 +138,7 @@ The repository ID must be on a reviewed allowlist (a file in the platform reposi
 
 Reject anything that is not on the allowed list, by extension and by content. A pickle renamed to `.safetensors` fails the header check.
 
-```python title="check_weights.py (illustrative, not run)"
+```python title="check_weights.py (helper-tested with the fixtures below)"
 #!/usr/bin/env python3
 """Fail on pickle-bearing files, safetensors files with an invalid header, and configs that load code."""
 import json
@@ -432,7 +432,7 @@ A model change is a change of the pinned revision in the serving configuration. 
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the supply-chain risk framing, provenance, hashing and licence-inventory advice; the Python, Hugging Face and JFrog behaviour could not be read locally.
+Source-reviewed on 2026-11-02. Nothing was run apart from a helper check of `check_weights.py` on 2026-11-24 (see Not verified). Scope: the supply-chain risk framing, provenance, hashing and licence-inventory advice; the Python, Hugging Face and JFrog behaviour could not be read locally.
 
 ### Sources checked
 
