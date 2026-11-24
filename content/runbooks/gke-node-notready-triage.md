@@ -9,7 +9,7 @@ tags:
   - reliability
   - observability
 created: 2026-10-19
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 ---
 
@@ -87,7 +87,7 @@ kubectl get nodes -o json | jq -r '.items[] | select(([.status.conditions[]|sele
 - Many nodes across pools at once: suspect the control plane path, a bad DaemonSet, a network change or a platform event. Go to [[gke-control-plane-unavailable]] and check the Google Cloud status page.
 - All nodes in one zone: a zonal incident or a zone-specific network change.
 - One node: continue below.
-- To list one pool's nodes, use `kubectl get nodes -l pool="$POOL"`. The `pool` label is set by the operator on the node pool, not assumed. If the nodes do not carry it yet, list the labels they actually have with `kubectl get nodes --show-labels`, and label the pool with `gcloud container node-pools update "$POOL" --cluster "$CLUSTER" --location "$LOCATION" --node-labels=pool="$POOL"` before relying on the selector (this replaces all user-specified labels of the pool, so repeat any existing ones).
+- To list one pool's nodes, use `kubectl get nodes -l cloud.google.com/gke-nodepool="$POOL"`; GKE sets this label on every node. If later steps rely on a `pool` label your nodes do not carry, add it as described in [[gke-node-pool-labels-update]] (`--node-labels` replaces every user-set label), not during the incident.
 - All nodes of one pool shortly after a change: a node image, taint or kubelet config change. Roll that back.
 
 ### 3. Check the VM
