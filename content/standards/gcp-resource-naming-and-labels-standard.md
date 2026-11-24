@@ -9,7 +9,7 @@ tags:
   - cost
   - audit
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -91,10 +91,17 @@ Labels are key-value pairs on a resource. They appear in Cloud Asset Inventory a
 Rules for the values:
 
 - **Values come from a list**, kept in the naming module, not free text. A typo (`prod`, `production`, `prd`) splits the cost report three ways.
-- **`data-classification`** uses the classes in [[data-classification-and-handling-standard]]. A project carries the highest class of data it holds.
+- **`data-classification`** uses the classes in [[data-classification-and-handling-standard]]. A project carries the highest class of data it holds. Policy conditions use the `data-class` tag instead; the key for each system is listed in [[data-classification-and-handling-standard#Labelling]].
 - **`managed-by: manual`** is allowed only with an exception record; it marks the resources that drift.
-- **Kubernetes uses `environment`, Google Cloud uses `env`.** [[kubernetes-labels-and-annotations-standard]] names the Kubernetes label `environment`; the Google Cloud key is `env`, as in the FinOps module. When GKE cost allocation exports Kubernetes labels into billing data, map one to the other in the report query rather than renaming either side.
+- **Kubernetes uses `environment`, Google Cloud uses `env`.** [[kubernetes-labels-and-annotations-standard]] names the Kubernetes label `environment`; the Google Cloud key is `env`, as in the FinOps module. When GKE cost allocation exports Kubernetes labels into billing data, map one to the other in the report query rather than renaming either side, using the table below.
 - **No personal data, no secrets, no free-form descriptions** in values.
+
+| Google Cloud `env` | Kubernetes `environment` | Note                                                                        |
+| ------------------ | ------------------------ | --------------------------------------------------------------------------- |
+| `prod`             | `prod`                   |                                                                             |
+| `stage`            | `stage`                  |                                                                             |
+| `dev`              | `dev`                    |                                                                             |
+| `sbx`              | none                     | The Kubernetes standard has no sandbox value; add it there first if needed. |
 
 > [!warning] Label limits are not verified
 > The maximum number of labels per resource, the key and value length limits and the allowed characters were **not verified** against the [labels overview](https://cloud.google.com/resource-manager/docs/labels-overview) for this note. Google Cloud labels are stricter than Kubernetes labels: keys such as `app.kubernetes.io/name` are not valid. Keeping keys and values to lowercase letters, digits, hyphens and underscores, starting keys with a letter and staying well under 63 characters avoids every limit we know of. Which resource types support labels, and which of them reach the billing export, also varies; check per service.

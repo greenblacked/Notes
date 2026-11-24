@@ -84,6 +84,8 @@ The AI row is team policy. No vendor's data-retention or training terms were che
 
 Classes are useful only when tools can read them. Use the same lowercase values everywhere: `public`, `internal`, `confidential`, `restricted`.
 
+This table is the single list of key names for the data class; other notes link here. Tags drive controls (organisation policy and IAM conditions), and labels drive inventory and cost reports. KMS keys use `data_class` because [[adr/0059-cmek-where-data-classification-requires-it|ADR-0059]] set it; Google Cloud label keys allow underscores.
+
 | Where                                                        | Key                                      | Purpose                                                                                                |
 | ------------------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | GCP resource labels (projects, buckets, datasets, instances) | `data-classification`                    | Inventory, cost and search ([[gcp-resource-naming-and-labels-standard]])                               |
