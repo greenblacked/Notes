@@ -9,14 +9,14 @@ tags:
   - ci-cd
   - reliability
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
 [[terraform-vs-opentofu]] compares the two tools and has a short Migration section. This note extends that section into a procedure for a team whose state lives in a GCS bucket: what to check first, how to take a recoverable copy of state, how to move one workspace at a time behind gates, and how to go back. It assumes you have already decided to migrate. If you have not, read the comparison first.
 
 > [!info] Not checked against current releases
-> Version compatibility, state-format details, registry behaviour and command output were not checked when this note was written, and no migration was run to produce it. Confirm everything against the current OpenTofu migration guide and release notes, and rehearse on a copy of the state first.
+> Version compatibility, state-format details, registry behaviour and command output were not checked when this note was written, and no migration was run to produce it. Confirm everything against the current OpenTofu migration guide and release notes, and rehearse on a copy of the state first. Checked on 2026-11-24: listing generations with `--all-versions` and restoring with `#GENERATION` (Cloud Storage versioned objects page), and the GCS backend's `<prefix>/<name>.tfstate` naming. Not verified: that `ls --all-versions` on a single object URL lists its generations, that the highest generation is always the live one, and that a no-op `tofu apply` of a saved plan writes a new state generation.
 
 ## Scope
 
@@ -66,15 +66,23 @@ STATE="gs://${BUCKET}/${PREFIX}/${WORKSPACE}.tfstate"
 ### Step 1: Back up state and record the generation
 
 ```bash title="copy and list generations"
-gcloud storage cp "${STATE}" "./backup-$(date +%F).tfstate"
+# Keep the copy outside the repository working tree, readable only by you: state can contain secrets.
+umask 077
+BACKUP_DIR="${HOME}/tfstate-backups/${PREFIX}"
+mkdir -p "${BACKUP_DIR}"
 
-# -a lists all object generations; note the current one
-gcloud storage ls -a "${STATE}"
+# --all-versions lists every generation as gs://...#GENERATION; the highest number is the live one.
+gcloud storage ls --all-versions "${STATE}"
+GEN="$(gcloud storage ls --all-versions "${STATE}" | sed -n 's/.*#//p' | sort -n | tail -n 1)"
+echo "live generation: ${GEN}"   # write this into the change ticket
+
+# Copy that exact generation, so the backup and the recorded number match.
+gcloud storage cp "${STATE}#${GEN}" "${BACKUP_DIR}/${WORKSPACE}-${GEN}.tfstate"
 ```
 
-Store the local copy somewhere access-controlled, not in Git: state can contain secrets. Write the generation number you will restore to into the change ticket.
+The copy lands under `~/tfstate-backups`, outside the repository, readable only by you. For a team, keep it in an access-controlled bucket with its own retention rather than on a laptop, and delete the local copy once the migration is signed off. Write the generation number into the change ticket.
 
-**Gate 1:** the backup file opens as JSON, and the recorded generation matches the live object.
+**Gate 1:** the backup file opens as JSON (`jq . "${BACKUP_DIR}/${WORKSPACE}-${GEN}.tfstate" > /dev/null`), and its `serial` matches `terraform state pull | jq .serial`.
 
 ### Step 2: Record the baseline with the current tool
 
@@ -110,10 +118,13 @@ tofu plan -detailed-exitcode; echo "exit=$?"
 
 ### Step 5: Make the first write deliberate
 
-A plain `tofu plan` does not write state. The first write happens at the first `apply` or `refresh`, so the cleanest first apply is a harmless one: a no-op, or a tiny reviewed change such as a label.
+A plain `tofu plan` does not write state. The first write happens at the first `apply` or `refresh`, so the cleanest first apply is a harmless one: a no-op, or a tiny reviewed change such as a label. Apply exactly the plan you reviewed, never a fresh interactive one:
 
 ```bash
-tofu apply
+tofu plan -detailed-exitcode -out=migrate.tfplan; echo "exit=$?"
+tofu show migrate.tfplan    # read it: normally no changes, or only the reviewed label
+tofu apply migrate.tfplan   # applies only the saved plan, no new prompt
+rm -f migrate.tfplan        # a saved plan can hold sensitive values
 ```
 
 **Gate 5:** the apply succeeds, `tofu plan -detailed-exitcode` exits 0 afterwards, and the state's `terraform_version` field now reflects the new tool. List generations again with `gcloud storage ls -a "${STATE}"` and confirm a new generation appeared.
@@ -162,15 +173,25 @@ Rollback depends on whether OpenTofu has written to the state.
 
 **Before the first write (steps 1 to 4).** Nothing changed in the bucket. Delete the `.terraform` directory, return the pipeline to the pinned Terraform version, and continue.
 
+> [!warning] The restore overwrites the live state
+> Copying a generation onto `${STATE}` replaces what both tools read. Keep the workspace frozen (no pipeline runs, no local applies), confirm no run holds the lock, and record the current live generation first so the restore itself can be undone.
+
 **After OpenTofu has written (step 5 onwards).** Restore the state object to the generation you recorded, then return to the pinned Terraform:
 
 ```bash
-# generation number from `gcloud storage ls -a`
-GEN=1760000000000000
+GEN=1760000000000000   # example value: use the generation recorded in step 1 (change ticket)
+
+# Pre-check: record the generation you are about to replace, so this step can be undone.
+gcloud storage ls --all-versions "${STATE}"
+CURRENT_GEN="$(gcloud storage ls --all-versions "${STATE}" | sed -n 's/.*#//p' | sort -n | tail -n 1)"
+echo "replacing live generation ${CURRENT_GEN} with ${GEN}"
+
 gcloud storage cp "${STATE}#${GEN}" "${STATE}"
+
+# Undo, if needed: gcloud storage cp "${STATE}#${CURRENT_GEN}" "${STATE}"
 ```
 
-Check the exact generation-addressing syntax with `gcloud storage cp --help` before you need it; rehearse the restore in the scratch bucket. After the restore:
+Cloud Storage documents the `gs://BUCKET/OBJECT#GENERATION` form for restoring a noncurrent version; the replaced live version becomes noncurrent and stays in the bucket (checked 2026-11-24). Rehearse the restore in the scratch bucket. After the restore:
 
 ```bash
 rm -rf .terraform
@@ -202,5 +223,6 @@ The bucket's object versioning documentation explains generations and retention:
 ## Sources
 
 - [OpenTofu migration guide](https://opentofu.org/docs/intro/migration/)
-- [Terraform GCS backend](https://developer.hashicorp.com/terraform/language/backend/gcs)
+- [Terraform GCS backend](https://developer.hashicorp.com/terraform/language/backend/gcs) (state object naming, versioning recommended; checked 2026-11-24)
 - [Cloud Storage object versioning](https://cloud.google.com/storage/docs/object-versioning)
+- [Cloud Storage: use versioned objects](https://docs.cloud.google.com/storage/docs/using-versioned-objects): listing and restoring generations, checked 2026-11-24.
