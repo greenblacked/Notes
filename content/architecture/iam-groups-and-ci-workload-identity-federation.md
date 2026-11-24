@@ -19,7 +19,7 @@ This note describes an IAM design for GCP in two parts: how people get access (g
 > Written against Cloud IAM, Workload Identity Federation and GitLab CI OIDC `id_tokens`, based on the Google Cloud IAM and Workload Identity Federation documentation and the GitLab CI documentation at docs.gitlab.com. Examples use gitlab.com as the issuer; self-managed GitLab uses its own issuer URL.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the exact GitLab OIDC claim names (`project_path`, `ref_protected`, `namespace_path`); the `gcloud iam workload-identity-pools create-cred-config` flags for a file-based OIDC token source; the name and configuration of the Jenkins OIDC plugin; the GitLab keywords `artifacts:access`, `resource_group` and protected-environment approval settings; and that Terraform refuses to apply a saved plan when the state changed after the plan. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the exact GitLab OIDC claim names (`project_path`, `ref_protected`, `namespace_path`); the `gcloud iam workload-identity-pools create-cred-config` flags for a file-based OIDC token source; the name and configuration of the Jenkins OIDC plugin; the GitLab claims `ref_path`, `environment` and `environment_protected` (present only when the job sets an environment, and their string values); `has()` and the conditional expression in a provider attribute mapping; the `principalSet` member format for the combined attribute; the GitLab keywords `artifacts:access`, `resource_group` and protected-environment approval settings, including that protected environments need GitLab Premium or Ultimate; that `needs` still passes an `access: maintainer` artifact between jobs; `terraform init -lockfile=readonly`; and that Terraform refuses to apply a saved plan when the state changed after the plan. Check them before relying on them.
 
 ## Principles
 
@@ -82,11 +82,13 @@ A pipeline needs at least two identities, and for sensitive environments more:
 | Service account  | Used by                                                 | Roles                                                                                                                                                   |
 | ---------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tf-plan-<env>`  | Merge request pipelines and the default-branch plan job | Read-only: `roles/viewer` on the target project is too broad; use the predefined viewer roles of the services you manage, plus read on the state bucket |
-| `tf-apply-<env>` | Protected branch pipeline only                          | The roles needed to create the resources of that environment, nothing more                                                                              |
+| `tf-apply-<env>` | Manual apply job in `infra/prod` only                   | The roles needed to create the resources of that environment, nothing more                                                                              |
 | `deploy-<env>`   | Deploy stage                                            | `roles/container.developer` on the environment cluster, `roles/artifactregistry.reader` where used                                                      |
 | `build`          | Build stage                                             | Write on the artifact registry only                                                                                                                     |
 
-Two things matter more than the exact roles. First, the plan account cannot change anything, so a merge request from a branch cannot alter infrastructure even if its pipeline is compromised. Second, only the pipeline on a protected branch or tag can impersonate the apply account; this is enforced in the federation binding below, not in a CI variable.
+Two things matter more than the exact roles. First, the plan account cannot change anything, so a merge request from a branch cannot alter infrastructure even if its pipeline is compromised. Second, only the apply job on the default branch, running in the protected `infra/prod` environment, can impersonate the apply account; this is enforced in the federation binding below, not in a CI variable.
+
+The plan account changes nothing, but it reads the state bucket, and Terraform state holds every secret it manages in clear text. Any pipeline of the project, including merge request pipelines, can impersonate the plan account, so access to the plan account is read access to every secret in state. Keep secrets out of state where you can, and limit who can run pipelines in the project.
 
 The state bucket needs the plan account to read state and the apply account to write it. The GCS backend also writes a lock object, so a read-only plan account needs object create and delete on the lock path, or plan must run with `-lock=false` (accepting that concurrent runs are not serialised). Grant bucket-level roles, not project-level storage roles.
 
@@ -102,7 +104,7 @@ sequenceDiagram
   participant IAM as IAM (service account)
   participant API as GCP API
   Job->>GL: request id_token (aud set in .gitlab-ci.yml)
-  GL-->>Job: signed JWT (project_path, ref, ref_protected)
+  GL-->>Job: signed JWT (project_path, ref_path, environment)
   Job->>STS: exchange JWT for federated token
   STS->>STS: verify signature, audience and attribute condition
   STS-->>Job: federated access token
@@ -122,6 +124,12 @@ variable "project_id" {
 variable "gitlab_group_path" {
   type        = string
   description = "GitLab group (namespace) allowed to authenticate, for example my-group."
+}
+
+variable "default_branch_ref_path" {
+  type        = string
+  default     = "refs/heads/main" # change if your default branch is not main
+  description = "ref_path claim of the default branch, the only ref that may apply."
 }
 
 variable "gitlab_project_path" {
@@ -145,13 +153,14 @@ resource "google_iam_workload_identity_pool_provider" "gitlab" {
   attribute_mapping = {
     "google.subject"         = "assertion.sub"
     "attribute.project_path" = "assertion.project_path"
-    "attribute.ref"          = "assertion.ref"
-    "attribute.ref_protected" = "assertion.ref_protected"
-    # Combined value so a binding can require project AND protected ref.
-    "attribute.project_ref_protected" = "assertion.project_path + ':' + assertion.ref_protected"
+    # Combined value so a binding can require project, ref, environment and the
+    # environment's protection together. GitLab adds the two environment claims
+    # only when the job sets an environment, so has() keeps jobs without one
+    # (such as plan) able to authenticate; they get the value "none".
+    "attribute.apply_gate" = "has(assertion.environment) && has(assertion.environment_protected) ? assertion.project_path + ':' + assertion.ref_path + ':' + assertion.environment + ':' + assertion.environment_protected : 'none'"
   }
 
-  # Only jobs of one group get a token at all. Protected refs are enforced
+  # Only jobs of one group get a token at all. The apply gate is enforced
   # per service account below, so merge request pipelines can still plan.
   # namespace_path is the full group path: a project in a subgroup has
   # `group/sub`; use assertion.namespace_path.startsWith('my-group/') ||
@@ -174,11 +183,13 @@ data "google_project" "this" {
   project_id = var.project_id
 }
 
-# Apply: only jobs of this one GitLab project on a protected ref.
+# Apply: only a job of this one GitLab project, on the default branch, in the
+# protected infra/prod environment. A job on any other protected ref, or without
+# that environment, does not match.
 resource "google_service_account_iam_member" "tf_apply_prod_wif" {
   service_account_id = google_service_account.tf_apply_prod.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.ci.workload_identity_pool_id}/attribute.project_ref_protected/${var.gitlab_project_path}:true"
+  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.ci.workload_identity_pool_id}/attribute.apply_gate/${var.gitlab_project_path}:${var.default_branch_ref_path}:infra/prod:true"
 }
 
 resource "google_service_account" "tf_plan_prod" {
@@ -195,7 +206,7 @@ resource "google_service_account_iam_member" "tf_plan_prod_wif" {
 }
 ```
 
-The attribute condition is the real security boundary. Without it, any GitLab project in the world could present a valid token to your provider. The condition above limits the namespace. The `principalSet` bindings then narrow each service account: apply requires the project and a protected ref (through the combined `project_ref_protected` attribute), plan accepts the project on any ref so merge request pipelines can run. Protected refs are therefore enforced per service account, not for the whole provider. Use both layers. If you prefer a hard split, use two providers (one for plan, one for apply).
+The attribute condition is the real security boundary. Without it, any GitLab project in the world could present a valid token to your provider. The condition above limits the namespace. The `principalSet` bindings then narrow each service account: apply requires the project, the default branch and the protected `infra/prod` environment (through the combined `apply_gate` attribute), plan accepts the project on any ref so merge request pipelines can run. The gate is therefore enforced in GCP per service account, not only in GitLab, and not for the whole provider. Without the environment binding, the approval in GitLab would be the only control, and any job on any protected ref or tag of the project could impersonate the apply account without it. The environment claims carry a protected value only on a GitLab tier that has protected environments (Premium or Ultimate). On a tier without them, the job can never match this binding, and the honest alternative is to bind apply to the default branch alone and accept that the cloud side then trusts every job on that branch. Use both layers. If you prefer a hard split, use two providers (one for plan, one for apply).
 
 ### The CI job
 
@@ -243,12 +254,12 @@ terraform-plan:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
   script:
-    - terraform init -input=false
+    - terraform init -input=false -lockfile=readonly
     - terraform plan -input=false -lock=false -out=plan.tfplan
     - terraform show -no-color plan.tfplan > plan.txt
   artifacts:
     paths: [plan.tfplan, plan.txt]
-    access: developer # the saved plan can hold secrets; check artifacts:access in your GitLab version
+    access: maintainer # the saved plan holds state and variable values in clear text; check artifacts:access in your GitLab version
     expire_in: 1 day
 
 terraform-apply:
@@ -266,13 +277,14 @@ terraform-apply:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
       when: manual
   script:
-    - terraform init -input=false
+    - terraform init -input=false -lockfile=readonly
     - terraform apply -input=false plan.tfplan # the reviewed saved plan, never a fresh plan
 ```
 
 The Terraform image does not contain `gcloud`. In practice use your own pinned runner image that has both `gcloud` and `terraform`; the sample shows the authentication shape, not the image. Notes:
 
-- The apply job follows [[adr/0035-terraform-plan-policy-gate-and-ci-only-apply]]: the default-branch pipeline saves a plan, a person reads `plan.txt`, and a manual job in the protected `infra/prod` environment applies that saved file with the apply account. It never runs `-auto-approve` on a fresh plan. If the state changed after the plan, Terraform should refuse the stale plan; re-run the pipeline and review again. The plan artifact expires after one day (`expire_in: 1 day`); if approval comes later and the artifact is gone, re-run the pipeline and review the new plan. Never fall back to a fresh plan in the apply job. Without a protected environment and an approval rule, `when: manual` only means "anyone with Developer access can click". `resource_group` keeps two applies off the same state. The plan job uses the read-only plan account with `-lock=false` (see the state bucket paragraph above). The full delivery flow, including merge request plans and the policy gate, is in [[architecture/infrastructure-delivery-terraform-pipelines-and-drift]].
+- The apply job follows [[adr/0035-terraform-plan-policy-gate-and-ci-only-apply]]: the default-branch pipeline saves a plan, a person reads `plan.txt`, and a manual job in the protected `infra/prod` environment applies that saved file with the apply account. It never runs `-auto-approve` on a fresh plan. If the state changed after the plan, Terraform should refuse the stale plan; re-run the pipeline and review again. The plan is also printed in the job log for reviewers, with values marked sensitive masked, so the artifact itself is limited to Maintainers (`access: maintainer`): a saved plan holds state and variable values in clear text. The plan artifact expires after one day (`expire_in: 1 day`); if approval comes later and the artifact is gone, re-run the pipeline and review the new plan. Never fall back to a fresh plan in the apply job. Without a protected environment and an approval rule, `when: manual` only means "anyone with Developer access can click". `resource_group` keeps two applies off the same state. The plan job uses the read-only plan account with `-lock=false` (see the state bucket paragraph above). The full delivery flow, including merge request plans and the policy gate, is in [[architecture/infrastructure-delivery-terraform-pipelines-and-drift]].
+- Commit `.terraform.lock.hcl` and run `terraform init -input=false -lockfile=readonly` in both jobs, so the apply job uses the same provider versions as the plan. The apply job runs its own `init`, and without the lock file it could pick different providers.
 - The token is a secret for its lifetime. Write it with `umask 077`, delete it in `after_script` and never print it.
 - `id_tokens` is per job. Jobs that do not need cloud access do not get a token.
 - Terraform needs `GOOGLE_APPLICATION_CREDENTIALS` pointing at the credential file (set in `before_script`); the provider reads Application Default Credentials, not the `gcloud auth login` store. `gcloud auth login` is only for `gcloud` steps. The paths are per job (`CI_JOB_ID`) so concurrent jobs on a shared runner do not collide. Check the provider docs for the current behaviour.
@@ -300,7 +312,7 @@ Several single bindings quietly give someone every permission of another identit
 - `roles/iam.serviceAccountKeyAdmin` or key creation permissions: allow creating a key for any account. Block key creation by organization policy (see [[compliance/gcp-organization-policy-guardrails]]).
 - `roles/owner` or `roles/editor` on the default Compute Engine service account: any workload that runs as it has broad project access. Do not use the default account; create dedicated ones, and prevent the broad grant by policy.
 - `roles/resourcemanager.projectIamAdmin` and similar setIamPolicy permissions: whoever holds them can grant themselves anything. Treat them as admin.
-- Attribute conditions that trust a branch name. A branch called `main` can exist in any fork or unprotected clone. Require `ref_protected == 'true'` (in the apply binding), or check the token's project and ref type, not just a name.
+- Attribute conditions that trust a branch name. A branch called `main` can exist in any fork or unprotected clone. Bind apply to the project, the `ref_path` of the default branch and the protected environment (the `apply_gate` binding above), not to a branch name alone.
 - A `principalSet` for a whole pool (no attribute segment). That lets every identity in the pool impersonate the account.
 
 ## Verify
@@ -335,7 +347,7 @@ gcloud iam service-accounts get-iam-policy "${SA_EMAIL}" \
   --format="yaml(bindings)"
 ```
 
-For federation, run a plan job on an unprotected branch, a temporary job on an unprotected branch that sets `GCP_SERVICE_ACCOUNT` to the apply account and an apply job on the protected branch. The apply job on the unprotected branch must fail at impersonation (the `project_ref_protected` binding does not match) while a job using the plan account must succeed as `tf-plan-<env>`; the apply job on the protected branch must authenticate and show the service account as the active identity with `gcloud auth list`.
+For federation, run these jobs: a plan job on an unprotected branch; a temporary job on an unprotected branch that sets `GCP_SERVICE_ACCOUNT` to the apply account; a temporary job on a protected test branch that sets the apply account but runs without the `infra/prod` environment; and the apply job on the default branch. Both temporary jobs must fail at impersonation (the `apply_gate` binding does not match), while the plan job using the plan account must succeed as `tf-plan-<env>`. The apply job in `infra/prod` must authenticate and show the service account as the active identity with `gcloud auth list`.
 
 If a leaked credential is suspected, follow [[runbooks/leaked-credential-rotation]].
 
@@ -343,7 +355,7 @@ If a leaked credential is suspected, follow [[runbooks/leaked-credential-rotatio
 
 - Basic roles bound to groups "to unblock people". They are almost never removed afterward.
 - Using a service account key in a CI variable because federation "was taking too long". Keys do not expire by default and are copied into logs and laptops.
-- One apply account shared by all environments. A compromise of the dev pipeline then reaches prod. One account per environment, with a prod condition limited to the protected branch.
+- One apply account shared by all environments. A compromise of the dev pipeline then reaches prod. One account per environment, with a prod condition limited to the default branch and the protected environment.
 - Forgetting that `google_service_account_iam_member` with a wide `principalSet` is as wide as the pool.
 - Granting `roles/iam.workloadIdentityUser` on the project instead of on the service account.
 - Letting the plan job run the same identity as apply, so merge request pipelines can change infrastructure.
