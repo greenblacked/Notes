@@ -8,7 +8,7 @@ tags:
   - gke
   - reliability
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
@@ -100,8 +100,14 @@ done
 
 Anything listed is a remaining object. Normal deletion normally removes them; if they persist they are either waiting on a finalizer or on a controller that is down. Re-issue the delete once and see:
 
+> [!warning] Deletes every object of that kind in the namespace
+> Run it only for a namespace that is already `Terminating` and that you confirmed in Preconditions was meant to be deleted.
+
 ```bash
-kubectl delete <kind> --all -n "$NS" --wait=false
+KIND=widgets.example.com   # change: a kind listed by the loop above
+kubectl get ns "$NS" -o jsonpath='{.status.phase}{"\n"}'   # must print Terminating
+kubectl get "$KIND" -n "$NS" -o name                       # what will be deleted
+kubectl delete "$KIND" --all -n "$NS" --wait=false
 ```
 
 ### 4. Finalizers whose controller is gone
@@ -109,7 +115,8 @@ kubectl delete <kind> --all -n "$NS" --wait=false
 For each remaining object, read its finalizers and deletion timestamp.
 
 ```bash
-kubectl get <kind> <name> -n "$NS" -o jsonpath='{.metadata.deletionTimestamp}{"\n"}{.metadata.finalizers}{"\n"}'
+OBJ=my-widget              # change: an object name from the list above
+kubectl get "$KIND" "$OBJ" -n "$NS" -o jsonpath='{.metadata.deletionTimestamp}{"\n"}{.metadata.finalizers}{"\n"}'
 ```
 
 Common cases:
@@ -119,10 +126,11 @@ Common cases:
 - **Volume claims**: see [[pvc-stuck-terminating]].
 - **Argo CD applications and resources**: an Argo CD finalizer can wait on its own cleanup; see [[argocd-sync-failure-and-drift]].
 
-If the controller is permanently gone and the cloud resource is already deleted or intentionally abandoned, remove the finalizer on that single object:
+If the controller is permanently gone and the cloud resource is already deleted or intentionally abandoned, remove the finalizer on that single object. Follow the finalizer rule in [[pods-stuck-terminating-and-blocked-drains#2. Pod finalizers: fix the owner, not the symptom]].
 
 ```bash
-kubectl patch <kind> <name> -n "$NS" --type=merge -p '{"metadata":{"finalizers":null}}'
+kubectl get "$KIND" "$OBJ" -n "$NS" -o yaml > "$KIND-$OBJ-before.yaml"
+kubectl patch "$KIND" "$OBJ" -n "$NS" --type=merge -p '{"metadata":{"finalizers":null}}'
 ```
 
 Record what you removed and what external resource it guarded, and then verify that external resource in the cloud console or with `gcloud`.

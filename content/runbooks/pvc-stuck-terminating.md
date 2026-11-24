@@ -9,7 +9,7 @@ tags:
   - gcp
   - reliability
 created: 2026-10-19
-modified: 2026-10-22
+modified: 2026-11-24
 draft: false
 ---
 
@@ -154,10 +154,11 @@ Most stuck claims clear at this step.
 
 ### 6. Last resort: patch out the finalizer
 
-Only when no Pod, attachment or controller holds the object, the data is backed up, and the reclaim policy is `Retain` (or you accept the disk deletion):
+Only when no Pod, attachment or controller holds the object, the data is backed up, and the reclaim policy is `Retain` (or you accept the disk deletion). The general finalizer rule is in [[pods-stuck-terminating-and-blocked-drains#2. Pod finalizers: fix the owner, not the symptom]]; the volume-specific checks are above.
 
 ```bash
-kubectl -n "$NS" get pvc "$PVC" -o yaml > pvc-backup.yaml; kubectl get pv "$PV" -o yaml > pv-backup.yaml
+kubectl -n "$NS" get pvc "$PVC" -o yaml > pvc-backup.yaml
+kubectl get pv "$PV" -o yaml > pv-backup.yaml
 kubectl -n "$NS" patch pvc "$PVC" --type=merge -p '{"metadata":{"finalizers":null}}'
 # for a PV that is stuck
 kubectl patch pv "$PV" --type=merge -p '{"metadata":{"finalizers":null}}'

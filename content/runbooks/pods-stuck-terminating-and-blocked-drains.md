@@ -8,7 +8,7 @@ tags:
   - gke
   - reliability
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -109,7 +109,7 @@ kubectl get deploy -A -o wide | grep -Ei 'operator|controller'
 Typical causes are an operator that was uninstalled before its Pods were deleted, or a controller that is crash-looping or lacks RBAC. Restore the controller and the finalizer usually clears by itself.
 
 > [!warning] Removing a finalizer skips its cleanup
-> The Kubernetes documentation advises against removing finalizers by hand unless you understand what the finalizer does and that its purpose is achieved some other way. Skipping it can leave external resources (load balancer entries, volumes, registrations in other systems) behind.
+> This is the rule for any object, not only Pods; [[namespace-stuck-terminating]] and [[pvc-stuck-terminating]] follow it. The Kubernetes Finalizers page says to avoid removing finalizers by hand to let deletion continue, because they are usually there for a reason. Skipping one can leave external resources behind (load balancer entries, disks, registrations in other systems). Before you remove one: restore its controller if you can; confirm its cleanup is done or not needed; save the object with `-o yaml`; patch that one object only, never in a loop; and record which finalizer, on which object, and why. Setting `finalizers` to `null` removes every finalizer on the object, so check each one listed.
 
 Only when the owner is gone for good, and its cleanup is done or not needed:
 

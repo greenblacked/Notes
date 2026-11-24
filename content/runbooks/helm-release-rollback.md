@@ -9,7 +9,7 @@ tags:
   - gitops
   - reliability
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-11-24
 draft: false
 ---
 
@@ -104,16 +104,26 @@ helm upgrade --install "$RELEASE" ./chart -n "$NS" \
 
 ```bash
 helm history "$RELEASE" -n "$NS"
-helm rollback "$RELEASE" <last-deployed-revision> -n "$NS"
+GOOD_REV=7   # change: the last revision whose STATUS is deployed or superseded
+helm rollback "$RELEASE" "$GOOD_REV" -n "$NS"
 ```
 
-If rollback is also refused, back up the stuck release Secret, then delete only the stuck revision's Secret:
+If rollback is also refused:
+
+> [!warning] This edits Helm's release state
+> Deleting a release Secret removes that revision from Helm's history. Back it up first, check it is the stuck revision, and delete nothing else.
 
 ```bash
 kubectl get secret -n "$NS" -l owner=helm,name="$RELEASE" --show-labels
-kubectl get secret sh.helm.release.v1."$RELEASE".v9 -n "$NS" -o yaml > helm-secret-v9-backup.yaml
-kubectl delete secret sh.helm.release.v1."$RELEASE".v9 -n "$NS"
+STUCK_REV=9   # change: the revision helm history shows as pending-install, pending-upgrade or pending-rollback
+SECRET="sh.helm.release.v1.${RELEASE}.v${STUCK_REV}"
+kubectl get secret "$SECRET" -n "$NS" -o json \
+  | jq 'del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.managedFields)' \
+  > "helm-secret-${RELEASE}-v${STUCK_REV}-backup.json"
+kubectl delete secret "$SECRET" -n "$NS"
 ```
+
+To undo: `kubectl create -f "helm-secret-${RELEASE}-v${STUCK_REV}-backup.json" -n "$NS"`. Keep the backup file safe: it holds the rendered release, which can include Secret values.
 
 This edits Helm's bookkeeping, not the workload, and is a last resort. Re-run `helm history`, and then upgrade.
 
@@ -161,7 +171,7 @@ Then check the application signals: error rate, latency, and the version endpoin
 
 ## Rollback
 
-Rolling back a rollback is another `helm rollback` to the revision you left (for example 8), because each rollback is a new revision. For a GitOps release, revert the revert. Backups taken above (values, manifests, Secret YAML) let you reconstruct a release by hand.
+Rolling back a rollback is another `helm rollback` to the revision you left (for example 8), because each rollback is a new revision. For a GitOps release, revert the revert. Backups taken above (values, manifests, Secret JSON) let you reconstruct a release by hand.
 
 ## Troubleshooting
 
