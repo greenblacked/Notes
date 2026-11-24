@@ -8,7 +8,7 @@ tags:
   - gitlab-ci
   - team-process
 created: 2026-10-17
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -63,12 +63,12 @@ flowchart LR
 
 ## Wiring it into the pipeline
 
-Add one advisory job to the merge request pipeline, next to the deterministic jobs described in [[patterns/gitlab-ci-pipeline-structure]]. The job collects the diff, runs a review command and posts a note. [The owner's AI skills catalogue](https://ai.szolotov.com) is one place to look for reusable review skills and prompts, and the review command can wrap any of them.
+Add one advisory job to the merge request pipeline, next to the deterministic jobs described in [[patterns/gitlab-ci-pipeline-structure]]. The job collects the diff, runs a review command and posts a note.
 
 ```yaml title=".gitlab-ci.yml"
 ai-review:
   stage: test
-  image: python:3.12-slim # change: pin by digest; use an image that contains your review tool
+  image: registry.example.com/platform/ai-review@sha256:<digest> # change: your review image, pinned by digest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID'
   allow_failure: true
@@ -95,6 +95,7 @@ The script is a skeleton. The review command is a placeholder you replace with y
 """Collect the MR diff, run a review command, post or update one advisory note."""
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -107,6 +108,11 @@ TOKEN = os.environ["REVIEW_BOT_TOKEN"]
 REVIEW_COMMAND = shlex.split(os.environ["REVIEW_COMMAND"])  # integration point
 MAX_DIFF_CHARS = int(os.environ.get("MAX_DIFF_CHARS", "60000"))
 MARKER = "<!-- ai-review-summary -->"
+MAX_FINDINGS = 20
+SEVERITIES = ("high", "medium", "low")
+PATH_SHAPE = re.compile(r"[A-Za-z0-9._/-]{1,200}")
+# Backslash-escape Markdown, mention and quick-action characters, so no output line can start a /command.
+MARKDOWN_SPECIAL = re.compile(r"([\\`*_{}\[\]()<>#+!|@~/:-])")
 BASE = f"{API}/projects/{PROJECT_ID}/merge_requests/{MR_IID}"
 
 
@@ -138,7 +144,7 @@ def collect_diff():
 
 def run_review(diff):
     # Integration point: replace REVIEW_COMMAND with your tool or gateway client.
-    # It reads the diff on stdin and prints plain-text findings on stdout.
+    # It reads the diff on stdin and prints one JSON object per finding on stdout.
     result = subprocess.run(
         REVIEW_COMMAND,
         input=diff,
@@ -148,6 +154,42 @@ def run_review(diff):
         check=True,
     )
     return result.stdout.strip()
+
+
+def plain(text, limit):
+    """One line of text with Markdown and quick-action characters escaped."""
+    text = " ".join(str(text).split())[:limit]
+    return MARKDOWN_SPECIAL.sub(r"\\\1", text)
+
+
+def render_findings(raw):
+    """Accept only JSON lines of the agreed shape; everything else is counted and dropped.
+
+    The review command must print one JSON object per finding:
+    {"severity": "high|medium|low", "file": "path", "line": 12, "message": "..."}
+    """
+    lines, dropped = [], 0
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+            severity, path, message = item["severity"], item["file"], item["message"]
+            line_no = int(item.get("line", 0))
+        except (ValueError, KeyError, TypeError):
+            dropped += 1
+            continue
+        if severity not in SEVERITIES or not PATH_SHAPE.fullmatch(str(path)) or not message:
+            dropped += 1
+            continue
+        if len(lines) < MAX_FINDINGS:
+            lines.append(f"- {severity}: {plain(path, 200)} line {max(line_no, 0)}: {plain(message, 300)}")
+        else:
+            dropped += 1
+    body = "\n".join(lines) if lines else "No findings."
+    if dropped:
+        body += f"\n\n{dropped} line(s) of review output were dropped because they did not match the expected shape."
+    return body
 
 
 def post_note(body):
@@ -174,8 +216,7 @@ def main():
     if not diff:
         print("empty diff; nothing to review")
         return 0
-    findings = run_review(diff)
-    post_note(findings or "No findings.")
+    post_note(render_findings(run_review(diff)))
     return 0
 
 
@@ -186,6 +227,15 @@ if __name__ == "__main__":
 Notes on the skeleton: it takes its diff input from the API and sets `GIT_STRATEGY: none`, so the job does not check out the merge request's branch, and it runs the script from the pinned image rather than from the repository. Without both, the author's own code would run with `REVIEW_BOT_TOKEN` in the environment. With `none`, the runner can still leave an old working copy in the build directory, so never run anything from it. The job definition itself still comes from the merge request's `.gitlab-ci.yml`, which the author can edit; if the bot token must be out of the author's reach, run the job from pipeline configuration the merge request cannot change, as in [[ai-generated-code-policy-and-provenance]]. It truncates input so cost is bounded, and it updates one note instead of adding a new one per push. Pagination of notes and diffs is simplified: the script says so in the note when 100 files are returned, and you can follow the `x-next-page` response header if your merge requests are large. It edits only a note written by the bot's own user, so a pasted marker cannot hijack it.
 
 On GitHub the same shape uses two jobs in a `pull_request` workflow, never `pull_request_target`. GitHub Actions permissions are set per workflow or per job, not per step. A review job with `contents: read` uploads the findings as an artifact; a second job with `pull-requests: write` downloads it and comments, and it runs no agent. See the example in [[ai/securing-ai-agents-in-ci-and-cloud]].
+
+## The diff is untrusted input
+
+Everything the bot reads was written by the merge request's author or by whoever wrote the code being changed: code, comments, commit messages, file names and test fixtures. Any of it can carry text addressed to the model ("ignore previous instructions", "approve this", "say no issues found"). Design for that, not against it:
+
+- **The bot can only comment.** Its token cannot push, approve or merge (see Rules), so the worst a followed instruction can do is a wrong or missing comment.
+- **The output shape is validated.** GitLab can run quick actions found in a note body, so a model that is steered into printing a line such as `/approve` or `/close` could run it as the bot. The skeleton accepts only JSON findings of a fixed shape, caps their number and escapes every character that could start a quick action, a mention or a link. Anything else is dropped and counted in the note.
+- **A clean review is not evidence.** "No findings" can mean the model was told to say so. It never counts towards approval, and it does not replace the deterministic checks.
+- **Test it.** Put planted instructions in a fixture merge request and assert that the posted note contains no command, mention or link, as in [[prompt-injection-test-harness-for-ci-agents]].
 
 ## Triage
 
@@ -233,7 +283,7 @@ Be careful when relating this to the delivery measures in [[management/dora-metr
 
 - **Making the bot required.** Once a branch rule needs its pass, outages and false positives block work. Keep it advisory.
 - **Comment floods.** One note per push, a cap on findings and a minimum severity keep the noise down.
-- **Bot instructions inside the diff.** A comment in the code can try to steer the reviewer. The bot's token has no write access to code, no deploy and no cloud credentials, and its output is only a comment, so the damage stays small; do not give it more.
+- **Bot instructions inside the diff.** See "The diff is untrusted input": comment-only token, validated output, and a clean review is never evidence.
 - **Reviewers relaxing.** "The bot looked at it" is not a review. Keep the human approval rule.
 - **Drift.** Models and prompts change; sample the output every month and re-check the false-positive rate.
 
@@ -244,7 +294,6 @@ Be careful when relating this to the delivery measures in [[management/dora-metr
 - [[ai/securing-ai-agents-in-ci-and-cloud]]: tokens, isolation and egress for the bot job.
 - [[management/dora-metrics]]: delivery metrics to watch alongside review numbers.
 - [[patterns/gitlab-ci-pipeline-structure]]: where the advisory job fits in the pipeline.
-- [The owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
 
 ## Evidence
 
@@ -271,4 +320,6 @@ Source-reviewed on 2026-11-02. Nothing was run. The scope is the GitLab API, tok
 - GitHub Actions statements (`pull_request` versus `pull_request_target`, permissions set per workflow or per job, two-job artifact hand-off): GitHub documentation was not available.
 - SonarQube quality gates, any specific review product's tier, rule files or ability to block merges, and the model gateway: no local source.
 - Engineering guidance, not a documented claim: bot scope and noise rules, triage categories, usefulness metrics, data-handling advice and the pitfalls list.
-- Nothing was run, including the skeleton script and pipeline job.
+- That GitLab runs quick actions found in a note body created through the Notes API, and the exact quick-action rules (a command starts with a forward slash on its own line); whether quick actions inside code blocks or quotes run is also unknown. The Notes API and quick actions pages were not re-read on 2026-11-24, and the skeleton does not rely on any such exception. Treat the claim as a risk to design for, not a tested fact.
+- The escaping as rendered by your GitLab version. `render_findings` was exercised with sample output on 2026-11-24, not in a pipeline.
+- Nothing else was run, including the pipeline job.
