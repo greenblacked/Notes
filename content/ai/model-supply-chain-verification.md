@@ -7,7 +7,7 @@ tags:
   - security
   - supply-chain
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -60,4 +60,3 @@ If a model artifact is suspected compromised, suspend further promotion, preserv
 - [Sigstore Cosign: Verifying signatures](https://docs.sigstore.dev/cosign/verifying/verify/): verification of signatures and attestations.
 - [Hugging Face Hub model cards](https://huggingface.co/docs/hub/en/model-cards): model card structure and expected descriptive information; publisher claims still require review.
 - [NIST AI 600-1, Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): risk management context for GenAI components.
-- [Owner’s AI skills catalogue](https://ai.szolotov.com): reusable AI skills and workflows.

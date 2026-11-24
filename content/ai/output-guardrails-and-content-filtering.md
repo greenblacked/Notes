@@ -8,7 +8,7 @@ tags:
   - reliability
   - observability
 created: 2026-11-01
-modified: 2026-11-02
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -246,5 +246,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the OWASP, MCP, OpenTelem
 [^otel]: Attribute names and stability vary by version; check the registry for the version you pin.
 
 [^mcp]: The MUST covers annotations; the two SHOULDs cover tool invocations generally.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

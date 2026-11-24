@@ -8,7 +8,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -63,4 +63,3 @@ Test load and failure behavior in a controlled environment with synthetic reques
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): agent-specific risks from autonomy, tools, and cascading work.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): AI RMF 1.0 overview; NIST says the framework is under revision as of 2026-10-26.
 - [OpenTelemetry GenAI semantic conventions repository](https://github.com/open-telemetry/semantic-conventions-genai): maintained location for evolving GenAI telemetry conventions.
-- [Owner’s AI skills catalogue](https://ai.szolotov.com): reusable AI skills and workflows.

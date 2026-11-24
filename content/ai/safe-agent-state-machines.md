@@ -7,7 +7,7 @@ tags:
   - security
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -53,5 +53,3 @@ Test crash recovery at every transition boundary, including after an upstream si
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — supports lifecycle governance and monitoring; NIST says AI RMF 1.0 is being revised.
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) — current agentic risk taxonomy, including risks around autonomy and delegated authority.
 - [Google Cloud Workflows documentation](https://cloud.google.com/workflows/docs) — official workflow orchestration documentation for durable, explicit execution patterns; implementation semantics depend on the selected runtime.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

@@ -7,7 +7,7 @@ tags:
   - reliability
   - observability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -47,8 +47,6 @@ At launch, have the product owner, service owner, and on-call representative agr
 - A review date and a change process when product behavior or provider contracts change.
 
 Revisit the SLO after a material traffic shift, model migration, new streaming behavior, or change in user expectation. A target that is copied from a generic uptime template is not a service agreement. Record decisions and exclusions in plain language, and preserve raw enough telemetry to explain a bad event without storing user prompts by default. Engineering guidance is not legal advice where user commitments or regulated outcomes are involved.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

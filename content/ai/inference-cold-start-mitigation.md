@@ -9,7 +9,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -59,8 +59,6 @@ Define separate behavior for interactive and asynchronous work. Interactive requ
 - Define a rollback and traffic-drain path for model-load failures.
 
 Warm capacity trades idle expense for response time and resilience. Optimize the slowest measured stage first; adding replicas cannot fix an unavailable artifact store or broken readiness contract.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Evidence
 

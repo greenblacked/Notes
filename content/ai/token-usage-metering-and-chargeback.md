@@ -7,7 +7,7 @@ tags:
   - cost
   - audit
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -45,10 +45,7 @@ Provide owners with trends, forecast, effective rates, top request classes, and 
 
 Do not expose customer-level prompt data in finance dashboards. Apply retention and access controls to detailed usage records, and aggregate or de-identify reports where possible. Engineering guidance for allocation is not legal or accounting advice.
 
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
-
 ## Sources
 
 - [Agent Platform Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing): official example of model-specific pricing; rates and billing units can change.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Generative AI on Agent Platform quotas and system limits](https://cloud.google.com/vertex-ai/generative-ai/docs/quotas): official quota dimensions that may affect metering and service behavior.

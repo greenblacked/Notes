@@ -8,7 +8,7 @@ tags:
   - gke
   - reliability
 created: 2026-11-01
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -259,5 +259,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: Kubernetes GPU scheduling
 - [Kubernetes: Dynamic Resource Allocation](https://kubernetes.io/docs/concepts/resource-management/dynamic-resource-allocation/) and its DRA features page: back device classes, CEL filtering, claims, partitionable devices and compatibility groups (which need both gates enabled). Feature-gate stages were not checked. Checked 2026-11-02 (commit 491f14e).
 - [vLLM metrics design](https://docs.vllm.ai/en/latest/design/metrics/): backs `vllm:kv_cache_usage_perc` and the 0.9 example value. Checked 2026-11-02 (commit 8530a77).
 - [OpenTelemetry GenAI metrics](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-metrics.md): backs the `gen_ai.server.*` metric names and their Development status. Checked 2026-11-02 (semantic-conventions-genai commit 244465e); the public URL is inferred from the repository path.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

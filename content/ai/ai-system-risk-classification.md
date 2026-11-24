@@ -8,7 +8,7 @@ tags:
   - compliance
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -65,7 +65,9 @@ Use legal counsel for legal classifications and obligations; use engineering ass
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[ai-impact-assessment-for-engineering-systems]]: step 2, who is affected and how.
+- [[ai-system-threat-modeling]]: step 3, attack paths and controls.
+- [[ai-red-team-exercise-planning]]: step 4, testing the controls.
 
 ## Sources
 

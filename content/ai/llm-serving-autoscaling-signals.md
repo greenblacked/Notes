@@ -9,7 +9,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -57,8 +57,6 @@ Avoid oscillation. Scrape intervals, smoothing, stabilization windows, the HPA t
 - Revisit the controller after model, hardware, metric, or cluster-autoscaler changes.
 
 Reactive scaling trades lower idle cost against delayed capacity. A warm pool or minimum replica count raises the baseline but can preserve latency during bursts. Set the balance from observed provisioning time, demand volatility, and the cost of missed requests.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Evidence
 

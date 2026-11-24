@@ -8,7 +8,7 @@ tags:
   - cost
   - observability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -45,8 +45,6 @@ Define a headroom trigger with a named owner and a lead time before the expected
 - Reforecast after product, model, quota, or latency-distribution changes.
 
 Do not use production customer content in load tests unless it has been approved and transformed under the data policy. Estimates are uncertain; document assumptions instead of presenting a single precise capacity number. Capacity plans support operational decisions, not provider guarantees.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

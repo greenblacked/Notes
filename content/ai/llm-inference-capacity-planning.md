@@ -9,7 +9,7 @@ tags:
   - cost
   - reliability
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -56,8 +56,6 @@ Re-evaluate after model or engine upgrades and when request distributions shift.
 - Re-run the envelope after material changes and preserve the last known-good configuration.
 
 Tradeoffs should be explicit: reserve capacity buys recovery and latency stability at ongoing cost, while high utilization lowers idle cost but leaves less room for bursts and maintenance. Neither is universally correct; choose against a stated objective and revisit it with production evidence.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Evidence
 

@@ -8,7 +8,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -55,8 +55,6 @@ Some runtimes apply dynamic batching automatically or schedule token iterations 
 - Review batch behavior after runtime or model changes.
 
 The right setting is workload-specific: smaller batches favor responsiveness and isolation, while fuller batches can improve efficiency at the cost of waiting and memory. Keep evidence from the workload test, not from a synthetic one-request benchmark.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

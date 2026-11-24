@@ -8,7 +8,7 @@ tags:
   - reliability
   - team-process
 created: 2026-11-01
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -171,5 +171,3 @@ Record retrieval and tool steps in traces so you can see which lever misbehaves.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): risk framing for choosing and measuring a system design.
 - [NIST AI 600-1, Generative AI Profile](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence): generative-AI risks such as confabulation and data privacy for the eval plan.
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): prompt injection and excessive agency in retrieved content and tool use.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

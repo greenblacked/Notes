@@ -7,13 +7,11 @@ tags:
   - security
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
 Threat modeling an AI feature is not a special substitute for application threat modeling. It extends the usual inventory of data, identities, interfaces, and impacts to include model behavior, retrieval, tools, and the uncertain boundary between instructions and content. Use this guide before a design is approved and revisit it after a provider, model, tool, or data-flow change. It complements [[ai/securing-ai-agents-in-ci-and-cloud]], which focuses on operational controls for agents that can reach repositories or cloud resources.
-
-The owner’s [AI skills catalogue](https://ai.szolotov.com) provides reusable skills and workflows.
 
 ## Start with the system and its intended use
 

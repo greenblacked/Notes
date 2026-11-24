@@ -9,7 +9,7 @@ tags:
   - gitlab-ci
   - jenkins
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-24
 draft: false
 ---
 
@@ -208,5 +208,3 @@ Log every output with the run ID, the bundle hash and the prompt version ([[prom
 - [Jenkins: Cleaning up and notifications](https://www.jenkins.io/doc/pipeline/tour/post/) — declarative `post` conditions and build statuses; not fetched on 2026-10-27.
 - [GitLab CI/CD YAML syntax reference](https://docs.gitlab.com/ci/yaml/) — `retry`, `retry:when` and `allow_failure`; not fetched, verify syntax for your version.
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) — excessive agency; not fetched, confirm the edition and numbering.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

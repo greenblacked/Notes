@@ -7,7 +7,7 @@ tags:
   - security
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -60,4 +60,3 @@ Track fixes to closure and retest the failed boundary. Add safe regression fixtu
 - [NIST AI 600-1, Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): GenAI-specific risks and risk-management practices.
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): risk categories for agentic systems.
 - [MITRE ATLAS](https://atlas.mitre.org/): AI-system tactics and techniques for organizing defensive exercises.
-- [Owner’s AI skills catalogue](https://ai.szolotov.com): reusable AI skills and workflows.

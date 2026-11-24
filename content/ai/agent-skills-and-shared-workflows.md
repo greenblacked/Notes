@@ -8,7 +8,7 @@ tags:
   - team-process
   - security
 created: 2026-10-17
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -155,7 +155,6 @@ REQUIRED = {"name", "version", "description", "owner", "allowed_tools", "forbidd
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 BASELINE_FORBIDDEN = {"read_secrets", "terraform_apply"}
 
-
 def check(path: pathlib.Path) -> list[str]:
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict):
@@ -177,7 +176,6 @@ def check(path: pathlib.Path) -> list[str]:
         errors.append(f"{path}: baseline-forbidden tools allowed: {sorted(overlap)}")
     return errors
 
-
 def main() -> int:
     problems = []
     manifests = list(pathlib.Path("skills").glob("*/manifest.yaml"))
@@ -189,7 +187,6 @@ def main() -> int:
     for problem in problems:
         print(problem, file=sys.stderr)
     return 1 if problems else 0
-
 
 if __name__ == "__main__":
     sys.exit(main())
@@ -236,7 +233,7 @@ Keep the template minimal and readable, and pin job images by explicit tag or di
 
 Note that `scripts/validate-manifests.py` must exist in the consuming project, or the template must fetch it from the shared repository at the same pinned tag. Jenkins teams do the equivalent with a shared library pinned to a tag.
 
-For ideas on what skills and workflows to share, see [the owner's AI skills catalogue](https://ai.szolotov.com). Treat anything you copy from any catalogue as untrusted until your own review.
+Treat anything you copy from any shared catalogue of skills or prompts as untrusted until your own review.
 
 ## Pitfalls
 
@@ -268,7 +265,6 @@ Move consumers back to the previous tag in their `include` and agent runner conf
 - [[patterns/jenkins-shared-libraries]]: the same pin-and-review model for Jenkins.
 - [[patterns/release-versioning-and-changelog-automation]]: tags and changelogs for the skills repository.
 - [[management/platform-team-operating-model]]: who owns shared platform assets.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
 
 ## Evidence
 

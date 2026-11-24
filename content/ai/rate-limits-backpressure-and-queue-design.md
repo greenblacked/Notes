@@ -8,7 +8,7 @@ tags:
   - kubernetes
   - cost
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -57,10 +57,7 @@ Provider-specific throttling can return headers, status codes, or retry guidance
 
 The tradeoff is between rejecting work early and allowing a queue to absorb short variability. A bounded queue can smooth transient bursts; an unbounded queue transfers overload into user-visible latency, memory pressure, and delayed recovery. Set limits to match the service objective, not to hide inadequate capacity.
 
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
-
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Quotas for Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html): Amazon Bedrock quotas; service quotas are provider- and region-specific.
 - [Horizontal Pod Autoscaling | Kubernetes](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/): Kubernetes scaling inputs; HPA alone does not implement queue backpressure.

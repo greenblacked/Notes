@@ -7,7 +7,7 @@ tags:
   - reliability
   - observability
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -49,8 +49,6 @@ Mitigate with strict side-effect isolation, privacy review, eligible-traffic acc
 - Are safety, cost, latency, errors and user outcomes monitored?
 - Are local stop criteria defined before exposure?
 - Are limitations of shadow and canary evidence clearly separated?
-
-The owner's agent skills and workflows are listed in [the AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

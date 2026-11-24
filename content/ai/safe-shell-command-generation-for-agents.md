@@ -8,7 +8,7 @@ tags:
   - ci-cd
   - linux
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -57,7 +57,8 @@ If not, do not execute. Return the proposed command for a human to review, or as
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[coding-agent-permission-allowlists]]: allow, ask and deny rules for shell use.
+- [[code-execution-agent-sandboxing]]: running model-selected code.
 
 ## Evidence
 

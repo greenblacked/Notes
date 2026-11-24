@@ -6,7 +6,7 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -16,8 +16,6 @@ review-due: 2027-05-02
 Browser agents combine a model with a session that may hold cookies, credentials, internal app access, and form-submission authority. They interpret untrusted pages and can act on them. The boundary includes model, browser, profile, network, identity provider, and target site. This guide focuses on browser isolation; tool permissions are in [[ai/agent-tool-authorization-boundaries]].
 
 The host and runner isolation baseline in [[ai/sandboxing-coding-agents-on-workstations-and-runners]] is relevant, but browser sessions need additional identity and profile controls.
-
-The owner’s [AI skills catalogue](https://ai.szolotov.com) provides reusable skills and workflows.
 
 ## Use a dedicated identity and profile
 
@@ -76,10 +74,8 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the prompt-injection, lea
 
 - NIST SP 800-207 and NIST AI 600-1 (listed in Sources) could not be read; NIST publications are not reachable. The one-line descriptions there are unconfirmed.
 - OWASP Top 10 for Agentic Applications 2026 (listed in Sources) is not in the local OWASP checkout; its description is unconfirmed.
-- The model provider documentation entry in Sources is generic and was not read.
 - Browser-specific behaviour (profile isolation, remote debugging ports, session expiry after UI close, download, clipboard and extension controls) was not checked against any browser or automation product documentation.
 - The claim that a container alone does not hide browser credentials, and the specific sandbox configuration (dedicated user, filesystem and network policy), are engineering guidance; the Docker and gVisor pages above support only the host-mount and isolation-layer points.
-- The owner's AI skills catalogue link was not checked.
 - General engineering advice (dedicated identities, egress limits, approval binding, audit logging, retention, test plan) is guidance, not a documented claim.
 - Nothing was run.
 
@@ -88,5 +84,4 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the prompt-injection, lea
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): prompt injection (LLM01) and excessive agency (LLM06) guidance.
 - [NIST SP 800-207, Zero Trust Architecture](https://csrc.nist.gov/pubs/sp/800/207/final): identity- and resource-focused access principles.
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): agent identity, tool, and execution risks.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [NIST AI 600-1, Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): AI risk management context.

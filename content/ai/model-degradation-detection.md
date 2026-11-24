@@ -7,7 +7,7 @@ tags:
   - observability
   - reliability
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -49,10 +49,7 @@ During investigation, prefer reversible containment: stop increasing exposure, r
 
 Recalibrate after a product workflow changes, not just after a model upgrade. Engineering guidance is not legal advice for products that make regulated or high-impact decisions.
 
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
-
 ## Sources
 
 - [GitHub: OpenTelemetry GenAI Semantic Conventions](https://github.com/open-telemetry/semantic-conventions-genai): current community convention repository; conventions evolve and should be checked at adoption.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Google SRE: Monitoring Distributed Systems](https://sre.google/sre-book/monitoring-distributed-systems/): monitoring signals and alert interpretation.

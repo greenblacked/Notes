@@ -8,7 +8,7 @@ tags:
   - incident-management
   - observability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -46,8 +46,6 @@ After stabilization, document impact, timeline, detection gap, contributing fact
 - Is the proposed mitigation reversible and narrower than disabling authorization or serving stale data?
 - Are quality, citations, permissions, latency and freshness all part of recovery criteria?
 - Is a sanitized regression test and accountable corrective action recorded?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

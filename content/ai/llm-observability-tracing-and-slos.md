@@ -9,7 +9,7 @@ tags:
   - reliability
   - prometheus
 created: 2026-10-21
-modified: 2026-11-01
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-01
 review-due: 2027-05-01
@@ -295,4 +295,3 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the OpenTelemetry GenAI a
 - [[redacting-sensitive-data-before-llm-calls]]: the filter content capture must sit behind.
 - [[timeouts-retries-load-shedding]]: retries, circuit breakers and shedding.
 - [[internal-mcp-servers-for-platform-tools]]: tool servers that continue the trace.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

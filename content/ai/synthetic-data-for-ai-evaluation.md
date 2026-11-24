@@ -8,7 +8,7 @@ tags:
   - reliability
   - team-process
 created: 2026-11-01
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -227,5 +227,3 @@ Source-reviewed on 2026-11-02. Nothing was run. The review covered the OpenTelem
 - [NIST AI 600-1, Generative AI Profile](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence) - expectations for evaluation and data provenance in generative AI; check current content.
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) - sensitive information disclosure and data poisoning risks for eval and training data; check current numbering.
 - [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-events.md) - the evaluation result event and its attributes, at development stability.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

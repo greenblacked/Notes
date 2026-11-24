@@ -8,7 +8,7 @@ tags:
   - supply-chain
   - cost
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -58,11 +58,8 @@ The tradeoff is between immediate visibility and safe publication. Incremental u
 
 Google Cloud's RAG infrastructure reference can provide one implementation example, but its page reports last reviewed 2025-09-22; treat it as dated architecture context rather than current service guidance.
 
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
-
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Google Cloud: get text embeddings](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings): Google Cloud embedding API behavior; provider-specific.
 - [Exactly-once in Dataflow | Google Cloud Documentation](https://docs.cloud.google.com/dataflow/docs/concepts/exactly-once): Dataflow processing guarantees and limitations; external side effects still need idempotent handling.
 - [RAG infrastructure for generative AI using Agent Platform and AlloyDB for PostgreSQL](https://docs.cloud.google.com/architecture/rag-capable-gen-ai-app-using-vertex-ai): Google Cloud architecture example, last reviewed 2025-09-22; use as dated reference, not a guarantee of current product behavior.

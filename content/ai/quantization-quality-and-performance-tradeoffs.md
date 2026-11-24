@@ -8,7 +8,7 @@ tags:
   - cost
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -53,8 +53,6 @@ Promote a candidate through a staged gate: offline quality evaluation; hardware-
 - Re-test after changes to runtime, GPU generation, tokenizer, or serving parameters.
 
 The operational decision is a balance: smaller representation may reduce resource cost and unlock concurrency, while quality or compatibility risk may outweigh those gains. Choose the candidate on observed end-to-end results and keep the baseline available for comparison and rollback.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

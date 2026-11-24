@@ -8,7 +8,7 @@ tags:
   - observability
   - team-process
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -203,5 +203,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the controls borrowed fro
 - [FinOps Foundation: Managing cloud cost anomalies](https://www.finops.org/wg/managing-cloud-cost-anomalies/) — working-group notes on anomaly causes and handling.
 - [Google Cloud: Export Cloud Billing data to BigQuery](https://docs.cloud.google.com/billing/docs/how-to/export-data-bigquery) — export types, lack of backfill and label fields; check the current schema before writing SQL.
 - [OWASP GenAI: LLM Top 10 (2025)](https://genai.owasp.org/llm-top-10/): prompt injection (LLM01) and excessive agency (LLM06) categories; numbering has changed between editions, so cite names.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

@@ -5,7 +5,7 @@ tags:
   - ai
   - meta
 created: 2026-10-17
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -238,4 +238,4 @@ Classify risk, review providers and contracts, keep an inventory, and control da
 The owner's agent skills and workflows live in [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 > [!note] Tools change fast
-> AI tools change quickly, so these notes avoid product-specific claims and describe controls that hold across tools. Find skills and shared workflows at [ai.szolotov.com](https://ai.szolotov.com).
+> AI tools change quickly, so these notes avoid product-specific claims and describe controls that hold across tools. Find reusable skills and shared workflows in the catalogue linked above.

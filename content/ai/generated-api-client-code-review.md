@@ -8,7 +8,7 @@ tags:
   - security
   - ci-cd
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -54,10 +54,10 @@ If the contract's provenance or behavior cannot be established, block release of
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[dependency-hallucination-controls]]: checking suggested packages.
+- [[ai-assisted-test-generation-quality-gates]]: tests for generated code.
 
 ## Sources
 
 - [OpenAPI Specification v3.2.1](https://spec.openapis.org/oas/latest.html): API description vocabulary and schema semantics; confirm the specific version used by the project.
 - [OpenAPI Generator: Usage](https://openapi-generator.tech/docs/usage/): generator command options and generation workflow.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).

@@ -7,7 +7,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -57,7 +57,4 @@ Typical defects include counting tokens before adding tool schemas; reserving no
 
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OpenTelemetry GenAI Semantic Conventions](https://github.com/open-telemetry/semantic-conventions-genai) — evolving conventions repository for GenAI telemetry; inspect current files before choosing attribute names.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

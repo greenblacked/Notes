@@ -6,7 +6,7 @@ tags:
   - ai
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -45,8 +45,6 @@ On an incident, compare each arm separately, verify freshness and ACL consistenc
 - Does the evaluation cover exact identifiers, paraphrase, multilingual content, no-evidence and version conflicts?
 - Are quality, latency, failure behavior and incremental cost measured together?
 - Is degraded mode explicit, bounded, permission-safe and visible to operators?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

@@ -7,7 +7,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -46,8 +46,6 @@ Promote a strategy only if it meets predefined thresholds on retrieval and answe
 - Are quality and cost measured together, with results segmented by risk-relevant category?
 - Have humans checked false positives, lost context, table coherence and citation precision?
 - Is promotion gated and rollback possible without losing newer source updates?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

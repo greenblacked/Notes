@@ -7,7 +7,7 @@ tags:
   - security
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -53,8 +53,6 @@ A successful job is not proof of a correct corpus. Sample against the source, co
 - Do extraction tests cover tables, scans, long documents, multilingual text and parser upgrades?
 - Are staging, logs, dead letters and backups subject to the same retention and access controls?
 - Can operators pause a bad run and restore the prior generation without discarding newer valid changes?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

@@ -8,7 +8,7 @@ tags:
   - policy-as-code
   - audit
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -175,12 +175,9 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the general design claims
 
 ## Sources
 
-- Your coding agent's own documentation for rule syntax, precedence, wildcard matching, compound commands, MCP rules and OS-level sandboxing. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [NIST SP 800-53 Rev. 5](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) — the least-privilege control (AC-6) and separation of duties (AC-5) used as the policy frame.
 - [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) — an allow-only authorisation model, as a contrast to deny-first precedence.
 - [git-push](https://git-scm.com/docs/git-push) — force-push spellings.
 - [GitLab job rules](https://docs.gitlab.com/ci/jobs/job_rules/) — the CI rules used in the lint job.
 - [MCP tools specification](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) — human in the loop for tool calls.
 - [OWASP LLM06:2025 Excessive Agency](https://genai.owasp.org/llm-top-10/) — least privilege and approval for agent actions.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

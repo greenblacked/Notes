@@ -8,7 +8,7 @@ tags:
   - gitlab-ci
   - security
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -55,7 +55,8 @@ Use the smallest isolation that contains the task's realistic risk. A trusted do
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[sandboxing-coding-agents-on-workstations-and-runners]]: where the agent runs.
+- [[parallel-agent-fan-out-and-result-merging]]: one worktree per subtask.
 
 ## Evidence
 

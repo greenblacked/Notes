@@ -8,7 +8,7 @@ tags:
   - security
   - cost
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -55,8 +55,6 @@ Measure hit rate alongside correctness, staleness, tenant isolation, latency, an
 
 Do not place personal or confidential values into a broadly accessible cache without the data owner's approval. Engineering guidance is not legal advice; privacy and contractual requirements need review by the appropriate owner. See [[redacting-sensitive-data-before-llm-calls]] for upstream data handling.
 
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
-
 ## Evidence
 
 Source-reviewed on 2026-11-02. Nothing was run. Scope: the self-hosted inference engine's prefix-cache isolation statements and the OpenTelemetry cache token attributes added to this note, and the cache lifetime fields of a cloud provider's cached-content API.
@@ -77,6 +75,5 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the self-hosted inference
 
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Context caching overview](https://cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview): A cloud provider's context-cache concepts and lifecycle.
 - [Prompt caching for faster model inference](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html): Provider-specific prompt-caching behavior.

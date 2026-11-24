@@ -8,7 +8,7 @@ tags:
   - ci-cd
   - gitlab-ci
 created: 2026-10-17
-modified: 2026-10-20
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-10-20
 review-due: 2027-04-20
@@ -50,7 +50,7 @@ The rules are short on purpose, so a reviewer can check a pipeline against them.
 - Data classes sent to a model provider are written down, and secrets, personal data and customer data are excluded unless an approved agreement says otherwise.
 - Each job has a time limit, a token or request budget and a cap on tool calls.
 
-Reusable agent prompts and workflows, with the guardrails above written into them, are easier to keep safe when they live in one place. [The owner's AI skills catalogue](https://ai.szolotov.com) is one such collection.
+Reusable agent prompts and workflows, with the guardrails above written into them, are easier to keep safe when they live in one reviewed repository ([[agent-skills-and-shared-workflows]]).
 
 ## Trigger and token matrix
 
@@ -270,10 +270,8 @@ A helper check, not part of the evidence level. Host: Ubuntu 24.04.5 LTS, `pytho
 ```python title="egress_check.py"
 ALLOW = {"llm-gateway.example.com:443"}
 
-
 def decide(target):
     return "ALLOW" if target.lower() in ALLOW else "DENY"
-
 
 for t in [
     "llm-gateway.example.com:443",
@@ -308,4 +306,3 @@ This shows only that exact (lower-cased) matching rejects a subdomain trick and 
 - [[architecture/iam-groups-and-ci-workload-identity-federation]]: short-lived cloud access for CI instead of key files.
 - [[ai/ai-code-review-bots]]: the advisory review pattern that follows these rules.
 - [[ai/ai-generated-code-policy-and-provenance]]: the review and audit side of AI-written code.
-- [The owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

@@ -9,7 +9,7 @@ tags:
   - policy-as-code
   - security
 created: 2026-10-19
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -262,4 +262,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the Terraform plan JSON f
 - [[securing-ai-agents-in-ci-and-cloud]]: token, egress and isolation rules for the model job.
 - [[ai-code-review-bots]]: the general advisory-reviewer pattern.
 - [[secret-scanning-pre-commit-and-ci]]: scanning what you send.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

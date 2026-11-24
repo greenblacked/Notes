@@ -9,7 +9,7 @@ tags:
   - reliability
   - gcp
 created: 2026-10-19
-modified: 2026-11-01
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-01
 review-due: 2027-05-01
@@ -223,4 +223,3 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the gcloud budget command
 - [[rolling-out-ai-tools-in-a-team]]: budgets as part of a rollout.
 - [[llm-log-analysis-and-alert-triage]]: reducing tokens and capping calls in alert storms.
 - [[evaluating-ai-tools-for-a-platform-team]]: the evaluation gate for tiering.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

@@ -8,7 +8,7 @@ tags:
   - audit
   - team-process
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -169,5 +169,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the general agency, least
 - [Slack: Using token rotation](https://docs.slack.dev/authentication/using-token-rotation): expiring access tokens and refresh-token exchange.
 - [Slack: Rate limits](https://api.slack.com/apis/rate-limits): HTTP 429, `Retry-After` and per-method limits.
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) - excessive agency, prompt injection, sensitive information disclosure and unbounded consumption.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

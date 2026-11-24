@@ -8,7 +8,7 @@ tags:
   - security
   - reliability
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -53,10 +53,7 @@ Monitor gateway availability, policy denials, dispatch latency, provider respons
 
 The primary tradeoff is central consistency versus a new critical dependency and latency hop. Keep the gateway small, observable, highly available, and limited to decisions that truly need central enforcement.
 
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
-
 ## Sources
 
 - [OWASP Top 10 for Agentic Applications for 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): current OWASP agentic risk guidance; a gateway is only one layer in the control system.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [AI Risk Management Framework | NIST](https://www.nist.gov/itl/ai-risk-management-framework): NIST AI RMF 1.0 (January 2023); the page states revision is underway, so it is cited as a dated framework, not an unrevised current standard.

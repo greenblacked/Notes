@@ -7,7 +7,7 @@ tags:
   - security
   - supply-chain
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -17,8 +17,6 @@ review-due: 2027-05-02
 When an agent installs a package, it delegates trust to a registry, publisher account, package version, transitive dependency graph, and build or install scripts. The dependency may execute code during installation, compile, test, or runtime. A model’s recommendation, popularity metric, lockfile, or successful test does not establish that the package is safe. This note is about package acquisition in agent workflows; broader model artifact integrity is covered by [[ai/model-supply-chain-verification]].
 
 Agent-generated dependency changes still require the review and provenance practices in [[ai/ai-generated-code-policy-and-provenance]].
-
-The owner’s [AI skills catalogue](https://ai.szolotov.com) provides reusable skills and workflows.
 
 ## Treat dependency changes as executable changes
 

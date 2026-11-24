@@ -8,7 +8,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -54,6 +54,3 @@ Common mistakes include aliases resolving to new model versions without review; 
 ## Sources
 
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance and risk management; NIST reports that AI RMF 1.0 is being revised.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

@@ -7,7 +7,7 @@ tags:
   - security
   - audit
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -56,7 +56,8 @@ If a control cannot be established, keep the output advisory and do not execute 
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[ai-assisted-database-migration-review]]: reviewing generated migrations.
+- [[safe-shell-command-generation-for-agents]]: the same rules for shell commands.
 
 ## Evidence
 

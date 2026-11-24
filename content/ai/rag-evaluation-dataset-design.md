@@ -6,7 +6,7 @@ tags:
   - ai
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -48,8 +48,6 @@ Common problems are questions written to match the system's current chunk bounda
 - Are human reviewers calibrated and automated judges treated as fallible?
 - Are thresholds predefined, changes reproducible and benchmark leakage considered?
 - Can source owners update or withdraw labels when authoritative content changes?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

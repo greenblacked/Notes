@@ -7,7 +7,7 @@ tags:
   - security
   - reliability
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -54,7 +54,4 @@ Watch for duplicate JSON keys interpreted differently across components, coercio
 
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [JSON Schema reference documentation](https://json-schema.org/understanding-json-schema/reference) — documentation for JSON Schema keywords; select a dialect supported by your validator.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

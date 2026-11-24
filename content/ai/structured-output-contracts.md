@@ -7,7 +7,7 @@ tags:
   - reliability
   - security
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -52,8 +52,5 @@ Review each contract against these questions:
 
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [JSON Schema specification](https://json-schema.org/specification) — the vocabulary and validation rules a structured-output schema is written in; providers support different subsets of it.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — risk and measurement framing; NIST states AI RMF 1.0 is being revised.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

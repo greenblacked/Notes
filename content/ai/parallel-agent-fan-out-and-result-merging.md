@@ -8,7 +8,7 @@ tags:
   - cost
   - reliability
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -188,7 +188,4 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the git worktree, merge, 
 
 ## Sources
 
-- Your coding agent's own documentation for parallel subagents, worktree naming, concurrency limits and cleanup. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [git-worktree documentation](https://git-scm.com/docs/git-worktree): linked worktrees share history; add, list, lock, prune and remove; a branch is not normally checked out in two worktrees.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

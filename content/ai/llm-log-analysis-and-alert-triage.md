@@ -9,7 +9,7 @@ tags:
   - on-call
   - incident-management
 created: 2026-10-19
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -229,4 +229,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the gcloud and kubectl fl
 - [[securing-ai-agents-in-ci-and-cloud]]: access and egress rules for the triage service.
 - [[on-call-health]]: alert fatigue and load.
 - [[llm-api-cost-control]]: caps and a kill switch at the gateway.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
