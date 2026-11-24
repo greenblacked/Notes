@@ -8,7 +8,7 @@ tags:
   - ci-cd
   - delivery
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -70,11 +70,61 @@ agent-fix-upgrade:
   # needs: [] keeps the job runnable after the test job has failed;
   # a needs on the failed job would skip it. The script fetches the failing job log.
   needs: []
+  environment:
+    name: dependency-agent # protected environment; the push token is scoped to it
+    action: prepare
   script:
-    - ./ci/agent-fix.sh
+    # Run the job script from the default branch, never from the MR branch the agent writes to.
+    - |
+      set -Eeuo pipefail
+      git fetch --no-tags origin "refs/heads/${CI_DEFAULT_BRANCH}"
+      trusted="$(mktemp)"
+      git show "FETCH_HEAD:ci/agent-fix.sh" > "$trusted"
+      if [[ ! -s "$trusted" ]]; then
+        echo "ci/agent-fix.sh is missing or empty on ${CI_DEFAULT_BRANCH}" >&2
+        exit 1
+      fi
+      bash "$trusted"
+
+agent-commit-guard:
+  stage: test
+  image: registry.example.com/ci/base@sha256:REPLACE_WITH_DIGEST
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^renovate\//'
+  needs: []
+  variables:
+    GIT_DEPTH: "0" # full history, so the merge request range is complete
+    DEP_BOT_EMAIL: "renovate-bot@example.com" # change: the committer email of the dependency bot
+  script:
+    - |
+      set -Eeuo pipefail
+      git fetch --no-tags origin "refs/heads/${CI_DEFAULT_BRANCH}"
+      guard="$(mktemp)"
+      git show "FETCH_HEAD:ci/guard-agent-commit.sh" > "$guard"
+      if [[ ! -s "$guard" ]]; then
+        echo "ci/guard-agent-commit.sh is missing or empty on ${CI_DEFAULT_BRANCH}" >&2
+        exit 1
+      fi
+      base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:?not a merge request pipeline}"
+      merges="$(git rev-list --merges "${base}..${CI_COMMIT_SHA}")"
+      if [[ -n "$merges" ]]; then
+        echo "merge commits on the bot branch are not allowed: ${merges}" >&2
+        exit 1
+      fi
+      git rev-list --reverse "${base}..${CI_COMMIT_SHA}" > "${CI_PROJECT_DIR}/commits.txt"
+      while read -r commit; do
+        committer="$(git log -1 --format=%ce "$commit")"
+        if [[ "$committer" == "$DEP_BOT_EMAIL" ]]; then
+          continue
+        fi
+        echo "checking ${commit} committed by ${committer}"
+        bash "$guard" "${commit}^" "$commit"
+      done < "${CI_PROJECT_DIR}/commits.txt"
 ```
 
 `when: manual` keeps a human choosing to spend agent time. Pipelines from forked projects cannot access the parent project's CI/CD variables by default, but running a merge request pipeline in the parent project for a fork makes all variables available to it, so do not expose write tokens to fork-controlled pipelines. `CI_MERGE_REQUEST_LABELS` is a comma-separated list and exists only when the merge request has at least one label.
+
+The job runs `ci/agent-fix.sh` as it is on the default branch, so a commit on the bot branch cannot change what the job does. Give the push token to this job only: a project access token with the Developer role and the `write_repository` and `read_api` scopes (push, and read the failed job log), with an expiry, stored as a masked CI/CD variable scoped to the `dependency-agent` environment. Protect that environment so only the owning group can start the job. GitLab cannot limit a token to `renovate/*` branches. A Developer can push to any unprotected branch, but cannot push to or merge into protected branches when those allow only Maintainers. So protect the default branch and every long-lived branch, leave the token's bot user out of every approval rule and CODEOWNERS entry, and turn on "Prevent approvals by users who add commits" so its commits cannot count as approval.
 
 ## What the agent gets
 
@@ -89,7 +139,7 @@ Treat changelog text as untrusted input: it comes from a third party and can car
 - Edit lockfiles or write checksums by hand. CI regenerates them with the package manager and verifies they match the manifest.
 - Add, remove or swap dependencies to make a build pass, or loosen version ranges.
 - Delete or weaken tests, lint rules, type checks or scanner configuration. Enforce this with a path-based check that fails if the agent's commit touches protected files; see [[deterministic-hooks-for-coding-agents]].
-- Merge. Its token should not allow it.
+- Merge or approve. Its token cannot merge into protected branches, and approval rules exclude it (see the token paragraph above).
 
 A guard in CI can enforce the lockfile and scope rules:
 
@@ -120,7 +170,7 @@ if (( count > max_files )); then
 fi
 ```
 
-Run this on the agent's commits only, for example by comparing against the bot's last commit. It does not catch weakened tests: add your lint and scanner configuration paths to the protected list, and flag any change to test files for explicit reviewer attention, since a legitimate fix may need to update a test's call sites.
+The `agent-commit-guard` job above runs it on every pipeline of a bot branch, on each commit the bot did not make, using the copy of the script on the default branch. It is a normal blocking job, so with "Pipelines must succeed" a failing check stops the merge. Bot commits are recognised by committer email. That is only safe with the push rule "Reject unverified users", which stops the agent's token from pushing commits that claim the bot's email. The pipeline configuration itself comes from the bot branch, so require a CODEOWNERS approval from the CI owners for `.gitlab-ci.yml` and `ci/`; otherwise a commit that deletes the guard job removes the check. The guard does not catch weakened tests: add your lint and scanner configuration paths to the protected list, and flag any change to test files for explicit reviewer attention, since a legitimate fix may need to update a test's call sites.
 
 ## Supply-chain checks before merge
 
@@ -153,10 +203,10 @@ Track time from release to merged upgrade, share of agent fixes accepted without
 - [ ] Majors need explicit approval and are never auto-merged.
 - [ ] A release-age delay is configured in the bot and, where available, the package manager.
 - [ ] The agent receives version-specific release notes and must cite them.
-- [ ] Diff scope, file count and protected paths are enforced in CI.
+- [ ] Diff scope, file count and protected paths are enforced by a blocking CI job that runs the guard from the default branch.
 - [ ] Lockfiles are regenerated by tooling, never hand-edited.
 - [ ] Full CI plus supply-chain checks run on the new version.
-- [ ] Agent token cannot merge; a human reviews every upgrade MR.
+- [ ] Agent token is a Developer project access token scoped to one protected environment; it cannot merge or approve, and a human reviews every upgrade MR.
 - [ ] Acceptance, rejection, rollback and cost are tracked.
 
 ## Evidence
@@ -182,6 +232,9 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI trigger exa
 - Pinning CI images or actions to digests, and how an agent product is triggered on a bot branch and which token it receives: no local source.
 - Hand-edited lockfile, package-manager checksum and registry behaviour: not checked.
 - General engineering guidance (division of labour, scope caps, metrics, failure modes, checklist) is not a documented claim.
+- `CI_MERGE_REQUEST_DIFF_BASE_SHA`, `GIT_DEPTH: "0"`, and fetching the default branch inside a merge request pipeline: not checked against the current GitLab docs.
+- Project access token roles and scopes (`write_repository`, `read_api`), environment-scoped variables, and whether a protected environment blocks starting a job with `action: prepare`: not checked. Confirm that a user outside the owning group cannot start the job.
+- The push rule "Reject unverified users", "Prevent approvals by users who add commits", CODEOWNERS approval and the GitLab tier each needs: not checked.
 - Nothing was run.
 
 ## Sources
