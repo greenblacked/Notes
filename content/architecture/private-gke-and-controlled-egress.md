@@ -18,7 +18,7 @@ This note covers how to run GKE clusters whose nodes have no public IP addresses
 > Written against the GKE private cluster, Cloud NAT, Private Google Access and Private Service Connect documentation on cloud.google.com, as understood in October 2026. Terraform examples use the `google` provider.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the `google` provider attribute names for the DNS-based endpoint and for authorized networks on the private endpoint, how `get-credentials` selects the DNS-based endpoint, the availability of FQDN firewall objects and Secure Web Proxy, Cloud NAT port-allocation defaults, and the exact gcloud flag names. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the `google` provider attribute names for the DNS-based endpoint and for authorized networks on the private endpoint, how `get-credentials` selects the DNS-based endpoint, that authorized networks do not apply to the DNS-based endpoint, the cluster connect permission, that a VPC Service Controls perimeter on `container.googleapis.com` can restrict it by network, that Kubernetes tokens and client certificates over it are disabled by default, whether a cluster with these private-endpoint settings and no `/28` is accepted (the ADR 0055 shape), the availability of FQDN firewall objects and Secure Web Proxy, Cloud NAT port-allocation defaults, and the exact gcloud flag names. Check them before relying on them.
 
 ## Threats and goals
 
@@ -52,7 +52,15 @@ The gcloud form is quick to read; the Terraform form is what you commit. Flags a
 
 Control-plane access follows [[adr/0055-private-gke-control-plane-and-egress]]: there is no public IP endpoint. People and CI outside the VPC use the DNS-based endpoint, where IAM decides on every request; runners in the VPC and on-premises networks use the private endpoint, which authorized networks limit to the listed ranges. `0.0.0.0/0` never appears in the list.
 
-The /28 control-plane range applies to peering-based private clusters; newer clusters may use a Private Service Connect based control plane and a DNS-based endpoint that do not need it, so check the current GKE network isolation docs.
+> [!warning] The DNS-based endpoint is reachable from the internet
+> With `allow_external_traffic = true` (`--enable-dns-access` with external access), the DNS-based endpoint accepts connections from any network. Authorized networks do not apply to it, so IAM is the only gate, and a stolen Google credential that has cluster access works from anywhere. "No public IP endpoint" is accurate; "not reachable from the internet" is not. Compensating controls:
+>
+> - Put `container.googleapis.com` in a VPC Service Controls perimeter with access levels, to restrict by network ([[architecture/zero-trust-access-iap-and-vpc-service-controls]]).
+> - Keep the number of principals that hold the permission to connect to the cluster small, and review them ([[compliance/access-reviews-gcp-and-gke]]).
+> - Leave Kubernetes ServiceAccount tokens and client certificates over the DNS endpoint disabled, which is the default.
+> - If every client is inside the VPC or a connected network, leave the DNS endpoint off (omit `--enable-dns-access`, or set `allow_external_traffic = false`) and use the private endpoint only.
+
+The examples assume a Private Service Connect based control plane, as in ADR 0055, so they set no /28 control-plane range. A peering-based private cluster needs one (`--master-ipv4-cidr`, `master_ipv4_cidr_block`) and is not what this note builds; check the current GKE network isolation docs for which cluster type you get.
 
 ```bash
 set -euo pipefail
@@ -63,7 +71,6 @@ REGION="europe-west1"                            # change: your region
 CLUSTER="prod-1"                                 # change: cluster name
 NETWORK="projects/${HOST_PROJECT}/global/networks/prod"          # change: your VPC
 SUBNET="projects/${HOST_PROJECT}/regions/${REGION}/subnetworks/gke-prod-europe-west1"  # change
-MASTER_CIDR="172.16.0.32/28"                     # change: unused /28 from the IP plan
 RUNNER_CIDR="192.0.2.0/24"                       # change: CI runner subnet (documentation range)
 ADMIN_CIDR="198.51.100.0/24"                     # change: admin network over VPN (documentation range)
 
@@ -78,7 +85,6 @@ gcloud container clusters create "$CLUSTER" \
   --enable-private-nodes \
   --enable-dns-access \
   --enable-private-endpoint \
-  --master-ipv4-cidr "$MASTER_CIDR" \
   --enable-master-authorized-networks \
   --master-authorized-networks "${RUNNER_CIDR},${ADMIN_CIDR}" \
   --enable-authorized-networks-on-private-endpoint \
@@ -105,7 +111,7 @@ resource "google_container_cluster" "prod" {
   }
 
   # Control plane per ADR 0055: DNS-based endpoint with IAM, private IP endpoint
-  # only, authorized networks enforced on it, no public endpoint.
+  # only, authorized networks enforced on it, no public IP endpoint.
   control_plane_endpoints_config {
     dns_endpoint_config {
       allow_external_traffic = true # laptops and SaaS runners reach it; IAM decides
@@ -115,7 +121,6 @@ resource "google_container_cluster" "prod" {
   private_cluster_config {
     enable_private_nodes    = true
     enable_private_endpoint = true
-    master_ipv4_cidr_block  = "172.16.0.32/28" # change: unused /28 from the IP plan
   }
 
   master_authorized_networks_config {
@@ -141,7 +146,7 @@ resource "google_container_cluster" "prod" {
 
 ## Reaching the control plane from CI
 
-Two paths, both from ADR 0055; there is no public endpoint to fall back to.
+Two paths, both from ADR 0055; there is no public IP endpoint to fall back to. The DNS-based endpoint is reachable from the internet, so see the warning above.
 
 | Option                                         | How it works                                                                                                     | Trade-off                                                                                     |
 | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -244,15 +249,15 @@ kubectl run egress-check --rm -it --restart=Never \
   --image=curlimages/curl:8.10.1 -- curl -sS https://ifconfig.me
 ```
 
-Expected: the first command prints nothing, the second shows `enablePrivateNodes: true`, DNS access enabled, the private endpoint enabled with no public endpoint, and no `0.0.0.0/0` in the authorized networks (field names vary by GKE version), and the third prints one of your reserved NAT addresses. Once the allowlist is enforced, the same Pod must fail to reach a host that is not on it.
+Expected: the first command prints nothing, the second shows `enablePrivateNodes: true`, DNS access enabled, the private endpoint enabled with no public IP endpoint, and no `0.0.0.0/0` in the authorized networks (field names vary by GKE version), and the third prints one of your reserved NAT addresses. Once the allowlist is enforced, the same Pod must fail to reach a host that is not on it.
 
 ## Pitfalls
 
 - **Private endpoint breaking SaaS runners.** Hosted CI runners have no route to the private endpoint. Use the DNS-based endpoint with IAM, runners in the VPC, or GitOps. Do not reopen a public endpoint.
 - **Image pulls failing.** Without PGA or a PSC endpoint, nodes cannot reach Artifact Registry, and Pods stay in `ImagePullBackOff`. Third-party registries (Docker Hub, Quay) need NAT and an allowlist entry, or a mirror in Artifactory ([[patterns/artifact-promotion-artifactory]]).
 - **NAT port exhaustion.** Many connections to the same destination from few nodes can use up ports; symptoms are random timeouts and NAT error logs. Add NAT addresses, raise minimum ports, or reduce connection churn.
-- **Overlapping control-plane CIDR.** The `/28` for the control plane must not overlap any range you route. Reserve it in the IP plan.
-- **Authorised networks drift.** CI NAT addresses or VPN ranges change and nobody updates the list. Manage it in Terraform and review it during cluster upgrades ([[runbooks/gke-cluster-upgrade]]).
+- **Overlapping control-plane CIDR on peering clusters.** A peering-based cluster needs a `/28` for the control plane that must not overlap any range you route; reserve it in the IP plan. The examples above do not use one.
+- **Authorized networks drift.** CI runner subnets or VPN ranges change and nobody updates the list. Manage it in Terraform and review it during cluster upgrades ([[runbooks/gke-cluster-upgrade]]).
 
 ## Adopt it incrementally
 
@@ -269,5 +274,5 @@ Expected: the first command prints nothing, the second shows `enablePrivateNodes
 - [[patterns/gitlab-runners-on-gke]]: runners that can reach a private control plane.
 - [[adr/0055-private-gke-control-plane-and-egress]]: the decision record for private control planes and egress.
 - [[patterns/kubernetes-network-policies]]: egress rules inside the cluster.
-- [[runbooks/gke-cluster-upgrade]]: upgrades with private nodes and authorised networks.
+- [[runbooks/gke-cluster-upgrade]]: upgrades with private nodes and authorized networks.
 - [[runbooks/network-troubleshooting-dns-mtu-tls-load-balancers]]: debugging when traffic does not flow.
