@@ -8,7 +8,7 @@ tags:
   - gke
   - kubernetes
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
@@ -95,8 +95,6 @@ Alternatively, attach an ephemeral container to the failing Pod with `kubectl de
 ### 2. DNS
 
 ```bash
-set -euo pipefail
-
 NAMESPACE="default"                 # change: namespace of the affected workload
 NAME="orders.internal.example.com"  # change: the name that fails
 
@@ -106,18 +104,13 @@ kubectl -n "$NAMESPACE" exec netdebug -- cat /etc/resolv.conf
 # Resolve using the Pod's search path, then as a fully qualified name (trailing dot).
 kubectl -n "$NAMESPACE" exec netdebug -- dig +search "$NAME"
 kubectl -n "$NAMESPACE" exec netdebug -- dig "$NAME."
-
-# Cluster DNS health.
-kubectl -n kube-system get pods -l k8s-app=kube-dns
-kubectl -n kube-system logs -l k8s-app=kube-dns --all-containers --tail=50
 ```
 
 What to look for:
 
-- `ndots:5` (the Kubernetes default) makes names with fewer than five dots try every search suffix first. External names then cost several failed lookups. Use fully qualified names with a trailing dot in latency-sensitive code, or lower `ndots` in the Pod `dnsConfig`.
 - `NXDOMAIN` for the fully qualified name means the record does not exist in the zone the resolver consults. For private zones and forwarding, see [[architecture/cloud-dns-hybrid-and-multi-project]].
-- `SERVER FAILURE` or timeouts mean the upstream or the cluster DNS Pods are unhealthy or overloaded.
-- If the cluster uses Cloud DNS for GKE or NodeLocal DNSCache, the resolver address in `resolv.conf` differs; check the current documentation for your configuration.
+- The fully qualified name resolves quickly but the search-path lookup is slow or fails: search-domain amplification (`ndots`). Continue in [[gke-dns-failures-kube-dns-and-nodelocal]], step 4.
+- `SERVER FAILURE` or timeouts for every name, or only on some nodes: cluster DNS itself (kube-dns capacity, NodeLocal DNSCache, conntrack, NetworkPolicy). Continue in [[gke-dns-failures-kube-dns-and-nodelocal]] from step 1, which also finds which DNS provider and cache the cluster uses.
 
 ### 3. MTU and path MTU black holes
 
@@ -270,7 +263,7 @@ Any fix (firewall rules, MTU, health check, certificates, DNS records) is a chan
 | Symptom                              | Cause                                                         | Fix                                                                      |
 | ------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `NXDOMAIN` for an internal name      | Record or private zone missing, or wrong zone attached to VPC | Fix the zone or forwarding; see the DNS architecture note                |
-| Intermittent slow first request      | `ndots:5` search path expansion                               | Use trailing-dot names or set `dnsConfig` `ndots`                        |
+| Intermittent slow first request      | `ndots:5` search path expansion                               | See [[gke-dns-failures-kube-dns-and-nodelocal]], step 4                  |
 | Small requests work, large ones hang | Path MTU lower than host MTU, ICMP blocked                    | Align MTU, clamp TCP MSS, allow ICMP fragmentation-needed                |
 | Timeout from one namespace only      | NetworkPolicy blocks egress or ingress                        | Add the minimal allow rule; see [[patterns/kubernetes-network-policies]] |
 | Browser shows a certificate warning  | Wrong certificate, missing intermediate, or expired           | Fix the certificate mapping or renew                                     |
