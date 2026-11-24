@@ -105,16 +105,16 @@ apply-agent-patch:
     name: dependency-agent # protected environment; AGENT_PUSH_TOKEN is scoped to it
   variables:
     GIT_DEPTH: "0"
-    AGENT_GIT_NAME: "dependency-agent" # change: the author name for the patch commits
-    AGENT_GIT_EMAIL: "dependency-agent@example.com" # change: its email
+    AGENT_GIT_NAME: "dependency-agent" # change: the committer name for the patch commits
+    AGENT_GIT_EMAIL: "dependency-agent@example.com" # change: the committer email (the token bot user's address if "Reject unverified users" is on)
   script:
     - |
       set -Eeuo pipefail
       : "${AGENT_JOB_ID:?pipeline variable: ID of the agent-fix-upgrade job, taken on trust}"
       : "${PATCH_BRANCH:?pipeline variable: the renovate/ branch}"
       : "${PATCH_BASE_SHA:?pipeline variable: head of that branch when the patch was made}"
-      if [[ ! "$PATCH_BRANCH" =~ ^renovate/[A-Za-z0-9._/-]+$ || ! "$PATCH_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-        echo "unexpected branch name or SHA" >&2
+      if [[ ! "$AGENT_JOB_ID" =~ ^[0-9]+$ || ! "$PATCH_BRANCH" =~ ^renovate/[A-Za-z0-9._/-]+$ || ! "$PATCH_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+        echo "unexpected job id, branch name or SHA" >&2
         exit 1
       fi
       # This pipeline runs on the default branch, so the working tree holds the trusted guard.
@@ -195,7 +195,7 @@ agent-commit-guard:
       fi
 ```
 
-`AGENT_JOB_ID` is taken on the word of the person who starts the push job: the job does not look the job up, so it does not prove that the artifact came from a real agent run. The controls on the patch are these: `PATCH_BASE_SHA` must equal the fetched branch head, `git am` must apply the patch on it, the guard (including the default-branch check) must pass, a human starts the job, and a human reviews the upgrade MR. The image needs `curl` and `unzip`.
+`AGENT_JOB_ID` is taken on the word of the person who starts the push job: the job does not look the job up, so it does not prove that the artifact came from a real agent run. `AGENT_GIT_NAME` and `AGENT_GIT_EMAIL` set only the committer under `git am`; the author comes from the patch's `From` header, which the untrusted agent job wrote, so the author field is not trusted, and with "Reject unverified users" on the committer email must be the token bot user's address. The controls on the patch are these: `PATCH_BASE_SHA` must equal the fetched branch head, `git am` must apply the patch on it, the guard (including the default-branch check) must pass, a human starts the job, and a human reviews the upgrade MR. The image needs `curl` and `unzip`.
 
 The push job starts as a web pipeline on the default branch, so it also runs every other default-branch job whose rules match. Give deploy and release jobs a rule that excludes pipelines where `PATCH_BRANCH` is set (or where `CI_PIPELINE_SOURCE` is `web`), so applying a patch does not deploy. Allow pipeline variables only for the role that starts the push job: GitLab 17.7 and later default new projects to letting nobody set them, and `AGENT_JOB_ID`, `PATCH_BRANCH` and `PATCH_BASE_SHA` are pipeline variables.
 
@@ -214,7 +214,7 @@ The checkout holds an upgraded third-party dependency and agent-written code, an
 The patch is data until the push job accepts it. The push job comes from the default branch, runs the default-branch copy of `ci/guard-agent-commit.sh` on the patch and refuses to push one that changes `.gitlab-ci.yml` or `ci/`. This holds because the agent job never had the token. It checks paths, not content: a patch can still change `scripts` in a manifest or add harmful code, so a human reviews every upgrade MR.
 
 - **Where the script starts.** In a merged results or merge train pipeline the agent job starts on the temporary merge commit, not on the branch. `ci/agent-fix.sh` therefore checks out the source branch head (`CI_MERGE_REQUEST_SOURCE_BRANCH_SHA`, or `CI_COMMIT_SHA` in a plain merge request pipeline) before the agent works, and builds `agent.patch` with `git format-patch` from that head. Set `PATCH_BASE_SHA` to that head, not to the pipeline's own `sha`. Otherwise the patch carries target-branch changes and the guard rejects it. The script is not shown here.
-- **The failing log.** Have the test job upload its log with `artifacts: when: always` and download it in the agent job with `CI_JOB_TOKEN`. That keeps `read_api` off the push token. With `read_api` the token can read every job log and artifact in the project, not only one failed log; if you add it, treat that as its reach.
+- **The failing log.** Have the test job upload its log with `artifacts: when: always` and download it in the agent job with `CI_JOB_TOKEN`. That keeps `read_api` off the push token. With `read_api` the token can read every job log and artifact in the project, not only one failed log; if you add it, treat that as its reach. The agent job also needs the failed test job's ID to download that log: the person starting the manual job enters it as a manual-job variable, which the script validates as digits, or a fine-grained `READ_JOBS` permission lets the script list the pipeline's jobs and find it.
 - **The push token.** A project access token with the Developer role and only the `write_repository` scope, with an expiry, stored as a masked CI/CD variable named `AGENT_PUSH_TOKEN`. Mark it protected (it reaches only pipelines on protected branches and tags) and scope it to the `dependency-agent` environment. The agent job and every pipeline on a `renovate/*` branch must not receive it.
 - **Who can start the push job.** Protected environments need GitLab Premium or Ultimate. Where you have them, protect `dependency-agent` so only the owning group can run the job. Without them, the protected variable still keeps the token away from branch pipelines, but anyone who can run a pipeline on any protected branch or tag can name the `dependency-agent` environment in a job and receive the token, not only people who can run default-branch pipelines. That is another reason to keep the protected refs few; check who can run pipelines on them. A separate trusted project does the same job and keeps the token out of this project entirely, at the cost of a job token allowlist entry and a second repository to maintain.
 - **What the token can still do.** GitLab cannot limit a token to `renovate/*` branches. A Developer can push to any unprotected branch, create tags and start branch pipelines as the bot user, so those pipelines must not receive sensitive variables (protected variables only reach protected refs). Protect the default branch and every long-lived branch so that only Maintainers can push or merge, and protect release tag patterns (for example `v*`) so that only Maintainers can create them. Leave the token's bot user out of every approval rule and CODEOWNERS entry, and turn on "Prevent approvals by users who add commits" so its commits cannot count as approval.
@@ -361,6 +361,7 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI trigger exa
 - The push job steps (downloading a job's artifacts with `CI_JOB_TOKEN`, `git format-patch` and `git am` on the agent patch, pushing through a `GIT_ASKPASS` helper with a project access token, a job token allowlist for a separate trusted project) and the test job's log artifact: described, not run or checked.
 - `git diff --no-renames --name-only` listing both paths of a rename, and the `bot` allowlist file names: not checked against the git docs.
 - `CI_MERGE_REQUEST_SOURCE_BRANCH_SHA` (set only in merged results and merge train pipelines) and that the merge ref's history contains the source head with `GIT_DEPTH: "0"`: not checked against the current GitLab docs.
+- How the agent job learns the failed test job's ID (a manual-job variable validated as digits, or listing the pipeline's jobs with a fine-grained `READ_JOBS` permission) and that permission's name and reach: not checked.
 - The push rule "Reject unverified users", "Prevent approvals by users who add commits", CODEOWNERS approval and the GitLab tier each needs: not checked.
 - The job token's allowed Jobs API endpoints (the push job uses only the artifact download and does not look up job metadata, so `AGENT_JOB_ID` is trusted as given), and `curl` and `unzip` in the image: not checked against the current GitLab docs.
 - Git's quoting of unusual file names in `git diff --name-only` (and that `core.quotePath=false` leaves quotes, backslashes and control characters quoted), which the guard rejects: tried in a scratch repo, not checked against the git docs.

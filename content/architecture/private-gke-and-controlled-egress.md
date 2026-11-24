@@ -60,7 +60,7 @@ Control-plane access follows [[adr/0055-private-gke-control-plane-and-egress]]: 
 > - Leave Kubernetes ServiceAccount tokens and client certificates over the DNS endpoint disabled, which is the default.
 > - If every client is inside the VPC or a connected network, leave the DNS endpoint off (omit `--enable-dns-access`, or set `allow_external_traffic = false`) and use the private endpoint only.
 
-The examples assume a Private Service Connect based control plane, as in ADR 0055, so they set no /28 control-plane range. A peering-based private cluster needs one (`--master-ipv4-cidr`, `master_ipv4_cidr_block`) and is not what this note builds; check the current GKE network isolation docs for which cluster type you get.
+Like the sketch in ADR 0055, the examples set no /28 control-plane range, which assumes a Private Service Connect based control plane. A peering-based private cluster needs one (`--master-ipv4-cidr`, `master_ipv4_cidr_block`) and is not what this note builds; check the current GKE network isolation docs for which cluster type you get.
 
 ```bash
 set -euo pipefail
