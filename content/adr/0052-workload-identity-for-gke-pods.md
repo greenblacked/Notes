@@ -286,6 +286,9 @@ spec:
         allowPrivilegeEscalation: false
         capabilities:
           drop: ["ALL"]
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits: { memory: 32Mi }
 EOF
 kubectl wait --namespace "${NAMESPACE}" pod/wi-check \
   --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s || true

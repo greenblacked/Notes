@@ -21,7 +21,7 @@ External and internal HTTP traffic enters our clusters through Ingress resources
 
 Gateway API is the Kubernetes successor to Ingress. It splits responsibilities into roles: an infrastructure provider supplies a `GatewayClass`, the platform team owns `Gateway` objects, and application teams own `HTTPRoute` objects. GKE ships a Gateway controller backed by Google Cloud load balancers.
 
-There is also external pressure. On 2025-11-11 the Kubernetes project announced the retirement of the Ingress NGINX controller: best-effort maintenance continued until March 2026, and after that there are no further releases, no bug fixes and no updates for security vulnerabilities. Existing deployments keep working, and the published charts and images stay available ([Ingress NGINX retirement](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/), read 2026-11-24). That date has passed, so a cluster still running ingress-nginx runs an unpatched edge component. That makes this decision unavoidable rather than optional.
+There is also external pressure. On 2025-11-11 the Kubernetes project announced the retirement of the Ingress NGINX controller: best-effort maintenance continued until March 2026, and after that there are no further releases, no bug fixes and no updates for security vulnerabilities. Existing deployments keep working, and the installation artifacts stay available ([Ingress NGINX retirement](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/), read 2026-11-24). That date has passed, so a cluster still running ingress-nginx runs an unpatched edge component. That makes this decision unavoidable rather than optional.
 
 ## Decision
 

@@ -19,7 +19,7 @@ This note describes how to give every merge request its own short-lived environm
 > [!info] Scope and sources
 > Written against the GitLab environments, review apps, variables and merge request pipeline docs, the Argo CD ApplicationSet pull request generator docs, the Kubernetes ResourceQuota, LimitRange and NetworkPolicy docs, cert-manager DNS-01 and the Let's Encrypt challenge types, read from their documentation sources on 2026-10-21.
 >
-> Not verified: that `oldObject` holds the namespace on a DELETE admission request, and the janitor policy's CEL.
+> Not verified: that `oldObject` holds the namespace on a DELETE admission request, the janitor policy's CEL, and that kubectl runs cleanly with a read-only root filesystem and `/tmp` as `HOME`.
 
 > [!note] Not verified
 > Nothing here was run. Check before relying on it: exactly when GitLab runs the stop job on merge or close; how often GitLab's `auto_stop_in` worker runs (about hourly is stated below) and whether each deploy resets the timer; the setting name that lets merge request pipelines read protected variables; what Argo CD does to a preview Application and its namespace when the merge request closes; Cloudflare Access and IAP configuration for wildcard hostnames; GKE Gateway class names, Spot node labels and taints; and Let's Encrypt rate limits (none are quoted here).
@@ -307,6 +307,12 @@ spec:
             - name: janitor
               image: registry.example.com/ci/kubectl@sha256:<digest> # change: your reviewed kubectl image
               command: ["/bin/sh", "-c"]
+              env:
+                - name: HOME
+                  value: /tmp # kubectl writes its discovery cache under $HOME/.kube
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               args:
                 - |
                   set -eu
@@ -331,6 +337,9 @@ spec:
               resources:
                 requests: { cpu: 50m, memory: 64Mi }
                 limits: { memory: 128Mi }
+          volumes:
+            - name: tmp
+              emptyDir: {}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -394,7 +403,7 @@ spec:
   validationActions: [Deny]
 ```
 
-**Blast radius.** Without the admission policy, the janitor's identity can delete any namespace in the preview cluster, including `kube-system`, `gateway-system` and `preview-system`. The script's name filter is not a control. The policy limits deletes to `review-*` namespaces labelled `preview=true`. The janitor has no rights on admission policies, so it cannot remove the guard. Anyone who can create namespaces in this cluster can still create a `review-*` namespace the janitor will delete, which is why the cluster holds previews only. Check before relying on it: `kubectl auth can-i delete namespace/kube-system --as=system:serviceaccount:preview-system:preview-janitor` says `yes` (RBAC), and a server-side dry-run delete of `kube-system` as that identity must be denied by the policy. Rollback: suspend the CronJob (`kubectl -n preview-system patch cronjob preview-janitor -p '{"spec":{"suspend":true}}'`). A deleted namespace cannot be restored; the preview is redeployed from its merge request.
+**Blast radius.** Without the admission policy, the janitor's identity can delete any namespace in the preview cluster, including `kube-system`, `gateway-system` and `preview-system`. The script's name filter is not a control. The policy limits deletes to `review-*` namespaces labelled `preview=true`. A namespace without the kit's `preview=true` label, such as one made by Argo CD's `CreateNamespace=true` before the kit is applied, is refused by the guard and stays behind, so ship the kit in the chart. The janitor has no rights on admission policies, so it cannot remove the guard. Anyone who can create namespaces in this cluster can still create a `review-*` namespace the janitor will delete, which is why the cluster holds previews only. Check before relying on it: `kubectl auth can-i delete namespace/kube-system --as=system:serviceaccount:preview-system:preview-janitor` says `yes` (RBAC), and a server-side dry-run delete of `kube-system` as that identity must be denied by the policy. Rollback: suspend the CronJob (`kubectl -n preview-system patch cronjob preview-janitor -p '{"spec":{"suspend":true}}'`). A deleted namespace cannot be restored; the preview is redeployed from its merge request.
 
 ## Cost controls
 
