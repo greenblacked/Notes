@@ -133,7 +133,7 @@ Each core lesson shows its stage, its number in the path and the previous and ne
 - `middle` [[learn/kubernetes-storage-volumes-pvcs-and-statefulsets|Kubernetes 09: Storage: volumes, PersistentVolumeClaims, StorageClasses and StatefulSets]]
 - `middle` [[learn/kubernetes-scheduling-affinity-taints-and-draining|Kubernetes 10: Scheduling: affinity, taints, topology spread, PodDisruptionBudgets and draining]]
 - `middle` [[learn/kubernetes-network-policies-from-zero|Kubernetes 11: NetworkPolicy from zero]]
-- `junior-middle` [[learn/kubernetes-jobs-and-cronjobs|Kubernetes 12: Jobs and CronJobs]]
+- `junior-middle` [[learn/kubernetes-jobs-and-cronjobs-basics|Kubernetes 12: Jobs and CronJobs]]
 
 **Homelab P3** after this stage: a kind or k3s cluster with Helm, ingress and a rollback.
 

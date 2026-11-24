@@ -327,7 +327,7 @@ Stopping a misbehaving CronJob safely:
 - [[pod-disruption-budgets-for-stateless-services]]
 - [[timeouts-retries-load-shedding]]
 - [[linux-services-packages-and-scheduled-jobs]] for host cron and systemd timers
-- [[learn/kubernetes-jobs-and-cronjobs|Kubernetes 12: Jobs and CronJobs]] for the beginner lesson with hands-on exercises
+- [[learn/kubernetes-jobs-and-cronjobs-basics|Kubernetes 12: Jobs and CronJobs]] for the beginner lesson with hands-on exercises
 - [[scheduled-jobs-standard]] for the rules every scheduled job must meet
 - [[batch-and-scheduled-workloads-gcp]] for choosing between GKE CronJobs, Cloud Run jobs and Batch
 
