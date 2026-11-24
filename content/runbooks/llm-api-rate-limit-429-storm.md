@@ -8,7 +8,7 @@ tags:
   - reliability
   - cost
 created: 2026-11-01
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -18,7 +18,7 @@ review-due: 2027-05-01
 How to respond when callers get HTTP 429 (and sometimes 503 or 529) from the model API or from our own gateway while the provider is otherwise healthy. A 429 is a limit doing its job, but clients that retry at once turn a small overrun into a storm: every rejected request comes back, often together, and the limit stays hit. The order is: **find which layer said no, find which limit, check whether retries make it worse, contain, then fix the client and the limit.**
 
 > [!info] Scope and verification
-> Nothing here was run against a live system or a provider account. The HTTP meaning of 429 and `Retry-After` is cited from the RFCs but the RFC text could not be fetched in this session (see Not verified). The PromQL functions were checked against the Prometheus docs (commit ef78ff6) and the OpenTelemetry GenAI attributes against the semantic-conventions checkout (commit 244465e), both on 2026-11-01. Gateway metrics (`llm_gateway_*`) and the admin API are this site's example names, not a standard. Provider limit types, header names such as `x-ratelimit-*`, status 529 and quota procedures are provider specific and are not verified.
+> Nothing here was run against a live system or a provider account. RFC 6585 (429) was read on 2026-11-24, after the review; RFC 9110 (`Retry-After`, 503) could not be read in full and is listed under Not verified. The PromQL functions were checked against the Prometheus docs (commit ef78ff6) and the OpenTelemetry GenAI attributes against the semantic-conventions checkout (commit 244465e), both on 2026-11-01. Gateway metrics (`llm_gateway_*`) and the admin API are this site's example names, not a standard. Provider limit types, header names such as `x-ratelimit-*`, status 529 and quota procedures are provider specific and are not verified.
 
 ## When to use
 
@@ -423,16 +423,20 @@ Then run a controlled load test in staging at 1.5x the expected peak. Confirm th
 
 ### Sources checked
 
-- [kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/): with a label selector and no `--tail`, kubectl returns only the last 10 lines per pod even when `--since` is set; `--tail=-1` lifts that cap. The `--tail=-1` claim was read on GitHub on 2026-11-01, not in a local checkout: https://github.com/kubernetes/kubectl/blob/8f64009/pkg/cmd/logs/logs.go (commit 8f64009; `selectorTail int64 = 10`, applied only when `--tail` was not given, so an explicit `--tail=-1` leaves the cap unset). Also checked 2026-11-02 in the local kubernetes/website docs, commit 491f14e, `content/en/docs/reference/kubectl/generated/kubectl_logs/_index.md`: `--tail` defaults to -1 with no selector and 10 with one; `-l/--selector`, `--prefix` and `--max-log-requests` are documented there.
+- [kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/): with a label selector and no `--tail`, kubectl returns only the last 10 lines per pod even when `--since` is set; `--tail=-1` lifts that cap. The `--tail=-1` claim was read on GitHub on 2026-11-01, not in a local checkout: https://github.com/kubernetes/kubectl/blob/8f64009/pkg/cmd/logs/logs.go (commit 8f64009; `selectorTail int64 = 10`, applied only when `--tail` was not given, so an explicit `--tail=-1` leaves the cap unset). Also checked 2026-11-02, after the review, in the local kubernetes/website docs, commit 491f14e, `content/en/docs/reference/kubectl/generated/kubectl_logs/_index.md`: `--tail` defaults to -1 with no selector and 10 with one; `-l/--selector`, `--prefix` and `--max-log-requests` are documented there.
 - [Prometheus querying functions](https://prometheus.io/docs/prometheus/latest/querying/functions/) and [operators](https://prometheus.io/docs/prometheus/latest/querying/operators/): `rate()`, `topk`, `sum by`, and the `offset` modifier (querying basics). Checked 2026-11-01 in the Prometheus repository docs, commit ef78ff6.
 - [OpenTelemetry semantic conventions for generative AI](https://github.com/open-telemetry/semantic-conventions-genai/tree/244465e/docs/gen-ai): `error.type` (conditionally required when the operation ends in an error; should match the error code returned by the provider or client library), `gen_ai.request.model`, `gen_ai.provider.name` (Development); `error.type` is Stable. The inference span document (docs/gen-ai/client-inference.md) is Development. Checked 2026-11-01 in the local semantic-conventions checkout, commit 244465e.
 - [Kubernetes Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) (default RollingUpdate: 25% max unavailable, 25% max surge), [CronJob](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) (unsuspending without a starting deadline schedules missed Jobs immediately) and [Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/) (an HPA manages the Deployment's `replicas`). Checked 2026-11-01 in the local website checkout, commit 491f14e: concepts/workloads/controllers/deployment.md, concepts/workloads/controllers/cron-jobs.md, concepts/workloads/autoscaling/horizontal-pod-autoscale.md.
 - The notes linked above, for this site's retry, queue, gateway and fallback guidance. Read 2026-11-01.
 
+Checked after the review, on 2026-11-24:
+
+- [RFC 6585 §4](https://www.rfc-editor.org/rfc/rfc6585): 429 Too Many Requests; the response MAY include Retry-After; 429 responses MUST NOT be stored by a cache. Checked 2026-11-24.
+
 ### Not verified
 
 - Nothing was run against a live system, a gateway or a provider account; command output is an expectation.
-- The RFC citations were not re-read: [RFC 6585](https://www.rfc-editor.org/rfc/rfc6585) (429 Too Many Requests) and [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) (`Retry-After` as seconds or an HTTP date, 503 Service Unavailable) are cited from the RFC text as remembered, not re-read here; the host could not be reached.
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) (`Retry-After` as delay-seconds or an HTTP date; 503): on 2026-11-24 every fetch stopped before §10.2.3, so these are cited as remembered, not read.
 - Provider limit types (requests, tokens, concurrency, per model, per organisation), whether requested `max_tokens` counts against a token limit, and how limits are shared.
 - Header names such as `x-ratelimit-*`, whether and how a provider returns `Retry-After`, and the meaning of status 529.
 - Quota-increase process, lead time and what evidence a provider asks for.
@@ -467,5 +471,5 @@ See the Rollback section: remove client retry overrides, scale back up in steps,
 - [Prometheus documentation: querying](https://prometheus.io/docs/prometheus/latest/querying/basics/): the PromQL functions and `offset` modifier used in the queries.
 - [OpenTelemetry semantic conventions for generative AI](https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai): `error.type` and request attributes for model-call spans.
 - [Kubernetes documentation: Deployment, CronJob, Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/): rollout defaults, CronJob unsuspend behaviour and HPA ownership of replicas.
-- [RFC 6585: Additional HTTP Status Codes](https://www.rfc-editor.org/rfc/rfc6585): defines 429 Too Many Requests (not re-read here).
+- [RFC 6585: Additional HTTP Status Codes](https://www.rfc-editor.org/rfc/rfc6585): defines 429 Too Many Requests (read 2026-11-24).
 - [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110): defines `Retry-After` and 503 (not re-read here).
