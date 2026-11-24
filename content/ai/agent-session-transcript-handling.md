@@ -8,7 +8,7 @@ tags:
   - audit
   - team-process
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -74,22 +74,25 @@ A hook that runs after each tool call can write this line. The hook must record 
 set -Eeuo pipefail
 
 # Reads one JSON event on stdin and appends a minimal audit line.
-# Stores a hash of the command, not the command text.
+# Stores a keyed hash (HMAC-SHA256) of the command, not the command text. The key lives in a
+# file outside the log store, readable only by the audit writer; its path is the only argument.
+: "${AUDIT_HMAC_KEY_FILE:?set AUDIT_HMAC_KEY_FILE to the HMAC key file}"
 event="$(cat)"
 tool="$(jq -r '.tool_name // "unknown"' <<<"$event")"
-cmd_hash="$(jq -r '.tool_input.command // ""' <<<"$event" | sha256sum | cut -d' ' -f1)"
+cmd_hmac="$(jq -j '.tool_input.command // ""' <<<"$event" \
+  | python3 -I -c 'import hashlib, hmac, sys; key = open(sys.argv[1], "rb").read().strip(); print(hmac.new(key, sys.stdin.buffer.read(), digestmod=hashlib.sha256).hexdigest())' "$AUDIT_HMAC_KEY_FILE")"
 
 jq -nc \
   --arg ts "$(date -u +%FT%TZ)" \
   --arg user "${USER:-unknown}" \
   --arg session "${AGENT_SESSION_ID:-unknown}" \
   --arg tool "$tool" \
-  --arg cmd_sha256 "$cmd_hash" \
-  '{ts:$ts,user:$user,session:$session,tool:$tool,cmd_sha256:$cmd_sha256}' \
+  --arg cmd_hmac_sha256 "$cmd_hmac" \
+  '{ts:$ts,user:$user,session:$session,tool:$tool,cmd_hmac_sha256:$cmd_hmac_sha256}' \
   >>"${AUDIT_FILE:-reports/agent-audit.jsonl}"
 ```
 
-The event field names above are an assumption for illustration. Check the payload your tool actually sends. A hash lets you prove that a known command ran without storing it; keep the plain command only where policy allows. A plain SHA-256 of a short or predictable command can be reversed by guessing, so if commands may embed secrets, use a keyed hash (HMAC) with a key held outside the log store.
+The event field names above are an assumption for illustration. Check the payload your tool actually sends. A keyed hash lets you prove that a known command ran without storing it; keep the plain command only where policy allows. Recompute the HMAC of the candidate command with the same key and compare with `hmac.compare_digest`. A plain SHA-256 of a short or predictable command can be reversed by guessing; without the key, the HMAC cannot. The key never appears in an argument list or in the log, and rotating it means old lines can only be checked with the old key, so keep retired keys with the retention of the audit log.
 
 ## Sharing a transcript is an external disclosure
 
@@ -148,7 +151,7 @@ Source-reviewed on 2026-11-02. Nothing was run. The review covered the GitLab CI
 - The OWASP Logging Cheat Sheet and NIST SP 800-92 listed under Sources could not be read (not reachable); they are kept as background reading only and no statement in this note depends on their wording.
 - Where each agent tool stores its transcripts, in what format, for how long, and whether a bug-report flow uploads a transcript: tool documentation was not available. The hook event field names in the sample script are an assumption.
 - How long GitLab keeps job logs relative to artifacts: not stated in the pages read.
-- The flags and behaviour of a secret scanner such as gitleaks, and the `jq`, `sha256sum` and HMAC details in the sample script.
+- The flags and behaviour of a secret scanner such as gitleaks, and the `jq` details in the sample script. The Python `hmac` documentation was not re-read on 2026-11-24; the audit script ran once with a sample event on that date and printed an HMAC line.
 - Engineering guidance, not documented claims: the transcript classification, lifecycle table, audit-record design, sharing steps, rotation-before-deletion and the failure modes. Retention periods are left to the compliance owner.
 - Nothing was run.
 
@@ -156,5 +159,3 @@ Source-reviewed on 2026-11-02. Nothing was run. The review covered the GitLab CI
 
 - [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html) - what not to log (passwords, tokens, session identifiers, personal data); could not be read for this review, see Not verified.
 - [NIST SP 800-92, Guide to Computer Security Log Management](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-92.pdf) - log retention and protection of logs; the URL is the legacy edition, check which revision is current.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
