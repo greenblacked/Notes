@@ -10,14 +10,14 @@ tags:
   - gcp
   - gitlab-ci
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
 A platform engineer who leaves takes two risks out of the door with them. The first is access: they usually hold more privilege than anyone else in the company, spread across an identity provider, cloud IAM, cluster RBAC, CI, the artifact registry and a few systems nobody remembers. The second is ownership: pipeline schedules, trigger tokens, Jenkins jobs and service-account keys that quietly run as that person and stop, or keep running unseen, the day the account is closed. Onboarding has its own guide ([[onboarding-engineers]]); this one covers the other end, for planned departures and for the ones that happen the same day. It is the people and ownership side; the per-system revocation steps, with a timestamp per system for the audit record, are in the runbook [[leaver-credential-revocation-devops-tools]].
 
 > [!info] Scope and what is not verified
-> The GitLab, gcloud, Kubernetes and Google Admin SDK calls below follow the official documentation as read on 2026-10-21; nothing was run against a live GitLab, GCP organisation, cluster, Jenkins or Artifactory. The GitLab inventory script and the jq filters were tested against a local mock API and sample JSON only. **Not verified**: whether suspending a Google identity revokes existing gcloud refresh tokens and how quickly; the exact audit-log `methodName` for service-account key creation; how a GitLab pipeline trigger token behaves after its owner is blocked; whether a Jenkins API token keeps working when the person is disabled only in an external SSO realm; and the Artifactory endpoints for listing a user's tokens. Each is marked where it appears. GitLab features change by version and tier: check the docs for yours.
+> The GitLab, gcloud, Kubernetes and Google Admin SDK calls below follow the official documentation as read on 2026-10-21; nothing was run against a live GitLab, GCP organisation, cluster, Jenkins or Artifactory. The GitLab inventory script and the jq filters were tested against a local mock API and sample JSON only. **Not verified**: whether suspending a Google identity revokes existing gcloud refresh tokens and how quickly; the exact audit-log `methodName` for service-account key creation, and the `disabled` field name in the key list projection (the documented table shows a DISABLED column); how a GitLab pipeline trigger token behaves after its owner is blocked; whether a Jenkins API token keeps working when the person is disabled only in an external SSO realm; and the Artifactory endpoints for listing a user's tokens. Each is marked where it appears. GitLab features change by version and tier: check the docs for yours.
 
 ## Planned and immediate departures
 
@@ -83,19 +83,38 @@ gcloud asset analyze-iam-policy \
 echo "## Service-account keys created by the leaver (from audit logs)"
 for p in "${PROJECTS[@]}"; do
   # methodName is inferred from the IAM Admin API, not verified: check one entry in your logs first.
+  # Admin Activity audit logs stay in the _Required bucket for 400 days; older key creations are not searchable.
   gcloud logging read \
     "protoPayload.methodName=\"google.iam.admin.v1.CreateServiceAccountKey\" AND protoPayload.authenticationInfo.principalEmail=\"${EMAIL}\"" \
-    --project="$p" --freshness=365d --order=desc \
+    --project="$p" --freshness=400d --order=desc \
     --format="table(timestamp, protoPayload.resourceName)"
 done
 ```
 
-The key resource itself does not record who created it: the IAM key fields are name, algorithm, validity times, origin, type and disabled state. The audit log is the only place that links a key to a person, and only for as long as your log retention keeps it. Cross-check with the keys that exist now:
+The key resource itself does not record who created it: the IAM key fields are name, algorithm, validity times, origin, type and disabled state. The audit log is the only place that links a key to a person. Admin Activity audit logs, which record key creation, stay in the `_Required` bucket for 400 days, and that period cannot be changed. A key created earlier, or in a project the loop does not list, is invisible to the search above. So list every user-managed key in the projects, whoever created it. Review each key created before the log window, or with no matching log entry, with the service account's owner. If you cannot prove the leaver never had a key, treat it as one they could have copied (see the risk table below).
 
-```bash
-SA="deployer@prod-app-1.iam.gserviceaccount.com"
-gcloud iam service-accounts keys list --iam-account="$SA" --managed-by=user
+```bash title="gcp-all-user-keys.sh"
+#!/usr/bin/env bash
+# Read-only. Every user-managed service-account key in the listed projects, any creator.
+# Needs roles/iam.serviceAccountViewer (View Service Accounts) on each project.
+set -euo pipefail
+
+PROJECTS=("prod-app-1" "ops-tools")  # the same projects as gcp-inventory.sh
+OUT="user-managed-keys-$(date -u +%Y%m%dT%H%M%SZ).csv"
+
+echo "project,service_account,key_id,created,expires,disabled" > "$OUT"
+for p in "${PROJECTS[@]}"; do
+  gcloud iam service-accounts list --project="$p" --format="value(email)" |
+    while read -r sa; do
+      gcloud iam service-accounts keys list --iam-account="$sa" --managed-by=user \
+        --format="csv[no-heading](name.basename(),validAfterTime,validBeforeTime,disabled)" |
+        sed "s|^|${p},${sa},|"
+    done
+done >> "$OUT"
+echo "user-managed keys: $(( $(grep -c '' "$OUT") - 1 )) (see ${OUT})"
 ```
+
+Keys whose `created` date (`validAfterTime`) is older than 400 days need an owner's answer. Running `--created-before` with the date 400 days ago lists just those.
 
 > [!note] Search results may lag
 > Cloud Asset search is an index over IAM policies. For the few projects that matter most (production, the Terraform state project, the organisation itself) also read the policy directly with `gcloud projects get-iam-policy`, and compare. Group-derived access is better removed by removing the group membership than by chasing each binding.
@@ -327,7 +346,8 @@ Most people leave on good terms, and the process should treat them that way.
 
 - [gcloud asset search-all-iam-policies](https://cloud.google.com/sdk/gcloud/reference/asset/search-all-iam-policies): query syntax, scope and required permission.
 - [gcloud asset analyze-iam-policy](https://cloud.google.com/sdk/gcloud/reference/asset/analyze-iam-policy): `--identity` and `--expand-groups`.
-- [List and get service account keys](https://cloud.google.com/iam/docs/keys-list-get) and [gcloud iam service-accounts keys list](https://cloud.google.com/sdk/gcloud/reference/iam/service-accounts/keys/list): key fields and `--managed-by`.
+- [List and get service account keys](https://docs.cloud.google.com/iam/docs/keys-list-get) and [gcloud iam service-accounts keys list](https://docs.cloud.google.com/sdk/gcloud/reference/iam/service-accounts/keys/list): key fields, the View Service Accounts role, `--managed-by` (user, system, any) and `--created-before`, checked 2026-11-24.
+- [Cloud Logging: store log entries](https://docs.cloud.google.com/logging/docs/store-log-entries): the `_Required` bucket keeps Admin Activity audit logs for 400 days, fixed, checked 2026-11-24.
 - [Cloud Audit Logs overview](https://cloud.google.com/logging/docs/audit): audit log entries and the principal field. Check log types and retention for your organisation.
 - [Admin SDK Directory API](https://developers.google.com/admin-sdk/directory/reference/rest): `users.signOut`, `tokens.list` and `tokens.delete`.
 - [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) and [authentication](https://kubernetes.io/docs/reference/access-authn-authz/authentication/): subjects, and that certificates cannot be revoked.
