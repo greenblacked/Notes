@@ -155,6 +155,7 @@ REQUIRED = {"name", "version", "description", "owner", "allowed_tools", "forbidd
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 BASELINE_FORBIDDEN = {"read_secrets", "terraform_apply"}
 
+
 def check(path: pathlib.Path) -> list[str]:
     data = yaml.safe_load(path.read_text())
     if not isinstance(data, dict):
@@ -176,6 +177,7 @@ def check(path: pathlib.Path) -> list[str]:
         errors.append(f"{path}: baseline-forbidden tools allowed: {sorted(overlap)}")
     return errors
 
+
 def main() -> int:
     problems = []
     manifests = list(pathlib.Path("skills").glob("*/manifest.yaml"))
@@ -187,6 +189,7 @@ def main() -> int:
     for problem in problems:
         print(problem, file=sys.stderr)
     return 1 if problems else 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -167,8 +167,10 @@ INTERNAL_HOST = re.compile(r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.internal\.example\.c
 SAFE_LOG_FIELDS = {"ts", "severity", "service", "namespace", "pod", "container", "message",
                    "error_code", "http_status", "route", "duration_ms", "trace_id"}
 
+
 class RedactionError(Exception):
     """Any failure in the filter. The gateway turns it into a blocked request."""
+
 
 @dataclass
 class Result:
@@ -176,12 +178,14 @@ class Result:
     counts: dict = field(default_factory=dict)
     blocked_reason: str = ""
 
+
 def filter_json_log(line: str) -> str:
     """Keep only allow-listed fields of a structured log line; drop everything else."""
     record = json.loads(line)
     if not isinstance(record, dict):
         raise RedactionError("log line is not a JSON object")
     return json.dumps({k: v for k, v in record.items() if k in SAFE_LOG_FIELDS}, sort_keys=True)
+
 
 def redact(text: str, policy: dict) -> Result:
     if not isinstance(text, str):
@@ -210,6 +214,7 @@ def redact(text: str, policy: dict) -> Result:
         if canary in out:
             return Result("", counts, "canary_survived")
     return Result(out, counts)
+
 
 def guarded_redact(text: str, policy: dict) -> Result:
     """Fail closed: an exception anywhere means the request is not sent."""
@@ -245,6 +250,7 @@ SEEDED = {
     "email": "jane.doe@example.com",
     "ipv4": "203.0.113.42",
 }
+
 
 class SeededCorpus(unittest.TestCase):
     def test_every_seeded_value_is_removed(self):
@@ -282,6 +288,7 @@ class SeededCorpus(unittest.TestCase):
     def test_json_log_allow_list(self):
         line = '{"ts":"2026-10-21T09:00:00Z","message":"timeout","user_email":"jane.doe@example.com","card":"x"}'
         self.assertEqual(redact.filter_json_log(line), '{"message": "timeout", "ts": "2026-10-21T09:00:00Z"}')
+
 
 if __name__ == "__main__":
     unittest.main()

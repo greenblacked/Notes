@@ -112,6 +112,7 @@ import sys
 WARN_DAYS = 90  # change: the lead time your upgrade process needs
 RECHECK_DAYS = 90  # change: how often a retirement date must be re-checked against the provider page
 
+
 def main(routes_path: str, catalogue_path: str) -> int:
     with open(routes_path, encoding="utf-8") as f:
         routes = json.load(f)["routes"]
@@ -141,6 +142,7 @@ def main(routes_path: str, catalogue_path: str) -> int:
         print(f"ERROR {line}")
     print(f"checked {len(routes)} routes, {len(errors)} problems")
     return 1 if errors else 0
+
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1], sys.argv[2]))
@@ -254,9 +256,11 @@ MAX_REFUSAL_RISE = 0.01
 MAX_P95_LATENCY_RATIO = 1.25
 MAX_TOKENS_OUT_RATIO = 1.20
 
+
 def load(path):
     with open(path, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
+
 
 def summary(rows):
     n = len(rows)
@@ -269,6 +273,7 @@ def summary(rows):
         "p95_latency_ms": statistics.quantiles(latencies, n=20)[-1] if n >= 2 else latencies[0],
         "mean_tokens_out": statistics.fmean(r["tokens_out"] for r in rows),
     }
+
 
 def main(baseline_path, candidate_path):
     base_rows, cand_rows = load(baseline_path), load(candidate_path)
@@ -291,6 +296,7 @@ def main(baseline_path, candidate_path):
     failed = [name for name, ok in checks if not ok]
     print("RESULT", "FAIL: " + ", ".join(failed) if failed else "PASS")
     return 1 if failed else 0
+
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1], sys.argv[2]))
