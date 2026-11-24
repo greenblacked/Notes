@@ -9,7 +9,7 @@ tags:
   - security
   - audit
 created: 2026-10-21
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -233,30 +233,51 @@ The kubelet refreshes the projected token before it expires, and the application
 **Outside the cluster**, mint a token for the run and build a throwaway kubeconfig from it. `kubectl create token` takes `--duration`, but the Kubernetes docs say the actual duration of the issued token might be shorter, or even longer, than requested, so check the `exp` claim if it matters. Check `kubectl create token --help` for the default in your kubectl version.
 
 ```bash title="agent-kubeconfig.sh"
+#!/usr/bin/env bash
 set -euo pipefail
 umask 077
 
 NAMESPACE="ai-agents"
 SA="agent-reader"
-DURATION="1h"                          # change: the length of one agent run, no longer
-CLUSTER_NAME="$(kubectl config view --minify -o jsonpath='{.clusters[0].name}')"
+DURATION="1h"                            # change: the length of one agent run, no longer
+DIR="${AGENT_CRED_DIR:-$(mktemp -d)}"   # a private directory for this run only
+
+# --flatten embeds a file-based certificate-authority as data, so both CA forms end up here.
 SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
-OUT="$(mktemp -d)/agent.kubeconfig"
+CA_DATA="$(kubectl config view --minify --flatten --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')"
+if [[ -z "$SERVER" || -z "$CA_DATA" ]]; then
+  echo "current context has no server or no cluster CA; refusing to write an unverified kubeconfig" >&2
+  exit 1
+fi
+printf '%s' "$CA_DATA" | base64 -d > "$DIR/ca.crt"
 
-kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' \
-  | base64 -d > "${OUT%.kubeconfig}.ca.crt"
+# The token goes straight to a file: never into a variable, an argument or the kubeconfig itself.
+kubectl -n "$NAMESPACE" create token "$SA" --duration="$DURATION" > "$DIR/token"
 
-TOKEN="$(kubectl -n "$NAMESPACE" create token "$SA" --duration="$DURATION")"
+cat > "$DIR/agent.kubeconfig" <<KUBECONFIG
+apiVersion: v1
+kind: Config
+clusters:
+  - name: agent-cluster
+    cluster:
+      server: ${SERVER}
+      certificate-authority: ${DIR}/ca.crt
+users:
+  - name: ${SA}
+    user:
+      tokenFile: ${DIR}/token
+contexts:
+  - name: agent
+    context:
+      cluster: agent-cluster
+      user: ${SA}
+current-context: agent
+KUBECONFIG
 
-KUBECONFIG="$OUT" kubectl config set-cluster "$CLUSTER_NAME" --server="$SERVER" \
-  --certificate-authority="${OUT%.kubeconfig}.ca.crt" --embed-certs=true >/dev/null
-KUBECONFIG="$OUT" kubectl config set-credentials "$SA" --token="$TOKEN" >/dev/null
-KUBECONFIG="$OUT" kubectl config set-context agent --cluster="$CLUSTER_NAME" --user="$SA" >/dev/null
-KUBECONFIG="$OUT" kubectl config use-context agent >/dev/null
-unset TOKEN
-
-echo "$OUT"
+echo "$DIR/agent.kubeconfig"
 ```
+
+The token never appears in a process argument list or in shell history. `kubectl config set-credentials --token=...` would put it in both, so the kubeconfig is written as a file whose `tokenFile` points at the token. A context that skips TLS verification has no CA to copy, and the script refuses it rather than write an insecure kubeconfig. Delete `$DIR` when the run ends. Deleting it does not revoke the token; see Rollback.
 
 The person or CI job that runs this needs `create` on `serviceaccounts/token` for that one ServiceAccount; grant it with a Role scoped by `resourceNames: ["agent-reader"]`, not cluster-wide. A token can also be bound to an object with `--bound-object-kind` and `--bound-object-name`, so it stops working when that object is deleted; the docs list Pod, Secret and Node (node-bound tokens GA in v1.33+) as supported kinds, so check which your version accepts.
 
@@ -377,7 +398,8 @@ Corrections made in this review: the aggregation risk comes from a labelled Clus
 - The exact verbs the API server checks on `pods/exec`, `pods/attach` and `pods/portforward` (the role grants none), and the exact contents of the default `view` ClusterRole in your version.
 - That the API groups and resource names in the role (for example `policy` and `events.k8s.io`) match your cluster version.
 - How quickly deleting a RoleBinding takes effect.
-- None of the scripts or manifests were run against a cluster.
+- The `kubectl config view` flags `--minify`, `--flatten` and `--raw`, that `--flatten` exposes a file-based CA under `certificate-authority-data` to the jsonpath query (inferred from "self-contained output"), and that the kubeconfig field `tokenFile` points to a file with a bearer token that is re-read periodically. The kubectl and kubeconfig reference pages were fetched on 2026-11-24, but the fetch did not return their option text.
+- None of the scripts or manifests were run against a cluster; `agent-kubeconfig.sh` passed a shell syntax check only.
 
 ### Environment
 
@@ -417,4 +439,3 @@ See the Rollback section of this note: delete the RoleBindings first, then the S
 - [[access-reviews-gcp-and-gke]]: reviewing agent grants on a schedule.
 - [[kubernetes-pod-troubleshooting]]: what the agent is helping with.
 - [[internal-mcp-servers-for-platform-tools]]: exposing narrow tools instead of raw `kubectl`.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

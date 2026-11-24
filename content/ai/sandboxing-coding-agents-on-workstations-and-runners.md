@@ -9,7 +9,7 @@ tags:
   - linux
   - gitlab-ci
 created: 2026-10-21
-modified: 2026-11-01
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-01
 review-due: 2027-05-01
@@ -65,8 +65,14 @@ REPO_DIR="$(git rev-parse --show-toplevel)"
 # The agent gets a throwaway clone, never the real .git directory (see "Git" below).
 AGENT_CLONE="$(mktemp -d /tmp/agent-clone.XXXXXX)"
 git clone --no-hardlinks "$REPO_DIR" "$AGENT_CLONE"
-AGENT_IMAGE="registry.example.com/platform/agent-sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000"  # change: your approved image digest
-PROXY_IMAGE="registry.example.com/platform/egress-proxy@sha256:0000000000000000000000000000000000000000000000000000000000000000"  # change: your Squid or proxy image digest
+# One private directory per session for credentials, removed when this script exits (also on Ctrl-C).
+# XDG_RUNTIME_DIR is usually a per-user tmpfs on Linux; elsewhere the fallback is a 0700 directory on disk.
+SESSION_DIR="$(umask 077 && mktemp -d "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/agent-session.XXXXXX")"
+trap 'rm -rf -- "$SESSION_DIR"' EXIT
+export SESSION_DIR
+# Optional: write session credentials now, with gcp-token-for-sandbox.sh or k8s-token-for-sandbox.sh below.
+AGENT_IMAGE="registry.example.com/platform/agent-sandbox@sha256:<digest>"  # change: your approved image digest
+PROXY_IMAGE="registry.example.com/platform/egress-proxy@sha256:<digest>"  # change: your Squid or proxy image digest
 
 # An internal network has no route to the internet; only the proxy is attached to both networks.
 # Gateway mode "isolated" also leaves the bridge without a host address, so the agent cannot reach
@@ -95,6 +101,7 @@ docker run --rm -it \
   --tmpfs /home/agent:rw,mode=1777 \
   --env HOME=/home/agent \
   -v "$AGENT_CLONE:/workspace" \
+  -v "$SESSION_DIR:/run/agent:ro" \
   -w /workspace \
   "$AGENT_IMAGE"
 ```
@@ -103,6 +110,7 @@ What each part does:
 
 - `--network agent-internal` with an `--internal` network: the container has no route to the internet. Host services listening on the bridge address (including `0.0.0.0` or `::` listeners) stay reachable unless the network is created with `-o com.docker.network.bridge.gateway_mode_ipv4=isolated` (and the `_ipv6` equivalent) or the host firewall blocks it, so keep sensitive local services off all-interface listeners. Its only way out to the internet is the proxy container, which holds the allowlist. Proxy environment variables alone are advisory (a process can ignore them); the internal network is what enforces it.
 - `-v "$AGENT_CLONE:/workspace"` is the only bind mount, and it is a throwaway clone of the repository rather than the real working tree. No home directory, no `~/.kube`, no `~/.ssh`, no Docker socket. Mounting the real repository read-write would let the agent write `.git/hooks`, or configuration keys that run commands (such as `core.hooksPath`, `core.fsmonitor` or `core.pager`) in `.git/config`; the next Git command on the host would then run that code outside the sandbox, and the change is untracked, so a diff review would not show it.
+- `SESSION_DIR` holds any credentials for this session only. It is mounted read-only at `/run/agent`, and the `EXIT` trap removes it when the session ends, because the `docker run` runs in the foreground of the same script. A `kill -9` of the script skips the trap, so check for leftover `agent-session.*` directories.
 - `--tmpfs /home/agent` gives tools a writable, empty, throwaway home.
 - `--cap-drop ALL`, `--security-opt no-new-privileges`, `--read-only` and a non-root `--user` remove the easy escalation paths.
 - The image contains the agent CLI and the repository's toolchain, built by the platform team and pinned by digest.
@@ -132,7 +140,7 @@ Dev container tooling can express a similar setup declaratively; the JSON below 
 ```json title=".devcontainer/devcontainer.json"
 {
   "name": "agent-sandbox",
-  "image": "registry.example.com/platform/agent-sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "image": "registry.example.com/platform/agent-sandbox@sha256:<digest>",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
   "workspaceFolder": "/workspace",
   "mounts": [],
@@ -185,47 +193,68 @@ Create one service account per agent task type, with the minimum roles, as in [[
 
 ```bash title="gcp-token-for-sandbox.sh (illustrative, not run)"
 set -euo pipefail
+umask 077
+: "${SESSION_DIR:?run this from the session launcher, which creates SESSION_DIR and removes it on exit}"
 
 AGENT_SA="agent-readonly@example-project.iam.gserviceaccount.com"  # change: the task's service account
-TOKEN_FILE="$(mktemp)"
-chmod 600 "$TOKEN_FILE"
 
-gcloud auth print-access-token --impersonate-service-account="$AGENT_SA" > "$TOKEN_FILE"
-echo "token written to $TOKEN_FILE; mount it read-only into the sandbox and delete it afterwards"
+# --lifetime shortens the token below the default; it needs impersonation.
+gcloud auth print-access-token --impersonate-service-account="$AGENT_SA" --lifetime=1800 \
+  > "$SESSION_DIR/gcp-token"
 ```
 
 - Impersonation needs `roles/iam.serviceAccountTokenCreator` on that service account; Service Account User does not grant it.
-- The resulting access token is short-lived (`gcloud auth print-access-token --lifetime` defaults to 3600 seconds, and lengthening it beyond that needs an organization policy constraint) and leaves no key file behind.
+- The resulting access token is short-lived (`gcloud auth print-access-token --lifetime` defaults to 3600 seconds, and lengthening it beyond that needs an organization policy constraint) and leaves no key file behind. **Deleting the file does not revoke it:** a copy stays valid until it expires. Check the current Google Cloud documentation for how to cut an access token off early; disabling the service account stops every workload that uses it, so see [[leaked-credential-rotation]] first.
 - Token creation is written to audit logs only if IAM Data Access audit logs are enabled; enable them if you want that record.
-- Inside the sandbox, tools need to be told to use the token. gcloud can read an access token from a file with the global `--access-token-file` flag or the `auth/access_token_file` property (the file contains only the token); how client libraries pick up a token is in their own authentication documentation. Never mount `~/.config/gcloud` into the sandbox.
+- Inside the sandbox, tools need to be told to use the token. gcloud can read an access token from a file with the global `--access-token-file` flag or the `auth/access_token_file` property (the file contains only the token; inside the sandbox the path is `/run/agent/gcp-token`); how client libraries pick up a token is in their own authentication documentation. Never mount `~/.config/gcloud` into the sandbox.
 
 ### Kubernetes: a bound token for a namespaced service account
 
 ```bash title="k8s-token-for-sandbox.sh (illustrative, not run)"
 set -euo pipefail
+umask 077
+: "${SESSION_DIR:?run this from the session launcher, which creates SESSION_DIR and removes it on exit}"
 
-CTX="dev-cluster"                 # change: a non-production context you are allowed to use
-NS="agent-sandbox"                # change: the namespace the agent may read
-SA="agent-reader"                 # change: a ServiceAccount with a read-only Role in that namespace
-OUT="./agent.kubeconfig"
+CTX="dev-cluster"      # change: a non-production context you are allowed to use
+NS="agent-sandbox"     # change: the namespace the agent may read
+SA="agent-reader"      # change: a ServiceAccount with a read-only Role in that namespace
+IN_SANDBOX="/run/agent"   # where the launcher mounts SESSION_DIR, read-only
 
+# --flatten embeds a file-based certificate-authority as data, so both CA forms end up here.
 SERVER="$(kubectl --context="$CTX" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
-kubectl --context="$CTX" config view --minify --raw \
-  -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > ./agent-ca.crt
-TOKEN="$(kubectl --context="$CTX" -n "$NS" create token "$SA" --duration=1h)"
+CA_DATA="$(kubectl --context="$CTX" config view --minify --flatten --raw \
+  -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')"
+[[ -n "$SERVER" && -n "$CA_DATA" ]] || { echo "no server or cluster CA for $CTX; refusing" >&2; exit 1; }
+printf '%s' "$CA_DATA" | base64 -d > "$SESSION_DIR/ca.crt"
 
-kubectl --kubeconfig="$OUT" config set-cluster sandbox --server="$SERVER" \
-  --certificate-authority=./agent-ca.crt --embed-certs=true
-kubectl --kubeconfig="$OUT" config set-credentials agent --token="$TOKEN"
-kubectl --kubeconfig="$OUT" config set-context sandbox --cluster=sandbox --user=agent --namespace="$NS"
-kubectl --kubeconfig="$OUT" config use-context sandbox
-rm -f ./agent-ca.crt
-chmod 600 "$OUT"
+# The token goes straight to a file, never into a variable or an argument.
+kubectl --context="$CTX" -n "$NS" create token "$SA" --duration=1h > "$SESSION_DIR/k8s-token"
+
+cat > "$SESSION_DIR/agent.kubeconfig" <<EOF
+apiVersion: v1
+kind: Config
+clusters:
+  - name: sandbox
+    cluster:
+      server: ${SERVER}
+      certificate-authority: ${IN_SANDBOX}/ca.crt
+users:
+  - name: agent
+    user:
+      tokenFile: ${IN_SANDBOX}/k8s-token
+contexts:
+  - name: sandbox
+    context:
+      cluster: sandbox
+      user: agent
+      namespace: ${NS}
+current-context: sandbox
+EOF
 ```
 
 `kubectl create token` requests a short-lived token for the ServiceAccount; `--duration` asks for a lifetime, and the server may return a longer or shorter one. Avoid long-lived Secret-based ServiceAccount tokens. The ServiceAccount's Role is read-only and namespaced; design it with [[kubernetes-rbac-for-ai-agents]]. Clusters that use a client-go exec credential plugin need that plugin's credentials only on the engineer's side, not in the sandbox, because the token above is all the sandbox gets.
 
-Mount the generated kubeconfig read-only, set `KUBECONFIG` to it inside the sandbox, and delete it when the session ends. Production contexts never go into an agent sandbox; production changes follow [[production-change-checklist]] with a human running them.
+Inside the sandbox, set `KUBECONFIG=/run/agent/agent.kubeconfig`. The paths in the file are the in-sandbox ones. The token is not in any argument list or in the kubeconfig, and the launcher's trap removes the directory when the session ends. Deleting the token does not revoke it; it lasts until it expires, or until the ServiceAccount is deleted and recreated ([[kubernetes-rbac-for-ai-agents]]). Production contexts never go into an agent sandbox; production changes follow [[production-change-checklist]] with a human running them.
 
 ### Git
 
@@ -324,7 +353,7 @@ check "allowed host works"             'curl -sS --max-time 10 -o /dev/null "$AL
 exit "$fail"
 ```
 
-```text
+```text title="Expected output (illustrative, not a recorded run)"
 ok    no kubeconfig in home
 ok    no KUBECONFIG unless intended
 ok    no gcloud config
@@ -381,6 +410,7 @@ Source-reviewed on 2026-11-01. Nothing was run. The review covered the documente
 - `CLOUDSDK_*` environment variable names for gcloud properties and how client libraries consume an access token.
 - Engineering guidance, not a documented claim: the isolation-level ranking, the rollout and rollback approach, and the trade-offs section.
 - No performance figures are given because none were measured.
+- That `XDG_RUNTIME_DIR` is a tmpfs on a given host, that `--flatten` exposes a file-based CA as `certificate-authority-data`, that the kubeconfig `tokenFile` field works as described, how Google Cloud revokes or expires a short-lived access token (the credential pages were not read on 2026-11-24), and that the `EXIT` trap removes the directory on TERM, INT and HUP inside the launcher.
 - Nothing was run: every command, script and expected output in the note is unexecuted.
 
 ## Sources
@@ -403,4 +433,3 @@ Source-reviewed on 2026-11-01. Nothing was run. The review covered the documente
 - [[gcp-iam-guardrails-for-agent-service-accounts]]: narrow service accounts to impersonate.
 - [[kubernetes-rbac-for-ai-agents]]: read-only Roles for agent ServiceAccounts.
 - [[runaway-or-compromised-ai-agent-response]]: what to do when an agent misbehaves anyway.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
