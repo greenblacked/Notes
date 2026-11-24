@@ -20,7 +20,7 @@ This note describes a target topology for a GKE platform: how many clusters to r
 > Written against GKE Standard and Autopilot as described in the official GKE documentation at [cloud.google.com/kubernetes-engine/docs](https://cloud.google.com/kubernetes-engine/docs) and the Kubernetes documentation at [kubernetes.io](https://kubernetes.io/docs/). Terraform examples use the `google` provider.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: fleet rules (one fleet per project, host-project requirements), Autopilot feature parity and pricing model, the spot VM preemption notice period, the Terraform attribute names for fleet registration, and the `google` provider attribute names for the control-plane endpoint (`control_plane_endpoints_config`, `private_endpoint_enforcement_enabled`, `gcp_public_cidrs_access_enabled`) with the provider version that has them. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: fleet rules (one fleet per project, host-project requirements), Autopilot feature parity and pricing model, the spot VM preemption notice period, the Terraform attribute names for fleet registration, that authorized networks do not apply to the DNS-based endpoint, the cluster connect permission, that a VPC Service Controls perimeter on `container.googleapis.com` can restrict it by network, that Kubernetes tokens and client certificates over it are disabled by default, and the `google` provider attribute names for the control-plane endpoint (`control_plane_endpoints_config`, `private_endpoint_enforcement_enabled`, `gcp_public_cidrs_access_enabled`) with the provider version that has them. Check them before relying on them.
 
 ## Decision drivers
 
@@ -98,6 +98,14 @@ Rules of thumb for this layout:
 
 A private, regional cluster with Workload Identity Federation, a release channel and the default node pool removed. Network, subnet and secondary range names are values to change; the private cluster and egress design is in [[architecture/private-gke-and-controlled-egress]] and is not repeated here. Control-plane access follows [[adr/0055-private-gke-control-plane-and-egress]]: there is no public IP endpoint. People and CI outside the VPC use the DNS-based endpoint, where IAM decides on every request; runners in the VPC and on-premises networks use the private endpoint, which authorized networks limit to the listed ranges. `0.0.0.0/0` never appears in the list.
 
+> [!warning] The DNS-based endpoint is reachable from the internet
+> With `allow_external_traffic = true` (`--enable-dns-access` with external access), the DNS-based endpoint accepts connections from any network. Authorized networks do not apply to it, so IAM is the only gate, and a stolen Google credential that has cluster access works from anywhere. "No public IP endpoint" is accurate; "not reachable from the internet" is not. Compensating controls:
+>
+> - Put `container.googleapis.com` in a VPC Service Controls perimeter with access levels, to restrict by network ([[architecture/zero-trust-access-iap-and-vpc-service-controls]]).
+> - Keep the number of principals that hold the permission to connect to the cluster small, and review them ([[compliance/access-reviews-gcp-and-gke]]).
+> - Leave Kubernetes ServiceAccount tokens and client certificates over the DNS endpoint disabled, which is the default.
+> - If every client is inside the VPC or a connected network, leave the DNS endpoint off (omit `--enable-dns-access`, or set `allow_external_traffic = false`) and use the private endpoint only.
+
 ```hcl title="modules/gke-cluster/main.tf"
 variable "project_id" {
   type        = string
@@ -164,10 +172,10 @@ resource "google_container_cluster" "this" {
   }
 
   # Control plane per ADR 0055: DNS-based endpoint with IAM, private IP endpoint
-  # only, authorized networks enforced on it, no public endpoint.
+  # only, authorized networks enforced on it, no public IP endpoint.
   control_plane_endpoints_config {
     dns_endpoint_config {
-      allow_external_traffic = true # laptops and SaaS runners reach it; IAM decides
+      allow_external_traffic = true # reachable from the internet; IAM is the only gate, see above
     }
   }
 
