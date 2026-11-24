@@ -174,6 +174,9 @@ resource "google_container_cluster" "this" {
   private_cluster_config {
     enable_private_nodes    = true
     enable_private_endpoint = true
+    # A peering-based cluster also needs master_ipv4_cidr_block (a /28, see
+    # [[architecture/private-gke-and-controlled-egress]]). This example assumes a
+    # Private Service Connect based control plane, which does not need it.
   }
 
   master_authorized_networks_config {
