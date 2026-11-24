@@ -33,7 +33,8 @@ Day-to-day publishing of notes needs none of this: merging to `main` deploys sta
 
   ```bash
   npm ci --ignore-scripts --prefix tools
-  WRANGLER=tools/node_modules/.bin/wrangler
+  # run from the repository root, so the absolute path below is right
+  WRANGLER="$PWD/tools/node_modules/.bin/wrangler"
   "$WRANGLER" --version          # the version pinned in tools/package.json
   read -rs CLOUDFLARE_API_TOKEN && export CLOUDFLARE_API_TOKEN
   export CLOUDFLARE_ACCOUNT_ID='<account-id>'   # change: the account that owns the Worker

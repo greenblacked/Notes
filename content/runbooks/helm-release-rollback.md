@@ -30,6 +30,7 @@ If the pods are failing for a reason you do not yet know, diagnose with [[kubern
 
 - Access to the cluster and namespace, and the right context (`kubectl config current-context`).
 - Helm 3 installed. Helm 3 stores release state in the cluster; there is no Tiller.
+- `jq` installed (the Secret backup in the steps pipes through it).
 - You know whether the release is managed by GitOps. Check for Argo CD application labels or annotations:
 
 ```bash
