@@ -8,18 +8,14 @@ tags:
   - gcp
   - reliability
 created: 2026-10-16
-modified: 2026-10-20
-evidence: source-reviewed
-reviewed: 2026-10-20
-review-due: 2027-04-20
-destructive: true
+modified: 2026-11-24
 draft: false
 ---
 
 Terraform state is the mapping between your code and real resources. When it is locked, damaged or out of step with reality, `plan` becomes untrustworthy. This runbook assumes the GCS backend, which is the common case on GCP. The layout that makes recovery small is described in [[terraform-module-and-state-layout]].
 
 > [!info] Scope
-> Commands were checked against the Terraform and Google Cloud documentation on 2026-10-20 (see Evidence), but never run against a real backend, so the note is not marked `verified`. Run `terraform <command> -help` for your version. OpenTofu uses the same commands under `tofu`, see [[terraform-vs-opentofu]]; OpenTofu behaviour was not checked here.
+> Commands were compared on 2026-10-20 with search excerpts and a third-party mirror of the Terraform and Google Cloud documentation, not with the pages themselves, so the note declares no evidence level. On 2026-11-24 only the `state push` page was read directly (see Evidence). Nothing was run against a real backend, so the note is not marked `verified`. Run `terraform <command> -help` for your version. OpenTofu uses the same commands under `tofu`, see [[terraform-vs-opentofu]]; OpenTofu behaviour was not checked here.
 
 > [!danger] This runbook changes and overwrites state
 > `force-unlock`, `state rm`, `state push -force` and copying an older object over the live state can orphan real resources or make Terraform forget or re-create them. Every step below starts from a backup (step 0). If something goes wrong, the recovery is the backup file in `$BACKUP_DIR` and the older object generations in the bucket (see Cleanup and rollback in Evidence).
@@ -256,9 +252,12 @@ If recovery touched production infrastructure, record it in the change log and f
 
 ## Evidence
 
+This note declares no evidence level. The checks below were made on 2026-10-20 through search excerpts and a mirror, because the official pages could not be fetched. That does not meet `source-reviewed`, so the level was removed on 2026-11-24. Treat each claim as unconfirmed until you have read the linked page, except where a bullet says it was read directly.
+
 ### Sources checked
 
-- [terraform state push](https://developer.hashicorp.com/terraform/cli/commands/state/push): the push is blocked when the lineage differs or the remote serial is higher, and `-force` disables both checks, checked 2026-10-20 (search excerpt, the page could not be fetched).
+- [terraform state push](https://developer.hashicorp.com/terraform/cli/commands/state/push), read directly on 2026-11-24: the push is refused when the lineage differs or the destination serial is higher; `-force` disables both checks, is not recommended, and overwrites the destination state.
+- The same page, earlier: the push is blocked when the lineage differs or the remote serial is higher, and `-force` disables both checks (2026-10-20, search excerpt; superseded by the direct read above).
 - [terraform force-unlock](https://developer.hashicorp.com/terraform/cli/commands/force-unlock) and [State: Locking](https://developer.hashicorp.com/terraform/language/state/locking): usage `terraform force-unlock [options] LOCK_ID`, `-force` skips the prompt, the lock ID is printed on failure, use only for your own lock, checked 2026-10-20 (search excerpts).
 - [terraform state rm](https://developer.hashicorp.com/terraform/cli/commands/state/rm): `-dry-run`, `-lock=false`, `-lock-timeout`, `-backup` as a legacy local-state option, objects keep existing in the cloud, a `removed` block is the previewable alternative, checked 2026-10-20 (search excerpt).
 - [removed block](https://developer.hashicorp.com/terraform/language/block/removed) and [Remove a resource from state](https://developer.hashicorp.com/terraform/language/state/remove): Terraform 1.7 and later, `lifecycle { destroy = false }`, destroy is the default without it, checked 2026-10-20 (search excerpts).
@@ -279,7 +278,7 @@ Corrections made on 2026-10-20: the `state push` rule now says lineage mismatch 
 - `-lock-timeout` on `plan`: its default of `0s` was seen on the `apply` page only, through a third-party mirror of the docs. `plan -refresh-only` and `apply -refresh-only` are documented (the plan page says refresh-only needs Terraform 0.15.4 or later), seen through search excerpts and mirrors, not the official pages.
 - That a state written by a newer provider schema cannot be read by an older provider, and the exact "newer Terraform version" error text.
 - The behaviour of the commands on OpenTofu, and on HCP Terraform or other backends.
-- The documentation pages were reached through search excerpts only, because the lab could not fetch the Terraform pages; nothing was run against Terraform, GCS or a real state.
+- Every page except `state push` was reached through search excerpts only on 2026-10-20; nothing was run against Terraform, GCS or a real state.
 
 ### Environment
 
