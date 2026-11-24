@@ -10,7 +10,7 @@ tags:
   - gitlab-ci
   - security
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
@@ -179,7 +179,7 @@ resource "google_storage_bucket" "lab" {
 The commands above change state **immediately**, with no plan, no review and no record in Git. Recent Terraform versions have code-based alternatives that go through a plan and a pull request. Prefer them.
 
 > [!warning] Check before relying on this
-> The versions below were not checked against the release notes and are **not verified**: `moved` blocks (1.1), `import` blocks with `terraform plan -generate-config-out` (1.5), `removed` blocks (1.7). Check the Terraform changelog and the language documentation for the version you pin. If your `required_version` is older than a feature, the feature will not parse.
+> `removed` blocks need Terraform 1.7.0 or later (Terraform 1.7 changelog, checked 2026-11-24). Not verified: `moved` blocks (believed 1.1) and `import` blocks with `terraform plan -generate-config-out` (believed 1.5); check the changelog for the version you pin. If your `required_version` is older than a feature, the feature will not parse.
 
 **Renaming a resource: `moved`.** If you rename `google_storage_bucket.lab` to `google_storage_bucket.main` in code, Terraform sees "one resource gone, one new" and plans to destroy the bucket and create another. A `moved` block tells it these are the same object:
 
@@ -272,7 +272,7 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 6.0"        # Change: the current major version from the Registry (see the warning in Delivery 04).
+      version = "~> 8.0"        # Change: the current major version from the Registry (see the warning in Delivery 04).
     }
   }
 }
@@ -740,8 +740,8 @@ Nothing in this lesson was run (see the note near the top). The commands and exa
 
 - HashiCorp Developer, "State" and "Backend type: gcs" documentation (https://developer.hashicorp.com/terraform/language/state, https://developer.hashicorp.com/terraform/language/backend/gcs). Not verified: native locking and the lock object name for your version.
 - HashiCorp Developer, "Modules" documentation (https://developer.hashicorp.com/terraform/language/modules), including module sources and version constraints.
-- HashiCorp Developer, "Refactoring" (`moved` blocks), "Import" (`import` blocks and `-generate-config-out`) and the `removed` block (https://developer.hashicorp.com/terraform/language). Not verified: the Terraform version in which each block first appeared.
+- HashiCorp Developer, "Refactoring" (`moved` blocks), "Import" (`import` blocks and `-generate-config-out`) and the `removed` block (https://developer.hashicorp.com/terraform/language), and the Terraform 1.7 changelog (https://github.com/hashicorp/terraform/blob/v1.7/CHANGELOG.md), which gives 1.7.0 for `removed` blocks; checked 2026-11-24. Not verified: the Terraform version in which `moved` and `import` blocks first appeared.
 - HashiCorp Developer, CLI documentation for `terraform state`, `plan -out`, `apply`, `force-unlock` and `init -migrate-state` (https://developer.hashicorp.com/terraform/cli).
-- Terraform Registry, `hashicorp/google` provider, `google_storage_bucket` resource and its import section (https://registry.terraform.io/providers/hashicorp/google/latest/docs). Not verified: the current major version and the import ID format.
+- Terraform Registry, `hashicorp/google` provider, `google_storage_bucket` resource and its import section (https://registry.terraform.io/providers/hashicorp/google/latest/docs). The current major version (8) was checked 2026-11-24 against the provider's GitHub releases (https://github.com/hashicorp/terraform-provider-google/releases). Not verified: the import ID format.
 - Google Cloud, Cloud Storage "Object Versioning" and `gcloud storage` reference (https://cloud.google.com/storage/docs/object-versioning, https://cloud.google.com/sdk/gcloud/reference/storage). Not verified: flag names in your `gcloud` version.
 - GitLab documentation, "CI/CD YAML syntax reference" for `rules`, `environment`, `resource_group` and `artifacts` (https://docs.gitlab.com/ci/yaml/). Not verified for your GitLab version.
