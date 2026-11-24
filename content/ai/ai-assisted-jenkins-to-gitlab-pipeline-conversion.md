@@ -9,7 +9,7 @@ tags:
   - jenkins
   - delivery
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -78,12 +78,17 @@ set -Eeuo pipefail
 : "${GITLAB_LINT_TOKEN:?set GITLAB_LINT_TOKEN}"
 CI_FILE=".gitlab-ci.yml"
 
-payload=$(jq -Rs '{content: ., dry_run: true}' "${CI_FILE}")
+umask 077
+tmp="$(mktemp -d)"
+trap 'rm -rf -- "$tmp"' EXIT
+# The token goes into a header file, not onto curl's command line where other processes can see it.
+printf 'PRIVATE-TOKEN: %s\n' "${GITLAB_LINT_TOKEN}" > "$tmp/headers"
+jq -Rs '{content: ., dry_run: true}' "${CI_FILE}" > "$tmp/payload.json"
 
 result=$(curl --silent --show-error --fail \
-  --header "PRIVATE-TOKEN: ${GITLAB_LINT_TOKEN}" \
+  --header @"$tmp/headers" \
   --header "Content-Type: application/json" \
-  --data "${payload}" \
+  --data-binary @"$tmp/payload.json" \
   "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/ci/lint")
 
 if ! printf '%s' "${result}" | jq -e '.valid == true' >/dev/null; then
@@ -102,7 +107,7 @@ stages: [build, test, deploy]
 
 build:
   stage: build
-  image: registry.example.com/ci/builder:1.4.0
+  image: registry.example.com/ci/builder:1.4.0@sha256:<digest>
   tags: [docker-large]
   timeout: 20m
   script:
@@ -117,7 +122,7 @@ build:
 deploy_prod:
   stage: deploy
   needs: [build]
-  image: registry.example.com/ci/deployer:2.1.0
+  image: registry.example.com/ci/deployer:2.1.0@sha256:<digest>
   environment: production
   script:
     - ./ci/deploy.sh
@@ -170,8 +175,14 @@ if [[ $# -ne 2 || ! -d "$1" || ! -d "$2" ]]; then
   exit 2
 fi
 
-diff <(cd "$1" && find . -type f -exec sha256sum {} + | sort -k2) \
-        <(cd "$2" && find . -type f -exec sha256sum {} + | sort -k2)
+# sha256sum on Linux, shasum -a 256 on macOS; NUL-separated names survive spaces and newlines.
+hash_tree() {
+  local hasher=(sha256sum)
+  command -v sha256sum >/dev/null || hasher=(shasum -a 256)
+  (cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 "${hasher[@]}")
+}
+
+diff <(hash_tree "$1") <(hash_tree "$2")
 ```
 
 Compare exit status, test counts and names, artifact checksums (expect differences for embedded timestamps; normalise or explain them), image digests where builds are reproducible, rendered manifests, and notifications. Keep the Jenkins job enabled as the system of record until parity holds for the agreed number of consecutive runs, then switch the trigger and disable the Jenkins job but keep it present; the programme-level comparison criteria are in [[jenkins-to-gitlab-migration-programme#Parallel run and comparison criteria]]. Define "done" for each pipeline as lint green, parity green and owner accepted ([[agent-done-criteria-and-verification]]).
@@ -223,7 +234,8 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI behaviours,
 - Jenkins step and credential binding behaviour (`input`, `post`, `stash`, plugin binding types) was not checked; confirm against the plugins on your controller.
 - The required token scope and role for CI Lint on your instance, and `glab ci lint` flags, were not checked.
 - Parity checks, runner isolation advice, inventory columns and the conversion workflow are engineering guidance, not documented claims.
-- Nothing was run.
+- That `curl --header @file` reads headers from a file (added in curl 7.55.0 according to the curl maintainer's blog, not re-read on 2026-11-24), `shasum` availability and `sort -z` / `xargs -0` on your platforms, and that `--data-binary @file` is accepted by the CI Lint endpoint as JSON.
+- Nothing was run beyond a local check of the new `hash_tree` function and a shell syntax check of the scripts.
 
 ## Sources
 
@@ -234,5 +246,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI behaviours,
 - [Jenkins: Extending with Shared Libraries](https://www.jenkins.io/doc/book/pipeline/shared-libraries/) — library layout (`vars/`, `src/`, `resources/`) and global variables (not read, see Not verified).
 - [OWASP Secrets Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html) — scoped, short-lived credentials and no secrets in configuration (not read, see Not verified).
 - [OWASP CI/CD Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/CI_CD_Security_Cheat_Sheet.html) — CI/CD hardening baseline for the new pipelines (not read, see Not verified).
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
