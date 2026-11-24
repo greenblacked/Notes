@@ -9,7 +9,7 @@ tags:
   - incident-management
   - audit
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 aliases:
   - NIS2
@@ -72,6 +72,8 @@ Article 23 requires notification of significant incidents to the national CSIRT 
 3. **Final report** after the incident, with a detailed description, root cause, mitigation and cross-border impact. There are also intermediate or progress reports on request.
 
 Article 23(4) sets the time limits: the early warning within 24 hours of becoming aware, the incident notification within 72 hours of becoming aware, and the final report within one month of the incident notification. This is a pointer, not a substitute for the text: confirm it on EUR-Lex, and check national law, which can add detail.
+
+**Financial entities report under DORA.** Recital 28 of NIS2 names Regulation (EU) 2022/2554 (DORA) as the sector-specific act for financial entities, and says the Directive's risk-management, reporting, supervision and enforcement provisions do not apply to them (read on EUR-Lex 2026-11-24). A financial entity in DORA's scope therefore follows DORA's major ICT-related incident reporting, not the 24 h / 72 h / one month clock above; see [[dora-eu-operational-resilience-for-engineers]]. A supplier that is itself an essential or important entity under NIS2 reports its own significant incidents under NIS2. A personal-data breach also starts the GDPR clock in either case. Article 4, which sets the sector-specific rule, was not re-read for this note; confirm which regime applies with counsel.
 
 ### What the on-call engineer must capture
 
@@ -148,6 +150,7 @@ Keep logs long enough to cover the time window you may need to reconstruct, and 
 ## Sources
 
 - EUR-Lex, [Directive (EU) 2022/2555 (NIS2)](https://eur-lex.europa.eu/eli/dir/2022/2555/oj).
+- EUR-Lex, [NIS2 text in HTML](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX%3A32022L2555): recital 28 (DORA as sector-specific act), read 2026-11-24.
 - EUR-Lex, [Commission Implementing Regulation (EU) 2024/2690](https://eur-lex.europa.eu/eli/reg_impl/2024/2690/oj): confirm scope.
 - ENISA, NIS2 pages on [enisa.europa.eu](https://www.enisa.europa.eu/): find the current guidance.
 - EUR-Lex, [Regulation (EU) 2016/679 (GDPR)](https://eur-lex.europa.eu/eli/reg/2016/679/oj).
