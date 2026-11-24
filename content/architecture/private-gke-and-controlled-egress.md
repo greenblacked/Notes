@@ -114,7 +114,7 @@ resource "google_container_cluster" "prod" {
   # only, authorized networks enforced on it, no public IP endpoint.
   control_plane_endpoints_config {
     dns_endpoint_config {
-      allow_external_traffic = true # laptops and SaaS runners reach it; IAM decides
+      allow_external_traffic = true # reachable from the internet; IAM is the only gate, see the warning above
     }
   }
 
