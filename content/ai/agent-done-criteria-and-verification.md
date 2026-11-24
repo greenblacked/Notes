@@ -15,7 +15,7 @@ draft: false
 This note explains how to define "done" for a task handed to a coding agent, how to demand evidence for the claim, and how to treat missing evidence. It is for engineers and reviewers who merge agent-produced changes. It does not cover scoring agents over many tasks ([[task-success-evaluation-for-agents]]), generating tests ([[ai-assisted-test-generation-quality-gates]]) or bounding retries in depth ([[bounded-agent-loops-and-stop-conditions]]); those are linked where they apply. For the pipeline baseline, see [[ci-pipeline-standard]].
 
 > [!note] Not verified
-> Sources were found via search on 2026-10-27, but the pages could not be fetched. Before use, check: the current wording of your coding agent's best-practices documentation, whether named features such as a goal evaluator, a verify skill or a stop-event hook exist in your tool version, and the current branch protection and required status check behaviour for your hosting plan (it differs between cloud and self-managed editions).
+> Sources were found via search on 2026-10-27, but the pages could not be fetched. Before use, check: the current wording of your coding agent's best-practices documentation, whether named features such as a goal evaluator, a verify skill or a stop-event hook exist in your tool version, and the current branch protection and required status check behaviour for your hosting plan (it differs between cloud and self-managed editions). The scripts and the CI job below are sketches and were not run.
 
 ## Define done before the work starts
 
@@ -97,17 +97,19 @@ Local verification and CI verification are different claims. State which one was
 ```yaml title=".gitlab-ci.yml"
 verify:
   stage: test
-  image: registry.example.com/ci/toolbox@sha256:REPLACE_WITH_DIGEST # change: an image with your build and test tools, pinned by digest
+  image: registry.example.com/ci/toolbox@sha256:<digest> # change: an image with your build and test tools, pinned by digest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   script:
-    - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - git fetch --no-tags origin "+refs/heads/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}:refs/remotes/origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
     - scripts/verify.sh "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
   artifacts:
     when: always
     expire_in: 1 week
     paths: [verify.log]
 ```
+
+On a shallow clone the three-dot diff may not find a merge base; `verify.sh` then exits non-zero. Increase the clone depth for this job (check the runner documentation for your version) rather than weakening the check.
 
 ## Minimum checklist per change
 
@@ -119,10 +121,19 @@ When a check fails repeatedly the agent tends to keep editing. Set a local limit
 
 Treat any diff that deletes, skips or loosens tests, snapshots or lint rules in the same change as a fix as a flag requiring human sign-off. A simple detector:
 
-```bash
-git diff origin/main...HEAD -U0 -- 'tests/**' '**/*.test.*' '.eslintrc*' 'ruff.toml' \
-  | grep -E '^-[^-].*(assert|expect)|^\+[^+].*(skip|xfail|\.only|noqa|eslint-disable)' \
-  && echo "Test or lint weakening detected: needs human sign-off" >&2 && exit 1 || true
+```bash title="scripts/detect-test-weakening.sh"
+#!/usr/bin/env bash
+# Sketch: fails when the diff deletes assertions or adds skips and lint suppressions.
+set -Eeuo pipefail
+
+base="${1:-origin/main}"
+# A failing git diff (missing base, shallow clone) stops the script here: fail closed.
+diff_out=$(git diff -U0 "$base"...HEAD -- 'tests/**' '**/*.test.*' '.eslintrc*' 'ruff.toml')
+if printf '%s\n' "$diff_out" | grep -E '^-[^-].*(assert|expect)|^\+[^+].*(skip|xfail|\.only|noqa|eslint-disable)'; then
+  echo "Test or lint weakening detected: needs human sign-off" >&2
+  exit 1
+fi
+echo "no test or lint weakening found"
 ```
 
 ## Failure modes

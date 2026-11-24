@@ -112,7 +112,7 @@ For CI-based fan-out, use parallel jobs with explicit `needs` and a single integ
 
 ```yaml title=".gitlab-ci.yml"
 default:
-  image: registry.example.com/ci/agent-runner@sha256:REPLACE_WITH_DIGEST # change: your image, pinned by digest
+  image: registry.example.com/ci/agent-runner@sha256:<digest> # change: your image, pinned by digest
 
 agent-task:
   stage: build

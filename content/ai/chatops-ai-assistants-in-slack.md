@@ -18,7 +18,7 @@ review-due: 2027-05-02
 This note covers an AI assistant that platform or on-call engineers talk to in Slack (or a similar chat tool) to look things up and, with approval, trigger operations. It is for the team building or approving such a bot. It focuses on request verification, scopes, channel boundaries, authorization, approvals, data exposure, audit and rate limits. It does not cover the incident workflow itself ([[ai-assisted-incident-response]]), the approval state model in depth ([[human-approval-state-machine]]), or scheduled agents ([[scheduled-autonomous-agent-jobs]]).
 
 > [!note] Not verified
-> The Slack pages listed under Sources could not be read. Check on the current vendor docs: the signature timestamp tolerance for signed requests; token rotation behaviour and expiry; per-method rate-limit tiers (figures differ between sources, so none are quoted here); which plans include audit logs; and app-approval workflows. Microsoft Teams has a different identity, consent and permission model, and nothing here transfers to it without checking. Nothing was run.
+> Slack's request-signing, Events API, token rotation and Web API rate-limit pages were read on 2026-11-24 (see Evidence). Still check on the current vendor docs: per-method rate-limit tiers (no figures are quoted here); which plans include audit logs; channel rename and reuse behaviour; and app-approval workflows. Microsoft Teams has a different identity, consent and permission model, and nothing here transfers to it without checking. Nothing was run against Slack.
 
 ## Start read-only, with a short list of verbs
 
@@ -26,18 +26,18 @@ Define the assistant's capabilities as a closed list of tools, not "whatever the
 
 ## Verify every inbound request
 
-Anyone who finds the endpoint can post to it. Slack signs requests with an `X-Slack-Signature` header: an HMAC-SHA256, keyed with your signing secret, over the string `v0:<X-Slack-Request-Timestamp>:<raw body>`. Compute it yourself over the unparsed body and compare in constant time. Reject requests with a stale timestamp; Slack's documentation describes a five-minute window, but check the current docs before relying on the figure. Verify before parsing, before logging the body, and before any model call.
+Anyone who finds the endpoint can post to it. Slack signs requests with an `X-Slack-Signature` header: an HMAC-SHA256, keyed with your signing secret, over the string `v0:<X-Slack-Request-Timestamp>:<raw body>`. Compute it yourself over the unparsed body and compare in constant time. Reject requests whose timestamp is more than five minutes from local time, as Slack's documentation says. Verify before parsing, before logging the body, and before any model call.
 
 ```bash title="verify-slack-signature.sh"
 #!/usr/bin/env bash
 # Illustrative: use your framework's built-in verifier (for example Bolt) in real code.
 set -Eeuo pipefail
 
-: "${SLACK_SIGNING_SECRET:?}"
+: "${SLACK_SIGNING_SECRET:?must be exported, never passed as an argument}"
 ts="${1:?X-Slack-Request-Timestamp}"
 sig="${2:?X-Slack-Signature}"
 body_file="${3:?raw body file}"
-max_skew="${MAX_SKEW_SECONDS:-300}" # five minutes per Slack's docs; confirm
+max_skew="${MAX_SKEW_SECONDS:-300}" # Slack's docs: reject requests more than five minutes old
 
 # Validate before arithmetic: bash evaluates (( )) operands as expressions,
 # so an unchecked header value could run commands.
@@ -48,25 +48,31 @@ if (( now - ts > max_skew || ts - now > max_skew )); then
   echo "stale timestamp" >&2; exit 1
 fi
 
-# Stream the body unchanged: "$(cat file)" would strip trailing newlines.
-# -hmac puts the secret in the process list; another reason to use an SDK.
-expected="v0=$({ printf 'v0:%s:' "$ts"; cat "$body_file"; } \
-  | openssl dgst -sha256 -hmac "$SLACK_SIGNING_SECRET" -hex | awk '{print $NF}')"
+# The secret is read from the environment, not argv, and the body is read as raw bytes.
+# hmac.compare_digest is a constant-time comparison.
+python3 -I - "$ts" "$sig" "$body_file" <<'PY' || { echo "bad signature" >&2; exit 1; }
+import hashlib, hmac, os, sys
 
-# Not constant-time: a shell string compare is for illustration only.
-[[ "$expected" == "$sig" ]] || { echo "bad signature" >&2; exit 1; }
+ts, sig, path = sys.argv[1:4]
+secret = os.environ["SLACK_SIGNING_SECRET"].encode()
+with open(path, "rb") as f:
+    body = f.read()
+expected = "v0=" + hmac.new(secret, b"v0:" + ts.encode() + b":" + body, hashlib.sha256).hexdigest()
+sys.exit(0 if hmac.compare_digest(expected.encode(), sig.encode("utf-8", "replace")) else 1)
+PY
+echo "signature ok"
 ```
 
-The scheme string (`v0`) and the signed-base-string format are from Slack's documentation; confirm them before copying. In production prefer a maintained SDK over hand-rolled code, and use a constant-time comparison there (for example `hmac.compare_digest` in Python or `crypto.timingSafeEqual` in Node.js).
+The scheme string (`v0`) and the base-string format are from Slack's request-verification page. In production prefer a maintained SDK over hand-rolled code; any comparison must be constant-time (`hmac.compare_digest` in Python, `crypto.timingSafeEqual` in Node.js).
 
-Slack retries an event delivery that is not acknowledged quickly. Acknowledge first, process asynchronously, and de-duplicate on the event ID so a retry cannot run a tool call twice. Ignore events from bot users, including your own, to avoid reply loops.
+Slack expects an HTTP 2xx within three seconds and otherwise retries the delivery up to three times, marking each retry with an `x-slack-retry-num` header. Acknowledge first, process asynchronously, and de-duplicate on the event ID so a retry cannot run a tool call twice. Ignore events from bot users, including your own, to avoid reply loops.
 
 ## Least-privilege app and channel scoping
 
 - Define the minimal bot scopes in the app manifest, in version control. Each extra scope is a reviewed change.
 - Invite the bot only to channels it needs. Keep it out of production-alert, security and HR channels unless there is a specific design for that channel.
 - Do not let it read history across all channels because it technically can. Pass only the current thread, or a bounded window, to the model.
-- If token rotation is enabled, access tokens expire and are refreshed with a refresh token. Store tokens and refresh tokens in a secrets manager ([[external-secrets-with-secret-manager]]), never in logs, error messages or query strings.
+- If token rotation is enabled, access tokens expire after 12 hours and are refreshed with a single-use refresh token; rotation cannot be turned off once it is on. Store tokens and refresh tokens in a secrets manager ([[external-secrets-with-secret-manager]]), never in logs, error messages or query strings.
 - Use a deployment manifest that fails closed:
 
 Key the policy on channel IDs, not names: channels can be renamed and a deleted name can be reused. Names are shown here for readability.
@@ -114,7 +120,7 @@ Record, outside the chat so it survives message deletion: requester, channel, th
 
 ## Rate limits and budgets
 
-Slack returns HTTP 429 with a `Retry-After` header (seconds), limits apply per method, and posting messages has its own per-channel limit; check the current figures in the rate-limit docs. Honour `Retry-After` with backoff and jitter, and queue replies ([[rate-limits-backpressure-and-queue-design]]). Separately, give the assistant its own per-user and per-channel budgets for model spend and tool calls so one noisy channel cannot exhaust the budget ([[llm-api-cost-control]]).
+Slack returns HTTP 429 with a `Retry-After` header in seconds, limits apply per method and workspace in tiers, and an app may post no more than about one message per second per channel; check the current tier of each method you call. Honour `Retry-After` with backoff and jitter, and queue replies ([[rate-limits-backpressure-and-queue-design]]). Separately, give the assistant its own per-user and per-channel budgets for model spend and tool calls so one noisy channel cannot exhaust the budget ([[llm-api-cost-control]]).
 
 ## Failure modes
 
@@ -144,7 +150,7 @@ Slack returns HTTP 429 with a `Retry-After` header (seconds), limits apply per m
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the general agency, least-privilege, human-approval, prompt-injection, data-exposure and rate-limit principles were checked against the OWASP LLM Top 10 text, while the specific approval mechanics are engineering guidance (see Not verified); the Slack-specific behaviour could not be checked locally.
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the general agency, least-privilege, human-approval, prompt-injection, data-exposure and rate-limit principles were checked against the OWASP LLM Top 10 text, while the specific approval mechanics are engineering guidance (see Not verified); the Slack behaviour not covered by those pages is listed under Not verified. The Slack statements were checked on 2026-11-24 against the four Slack pages under Sources checked.
 
 ### Sources checked
 
@@ -152,20 +158,25 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the general agency, least
 - [OWASP LLM01:2025 Prompt Injection](https://genai.owasp.org/llm-top-10/): external content can carry indirect injections; no fool-proof prevention is known; mitigate with least-privilege tool access and human-in-the-loop controls for privileged operations. Checked 2026-11-02 against the OWASP LLM Top 10 repository commit 99f4395 (2_0_vulns/LLM01_PromptInjection.md lines 19, 34, 48-54).
 - [OWASP LLM02:2025 Sensitive Information Disclosure](https://genai.owasp.org/llm-top-10/): sanitise or redact sensitive data and give clear terms on data use. Checked 2026-11-02 against the OWASP LLM Top 10 repository commit 99f4395 (2_0_vulns/LLM02_SensitiveInformationDisclosure.md lines 9, 26-30, 82).
 - [OWASP LLM10:2025 Unbounded Consumption](https://genai.owasp.org/llm-top-10/): rate limiting and user quotas to restrict the number of requests a single source entity can make in a given period; the cost framing is Denial of Wallet. Checked 2026-11-02 against the OWASP LLM Top 10 repository commit 99f4395 (2_0_vulns/LLM10_UnboundedConsumption.md lines 15-17, 49-51).
+- [Slack: Verifying requests from Slack](https://docs.slack.dev/authentication/verifying-requests-from-slack): the `X-Slack-Signature` and `X-Slack-Request-Timestamp` headers, the `v0` version string, the base string `v0:<timestamp>:<raw body>`, an HMAC-SHA256 hex digest keyed with the signing secret, rejecting timestamps more than five minutes from local time, and comparing with an HMAC compare function rather than plain equality. Checked 2026-11-24 (page read).
+- [Slack: Events API](https://docs.slack.dev/apis/events-api/): respond with HTTP 2xx within three seconds or the delivery counts as failed; up to three retries (almost immediately, after 1 minute, after 5 minutes) with `x-slack-retry-num` and `x-slack-retry-reason`; each event has an `event_id` unique across workspaces. Checked 2026-11-24 (page read).
+- [Slack: Using token rotation](https://docs.slack.dev/authentication/using-token-rotation): rotated access tokens expire after 12 hours; refresh tokens are single-use and exchanged through `oauth.v2.access` with `grant_type=refresh_token`; rotation cannot be turned off once on. Checked 2026-11-24 (page read).
+- [Slack: Web API rate limits](https://docs.slack.dev/apis/web-api/rate-limits/): HTTP 429 with `Retry-After` in seconds; limits per method per workspace in four tiers plus special; no more than one message per second per channel, short bursts tolerated. Checked 2026-11-24 (page read).
 
 ### Not verified
 
-- All Slack behaviour: the `X-Slack-Signature` scheme, the `v0` base string, the five-minute timestamp tolerance, event retries and event IDs, token rotation and expiry, HTTP 429 with `Retry-After`, per-method and per-channel limits, channel renaming and reuse of a deleted channel name, ephemeral replies, audit-log availability by plan, and app manifest scopes. No Slack documentation is available locally; the Slack pages listed under Sources were not read.
+- Slack behaviour not on the four pages above: channel renaming and reuse of a deleted channel name, ephemeral replies, audit-log availability by plan, app manifest scopes and app-approval workflows; the Security best practices page under Sources was not read. De-duplicating on `event_id` is this note's advice: the Events API page defines the ID but does not prescribe de-duplication.
 - Library APIs named as examples (Python `hmac.compare_digest`, Node.js `crypto.timingSafeEqual`, the Bolt built-in verifier) were not checked against their docs.
 - Microsoft Teams behaviour; nothing here transfers to it without checking.
-- The shell script was not run and its OpenSSL and bash behaviour was not tested.
+- The shell script was not run against a Slack workspace.
 - Engineering guidance, not documented claims: closed tool lists, default-deny channel policy keyed on channel IDs, hash-bound and expiring approvals, two-person review, idempotent execution, audit outside chat, per-channel budgets.
 - Nothing was run.
 
 ## Sources
 
 - [Slack: Verifying requests from Slack](https://docs.slack.dev/authentication/verifying-requests-from-slack): signing secret and `X-Slack-Signature` verification; confirm the timestamp tolerance.
+- [Slack: Events API](https://docs.slack.dev/apis/events-api/): acknowledgement window, retries and event IDs.
 - [Slack: Security best practices](https://docs.slack.dev/concepts/security): least-privilege scopes and token handling.
 - [Slack: Using token rotation](https://docs.slack.dev/authentication/using-token-rotation): expiring access tokens and refresh-token exchange.
-- [Slack: Rate limits](https://api.slack.com/apis/rate-limits): HTTP 429, `Retry-After` and per-method limits.
+- [Slack: Rate limits](https://docs.slack.dev/apis/web-api/rate-limits/): HTTP 429, `Retry-After` and per-method limits.
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) - excessive agency, prompt injection, sensitive information disclosure and unbounded consumption.

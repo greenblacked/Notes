@@ -96,7 +96,7 @@ spec:
       type: RuntimeDefault
   containers:
     - name: agent
-      image: registry.example.com/agents/runner@sha256:REPLACE_WITH_DIGEST
+      image: registry.example.com/agents/runner@sha256:<digest>
       resources:
         requests:
           cpu: 250m

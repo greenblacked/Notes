@@ -10,9 +10,6 @@ tags:
 created: 2026-10-27
 modified: 2026-11-24
 draft: false
-evidence: source-reviewed
-reviewed: 2026-11-02
-review-due: 2027-05-02
 ---
 
 This note covers the allow, ask and deny rules a coding agent checks before it runs a shell command, touches a file or calls an MCP tool: scoping, precedence and wildcards, reviewing rule changes, and auditing auto-approvals. It is for engineers who own agent configuration in shared repositories. It does not cover OS-level isolation ([[sandboxing-coding-agents-on-workstations-and-runners]]), egress filtering ([[agent-network-egress-controls]]), hook scripts ([[deterministic-hooks-for-coding-agents]]), vetting a server before you trust it ([[third-party-mcp-server-vetting]]) or organisation-wide managed policy ([[ai-coding-assistant-admin-controls]]). The wider model of what an agent may be authorised to do is in [[agent-tool-authorization-boundaries]].
@@ -153,7 +150,7 @@ Set expectations in [[team-norms-for-ai-assisted-engineering]]: who may add rule
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the general design claims, the Git force-push spellings, the GitLab CI example and the contrast with Kubernetes RBAC; coding-agent rule syntax is not covered.
+No evidence level is claimed. A review on 2026-11-02 checked the Git, GitLab, Kubernetes RBAC, MCP and OWASP statements under Sources checked, but no coding agent's rule syntax, precedence or matching behaviour could be checked, and the main example depends on them. Nothing was run.
 
 ### Sources checked
 

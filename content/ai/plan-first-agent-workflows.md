@@ -112,7 +112,7 @@ For work that reaches a shared branch, make the plan a merge input. A simple Git
 ```yaml title=".gitlab-ci.yml"
 plan-drift:
   stage: test
-  image: registry.example.com/ci/toolbox@sha256:REPLACE_WITH_DIGEST # change: an image with git, bash and awk, pinned by digest
+  image: registry.example.com/ci/toolbox@sha256:<digest> # change: an image with git, bash and awk, pinned by digest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^agent\//'
   script:

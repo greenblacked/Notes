@@ -10,8 +10,8 @@ tags:
 created: 2026-10-17
 modified: 2026-11-24
 evidence: source-reviewed
-reviewed: 2026-10-20
-review-due: 2027-04-20
+reviewed: 2026-11-24
+review-due: 2027-05-24
 draft: false
 ---
 
@@ -21,7 +21,7 @@ This note sets the rules for running AI coding and operations agents inside CI j
 > Written for GitLab CI and GitHub Actions pipelines running on GKE or hosted runners, and for agents that read repositories, issues, logs or cloud APIs. It is based on the general threat guidance in the OWASP Top 10 for LLM Applications, the GitLab CI/CD documentation at https://docs.gitlab.com/ci/ and the GitHub Actions security documentation. No product is named as the agent; the rules apply to any tool that turns text into actions.
 
 > [!note] What was checked
-> The OWASP names, the GitLab merge request, fork and variable behaviour and the job token statements were checked against the documentation on 2026-10-20, and the trigger matrix was corrected where it disagreed. The GitHub Actions workflow, the GKE statements and the runtime behaviour of the YAML were not checked. See Evidence for the list.
+> The OWASP names, the GitLab merge request, fork and variable behaviour and the job token statements were first checked from search excerpts on 2026-10-20 and re-read on the pages themselves on 2026-11-24; the trigger matrix was corrected where it disagreed. The GitHub Actions workflow, the GKE statements and the runtime behaviour of the YAML were not checked. See Evidence for the list.
 
 ## Threat model
 
@@ -246,20 +246,21 @@ Route model traffic through an internal gateway where you can log requests, enfo
 
 ### Sources checked
 
-- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): 2025 IDs and names LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure, LLM05 Improper Output Handling, LLM06 Excessive Agency, LLM10 Unbounded Consumption, checked 2026-10-20 (IDs from search results, including the OWASP pages for LLM05 and LLM10; the list page itself could not be fetched).
-- [Merge request pipelines](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/): fork merge request pipelines run in the fork by default; a parent member can run one in the parent with the parent's variables; the security warning; the `ci_allow_fork_pipelines_to_run_in_parent_project` setting; `merge_request_event` as the pipeline source, checked 2026-10-20 (search excerpts).
-- [Predefined variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_MERGE_REQUEST_SOURCE_PROJECT_ID`, `CI_MERGE_REQUEST_IID` and the `CI_PIPELINE_SOURCE` values, checked 2026-10-20 (search excerpt).
-- [CI/CD variables](https://docs.gitlab.com/ci/variables/): protected variables only on protected branches and tags, the version difference for merge request pipelines, masking limits and hidden variables, checked 2026-10-20 (search excerpt; the 17.9 and current pages disagree, as stated in the note). The 18.1 project setting, its conditions and the `protect_merge_request_pipelines` name come from a search excerpt of the current page and a GitLab planning epic; re-read the page for your version.
-- [CI/CD job token](https://docs.gitlab.com/ci/jobs/ci_job_token/): the default allowlist contains only the project itself, checked 2026-10-20 (search excerpt).
+- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): the 2025 IDs and names LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure, LLM05 Improper Output Handling, LLM06 Excessive Agency and LLM10 Unbounded Consumption. Checked 2026-11-24 (list page read).
+- [Merge request pipelines](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/): fork merge request pipelines run in the fork with the fork's variables by default; a parent member can run one in the parent, which then uses the parent's variables; the security warning; the `ci_allow_fork_pipelines_to_run_in_parent_project` setting; rules must match `CI_PIPELINE_SOURCE == "merge_request_event"`. Checked 2026-11-24 (page read).
+- [Predefined variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` (the ID of the source project of the merge request), `CI_MERGE_REQUEST_IID` and `CI_PROJECT_ID`. Checked 2026-11-24 (page read).
+- [CI/CD variables](https://docs.gitlab.com/ci/variables/): protected variables reach only pipelines on protected branches and tags, and merge request pipelines can optionally access them; masking is not a guaranteed way to keep a value from a malicious job; hidden variables cannot be revealed in the UI after saving; fork pipelines cannot access the parent's variables by default, but a merge request pipeline run in the parent gets all of them. Checked 2026-11-24 (page read).
+- [CI/CD job token](https://docs.gitlab.com/ci/jobs/ci_job_token/): by default a project's allowlist contains only the project itself. Checked 2026-11-24 (page read).
 
-Corrections made on 2026-10-20: OWASP names and IDs updated to the 2025 edition; the fork row of the trigger matrix no longer says a maintainer triggers a manual run, because that run exposes the parent's variables; the protected-variable statement was corrected to say the behaviour differs between GitLab versions; the masking limits and the job token allowlist were added; the GitLab documentation link now uses the current `/ci/` path.
+Corrections made on 2026-10-20: OWASP names and IDs updated to the 2025 edition; the fork row of the trigger matrix no longer says a maintainer triggers a manual run, because that run exposes the parent's variables; the protected-variable statement was corrected to say the behaviour differs between GitLab versions; the masking limits and the job token allowlist were added; the GitLab documentation link now uses the current `/ci/` path. On 2026-11-24 the GitLab and OWASP pages above were re-read in full instead of through search excerpts.
 
 ### Not verified
 
 - The GitHub Actions workflow (triggers, per-job permissions, `gh pr comment --body-file`, the runner label) was not checked.
 - The GKE statements (ephemeral pod per job, no workload identity binding by default) and the Kubernetes hardening links were not checked against Kubernetes or GKE documentation.
 - The project access token roles and scopes used in the YAML (Reporter with `read_api` or `api`) and the `environment: action: access` setting were not checked; the note already tells readers to check them for their version.
-- The YAML was never run in GitLab. The documentation pages were reached through search excerpts only, because the lab's network policy blocked fetching them.
+- The YAML was never run in GitLab.
+- The version history of protected variables in merge request pipelines (the 17.9 wording, the GitLab 18.1 project setting, its conditions and the `protect_merge_request_pipelines` name) and the full list of `CI_PIPELINE_SOURCE` values: the pages read on 2026-11-24 do not show them.
 - The Model Context Protocol is not cited in this note.
 - Nothing was verified against a real environment.
 

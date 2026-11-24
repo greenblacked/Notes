@@ -38,7 +38,7 @@ The model reviewer is never the only gate for something a tool can check. Run, i
 stages: [build, test, scan, agent-review]
 
 default:
-  image: registry.example.com/ci/agent-runner@sha256:REPLACE_WITH_DIGEST # change: your image, pinned by digest
+  image: registry.example.com/ci/agent-runner@sha256:<digest> # change: your image, pinned by digest
 
 unit-tests:
   stage: test

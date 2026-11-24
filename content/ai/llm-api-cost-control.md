@@ -101,7 +101,7 @@ These reduce cost without reducing control, but each depends on provider feature
 
 ## Budgets and alerts
 
-GCP budgets alert; they do not cap spend. A budget notification can arrive after the money is gone, and billing data lags. Use budgets as a second line and enforce at the gateway.
+An alerts-only GCP budget does not cap spend: Google's budget documentation says it does not automatically cap usage or spending, that the first notification can take several hours after the budget is created, and that costs reach Cloud Billing with a delay. The same page describes spend cap budgets on projects whose services support them; check whether yours does before relying on one. Either way, use budgets as a second line and enforce at the gateway.
 
 ```bash title="create-budget.sh"
 set -euo pipefail
@@ -186,7 +186,7 @@ Caps and budgets are configuration, so roll them back like configuration: keep t
 
 ## Evidence
 
-Source-reviewed on 2026-11-01. Nothing was run. Scope: the gcloud budget command, Prometheus label behaviour, the token-usage attribute names and the unbounded-consumption controls; the Google Cloud and gateway-specific statements could not be checked.
+Source-reviewed on 2026-11-01. Nothing was run. Scope: the gcloud budget command, Prometheus label behaviour, the token-usage attribute names and the unbounded-consumption controls; the Google Cloud budget behaviour was checked on 2026-11-24; the other Google Cloud statements and the gateway-specific statements could not be checked.
 
 ### Sources checked
 
@@ -194,10 +194,11 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the gcloud budget command
 - [Prometheus configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/): a target's `job` label is set from the `job_name` of its scrape configuration (`docs/configuration/configuration.md:3718`), so a custom `job` label would collide. Checked 2026-11-01 against the Prometheus repository commit ef78ff6.
 - [Semantic conventions for generative AI, attribute registry](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/model/gen-ai/registry.yaml): the `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` attributes are defined at `model/gen-ai/registry.yaml:282` and `:340` (also `docs/registry/attributes/gen-ai.md:88-89`). Checked 2026-11-01 against open-telemetry/semantic-conventions-genai commit 244465e.
 - [OWASP Top 10 for LLM Applications 2025, LLM10 Unbounded Consumption](https://genai.owasp.org/llm-top-10/): denial of wallet as a risk; mitigations include input size limits, rate limiting and quotas, timeouts and throttling, logging and anomaly detection, limiting queued actions, and graceful degradation (`LLM10_UnboundedConsumption.md`). Checked 2026-11-01 against the OWASP LLM repository commit 99f4395.
+- [Create and manage budgets](https://docs.cloud.google.com/billing/docs/how-to/budgets): alerts-only budgets do not automatically cap usage or spending; the first notification may take several hours; costs reach Cloud Billing with a delay; spend cap budgets exist for projects whose services support them. Checked 2026-11-24 (page read).
 
 ### Not verified
 
-- Google Cloud documentation (budgets alert but do not cap spend, notification delay and billing-data lag, Workload Identity and Secret Manager behaviour) was not available; the two Google Cloud links in Sources were not read.
+- Google Cloud: Workload Identity and Secret Manager behaviour, the Budget API overview, and which services support spend cap budgets.
 - Label-cardinality guidance (free-text labels create unbounded series and can overload Prometheus) was not checked; the Prometheus naming and instrumentation practices pages were not available locally.
 - The Prometheus alerting best-practices page was not available locally; "page only for user-facing symptoms" is not confirmed from it.
 - The `llm_gateway_tokens_total` and `llm_gateway_job_requests` metric names, the policy YAML fields and the audit-line fields are illustrative and belong to no real gateway.
@@ -207,7 +208,7 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the gcloud budget command
 
 ## Sources
 
-- [Create and manage budgets](https://cloud.google.com/billing/docs/how-to/budgets), Google Cloud Billing documentation.
+- [Create and manage budgets](https://docs.cloud.google.com/billing/docs/how-to/budgets), Google Cloud Billing documentation.
 - [Budget API overview](https://cloud.google.com/billing/docs/how-to/budget-api-overview), Google Cloud Billing documentation.
 - [Alerting best practices](https://prometheus.io/docs/practices/alerting/), Prometheus documentation.
 - [LLM10 Unbounded Consumption](https://genai.owasp.org/llm-top-10/), OWASP Top 10 for LLM Applications 2025.

@@ -97,7 +97,7 @@ Enforce the allowlist in CI so an unapproved server cannot reach shared configur
 ```yaml title=".gitlab-ci.yml"
 mcp-config-policy:
   stage: test
-  image: registry.example.com/ci/tools@sha256:REPLACE_WITH_DIGEST # bash, jq and yq
+  image: registry.example.com/ci/tools@sha256:<digest> # bash, jq and yq
   script:
     - ./scripts/check-mcp-config.sh agent-config/approved-mcp-servers.yaml .mcp.json
   rules:

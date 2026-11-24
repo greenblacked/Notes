@@ -10,9 +10,6 @@ tags:
 created: 2026-10-27
 modified: 2026-11-24
 draft: false
-evidence: source-reviewed
-reviewed: 2026-11-02
-review-due: 2027-05-02
 ---
 
 This note describes how a platform or FinOps engineer can use a language model to help investigate cloud cost anomalies on Google Cloud, using the billing export in BigQuery, resource labels and budgets. It covers the split between deterministic detection and model explanation, the evidence package, owner routing and the controls that stop an investigation from turning into automated deletion. It does not cover the cost of the model calls themselves ([[llm-api-cost-control]]), per-workload Kubernetes allocation ([[opencost-vs-kubecost-vs-gke-cost-allocation]]), or the label scheme ([[gcp-resource-naming-and-labels-standard]]). The same shape applies to logs and alerts in [[llm-log-analysis-and-alert-triage]].
@@ -177,7 +174,7 @@ The model may propose actions. It does not delete, stop, resize or detach anythi
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the controls borrowed from OWASP guidance and the budget notification options; the billing export, the SQL and the FinOps material could not be checked.
+No evidence level is claimed. A review on 2026-11-02 checked the OWASP controls and the budget resource under Sources checked, but the billing export schema the SQL relies on and the FinOps material could not be checked. Nothing was run.
 
 ### Sources checked
 

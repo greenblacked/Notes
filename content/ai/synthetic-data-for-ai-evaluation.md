@@ -111,7 +111,7 @@ Run it on merge requests that touch the sets, as below, and again as the first s
 ```yaml title=".gitlab-ci.yml"
 eval-set-manifest:
   stage: test
-  image: registry.example.com/ci/toolbox@sha256:REPLACE_WITH_DIGEST # change: an image with bash, yq and coreutils, pinned by digest
+  image: registry.example.com/ci/toolbox@sha256:<digest> # change: an image with bash, yq and coreutils, pinned by digest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
@@ -146,7 +146,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: drift
-              image: registry.example.com/eval/drift@sha256:REPLACE_WITH_DIGEST # change: your image, pinned by digest
+              image: registry.example.com/eval/drift@sha256:<digest> # change: your image, pinned by digest
               resources:
                 requests: { cpu: 250m, memory: 512Mi }
                 limits: { cpu: "1", memory: 1Gi }

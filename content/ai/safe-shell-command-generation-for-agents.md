@@ -9,11 +9,11 @@ tags:
   - linux
 created: 2026-10-26
 modified: 2026-11-24
-evidence: source-reviewed
-reviewed: 2026-11-02
-review-due: 2027-05-02
 draft: false
 ---
+
+> [!note] Not verified
+> The shell parsing, expansion and quoting claims here were not confirmed against a source, and nothing was run. See the Evidence section.
 
 ## A command suggestion is not authorization
 
@@ -62,7 +62,7 @@ If not, do not execute. Return the proposed command for a human to review, or as
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the note's claims about shell command risks and execution controls were compared with the local primary sources available; none of the listed Sources could be read.
+No evidence level is claimed. A review on 2026-11-02 confirmed only the items under Sources checked; the pages under Sources could not be read, and the shell parsing, expansion and quoting claims are unconfirmed. Nothing was run.
 
 ### Sources checked
 

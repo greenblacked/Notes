@@ -63,7 +63,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: run
-              image: registry.example.com/agent-jobs/dep-triage@sha256:REPLACE_WITH_DIGEST
+              image: registry.example.com/agent-jobs/dep-triage@sha256:<digest>
               command: ["/usr/local/bin/run-job.sh"]
               env:
                 - name: JOB_NAME
@@ -103,7 +103,7 @@ For GitLab CI, a pipeline schedule plus `rules:` and a `resource_group` gives th
 ```yaml title=".gitlab-ci.yml"
 agent-dep-triage:
   stage: agents
-  image: registry.example.com/agent-jobs/dep-triage@sha256:REPLACE_WITH_DIGEST
+  image: registry.example.com/agent-jobs/dep-triage@sha256:<digest>
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dep-triage"'
   resource_group: agent-dep-triage

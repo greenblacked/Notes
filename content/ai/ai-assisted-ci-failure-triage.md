@@ -16,7 +16,7 @@ draft: false
 This note describes the full pattern for using an LLM agent to triage failed GitLab CI pipelines and Jenkins builds: collect evidence with scripts, classify the failure as infrastructure, flaky or real, write a diagnosis where every claim cites a log range or diff hunk, and route it to the owning team. It is for platform and DevOps engineers who own shared pipelines. It does not cover production incidents ([[ai-assisted-incident-response]]), general log and alert noise ([[llm-log-analysis-and-alert-triage]]), converting pipelines between systems ([[ai-assisted-jenkins-to-gitlab-pipeline-conversion]]) or triage of scanner output ([[ai-assisted-security-findings-triage]]). Prompt habits are in [[effective-prompting-for-operations-work]].
 
 > [!note] Not verified
-> Sources were found via search on 2026-10-27, but the pages could not be fetched, so nothing here was checked against current docs. Check before relying on it: GitLab `retry:` and `when:` values and `allow_failure` behaviour for your instance version, Jenkins `post` condition behaviour for UNSTABLE versus FAILURE (including duplicate notifications when a post block changes the result), and the OWASP numbering for excessive agency.
+> Sources were found via search on 2026-10-27, but the pages could not be fetched, so nothing here was checked against current docs. Check before relying on it: GitLab `retry:` and `when:` values and `allow_failure` behaviour for your instance version, Jenkins `post` condition behaviour for UNSTABLE versus FAILURE (including duplicate notifications when a post block changes the result), and the OWASP numbering for excessive agency. The collector script and the YAML are sketches and were not run.
 
 ## The rules that do not bend
 
@@ -132,7 +132,7 @@ Rejected output goes back once with the error, then to a human unlabelled. This 
 Retry is a CI-system feature for infrastructure errors, not a way to clear red. In GitLab, `retry` with `when:` filters limits automatic retries to failure types such as runner system failures. Check the YAML reference for the values your version supports. `stuck_or_timeout_failure` also matches a test suite that hangs on a real deadlock; leave it out if your tests can hang.
 
 ```yaml
-# Human-reviewed pipeline config, not agent output
+# Sketch, human-reviewed pipeline config, not agent output; not run
 unit-tests:
   stage: test
   script: [./ci/run-tests.sh]
