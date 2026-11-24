@@ -8,7 +8,7 @@ tags:
   - kubernetes
   - reliability
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 aliases:
   - GKE topology
@@ -20,7 +20,7 @@ This note describes a target topology for a GKE platform: how many clusters to r
 > Written against GKE Standard and Autopilot as described in the official GKE documentation at [cloud.google.com/kubernetes-engine/docs](https://cloud.google.com/kubernetes-engine/docs) and the Kubernetes documentation at [kubernetes.io](https://kubernetes.io/docs/). Terraform examples use the `google` provider.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: fleet rules (one fleet per project, host-project requirements), Autopilot feature parity and pricing model, the spot VM preemption notice period, and the Terraform attribute names for fleet registration. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: fleet rules (one fleet per project, host-project requirements), Autopilot feature parity and pricing model, the spot VM preemption notice period, the Terraform attribute names for fleet registration, and the `google` provider attribute names for the control-plane endpoint (`control_plane_endpoints_config`, `private_endpoint_enforcement_enabled`, `gcp_public_cidrs_access_enabled`) with the provider version that has them. Check them before relying on them.
 
 ## Decision drivers
 
@@ -96,7 +96,7 @@ Rules of thumb for this layout:
 
 ## Cluster definition
 
-A private, regional cluster with Workload Identity Federation, a release channel and the default node pool removed. Network, subnet and secondary range names are values to change; the private cluster and egress design is in [[architecture/private-gke-and-controlled-egress]] and is not repeated here.
+A private, regional cluster with Workload Identity Federation, a release channel and the default node pool removed. Network, subnet and secondary range names are values to change; the private cluster and egress design is in [[architecture/private-gke-and-controlled-egress]] and is not repeated here. Control-plane access follows [[adr/0055-private-gke-control-plane-and-egress]]: there is no public IP endpoint. People and CI outside the VPC use the DNS-based endpoint, where IAM decides on every request; runners in the VPC and on-premises networks use the private endpoint, which authorized networks limit to the listed ranges. `0.0.0.0/0` never appears in the list.
 
 ```hcl title="modules/gke-cluster/main.tf"
 variable "project_id" {
@@ -163,15 +163,31 @@ resource "google_container_cluster" "this" {
     services_secondary_range_name = var.services_range_name
   }
 
+  # Control plane per ADR 0055: DNS-based endpoint with IAM, private IP endpoint
+  # only, authorized networks enforced on it, no public endpoint.
+  control_plane_endpoints_config {
+    dns_endpoint_config {
+      allow_external_traffic = true # laptops and SaaS runners reach it; IAM decides
+    }
+  }
+
   private_cluster_config {
     enable_private_nodes    = true
-    enable_private_endpoint = false
+    enable_private_endpoint = true
   }
 
   master_authorized_networks_config {
+    private_endpoint_enforcement_enabled = true  # authorized networks apply to the private endpoint
+    gcp_public_cidrs_access_enabled      = false # no blanket access from Google Cloud IPs
+
     cidr_blocks {
-      cidr_block   = "203.0.113.0/24" # change: your admin or CI egress range
-      display_name = "ci-and-admin"
+      cidr_block   = "192.0.2.0/24" # change: CI runner subnet in the VPC
+      display_name = "ci-runners"
+    }
+
+    cidr_blocks {
+      cidr_block   = "198.51.100.0/24" # change: admin network reaching the private endpoint over VPN
+      display_name = "admin-vpn"
     }
   }
 
@@ -473,3 +489,4 @@ Treat fleet membership as part of the cluster module so every cluster registers 
 - [[patterns/pod-security-admission]]: the Pod Security labels in the namespace bundle.
 - [[patterns/kubernetes-network-policies]]: the policies a tenant namespace needs after default deny.
 - [[patterns/kubernetes-autoscaling]]: tuning the autoscalers for the node pools above.
+- [[adr/0055-private-gke-control-plane-and-egress]]: the decision record for control-plane access and egress.
