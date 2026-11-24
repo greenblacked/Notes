@@ -58,6 +58,8 @@ stages: [build, test, deploy]
   variables:
     DOCKER_HOST: tcp://docker:2376
     DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
 
 # Merge request pipelines build but never push: unreviewed code cannot publish to the registry.
 build-mr:
