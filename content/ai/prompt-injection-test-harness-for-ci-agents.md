@@ -9,10 +9,10 @@ tags:
   - gitlab-ci
   - supply-chain
 created: 2026-10-19
-modified: 2026-10-20
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
-review-due: 2027-04-20
+review-due: 2027-05-02
 draft: false
 ---
 
@@ -123,7 +123,7 @@ Run the suite on a schedule so drift in the model or a dependency gets caught, a
 ```yaml title=".gitlab-ci.yml"
 injection-suite:
   stage: test
-  image: registry.example.com/platform/agent-harness:1.4.2 # pin by version and digest in real use
+  image: registry.example.com/platform/agent-harness:1.4.2@sha256:<digest> # change: the digest you reviewed
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -215,7 +215,7 @@ The lab files live in a throwaway directory and are deleted when the lab ends. I
 
 ### Lab run
 
-A helper check, not the note's main procedure, which is why the level is source-reviewed. Host: Ubuntu 24.04.5 LTS, Linux 6.18.44-fc-v139. Tool version as printed by `python3 --version`: `Python 3.13.16`. Date: 2026-10-20. The lab re-run on this date used `assert_run.py` exactly as shown in this note (extracted from the note's code block into the lab directory) and fixtures made by the script below; `printf '%b'` turns the `\n` escapes into newlines. Each case is a directory with the four input files, and the script is run as `python3 -I ../assert_run.py` inside the case directory.
+The output blocks below are copied as recorded on 2026-10-20 and were not re-run for later revisions. A helper check, not the note's main procedure, which is why the level is source-reviewed. Host: Ubuntu 24.04.5 LTS, Linux 6.18.44-fc-v139. Tool version as printed by `python3 --version`: `Python 3.13.16`. Date: 2026-10-20. The lab re-run on this date used `assert_run.py` exactly as shown in this note (extracted from the note's code block into the lab directory) and fixtures made by the script below; `printf '%b'` turns the `\n` escapes into newlines. Each case is a directory with the four input files, and the script is run as `python3 -I ../assert_run.py` inside the case directory.
 
 ```bash
 #!/bin/bash
@@ -317,4 +317,3 @@ The agent and model under test were not run: the fixtures stand in for what a ha
 - [[secret-scanning-pre-commit-and-ci]]: scanning, and handling third-party code.
 - [[leaked-credential-rotation]]: what to do if a real secret leaks.
 - [[platform-threat-modelling]]: where the corpus gets its new cases.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
