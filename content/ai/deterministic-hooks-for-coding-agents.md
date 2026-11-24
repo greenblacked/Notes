@@ -1,6 +1,6 @@
 ---
 title: Deterministic hooks for coding agents
-description: Use harness-level tool hooks and git hooks to enforce rules a coding agent must never break, with fail-closed guards, canary tests and CI as the backstop.
+description: Use harness-level tool hooks and git hooks to enforce rules a coding agent must never break, with text guards that fail closed, canary tests and server-side controls as the real boundary.
 type: pattern
 tags:
   - ai
@@ -8,7 +8,7 @@ tags:
   - policy-as-code
   - reliability
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -31,13 +31,15 @@ Instruction files (`AGENTS.md`, system prompts, rules files) are advisory. The m
 
 Layer the controls: permission allow/deny rules first, a sandbox for filesystem and network second, hooks for policy and audit third, CI last. Pattern matching on a shell string is bypassable through quoting, `sh -c`, variables or aliases, so say "reduces" rather than "prevents" when you describe a guard.
 
-## A fail-closed pre-tool guard
+## A pre-tool text guard that fails closed (not a boundary)
 
 In the common design, a pre-tool-use hook is matched by tool name (for example a shell tool, or an edit/write tool), receives the call as JSON on stdin, and blocks it with a specific exit code, with stderr returned to the model. Check the current hooks documentation for the exact contract. The trap: other non-zero exit codes are usually non-blocking errors, so a guard that crashes fails open. Handle that explicitly.
 
+The guard below matches text. It normalises quotes, backslashes and spacing, and it catches common spellings (`git -C dir push --force`, `+main` and `:main` refspecs, `rm -fr /`, quoted paths). It cannot see through variables (`g=git; $g push -f`), aliases, functions or a script file the agent wrote first. It reduces mistakes; it does not stop a determined or injected agent. The real control for pushes is server-side branch protection (no force-push, no deletion) in [[branching-and-merge-standard]]. For files and network, the real control is the sandbox in [[sandboxing-coding-agents-on-workstations-and-runners]].
+
 ```bash
 #!/usr/bin/env bash
-# .agent/hooks/guard-bash.sh - illustrative; adapt to your tool's hook contract
+# .agent/hooks/guard-bash.sh - a text guard, not a security boundary. Adapt to your tool's hook contract.
 set -Eeuo pipefail
 
 deny() { echo "Blocked by guard-bash: $1. Use the documented alternative." >&2; exit 2; }
@@ -45,13 +47,28 @@ trap 'deny "guard error (failing closed)"' ERR
 
 input=$(cat)
 cmd=$(printf '%s' "$input" | jq -er '.tool_input.command')
+# Normalise before matching: drop quotes and backslashes, squeeze whitespace, pad with spaces.
+# This catches rm -rf "/" and r\m -rf /; it cannot see through variables, aliases or decoding.
+norm=" $(printf '%s' "$cmd" | tr -d "\"'\\\\" | tr -s '[:space:]' ' ') "
 
-case "$cmd" in
-  *"rm -rf /"*|*"rm -rf ~"*)            deny "recursive delete of a root path" ;;
-  *"git push"*"--force"*|*"git push -f"*) deny "force push" ;;
-  *"terraform apply"*)                   [[ "$cmd" == *"tfplan"* ]] || deny "apply without a reviewed plan file" ;;
-  *".env"*|*".pem"*|*"id_rsa"*)          deny "secret file access" ;;
-esac
+# Regexes live in variables: bash parses them reliably that way.
+re_nested='(^| |;|&|\|)(sh|bash|zsh|dash) -c |(^| |;)eval |base64 (-d|--decode)|\| ?(sh|bash|zsh|dash) '
+re_push=' git( -[cC] [^ ]+)* push '
+re_push_bad=' (-f|--force|--force-with-lease[^ ]*|--force-if-includes|--mirror|--delete|-d|--prune) | \+[^ ]+ | :[^ ]+ '
+re_rm=' rm '
+re_rm_rec=' (-[a-zA-Z]*[rR][a-zA-Z]*|--recursive) '
+re_rm_target=' (/|/\*|~|~/|~/\*|\$HOME|\$HOME/|\$HOME/\*|\.\.|\.\./|\.\./\*|--no-preserve-root) '
+re_tf=' terraform( -[^ ]+)* (apply|destroy) '
+re_tfplan='\.tfplan '
+re_secret='[ /](\.env(\.[A-Za-z0-9_-]+)?|[^ ]*\.pem|id_rsa|id_ed25519|\.kube/config) '
+
+[[ "$norm" =~ $re_nested ]] && deny "nested shell or decoded command"
+if [[ "$norm" =~ $re_push ]] && [[ "$norm" =~ $re_push_bad ]]; then deny "force, delete or mirror push"; fi
+if [[ "$norm" =~ $re_rm ]] && [[ "$norm" =~ $re_rm_rec ]] && [[ "$norm" =~ $re_rm_target ]]; then
+  deny "recursive delete of a root, home or parent path"
+fi
+if [[ "$norm" =~ $re_tf ]] && ! [[ "$norm" =~ $re_tfplan ]]; then deny "apply or destroy without a reviewed plan file"; fi
+[[ "$norm" =~ $re_secret ]] && deny "secret file access"
 exit 0
 ```
 
@@ -73,6 +90,7 @@ Wire it up in settings with a short timeout. Check what your tool does when a ho
 Design rules that hold across tools:
 
 - Catch every error, including JSON parse failures and a missing `jq`, and exit with the blocking code. Where the harness has a block-on-failure setting for timeouts and hooks that fail to start, turn it on for guards.
+- A syntax error in the guard is not caught by the `ERR` trap: the script never starts, and the exit code may not be the blocking one. Run the canaries below in CI on every change to the guard.
 - Keep messages short and actionable: what was blocked, which rule, what to do instead. Hook output enters the model's context, so do not paste policy text.
 - Deny the agent write access to the hook scripts and the settings files. An agent that can edit its guard has no guard.
 - Review hooks as code, keep them pinned in the repository, and give each rule an owner.
@@ -118,7 +136,7 @@ and repeat it in CI so skipping locally changes nothing:
 ```yaml title=".gitlab-ci.yml"
 secret-scan:
   stage: test
-  image: registry.example.com/ci/secret-scan@sha256:REPLACE_WITH_DIGEST # change: your scanner image, pinned by digest
+  image: registry.example.com/ci/secret-scan@sha256:<digest> # change: your scanner image, pinned by digest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   script:
@@ -136,12 +154,55 @@ See [[secret-scanning-pre-commit-and-ci]] for scanner choices. Make a bypass vis
 
 A hook that silently stopped working is worse than none, because everyone assumes it protects them. Write a canary: a harmless call that the guard must block, such as a shell command echoing a fake secret filename. Run the agent once in a sandbox with a fixed prompt, and assert the block message appears in the transcript.
 
-```bash
+```bash title="ci/guard-canaries.sh"
 #!/usr/bin/env bash
-set -Eeuo pipefail
-out=$(printf '{"tool_input":{"command":"cat .env"}}' | .agent/hooks/guard-bash.sh 2>&1 || true)
-grep -q "Blocked by guard-bash" <<<"$out" || { echo "canary failed: guard did not block"; exit 1; }
+# Each must_block line must be blocked; a pass means the guard has a hole.
+set -uo pipefail
+guard=.agent/hooks/guard-bash.sh
+fail=0
+must_block=(
+  'cat .env'
+  'cat ".env"'
+  'git push --force origin main'
+  'git push -f origin main'
+  'git -C ../repo push --force origin main'
+  'git push origin +main'
+  'git push origin :main'
+  'git push --delete origin main'
+  'git push --force-with-lease origin main'
+  'rm -rf /'
+  'rm -fr /'
+  'rm -r -f /'
+  'rm -rf "/"'
+  'rm --recursive --force ~'
+  'r\m -rf /'
+  'bash -c "git push --force"'
+  'echo Z2l0IHB1c2ggLWY= | base64 -d | sh'
+  'terraform apply -auto-approve'
+  'terraform -chdir=infra destroy'
+)
+must_allow=(
+  'git push origin feat/x'
+  'git status'
+  'rm -rf ./build'
+  'terraform apply plan.tfplan'
+  'ls -la'
+)
+for c in "${must_block[@]}"; do
+  out=$(jq -cn --arg c "$c" '{tool_input:{command:$c}}' | "$guard" 2>&1); rc=$?
+  if [[ $rc -ne 2 ]] || ! grep -q "Blocked by guard-bash" <<<"$out"; then echo "HOLE: $c"; fail=1; fi
+done
+for c in "${must_allow[@]}"; do
+  out=$(jq -cn --arg c "$c" '{tool_input:{command:$c}}' | "$guard" 2>&1); rc=$?
+  if [[ $rc -ne 0 ]]; then echo "FALSE BLOCK: $c ($out)"; fail=1; fi
+done
+# Malformed input must fail closed.
+out=$(printf 'not json' | "$guard" 2>&1); rc=$?
+[[ $rc -eq 2 ]] || { echo "HOLE: malformed input exits $rc"; fail=1; }
+exit "$fail"
 ```
+
+The canaries document the guard's reach, including what it cannot catch: `g=git; $g push -f` passes, because the command name is only known at run time. Do not add such a line to `must_block` to make the list look complete. Rely on branch protection for it. Add a line whenever someone finds a new bypass.
 
 Run the script-level test in CI. Run the end-to-end agent canary after every settings change and every CLI upgrade, since a renamed matcher or event silently disables the guard. Also confirm the configuration is loaded from the layer you expect (project, user or managed), using the CLI's own config view.
 
@@ -149,7 +210,7 @@ Run the script-level test in CI. Run the end-to-end agent canary after every set
 
 - A crashing, timed-out or missing guard counts as a non-blocking error and the call proceeds.
 - Matcher names change between versions and the hook never runs.
-- Regex guards are bypassed by `bash -c "$(...)"`, encoded strings or a different tool that does the same thing (a file-edit tool instead of a shell write).
+- Text guards are bypassed by variables, aliases, a script file written first, or a different tool that does the same thing (a file-edit tool instead of a shell write). The guard is a text guard, not a boundary.
 - Local git hooks are treated as a control, then skipped.
 - Hooks are slow, so developers turn them off.
 - The agent can write to `.agent/hooks/` or the settings file.
@@ -164,12 +225,13 @@ Run the script-level test in CI. Run the end-to-end agent canary after every set
 - [ ] A canary proves each guard blocks, and runs after upgrades.
 - [ ] Config precedence was checked in the tool's own view.
 - [ ] Git hooks are mirrored by CI and branch protection.
+- [ ] Pushes are blocked by server-side branch protection, not only by the guard.
 - [ ] Hook output is short and contains no secrets.
 - [ ] Each hook has an owner and is code-reviewed.
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the git hook, `git diff` and GitLab CI statements in this note were checked against local copies of the documentation; the agent-tool hook contract was not.
+Source-reviewed on 2026-11-02. Nothing was run, apart from a helper check on 2026-11-24 (see Lab run). Scope: the git hook, `git diff` and GitLab CI statements in this note were checked against local copies of the documentation; the agent-tool hook contract was not.
 
 ### Sources checked
 
@@ -188,12 +250,26 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the git hook, `git diff` 
 - That a non-zero exit from a GitLab `script` command fails the job (the comment in the CI example relies on it): not found in the local GitLab docs subset.
 - The GitLab `stage: test` default and `image:` digest pinning in the CI job were not located in the local GitLab docs subset.
 - Secret scanner choice and bypass patterns of regex guards are engineering guidance, not documented claims.
-- Nothing was run, including the guard, canary and CI snippets.
+- The guard is a text guard; the bypasses listed under the canaries are known holes, not tested limits.
+- Nothing else was run: the post-tool hook and the CI job were not executed.
+
+### Lab run
+
+A helper check, not the note's main procedure (the guard was not run inside any agent harness). Host: Ubuntu 24.04.5 LTS, Linux 6.18.44-fc-v819. Versions as printed: `GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)`, `jq-1.7`. Date: 2026-11-24. The guard and `ci/guard-canaries.sh` exactly as shown in this note, with the guard at `.agent/hooks/guard-bash.sh`:
+
+```bash
+bash ci/guard-canaries.sh; echo "exit=$?"
+jq -cn --arg c 'g=git; $g push -f' '{tool_input:{command:$c}}' | .agent/hooks/guard-bash.sh; echo "exit=$?"
+```
+
+```text
+exit=0
+exit=0
+```
+
+The second command shows the documented hole: a push through a variable is not blocked.
 
 ## Sources
 
-- Your coding agent's own documentation for hook events, matchers, the exit code that blocks a call, and timeout and failure behaviour. This was not read for this note; the tool-specific behaviour given as an example varies by tool and version, so check it there before copying any configuration.
 - [githooks documentation](https://git-scm.com/docs/githooks) - which client-side hooks exist, that a non-zero exit aborts pre-commit and commit-msg, and that `--no-verify` skips them.
 - [pre-commit framework](https://pre-commit.com/) - not read for this note; the official home for installing and configuring pre-commit hooks.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

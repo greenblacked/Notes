@@ -9,7 +9,7 @@ tags:
   - team-process
   - delivery
 created: 2026-10-19
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -84,27 +84,62 @@ Conditions that keep the result honest:
 - Pipeline structure follows your normal templates ([[gitlab-ci-pipeline-structure]]) so the checks are the same ones real changes face.
 
 ```bash title="run-task.sh"
+#!/usr/bin/env bash
 set -euo pipefail
 
 TOOL="$1"      # change: the tool identifier from your registry
 TASK_ID="$2"   # change: the task directory name, for example 0007-fix-values
+HARNESS="$CI_PROJECT_DIR"
+: "${LLM_GATEWAY_URL:?set LLM_GATEWAY_URL}"            # change: the gateway the tool may call
+: "${LLM_GATEWAY_KEY_FILE:?set LLM_GATEWAY_KEY_FILE}"  # change: a file holding the tool's gateway key
 
-# Clone the target repo named by the task, not the harness repo, so no job token lands in work/.git/config.
-git clone --quiet "$(cat "tasks/${TASK_ID}/repo-url")" work && cd work
-git checkout --quiet "$(cat "../tasks/${TASK_ID}/start-commit")"
-git switch --quiet -c "bakeoff/${TOOL}/${TASK_ID}"
+# The runner's own checkout keeps the job token in its remote URL; strip it before any tool runs.
+git -C "$HARNESS" remote set-url origin "${CI_SERVER_URL}/${CI_PROJECT_PATH}.git"
+
+# Work outside the harness checkout, in a fresh clone of the target repository.
+work="$(mktemp -d)"
+tool_home="$(mktemp -d)"
+git clone --quiet "$(cat "$HARNESS/tasks/${TASK_ID}/repo-url")" "$work"
+git -C "$work" checkout --quiet "$(cat "$HARNESS/tasks/${TASK_ID}/start-commit")"
+git -C "$work" switch --quiet -c "bakeoff/${TOOL}/${TASK_ID}"
+
+# The tool and the checks get an empty environment plus this allowlist: no CI_JOB_TOKEN, no
+# CI_REPOSITORY_URL, no project variables. env -i hides the environment only; files the job user
+# can read stay readable.
+tool_env=(
+  PATH=/usr/local/bin:/usr/bin:/bin
+  HOME="$tool_home"
+  LANG=C.UTF-8
+  LLM_GATEWAY_URL="$LLM_GATEWAY_URL"
+  LLM_GATEWAY_KEY_FILE="$LLM_GATEWAY_KEY_FILE"
+)
+check_env=(PATH=/usr/local/bin:/usr/bin:/bin HOME="$tool_home" LANG=C.UTF-8)
+
+# Canaries: fail the run, not just the task, if the tool could reach the job token.
+if ! env -i "${tool_env[@]}" /bin/sh -c 'test -z "${CI_JOB_TOKEN:-}" && ! env | grep -q "^CI_"'; then
+  echo "canary: the tool environment still holds CI variables" >&2; exit 1
+fi
+if grep -rqsF -f <(printf '%s\n' "$CI_JOB_TOKEN") "$HARNESS" "$work" "$tool_home"; then
+  echo "canary: the job token is readable in files the tool can reach" >&2; exit 1
+fi
 
 started=$(date +%s)
-timeout 900 "../adapters/${TOOL}.sh" "../tasks/${TASK_ID}/prompt.txt" || echo "tool exited non-zero"
+(cd "$work" && env -i "${tool_env[@]}" timeout 900 "$HARNESS/adapters/${TOOL}.sh" "$HARNESS/tasks/${TASK_ID}/prompt.txt") \
+  || echo "tool exited non-zero"
 tool_seconds=$(( $(date +%s) - started ))
 
 # change: fetch-check is your command that pulls the check script from outside the job workspace; it runs only after the tool step.
-fetch-check "$TASK_ID" > ../check.sh
-if bash ../check.sh; then tests=pass; else tests=fail; fi
-echo "{\"tool\":\"${TOOL}\",\"task\":\"${TASK_ID}\",\"tests\":\"${tests}\",\"tool_seconds\":${tool_seconds},\"seconds_to_check_done\":$(( $(date +%s) - started ))}" >> ../results.jsonl
+fetch-check "$TASK_ID" > "$HARNESS/check.sh"
+# The checks run the tool's code, so they get the same empty environment.
+if (cd "$work" && env -i "${check_env[@]}" bash "$HARNESS/check.sh"); then tests=pass; else tests=fail; fi
+jq -cn --arg tool "$TOOL" --arg task "$TASK_ID" --arg tests "$tests" \
+  --argjson tool_seconds "$tool_seconds" --argjson total "$(( $(date +%s) - started ))" \
+  '{tool: $tool, task: $task, tests: $tests, tool_seconds: $tool_seconds, seconds_to_check_done: $total}' \
+  >> "$HARNESS/results.jsonl"
+rm -rf -- "$work" "$tool_home"
 ```
 
-The `tasks/` directory present while the tool runs holds only `repo-url`, `start-commit` and `prompt.txt`. Keep known-good diffs and check scripts out of the job workspace (the script fetches the check only after the tool step), and run the adapter with the working directory limited to `work/`. If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
+The `tasks/` directory holds only `repo-url`, `start-commit` and `prompt.txt` while the tool runs. Keep known-good diffs and check scripts out of the job workspace: the script fetches the check only after the tool step. The tool works in a clone outside the harness checkout, and both the tool and the checks run under `env -i` with an explicit allowlist, so `CI_JOB_TOKEN` and the project variables are not in their environment. Two canaries fail the run if that ever stops being true. `env -i` does not hide files. The job token stays valid while the job runs. File-type CI/CD variables are written to a temporary file that the variable points to, and any process running as the job user can read that file. So define no file-type variables for this job other than the gateway key, and give the gateway key its own narrow budget ([[llm-api-cost-control]]). If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
 
 Each adapter is a thin script that feeds the prompt to the tool non-interactively; write them once and review them like production code.
 
@@ -138,6 +173,7 @@ With 20 to 30 tasks you cannot rank tools finely, and you should not try.
 - **Operator effect.** A skilled operator makes any tool look better. Use scripted, non-interactive runs, and do a separate interactive study if that is how people will use it.
 - **Survivorship in the task set.** Only changes that merged are in your history. Add some abandoned or reverted ones.
 - **Gaming through the gateway.** A tool that makes many retries looks fine on pass rate and terrible on cost. Report both.
+- **The tool inherits the job's credentials.** Run adapters under `env -i` with an allowlist and keep the canaries that prove it.
 - **Security regressions hidden by passing tests.** Run your SAST and secret scanning on every produced diff ([[ai-code-review-bots]] covers review bots as a separate category).
 
 ## Reporting
@@ -164,6 +200,7 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the checkable statements 
 - [GitLab CI/CD job token](https://docs.gitlab.com/ci/jobs/ci_job_token/): a job clones with `gitlab-ci-token` as the user and the job token as the password. Checked 2026-11-02 against gitlabhq commit d7b9a61.
 - [GitLab predefined CI/CD variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_REPOSITORY_URL` is the clone URL with the job token embedded. Checked 2026-11-02 against gitlabhq commit d7b9a61.
 - [Troubleshooting CI/CD variables](https://docs.gitlab.com/ci/variables/variables_troubleshooting/): with debug logging enabled (`CI_DEBUG_TRACE`), the example job log shows the runner running `git remote set-url origin` with a `gitlab-ci-token` URL. This shows the runner's own checkout stores the job token in its remote URL, which is why the harness checkout is not reused as the work directory. Checked 2026-11-02 against gitlabhq commit d7b9a61.
+- [GitLab CI/CD job token, re-read](https://docs.gitlab.com/ci/jobs/ci_job_token/): GitLab makes the token available to the job as the `CI_JOB_TOKEN` predefined variable, it is valid only while the job is running, and a leaked token could be used to access private data. Checked 2026-11-24.
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): the 2025 list includes LLM02 Sensitive Information Disclosure, LLM06 Excessive Agency and LLM10 Unbounded Consumption, the risks behind the data, agent-safety and cost-cap rows. Checked 2026-11-02 against the OWASP repository commit 99f4395.
 
 ### Not verified
@@ -172,6 +209,10 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the checkable statements 
 - Vendor terms, retention, SSO, SCIM, audit export and subprocessor practices: the note quotes none and each must be checked per vendor.
 - Wilson interval, sign test, sample sizes (20 to 30 tasks) and the 900 second timeout are engineering guidance or starting points, not documented requirements.
 - The scorecard rows, the bake-off method and the failure modes are engineering guidance.
+- That a file-type CI/CD variable is saved to a temporary file whose path the variable holds, and that malicious code can compromise masked and protected variables (GitLab CI/CD variables page): not re-read on 2026-11-24.
+- That stripping the token from the harness checkout's remote URL removes every on-disk copy the runner writes. The file canary checks the harness, work and home directories only, not other runner paths.
+- That `CI_SERVER_URL` and `CI_PROJECT_PATH` are set in your runner version (not re-read on 2026-11-24).
+- The canary and `env -i` behaviour were not run in a pipeline.
 - Nothing was run.
 
 ## Sources
@@ -189,4 +230,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the checkable statements 
 - [[securing-ai-agents-in-ci-and-cloud]]: isolation for the harness.
 - [[measuring-ai-impact-on-delivery]]: measuring effect on real work afterwards.
 - [[llm-api-cost-control]]: caps and cost attribution at the gateway.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
