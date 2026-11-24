@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - gcp
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -19,7 +19,7 @@ draft: false
 > As of 2026-10-21, per each project's repository: the **Flyway** engine is open source under Apache-2.0, and Redgate's Flyway Community and Enterprise editions are separate products, "not part of the Flyway open source project". **Liquibase** Community is under the Functional Source License (FSL-1.1-ALv2), with a commercial edition called Liquibase Secure; it was under Apache-2.0 before, so the licence depends on the version. **Atlas**'s repository is Apache-2.0, but the terms of the distributed binary and which features need a login or a paid plan were not verified. Licence terms are a procurement question: record the decision in [[devops-vendor-and-licence-management]].
 
 > [!info] Not checked against current releases
-> Not checked against the tools' own documentation sites; verify there. Facts were taken from their repositories, the PostgreSQL documentation source and the Cloud SQL Auth Proxy README on 2026-10-21. Not verified: Flyway command names and settings (`info`, `validate`, `migrate`, `baseline`, `repair`, `clean`, `cleanDisabled`, `validateOnMigrate`, the `flyway_schema_history` table) and which features need a paid edition; Liquibase's `update-sql`, `status`, `release-locks`, its `DATABASECHANGELOG` and `DATABASECHANGELOGLOCK` tables and which commands are paid; Atlas's `atlas.sum` file, any dry-run flag, and which analyzers need a login; each tool's switch for running a migration outside a transaction; GitLab CI keyword details; and Cloud SQL IAM database user setup. Run each tool's `--help` and read its docs before relying on a flag.
+> Not checked against the tools' own documentation sites; verify there. Facts were taken from their repositories, the PostgreSQL documentation source and the Cloud SQL Auth Proxy README on 2026-10-21. Not verified: Flyway command names and settings (`info`, `validate`, `migrate`, `baseline`, `repair`, `clean`, `cleanDisabled`, `validateOnMigrate`, the `flyway_schema_history` table) and which features need a paid edition; Liquibase's `update-sql`, `status`, `release-locks`, its `DATABASECHANGELOG` and `DATABASECHANGELOGLOCK` tables and which commands are paid; Atlas's `atlas.sum` file, any dry-run flag, and which analyzers need a login; GitLab CI keyword details; and Cloud SQL IAM database user setup. Run each tool's `--help` and read its docs before relying on a flag. Checked on 2026-11-24 against the official pages: each tool's non-transactional setting, GitLab protected environments and deployment approvals (Premium and Ultimate), and that Cloud SQL point-in-time recovery requires automated backups. Not verified: the exact output of `gcloud sql instances describe --format="yaml(settings.backupConfiguration)"` that the pre-check greps (run it once by hand), and the `key=value` form of `executeInTransaction=false` in a Flyway `.conf` file (the page names the setting but shows no example).
 
 ## Criteria
 
@@ -104,7 +104,12 @@ These come from the PostgreSQL documentation and apply whichever tool runs the S
 
 - **Bound the wait for locks.** `lock_timeout` (default 0, disabled) aborts a statement that waits too long for a lock, so a migration queued behind a long transaction fails fast instead of blocking every query behind it. `statement_timeout` (default 0) bounds the whole statement. Setting `lock_timeout` in `postgresql.conf` is not recommended because it affects all sessions, and it is pointless at or above a non-zero `statement_timeout`. Set both in the migration session. Setting them per role with `ALTER ROLE migrator SET ...` is an option too; test it on your instance.
 - **A plain `CREATE INDEX` locks out writes** (not reads) on the table until it finishes. Use `CREATE INDEX CONCURRENTLY` on any table that serves traffic.
-- **`CREATE INDEX CONCURRENTLY` cannot run inside a transaction block.** Most tools wrap each migration in a transaction by default, so the concurrent index needs its own migration with the tool's non-transactional setting (each tool has one; the exact switch was not verified). Only one concurrent build can run on a table at a time.
+- **`CREATE INDEX CONCURRENTLY` cannot run inside a transaction block.** Each tool wraps a migration in a transaction by default, so the concurrent index needs its own migration file that runs without one:
+  - in Flyway, a script configuration file named after the migration with `.conf` added (`V42__orders_status_index.sql.conf`), setting `executeInTransaction=false`;
+  - in Liquibase formatted SQL, `runInTransaction:false` on the `--changeset` line;
+  - in Atlas, the directive `-- atlas:txmode none` at the top of the file.
+
+  Keep such a file to that one statement. Liquibase warns that a multi-statement changeset that fails part way without a transaction leaves `DATABASECHANGELOG` in an invalid state. Only one concurrent build can run on a table at a time.
 - **A failed concurrent build leaves an `INVALID` index** that still slows writes. `IF NOT EXISTS` then skips the retry because the name exists. Drop it and run again, or rebuild it with `REINDEX INDEX CONCURRENTLY`.
 
 ```sql title="db/migrations/V41__orders_add_status.sql"
@@ -115,11 +120,15 @@ ALTER TABLE orders ADD COLUMN status text;
 ```
 
 ```sql title="db/migrations/V42__orders_status_index.sql"
--- Must run outside a transaction: use the tool's non-transactional setting for this file.
+-- Runs outside a transaction: Flyway reads V42__orders_status_index.sql.conf next to this file.
 -- A long build must not hit statement_timeout, or it leaves an INVALID index.
 SET lock_timeout = '3s';
 SET statement_timeout = 0;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_status ON orders (status);
+```
+
+```ini title="db/migrations/V42__orders_status_index.sql.conf"
+executeInTransaction=false
 ```
 
 ```sql title="find and clean up invalid indexes"
@@ -210,6 +219,8 @@ stages: [verify, migrate, deploy]
 variables:
   MIGRATIONS_DIR: db/migrations
   INSTANCE_CONNECTION_NAME: example-project:europe-west1:orders-prod
+  CLOUDSQL_PROJECT: example-project
+  CLOUDSQL_INSTANCE: orders-prod
   DB_NAME: orders
   DB_IAM_USER: orders-migrator@example-project.iam
 
@@ -241,12 +252,18 @@ migrate:production:
   image: ${MIGRATE_IMAGE}
   resource_group: db-orders-production # one migration job at a time for this database
   environment:
-    name: production
+    name: production # protect it and add an approval rule (see below)
   id_tokens:
     GCP_ID_TOKEN:
       aud: https://iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/ci-prod/providers/gitlab
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+      when: manual # a person starts it; the tag alone never migrates production
+  allow_failure: false # the deploy stage waits for this job
+  artifacts:
+    when: always
+    expire_in: 1 year
+    paths: [restore-point.txt]
   script:
     - set -eo pipefail
     - CRED_DIR="$(mktemp -d)"
@@ -257,6 +274,15 @@ migrate:production:
       --credential-source-file="${CRED_DIR}/id_token"
       --output-file="${CRED_DIR}/wif.json"
     - export GOOGLE_APPLICATION_CREDENTIALS="${CRED_DIR}/wif.json"
+    # Pre-check: refuse to migrate unless automated backups and point-in-time recovery are on.
+    - |
+      gcloud sql instances describe "${CLOUDSQL_INSTANCE}" --project="${CLOUDSQL_PROJECT}" \
+        --format="yaml(settings.backupConfiguration)" > "${CRED_DIR}/backup.yaml"
+      cat "${CRED_DIR}/backup.yaml"
+      grep -Eq '^ +enabled: true$' "${CRED_DIR}/backup.yaml" ||
+        { echo "ERROR: automated backups are off for ${CLOUDSQL_INSTANCE}"; exit 1; }
+      grep -Eq '^ +pointInTimeRecoveryEnabled: true$' "${CRED_DIR}/backup.yaml" ||
+        { echo "ERROR: point-in-time recovery is off for ${CLOUDSQL_INSTANCE}"; exit 1; }
     # Start the proxy as the migrator identity, private IP, fixed port, with the admin endpoint.
     - cloud-sql-proxy --auto-iam-authn --private-ip --port 5432 --quitquitquit
       "${INSTANCE_CONNECTION_NAME}" > "${CRED_DIR}/proxy.log" 2>&1 &
@@ -266,12 +292,23 @@ migrate:production:
     - export FLYWAY_ARGS="-url=jdbc:postgresql://127.0.0.1:5432/${DB_NAME} -user=${DB_IAM_USER} -locations=filesystem:${MIGRATIONS_DIR}"
     - flyway ${FLYWAY_ARGS} info
     - flyway ${FLYWAY_ARGS} validate
+    # Record the restore point: the last moment before this migration writes anything.
+    - |
+      echo "restore point (UTC) for ${CLOUDSQL_INSTANCE}, ${CI_COMMIT_TAG}: $(date -u +%Y-%m-%dT%H:%M:%SZ)" |
+        tee restore-point.txt
     - flyway ${FLYWAY_ARGS} migrate
     - flyway ${FLYWAY_ARGS} info
     - curl -fsS -X POST http://127.0.0.1:9091/quitquitquit || true
 ```
 
 `123456789012`, `ci-prod`, `orders-prod` and the account names are examples; use the pool, provider and service account from your WIF setup. The `deploy` stage that bumps the image digest runs after this job, so the new code only arrives once the expand step has landed. Keep the migrator identity separate from the application's runtime identity: only it holds DDL rights.
+
+The tag alone never migrates production. `when: manual` makes a person start the job, and `allow_failure: false` keeps the deploy stage waiting. That is a gate only if the right people are the only ones who can start it.
+
+- **Premium or Ultimate:** protect the `production` environment, list the database owners under Allowed to deploy, and add a deployment approval rule. GitLab then blocks every job that deploys to the environment until it is approved.
+- **Free:** restrict who may create `v*` tags with protected tags.
+
+The pre-check needs only `cloudsql.instances.get`, which the Cloud SQL Client role holds according to the proxy README above. It fails the job when automated backups or point-in-time recovery are off; PITR requires automated backups anyway. `restore-point.txt` records the time just before `migrate`. Copy it into the change record: it is the target for point-in-time recovery in the Rollback section below. An on-demand backup needs more rights than the migrator should have; if you want one, take it in a separate job with its own identity.
 
 ## Validation
 
@@ -347,3 +384,8 @@ Every production migration is a production change: apply [[production-change-che
 - [Cloud SQL Auth Proxy repository](https://github.com/GoogleCloudPlatform/cloud-sql-proxy) (`--auto-iam-authn`, `--private-ip`, `--quitquitquit`, user naming, read 2026-10-21)
 - [PostgreSQL: CREATE INDEX](https://www.postgresql.org/docs/current/sql-createindex.html)
 - [PostgreSQL: client connection defaults](https://www.postgresql.org/docs/current/runtime-config-client.html) (`lock_timeout`, `statement_timeout`)
+- [Flyway: script configuration](https://documentation.red-gate.com/fd/reference/script-configuration) and [executeInTransaction](https://documentation.red-gate.com/fd/execute-in-transaction-224919715.html): per-file `.conf`, default true, checked 2026-11-24.
+- [Liquibase: SQL format](https://docs.liquibase.com/concepts/sql-format.html): `runInTransaction:false` on the changeset line and the partial-failure warning, checked 2026-11-24.
+- [Atlas: applying migrations](https://atlasgo.io/versioned/apply): `--tx-mode` and `-- atlas:txmode none`, checked 2026-11-24.
+- [GitLab: deployment approvals](https://docs.gitlab.com/ci/environments/deployment_approvals/) and [protected environments](https://docs.gitlab.com/ci/environments/protected_environments/): tiers and blocking, checked 2026-11-24.
+- [Cloud SQL: configure point-in-time recovery](https://docs.cloud.google.com/sql/docs/postgres/backup-recovery/configure-pitr): `pointInTimeRecoveryEnabled` and the dependency on automated backups, checked 2026-11-24.

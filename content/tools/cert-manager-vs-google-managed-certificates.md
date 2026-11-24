@@ -9,14 +9,14 @@ tags:
   - security
   - networking
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
 Three mechanisms issue and renew TLS certificates for workloads on GKE: cert-manager running ACME inside the cluster, the GKE `ManagedCertificate` resource, and Google Cloud Certificate Manager with DNS authorization. They overlap enough to confuse, and they fail in different ways. This note is for choosing one per use case, not for the renewal procedure, which is in [[tls-certificate-renewal]].
 
 > [!info] Not checked against current releases
-> Versions, limits, rate limits, supported load balancer types and command syntax were not checked when this note was written. Confirm them in the current documentation before relying on them.
+> Versions, limits, rate limits, supported load balancer types and command syntax were not checked when this note was written. Confirm them in the current documentation before relying on them. The Ingress class annotation was checked on 2026-11-24; nothing else was.
 
 ## Short answer
 
@@ -67,6 +67,8 @@ spec:
       port:
         number: 80
 ```
+
+GKE Ingress reads only the `kubernetes.io/ingress.class` annotation. `gce` creates an external Application Load Balancer and `gce-internal` an internal one. `spec.ingressClassName` is ignored for those classes, and an Ingress that sets only `ingressClassName` gets no load balancer from GKE. Keep the annotation even though Kubernetes reports it as deprecated (GKE Ingress concepts page, checked 2026-11-24).
 
 The sticking point is ordering: the DNS record for `shop.example.com` must already resolve to the load balancer's IP before provisioning can succeed. A reserved static address makes that predictable. Provisioning can take a while, and the certificate status moves through states such as `Provisioning`, `Active` and `FailedNotVisible`.
 
@@ -201,3 +203,4 @@ Use Certificate Manager with DNS authorization for public Google load balancers 
 - [cert-manager: Google CloudDNS solver](https://cert-manager.io/docs/configuration/acme/dns01/google/)
 - [GKE: Google-managed SSL certificates](https://cloud.google.com/kubernetes-engine/docs/how-to/managed-certs)
 - [Certificate Manager documentation](https://cloud.google.com/certificate-manager/docs)
+- [GKE Ingress for Application Load Balancers](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/ingress): the `kubernetes.io/ingress.class` annotation and the ignored `ingressClassName`, checked 2026-11-24.
