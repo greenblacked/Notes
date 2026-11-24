@@ -8,14 +8,16 @@ tags:
   - jenkins
   - ci-cd
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-11-24
 draft: false
 ---
 
 Jenkins is a self-hosted automation server whose behaviour is assembled from plugins. GitLab CI/CD is a pipeline engine built into the GitLab platform, driven by a single `.gitlab-ci.yml` and executed by runners. Both run jobs in containers on Kubernetes. The difference that matters in practice is who owns the glue: with Jenkins you own it, with GitLab much of it is a product feature.
 
+**Scope:** GitLab CI and Jenkins only: architecture, pipeline code, plugins, runners, security, cost and migration. For GitHub Actions, and for keyless auth to GCP, runner placement, reuse and security defaults across all three, see [[github-actions-vs-gitlab-ci-vs-jenkins]].
+
 > [!note] Not independently verified
-> This note describes design differences that are stable across versions. Check the current GitLab and Jenkins documentation before relying on a specific keyword, plugin or default.
+> This note describes design differences that are stable across versions. Check the current GitLab and Jenkins documentation before relying on a specific keyword, plugin or default. GitLab's Docker-in-Docker pages were checked on 2026-11-24 for version pinning and privileged mode; the runner-side TLS volume setup for the Kubernetes executor was not.
 
 ## At a glance
 
@@ -41,27 +43,42 @@ Jenkins is a self-hosted automation server whose behaviour is assembled from plu
 
 Jenkins Declarative Pipeline is Groovy with a fixed structure; scripted pipelines allow arbitrary code. Reuse is through Shared Libraries (see [[jenkins-shared-libraries]]). The power is real, and so is the risk: Groovy in a Jenkinsfile can do anything, runs in a sandbox with approval friction, and is hard to lint and test.
 
-GitLab pipelines are YAML. Reuse is through `include`, `extends`, hidden jobs and CI/CD components. The model is less expressive but much easier to review and validate (`glab ci lint`, the CI Lint API). Conventions for structuring this are in [[gitlab-ci-pipeline-structure]]. The build job below uses Docker-in-Docker, which needs a privileged runner.
+GitLab pipelines are YAML. Reuse is through `include`, `extends`, hidden jobs and CI/CD components. The model is less expressive but much easier to review and validate (`glab ci lint`, the CI Lint API). Conventions for structuring this are in [[gitlab-ci-pipeline-structure]]. The build jobs below use Docker-in-Docker, which needs a privileged runner, so run them only on runners reserved for trusted code. Merge request pipelines build the image but never push it; only the protected default branch pushes. GitLab's Docker-in-Docker page says to always pin a specific image version; a digest pins it exactly.
 
 ```yaml title=".gitlab-ci.yml"
 stages: [build, test, deploy]
 
-build:
+.docker-build:
   stage: build
-  image: docker:cli
+  # Pin by digest: resolve the exact versions you tested, e.g. `crane digest docker:<version>-cli`.
+  image: docker:cli@sha256:<digest>
   services:
-    - docker:dind # needs a privileged runner; a rootless builder is the alternative
+    - name: docker:dind@sha256:<digest> # needs a privileged runner; a rootless builder is the alternative
+      alias: docker
   variables:
+    DOCKER_HOST: tcp://docker:2376
     DOCKER_TLS_CERTDIR: "/certs"
+
+# Merge request pipelines build but never push: unreviewed code cannot publish to the registry.
+build-mr:
+  extends: .docker-build
+  script:
+    - docker build -t "local/build:$CI_COMMIT_SHORT_SHA" .
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+build-push:
+  extends: .docker-build
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
     - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" .
     - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"
 ```
+
+Replace each `<digest>` with the digest of the image version you tested; it is not a literal.
 
 ## Plugins versus built-ins
 
@@ -121,3 +138,20 @@ Choose **Jenkins** when:
 ## Recommendation
 
 For new work on GKE with GitLab as the source host, use GitLab CI. Keep Jenkins only where migration cost exceeds the operational and security cost of keeping it, and put an end date and an owner on every remaining Jenkins controller.
+
+## Related
+
+- [[github-actions-vs-gitlab-ci-vs-jenkins]]: the three-way comparison, with OIDC to GCP and security defaults.
+- [[gitlab-ci-pipeline-structure]]
+- [[gitlab-runners-on-gke]]
+- [[jenkins-shared-libraries]]
+- [[jenkins-controller-and-agent-hardening]]
+- [[jenkins-to-gitlab-migration-programme]]
+- [[kaniko-vs-buildkit-vs-cloud-build]]
+
+## Sources
+
+- [GitLab: use Docker-in-Docker](https://docs.gitlab.com/ci/docker/docker_in_docker/): pin a specific image version, the `docker` service alias, `DOCKER_HOST` for the Kubernetes executor, checked 2026-11-24.
+- [GitLab: use Docker to build Docker images](https://docs.gitlab.com/ci/docker/using_docker_build/): privileged mode for Docker-in-Docker and the alternatives, checked 2026-11-24.
+- [GitLab CI/CD documentation](https://docs.gitlab.com/ci/)
+- [Jenkins documentation](https://www.jenkins.io/doc/)
