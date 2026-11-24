@@ -9,7 +9,7 @@ tags:
   - ci-cd
   - supply-chain
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
@@ -147,7 +147,7 @@ The full procedure is in [[runbooks/leaked-credential-rotation]]. Practise the s
 - **Prefer short-lived access** (impersonation, Workload Identity Federation) to long-lived keys.
 - **Review.** Access that is never reviewed only grows.
 
-You will grant a bucket-level role and test what it allows and what it blocks in exercise 4.
+You will see a bucket-level role tested in exercise 4, which uses the GCP 02 lab.
 
 ## MFA: not all second factors are equal
 
@@ -427,57 +427,9 @@ If you see something else: `PermissionDenied` means your identity cannot read th
 
 ### Exercise 4: A least-privilege grant on one bucket
 
-1. Create a service account and a bucket, and let yourself impersonate the account for the test:
+This exercise is the same one-role, one-bucket test as [[learn/gcp-iam-and-service-accounts|GCP 02]], exercises 2 to 5 and its cleanup in exercise 10. Do it there: that version creates the bucket with public access prevention and soft delete off, impersonates the account instead of downloading a key, and removes the Token Creator grant in the cleanup.
 
-   ```bash
-   PROJECT_ID="lab-yourname-123456"          # Change: your lab project ID.
-   BUCKET="${PROJECT_ID}-uploads"
-   SA="lab-uploader"
-   SA_EMAIL="${SA}@${PROJECT_ID}.iam.gserviceaccount.com"
-   ME="you@example.com"                      # Change: your Google account.
-
-   gcloud iam service-accounts create "$SA" --project "$PROJECT_ID" --display-name "Lab uploader"
-   gcloud storage buckets create "gs://${BUCKET}" --project "$PROJECT_ID" \
-     --location europe-west4 --uniform-bucket-level-access --public-access-prevention
-   gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
-     --member="user:${ME}" --role="roles/iam.serviceAccountTokenCreator"
-   ```
-
-2. Grant **one** narrow role on **one** bucket:
-
-   ```bash
-   gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
-     --member="serviceAccount:${SA_EMAIL}" --role="roles/storage.objectCreator"
-   ```
-
-   Role bindings can take a minute to take effect.
-
-3. Test what the account can and cannot do:
-
-   ```bash
-   echo hello > hello.txt
-   gcloud storage cp hello.txt "gs://${BUCKET}/hello.txt" --impersonate-service-account="$SA_EMAIL"
-   gcloud storage ls "gs://${BUCKET}" --impersonate-service-account="$SA_EMAIL"
-   ```
-
-   Expected (illustrative): the copy succeeds (`Completed files 1/1`), and the listing fails:
-
-   ```text
-   ERROR: (gcloud.storage.ls) HTTPError 403: lab-uploader@lab-yourname-123456.iam.gserviceaccount.com
-   does not have storage.objects.list access to the Google Cloud Storage bucket.
-   Permission 'storage.objects.list' denied on resource (or it may not exist).
-   ```
-
-   The account can **write** new objects and cannot **list or read** them. That is least privilege: it can do its one job and nothing else.
-
-4. Clean up:
-
-   ```bash
-   gcloud storage rm --recursive "gs://${BUCKET}"
-   gcloud iam service-accounts delete "$SA_EMAIL" --project "$PROJECT_ID"
-   ```
-
-If you see something else: if the copy also fails with a permission error, wait a minute and retry. If your `gcloud` version reads the destination object first, it may need a permission that `objectCreator` does not have (read the error; do not fix it by granting `Owner`). If the listing succeeds, the account has a broader role from somewhere else (check the project IAM). A `TokenCreator` error means the impersonation binding in step 1 did not apply.
+What to notice for this lesson: the account can do the one thing its role allows on the one bucket it is bound to, the action it does not need fails with a `403`, and nothing was granted on the project. If the denied action succeeds, the account holds a broader role somewhere else; find it with the project policy query in GCP 02, exercise 1, instead of granting more.
 
 ### Exercise 5: Sign a commit with an SSH key
 
