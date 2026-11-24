@@ -211,7 +211,8 @@ Deny policies and bindings are reversible configuration:
    # 2. Delete the policy.
    gcloud iam policies delete "${POLICY_ID}" \
      --attachment-point="${ATTACHMENT_POINT}" \
-     --kind=denypolicies
+     --kind=denypolicies \
+     --quiet
    ```
 
    To restore it, create the policy again from the export with `gcloud iam policies create` and `--policy-file`. If the create call rejects server-set fields in the export (such as `name`, `uid`, `etag` or timestamps), keep only `displayName` and `rules`.
