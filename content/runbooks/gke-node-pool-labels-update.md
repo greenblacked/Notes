@@ -102,11 +102,11 @@ If `OLD_LABELS` is empty (the pool had no user labels), stop: how to clear every
 
 ## Troubleshooting
 
-| Symptom                                          | Cause                                      | Fix                              |
-| ------------------------------------------------ | ------------------------------------------ | -------------------------------- |
-| Pods `Pending` with `didn't match node affinity` | A label was left out of `--node-labels`    | Roll back with the saved set     |
-| The label comes back or goes again later         | Terraform or another tool manages the pool | Change the labels in that tool   |
-| `update` refuses the flag combination            | More than one update flag in one call      | Run one `update` per change      |
+| Symptom                                          | Cause                                      | Fix                            |
+| ------------------------------------------------ | ------------------------------------------ | ------------------------------ |
+| Pods `Pending` with `didn't match node affinity` | A label was left out of `--node-labels`    | Roll back with the saved set   |
+| The label comes back or goes again later         | Terraform or another tool manages the pool | Change the labels in that tool |
+| `update` refuses the flag combination            | More than one update flag in one call      | Run one `update` per change    |
 
 ## Related
 
