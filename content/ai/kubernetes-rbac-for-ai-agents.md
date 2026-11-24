@@ -11,10 +11,6 @@ tags:
 created: 2026-10-21
 modified: 2026-11-24
 draft: false
-evidence: source-reviewed
-reviewed: 2026-11-01
-review-due: 2027-05-01
-destructive: true
 ---
 
 An agent with `kubectl` is useful during an incident: it lists failing pods, reads events, compares a Deployment with its previous revision and suggests the next check. The same access is dangerous in three quiet ways. It can read Secrets, often through a verb nobody thought of as "reading". It can reach inside running containers through `exec`, `attach` or `port-forward`. And it reads text written by outsiders (logs, events, annotations) that can carry instructions it may follow. GCP-side guardrails for agent identities are in [[gcp-iam-guardrails-for-agent-service-accounts]]; this note is the in-cluster half: one identity per agent, a hand-written role, short-lived tokens, tests that fail when the role widens, and audit logs that show what the agent did.
@@ -23,7 +19,7 @@ An agent with `kubectl` is useful during an incident: it lists failing pods, rea
 > Kubernetes RBAC on GKE, for agents that troubleshoot (read) and never change the cluster on their own. The RBAC basics (Roles, bindings, `can-i`) are taught in [[rbac-roles-bindings-and-least-privilege]]; the incident workflow around the agent is in [[ai-assisted-incident-response]]. Agent rules in general are in [[securing-ai-agents-in-ci-and-cloud]].
 
 > [!note] Evidence
-> The Kubernetes claims in this note were checked against the Kubernetes documentation source on 2026-11-01; nothing was run against a cluster. The GKE and Google Cloud claims could not be checked and are hedged in the text. See the Evidence section at the end for what was and was not verified.
+> This note carries no evidence level, because the kubeconfig script depends on kubectl flags and fields that were not confirmed (see Not verified). Its Kubernetes RBAC claims were checked against the Kubernetes documentation source on 2026-11-01; nothing was run against a cluster. The GKE and Google Cloud claims could not be checked and are hedged in the text. See the Evidence section at the end for what was and was not verified.
 
 > [!warning] Destructive steps
 > The rollback steps delete RoleBindings, a ServiceAccount and (optionally) legacy token Secrets, which cuts off the agent's access. Run them against the right cluster and namespace (`kubectl config current-context`), keep the manifests in Git first, and prefer deleting the bindings before anything else.

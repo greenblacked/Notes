@@ -96,16 +96,23 @@ HARNESS="$CI_PROJECT_DIR"
 # The runner's own checkout keeps the job token in its remote URL; strip it before any tool runs.
 git -C "$HARNESS" remote set-url origin "${CI_SERVER_URL}/${CI_PROJECT_PATH}.git"
 
-# Work outside the harness checkout, in a fresh clone of the target repository.
-work="$(mktemp -d)"
-tool_home="$(mktemp -d)"
-git clone --quiet "$(cat "$HARNESS/tasks/${TASK_ID}/repo-url")" "$work"
-git -C "$work" checkout --quiet "$(cat "$HARNESS/tasks/${TASK_ID}/start-commit")"
-git -C "$work" switch --quiet -c "bakeoff/${TOOL}/${TASK_ID}"
+# The tool runs as a different uid. A process with the job's uid can read the job shell's
+# environment from /proc/<pid>/environ, token included, whatever env -i does to the tool's own copy.
+# change: a dedicated unprivileged user (here bakeoff-tool) and a sudoers rule on the runner that lets
+# the job user run commands as it, with no other rights. The user must be able to read the harness
+# checkout and LLM_GATEWAY_KEY_FILE (give that file group access for the user).
+as_tool=(sudo -n -u bakeoff-tool --)
+
+# Work outside the harness checkout, in a fresh clone of the target repository, owned by the tool user.
+work="$("${as_tool[@]}" mktemp -d)"
+tool_home="$("${as_tool[@]}" mktemp -d)"
+"${as_tool[@]}" git clone --quiet "$(cat "$HARNESS/tasks/${TASK_ID}/repo-url")" "$work"
+"${as_tool[@]}" git -C "$work" checkout --quiet "$(cat "$HARNESS/tasks/${TASK_ID}/start-commit")"
+"${as_tool[@]}" git -C "$work" switch --quiet -c "bakeoff/${TOOL}/${TASK_ID}"
 
 # The tool and the checks get an empty environment plus this allowlist: no CI_JOB_TOKEN, no
-# CI_REPOSITORY_URL, no project variables. env -i hides the environment only; files the job user
-# can read stay readable.
+# CI_REPOSITORY_URL, no project variables. env -i only empties the tool's own copy; the uid
+# change is what keeps the job shell's environment block out of its reach.
 tool_env=(
   PATH=/usr/local/bin:/usr/bin:/bin
   HOME="$tool_home"
@@ -116,30 +123,35 @@ tool_env=(
 check_env=(PATH=/usr/local/bin:/usr/bin:/bin HOME="$tool_home" LANG=C.UTF-8)
 
 # Canaries: fail the run, not just the task, if the tool could reach the job token.
-if ! env -i "${tool_env[@]}" /bin/sh -c 'test -z "${CI_JOB_TOKEN:-}" && ! env | grep -q "^CI_"'; then
+if ! "${as_tool[@]}" env -i "${tool_env[@]}" /bin/sh -c 'test -z "${CI_JOB_TOKEN:-}" && ! env | grep -q "^CI_"'; then
   echo "canary: the tool environment still holds CI variables" >&2; exit 1
 fi
-if grep -rqsF -f <(printf '%s\n' "$CI_JOB_TOKEN") "$HARNESS" "$work" "$tool_home"; then
+if "${as_tool[@]}" grep -rqsF -f <(printf '%s\n' "$CI_JOB_TOKEN") "$HARNESS" "$work" "$tool_home"; then
   echo "canary: the job token is readable in files the tool can reach" >&2; exit 1
+fi
+# The token stays in the job shell's /proc/<pid>/environ; the tool user must not be able to read it.
+if "${as_tool[@]}" sh -c 'cat /proc/[0-9]*/environ 2>/dev/null' | tr '\0' '\n' \
+   | grep -qF -f <(printf '%s\n' "$CI_JOB_TOKEN"); then
+  echo "canary: the job token is readable from /proc/*/environ as the tool user" >&2; exit 1
 fi
 
 started=$(date +%s)
-(cd "$work" && env -i "${tool_env[@]}" timeout 900 "$HARNESS/adapters/${TOOL}.sh" "$HARNESS/tasks/${TASK_ID}/prompt.txt") \
+(cd "$work" && "${as_tool[@]}" env -i "${tool_env[@]}" timeout 900 "$HARNESS/adapters/${TOOL}.sh" "$HARNESS/tasks/${TASK_ID}/prompt.txt") \
   || echo "tool exited non-zero"
 tool_seconds=$(( $(date +%s) - started ))
 
 # change: fetch-check is your command that pulls the check script from outside the job workspace; it runs only after the tool step.
 fetch-check "$TASK_ID" > "$HARNESS/check.sh"
 # The checks run the tool's code, so they get the same empty environment.
-if (cd "$work" && env -i "${check_env[@]}" bash "$HARNESS/check.sh"); then tests=pass; else tests=fail; fi
+if (cd "$work" && "${as_tool[@]}" env -i "${check_env[@]}" bash "$HARNESS/check.sh"); then tests=pass; else tests=fail; fi
 jq -cn --arg tool "$TOOL" --arg task "$TASK_ID" --arg tests "$tests" \
   --argjson tool_seconds "$tool_seconds" --argjson total "$(( $(date +%s) - started ))" \
   '{tool: $tool, task: $task, tests: $tests, tool_seconds: $tool_seconds, seconds_to_check_done: $total}' \
   >> "$HARNESS/results.jsonl"
-rm -rf -- "$work" "$tool_home"
+"${as_tool[@]}" rm -rf -- "$work" "$tool_home"
 ```
 
-The `tasks/` directory holds only `repo-url`, `start-commit` and `prompt.txt` while the tool runs. Keep known-good diffs and check scripts out of the job workspace: the script fetches the check only after the tool step. The tool works in a clone outside the harness checkout, and both the tool and the checks run under `env -i` with an explicit allowlist, so `CI_JOB_TOKEN` and the project variables are not in their environment. Two canaries fail the run if that ever stops being true. `env -i` does not hide files. The job token stays valid while the job runs. File-type CI/CD variables are written to a temporary file that the variable points to, and any process running as the job user can read that file. So define no file-type variables for this job other than the gateway key, and give the gateway key its own narrow budget ([[llm-api-cost-control]]). If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
+The `tasks/` directory holds only `repo-url`, `start-commit` and `prompt.txt` while the tool runs. Keep known-good diffs and check scripts out of the job workspace: the script fetches the check only after the tool step. The tool works in a clone outside the harness checkout, and both the tool and the checks run as a separate unprivileged user under `env -i` with an explicit allowlist, so `CI_JOB_TOKEN` and the project variables are not in their environment. `env -i` alone is not enough: it empties only the tool's own environment, while the job shell's environment block, token and project variables included, stays readable through `/proc/<ancestor>/environ` by any process with the same uid, and `unset` in the parent does not change it. Yama `ptrace_scope=1` does not stop that read. So the adapter runs as a different uid, or in a separate job or container that never receives `CI_JOB_TOKEN`. Three canaries fail the run if the token is still reachable from the tool's environment, from files, or from `/proc/*/environ`. The job token stays valid while the job runs. File-type CI/CD variables are written to a temporary file that the variable points to, and any process running as the job user can read that file, which the separate user also covers when the file is not group-readable. So define no file-type variables for this job other than the gateway key, and give the gateway key its own narrow budget ([[llm-api-cost-control]]). If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
 
 Each adapter is a thin script that feeds the prompt to the tool non-interactively; write them once and review them like production code.
 
@@ -173,7 +185,7 @@ With 20 to 30 tasks you cannot rank tools finely, and you should not try.
 - **Operator effect.** A skilled operator makes any tool look better. Use scripted, non-interactive runs, and do a separate interactive study if that is how people will use it.
 - **Survivorship in the task set.** Only changes that merged are in your history. Add some abandoned or reverted ones.
 - **Gaming through the gateway.** A tool that makes many retries looks fine on pass rate and terrible on cost. Report both.
-- **The tool inherits the job's credentials.** Run adapters under `env -i` with an allowlist and keep the canaries that prove it.
+- **The tool inherits the job's credentials.** Run adapters as a different uid (or in a job that never gets the token), under `env -i` with an allowlist, and keep the canaries that prove it.
 - **Security regressions hidden by passing tests.** Run your SAST and secret scanning on every produced diff ([[ai-code-review-bots]] covers review bots as a separate category).
 
 ## Reporting
@@ -212,7 +224,7 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the checkable statements 
 - That a file-type CI/CD variable is saved to a temporary file whose path the variable holds, and that malicious code can compromise masked and protected variables (GitLab CI/CD variables page): not re-read on 2026-11-24.
 - That stripping the token from the harness checkout's remote URL removes every on-disk copy the runner writes. The file canary checks the harness, work and home directories only, not other runner paths.
 - That `CI_SERVER_URL` and `CI_PROJECT_PATH` are set in your runner version (not re-read on 2026-11-24).
-- The canary and `env -i` behaviour were not run in a pipeline.
+- The canary, the `sudo` user switch and `env -i` behaviour were not run in a pipeline. That `/proc/<pid>/environ` of same-uid processes is readable and that Yama `ptrace_scope=1` does not restrict it comes from kernel and Yama documentation that was not re-read for this note.
 - Nothing was run.
 
 ## Sources
