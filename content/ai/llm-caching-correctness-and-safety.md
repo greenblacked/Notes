@@ -15,6 +15,9 @@ reviewed: 2026-11-02
 review-due: 2027-05-02
 ---
 
+> [!info] Scope
+> Application caches of model outputs and intermediate results: keys, scope, freshness and invalidation. Provider-side prompt-prefix caching and its tenancy review are in [[prompt-caching-and-data-isolation]]; retrieval caches are in [[retrieval-cache-invalidation]].
+
 ## Choose the cache boundary
 
 Caching can reduce latency and repeated inference cost, but it changes the semantics of a request. Distinguish provider-managed prompt-prefix caching from an application cache of complete outputs. A provider cache reuses eligible internal context according to provider rules; it does not mean an answer is safe to reuse for another user. An application response cache stores an output and needs an explicit correctness, privacy, and invalidation design.

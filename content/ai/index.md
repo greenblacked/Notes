@@ -223,7 +223,7 @@ Define reliability, observability and cost controls for AI-backed services.
 
 ## Risk and governance
 
-Classify risk, review providers and contracts, keep an inventory, and control data, regions, change and retirement.
+Classify risk, review providers and contracts, keep an inventory, and control data, regions, change and retirement. For one system, work through [[ai-system-risk-classification|risk classification]], [[ai-impact-assessment-for-engineering-systems|impact assessment]], [[ai-system-threat-modeling|threat modeling]] and [[ai-red-team-exercise-planning|red-team planning]] in that order.
 
 - [[ai-system-risk-classification|Risk classification for AI-enabled engineering systems]]
 - [[ai-impact-assessment-for-engineering-systems|Impact assessment for AI-enabled engineering systems]]

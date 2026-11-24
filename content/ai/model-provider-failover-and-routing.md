@@ -12,6 +12,9 @@ modified: 2026-11-24
 draft: false
 ---
 
+> [!info] Scope
+> Route changes when a provider, region or endpoint is unhealthy. The steady-state selection policy is in [[model-router-policy]]; quality limits for the fallback model are in [[fallback-model-selection-and-quality-degradation]].
+
 ## Failover is a semantic change
 
 Routing between model providers is not equivalent to switching interchangeable compute endpoints. Providers can differ in model revisions, tokenization, supported modalities, context behavior, safety settings, structured output, streaming, rate limits, data location, and error semantics. A route that preserves an API shape may still change answer quality, cost, or compliance posture.

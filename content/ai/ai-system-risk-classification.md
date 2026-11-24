@@ -12,6 +12,9 @@ modified: 2026-11-24
 draft: false
 ---
 
+> [!info] Scope
+> Step 1 of 4 for one AI-enabled system: classify it here, then assess impact ([[ai-impact-assessment-for-engineering-systems]]), threat-model the design ([[ai-system-threat-modeling]]) and test the controls in an exercise ([[ai-red-team-exercise-planning]]). This note only sets the risk tier, which decides how much of the other three steps the system needs.
+
 ## Classify the system in context
 
 A model name or provider tier is not a useful risk classification by itself. The same model can be a low-impact drafting aid in one workflow and a high-impact decision component when connected to production data, privileged tools, or automatic deployment. Classify the complete system: model, prompts, retrieval sources, tools, users, outputs, downstream decisions, and operating environment.
@@ -71,6 +74,6 @@ Use legal counsel for legal classifications and obligations; use engineering ass
 
 ## Sources
 
-- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): AI RMF 1.0 (2023) overview; the page notes that the framework is being revised, so verify version and status before reuse.
+- [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): AI RMF 1.0 (2023) overview; the page says AI RMF 1.0 is being revised (checked 2026-11-24), so verify version and status before reuse.
 - [NIST AI 600-1, Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): July 2024 generative-AI risk profile.
 - [OWASP Top 10 for Agentic Applications for 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): agent-specific security risk categories; not a legal classification scheme.

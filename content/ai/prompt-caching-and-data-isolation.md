@@ -11,6 +11,9 @@ modified: 2026-11-24
 draft: false
 ---
 
+> [!info] Scope
+> Provider-managed prompt-prefix caching: what is reused, and the tenancy and data review it needs. Caching complete model outputs in your own application is in [[llm-caching-correctness-and-safety]].
+
 Prompt caching can reduce repeated processing and sometimes cost or latency by reusing a shared prefix. It does not mean the application may share prompts across users, nor does it establish privacy, data retention or zero-retention guarantees. Treat it as a provider feature with a data-flow and tenancy review, not as a generic HTTP cache. Cost controls are also discussed in [[llm-api-cost-control]].
 
 ## Identify what is cached

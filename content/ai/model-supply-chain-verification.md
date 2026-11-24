@@ -11,7 +11,7 @@ modified: 2026-11-24
 draft: false
 ---
 
-An AI model is a supply-chain artifact with a publisher, source repository, files, tokenizer or configuration, dependencies, conversion steps, and deployment process. A friendly model name is not a stable identity. Files may be updated, mirrored, converted, or served by a different account than expected. This note defines a verification workflow for model artifacts, not a claim that signatures or provenance can establish model behavior. It complements [[ai/model-artifacts-in-artifactory]] and [[ai/model-version-pinning-and-upgrade-evals]].
+An AI model is a supply-chain artifact with a publisher, source repository, files, tokenizer or configuration, dependencies, conversion steps, and deployment process. A friendly model name is not a stable identity. Files may be updated, mirrored, converted, or served by a different account than expected. This note defines a verification workflow for model artifacts, not a claim that signatures or provenance can establish model behavior. It covers identity, provenance and promotion decisions for any model; storing, proxying and scanning weights in a registry is in [[ai/model-artifacts-in-artifactory]], and pinning hosted model versions is in [[ai/model-version-pinning-and-upgrade-evals]].
 
 ## Identify exactly what is being trusted
 

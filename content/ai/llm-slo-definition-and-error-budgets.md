@@ -11,6 +11,9 @@ modified: 2026-11-24
 draft: false
 ---
 
+> [!info] Scope
+> Defining SLIs, eligible events, windows and the error-budget policy for LLM features. Collecting the signals and writing the Prometheus rules is in [[llm-observability-tracing-and-slos]].
+
 ## Start with the user journey
 
 An LLM endpoint is not reliable merely because its HTTP handler returns 200. Define the service boundary around the outcome users consume: a response arrives within a useful time, meets the task's minimum quality bar, and does not violate the application's safety or privacy constraints. Identify separate journeys when their latency or failure consequences differ, such as interactive chat, asynchronous document processing, and agent tool execution. An asynchronous job can tolerate a longer completion window but still needs a clear deadline and a visible failure state.

@@ -11,6 +11,9 @@ modified: 2026-11-24
 draft: false
 ---
 
+> [!info] Scope
+> Step 3 of 4: assets, trust boundaries, abuse cases and controls. It does not set the risk tier ([[ai-system-risk-classification]]) or assess affected people ([[ai-impact-assessment-for-engineering-systems]]); test the chosen controls with [[ai-red-team-exercise-planning]].
+
 Threat modeling an AI feature is not a special substitute for application threat modeling. It extends the usual inventory of data, identities, interfaces, and impacts to include model behavior, retrieval, tools, and the uncertain boundary between instructions and content. Use this guide before a design is approved and revisit it after a provider, model, tool, or data-flow change. It complements [[ai/securing-ai-agents-in-ci-and-cloud]], which focuses on operational controls for agents that can reach repositories or cloud resources.
 
 ## Start with the system and its intended use
@@ -53,6 +56,12 @@ Define triggers for reassessment: new tools, new data sources, increased autonom
 - Are limits for calls, retries, concurrency, duration, and spend enforceable?
 - Are model/provider assumptions dated, and are known unknowns marked for confirmation?
 - Is there a reassessment trigger and an incident evidence plan?
+
+## Related
+
+- [[ai-system-risk-classification]]: step 1, the risk tier.
+- [[ai-impact-assessment-for-engineering-systems]]: step 2, who is affected and how.
+- [[ai-red-team-exercise-planning]]: step 4, testing the controls.
 
 ## Sources
 

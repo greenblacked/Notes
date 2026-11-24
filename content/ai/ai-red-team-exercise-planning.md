@@ -11,6 +11,9 @@ modified: 2026-11-24
 draft: false
 ---
 
+> [!info] Scope
+> Step 4 of 4: plan an authorized exercise that tests the controls chosen in [[ai-system-threat-modeling]]. Scope and stop conditions follow the tier from [[ai-system-risk-classification]] and the affected groups from [[ai-impact-assessment-for-engineering-systems]].
+
 A defensive AI red-team exercise tests whether an organization’s safeguards prevent, detect, and contain failures in a system it owns or is explicitly authorized to assess. It is not a license to probe public services, attack third parties, or collect real credentials. The goal is to find control gaps safely and create actionable fixes. This planning guide complements the repeatable CI prompt-injection harness in [[ai/prompt-injection-test-harness-for-ci-agents]] by covering governance, scope, and exercise design.
 
 ## Set authorization and boundaries first
@@ -53,6 +56,12 @@ Track fixes to closure and retest the failed boundary. Add safe regression fixtu
 - Does evidence demonstrate enforcement rather than a model’s verbal response?
 - Are findings assigned to owners with retest and regression plans?
 - Are framework/catalog versions and residual uncertainties recorded?
+
+## Related
+
+- [[ai-system-risk-classification]]: step 1, the risk tier.
+- [[ai-impact-assessment-for-engineering-systems]]: step 2, who is affected and how.
+- [[ai-system-threat-modeling]]: step 3, attack paths and controls.
 
 ## Sources
 

@@ -16,6 +16,9 @@ reviewed: 2026-11-01
 review-due: 2027-05-01
 ---
 
+> [!info] Scope
+> Turning a known workload into self-hosted serving capacity: replicas, accelerator memory and placement. Forecasting the demand itself, including managed-provider quotas, is in [[model-capacity-forecasting]]; KV cache sizing is in [[kv-cache-capacity-and-paging]].
+
 ## Start with the workload, not the accelerator
 
 Capacity planning for inference is a sizing exercise under uncertainty. A model's advertised throughput is not a service capacity guarantee: it depends on model revision, precision, prompt and output lengths, concurrency, serving engine, accelerator, and the latency objective. Define the workload before choosing hardware. Separate interactive requests from batch jobs and identify the distributions of input tokens, generated tokens, arrival rate, and concurrent sessions. Averages alone hide long prompts and bursts.

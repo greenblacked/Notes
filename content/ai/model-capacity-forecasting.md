@@ -12,6 +12,9 @@ modified: 2026-11-24
 draft: false
 ---
 
+> [!info] Scope
+> Forecasting demand (requests, tokens, concurrency) and the quota it needs, for managed and self-hosted models. Sizing self-hosted serving for that demand is in [[llm-inference-capacity-planning]].
+
 ## Forecast the actual workload
 
 Capacity planning for inference is not a single requests-per-second number. Collect request rate by workload class, prompt-size distribution, output tokens, generation duration, concurrency, streaming behavior, retries, region, and model. Include scheduled evaluation and batch traffic, not only end-user calls. If a service uses tools or multiple model steps, model the total attempts per logical request and the shape of the peak, rather than dividing total monthly tokens by seconds in a month.
