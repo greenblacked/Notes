@@ -8,7 +8,7 @@ tags:
   - supply-chain
   - security
 created: 2026-10-21
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -140,7 +140,7 @@ Reject anything that is not on the allowed list, by extension and by content. A 
 
 ```python title="check_weights.py (illustrative, not run)"
 #!/usr/bin/env python3
-"""Fail on pickle-bearing files and on safetensors files with an invalid header."""
+"""Fail on pickle-bearing files, safetensors files with an invalid header, and configs that load code."""
 import json
 import os
 import struct
@@ -150,6 +150,8 @@ ALLOWED_OTHER = {".json", ".txt", ".md", ".model"}  # change: the non-weight fil
 TEXT_EXT = {".json", ".txt", ".md"}  # .model (SentencePiece) is binary protobuf, so no text check
 PICKLE_EXT = {".bin", ".pt", ".pth", ".pkl", ".pickle", ".ckpt"}
 MAX_HEADER = 100 * 1024 * 1024  # refuse absurd header sizes before reading them
+# Keys that make a loader import Python code from the model repository (custom model classes).
+CODE_KEYS = {"auto_map"}  # change: add any other key your loader uses to import repository code
 
 
 def check_safetensors(path):
@@ -184,6 +186,27 @@ def check_safetensors(path):
     return None
 
 
+def code_keys(obj, path="$"):
+    """Yield the JSON path of every key in CODE_KEYS, at any depth."""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key in CODE_KEYS:
+                yield f"{path}.{key}"
+            yield from code_keys(value, f"{path}.{key}")
+    elif isinstance(obj, list):
+        for i, value in enumerate(obj):
+            yield from code_keys(value, f"{path}[{i}]")
+
+
+def check_json(path):
+    try:
+        with open(path, "rb") as f:
+            data = json.loads(f.read().decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        return [f"not valid JSON: {e}"]
+    return [f"{where} makes loaders import code from the repository" for where in code_keys(data)]
+
+
 def main(root):
     problems = []
     checked = 0
@@ -205,6 +228,8 @@ def main(root):
                 problems.append(f"{path}: extension {ext!r} is not on the allowed list")
             elif ext in TEXT_EXT and (magic[:1] == b"\x80" or magic == b"PK\x03\x04"):
                 problems.append(f"{path}: looks like a pickle or an archive, not text")
+            elif ext == ".json":
+                problems.extend(f"{path}: {err}" for err in check_json(path))
     if checked == 0:
         problems.append(f"{root}: no files to check")
     for p in problems:
@@ -218,6 +243,65 @@ if __name__ == "__main__":
 ```
 
 The header layout used here (an 8-byte little-endian length, then a JSON header with `dtype`, `shape` and `data_offsets` per tensor, and an optional `__metadata__` entry) is described in the safetensors repository; check it against the current README before relying on the script. The magic-byte check on text files is a heuristic for common pickle protocols and zip-based checkpoints renamed to an allowed extension, not a full detector; a pickle renamed to `.safetensors` fails the header check instead.
+
+```python title="test_check_weights.py"
+"""Fixtures for check_weights.py: run with python3 -m unittest test_check_weights from this directory (standard library only)."""
+import contextlib
+import io
+import json
+import os
+import tempfile
+import unittest
+
+import check_weights
+
+
+def run(files):
+    with tempfile.TemporaryDirectory() as root:
+        for name, content in files.items():
+            with open(os.path.join(root, name), "w", encoding="utf-8") as f:
+                f.write(content)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = check_weights.main(root)
+        return code, out.getvalue()
+
+
+class CheckWeightsTest(unittest.TestCase):
+    def test_plain_config_passes(self):
+        code, _ = run({"config.json": json.dumps({"model_type": "llama", "hidden_size": 4096})})
+        self.assertEqual(code, 0)
+
+    def test_auto_map_fails(self):
+        cfg = {"model_type": "custom", "auto_map": {"AutoModel": "modeling_custom.CustomModel"}}
+        code, out = run({"config.json": json.dumps(cfg)})
+        self.assertEqual(code, 1)
+        self.assertIn("$.auto_map", out)
+
+    def test_nested_auto_map_in_tokenizer_config_fails(self):
+        cfg = {"tokenizer_class": "X", "extra": {"auto_map": {"AutoTokenizer": ["tok.X", None]}}}
+        code, out = run({"tokenizer_config.json": json.dumps(cfg)})
+        self.assertEqual(code, 1)
+        self.assertIn("$.extra.auto_map", out)
+
+    def test_python_file_fails(self):
+        code, out = run({"config.json": "{}", "modeling_custom.py": "import os\n"})
+        self.assertEqual(code, 1)
+        self.assertIn("'.py' is not on the allowed list", out)
+
+    def test_invalid_json_fails(self):
+        code, out = run({"config.json": "{not json"})
+        self.assertEqual(code, 1)
+        self.assertIn("not valid JSON", out)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+### Code that runs at load time without pickle
+
+Safe weight formats do not stop a loader from running code. A model whose configuration names custom classes in `auto_map` is loaded by importing Python files from the model repository, and the Transformers library is documented to do that only when the caller passes `trust_remote_code=True` (not verified on 2026-11-24, see Evidence). The gate therefore fails any JSON file that contains `auto_map` at any depth, and rejects `.py` files because they are not on the allowed list. In serving, keep `trust_remote_code` off in every loader and serving engine, and review that setting like an image digest. If a model genuinely needs custom code, it goes through the written exception path above, with the code reviewed and pinned to the full revision.
 
 ### 3. Malware and pickle scan
 
@@ -323,6 +407,7 @@ A model change is a change of the pinned revision in the serving configuration. 
 - **Fallback to pickle.** The library finds no safetensors file and loads the `.bin` beside it. Do not promote pickle files at all, and set the library to require safetensors where it can.
 - **Scan theatre.** A green scanner result treated as proof of safety. The format rule is the control; the scan catches what slips past.
 - **Personal licence acceptance.** A gated model pulled with an engineer's token. Use an organisation credential on the remote repository, accepted by someone authorised.
+- **Code through configuration.** A `config.json` with `auto_map` plus `trust_remote_code=True` somewhere in serving runs the repository's Python on load. The gate rejects the key; serving keeps the flag off.
 - **Cleanup deletes the rollback.** Retention removes the previous revision. Keep it explicitly.
 
 [^pickle]: Python documentation, `pickle` module, the warning at the top of the page.
@@ -364,7 +449,8 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the supply-chain risk fra
 - PyTorch checkpoint format and the safetensors recommendation that libraries require safetensors: not checked.
 - GKE and Google Cloud egress behaviour in the serving and egress sections: not checked here.
 - Engineering guidance, not documented claims: repository layout, promotion flow, retention policy, rollback steps and the failure-mode list.
-- Nothing was run: the scripts, manifest and pipeline are illustrations.
+- That `auto_map` is the only configuration key that makes a loader import repository code, that `trust_remote_code` is needed to load it, and that it defaults to off in every loader and serving engine you use. The Transformers custom-model pages were not read on 2026-11-24.
+- Nothing else was run: `check_weights.py` with the `auto_map` check passed the five fixtures in `test_check_weights.py` on 2026-11-24 with Python 3.13.18; the other scripts, the manifest and the pipeline are illustrations.
 
 ## Sources
 
@@ -391,4 +477,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the supply-chain risk fra
 - [[open-source-license-compliance]]: the licence review step.
 - [[self-hosted-llm-inference-on-gke]]: the serving side.
 - [[private-gke-and-controlled-egress]]: blocking egress from serving pods.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
