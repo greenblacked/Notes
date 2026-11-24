@@ -8,7 +8,7 @@ tags:
   - reliability
   - observability
 created: 2026-11-22
-modified: 2026-11-22
+modified: 2026-11-24
 draft: false
 evidence: lab-tested
 reviewed: 2026-11-22
@@ -240,6 +240,7 @@ Then confirm the application recovered, not just the database: the failing endpo
 - The `pg_monitor` and `pg_signal_backend` role names and their exact privileges were not exercised; the lab ran as the superuser.
 - Managed-provider differences (Cloud SQL, RDS, Azure) in `pg_cancel_backend` permissions and in which settings can be changed were not tested. Check the provider's documentation before relying on step 6 there.
 - The `transactionid` wait case in the troubleshooting table was not reproduced; it is the standard deadlock shape, not an observation from this run.
+- The exact `psql` invocation used for steps 2 to 4 in the lab was not recorded; the SQL is the text of those steps.
 - Behaviour behind a transaction-mode connection pooler (PgBouncer) was not tested; the session seen in `pg_stat_activity` may be the pooler's, not the client's.
 
 ### Environment
@@ -276,8 +277,9 @@ docker exec pg-lock-lab psql -U postgres -d lab -c "CREATE TABLE accounts (id in
 docker exec -d pg-lock-lab bash -c "(printf 'BEGIN;\nUPDATE accounts SET balance=balance-1 WHERE id=1;\n'; sleep 120) | psql -U postgres -d lab -q"
 docker exec -d pg-lock-lab psql -U postgres -d lab -c "SET lock_timeout='0'; ALTER TABLE accounts ADD COLUMN note text;"
 docker exec -d pg-lock-lab psql -U postgres -d lab -c "SELECT count(*) AS accounts FROM accounts;"
-# then steps 2, 3 and 4 of this runbook
 ```
+
+Then the SQL of steps 2, 3 and 4 was run, as written above, in `psql` inside the container; the output is below and in [[postgres-lock-queue-lab]].
 
 ```text
  pid |        state        | wait_event_type | blocked_by |                    query
