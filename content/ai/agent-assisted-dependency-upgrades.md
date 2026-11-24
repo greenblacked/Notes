@@ -56,7 +56,7 @@ Do not start an agent on every release. Use bot policy to hold majors until some
 
 The three-day delay is an example policy, not a recommendation. A release-age delay gives time for a malicious or yanked version to be caught; the bot holds the update, or flags it as pending, until the age has passed (check the bot's current docs for exact behaviour). Where the package manager has an equivalent setting, set it there too. If you auto-merge anything, limit it to patch and minor updates that pass full CI; never majors. Team-wide Dependabot ignores (for example ignoring `version-update:semver-major`) belong in `dependabot.yml`, because comment-command ignores are per-PR state.
 
-A label such as `agent-eligible` is a convenient trigger condition. In GitLab CI:
+A label such as `agent-eligible` is a convenient trigger condition. Use two jobs for the repair, because the job that runs the agent also runs untrusted code (the upgraded dependency and the agent's own edits) and must hold no secret. In GitLab CI, the first job runs in the merge request pipeline. It has no `environment` and no token, and it only produces a patch:
 
 ```yaml title=".gitlab-ci.yml"
 agent-fix-upgrade:
@@ -68,13 +68,15 @@ agent-fix-upgrade:
       # explicit: manual jobs inside rules default to allow_failure: false (blocking)
       allow_failure: true
   # needs: [] keeps the job runnable after the test job has failed;
-  # a needs on the failed job would skip it. The script fetches the failing job log.
+  # a needs on the failed job would skip it. The script reads the failing log
+  # from the test job's artifact (see below).
   needs: []
-  environment:
-    name: dependency-agent # protected environment; the push token is scoped to it
-    action: prepare
+  variables:
+    GIT_DEPTH: "0"
+  # No environment: and no push token in this job. Its definition comes from the
+  # merge request branch, so a commit there can change anything in it.
   script:
-    # Run the job script from the default branch, never from the MR branch the agent writes to.
+    # Only this script body is taken from the default branch; the job definition is not.
     - |
       set -Eeuo pipefail
       git fetch --no-tags origin "refs/heads/${CI_DEFAULT_BRANCH}"
@@ -85,6 +87,59 @@ agent-fix-upgrade:
         exit 1
       fi
       bash "$trusted"
+  artifacts:
+    paths:
+      - agent.patch
+    expire_in: 1 day
+```
+
+The second job holds the token. It is defined in `.gitlab-ci.yml` on the protected default branch and runs only in a pipeline on that branch, started by a person who enters three variables: the agent job's ID, the `renovate/` branch and the branch head the patch was made on. It checks the patch with the default-branch guard and pushes it:
+
+```yaml title=".gitlab-ci.yml"
+apply-agent-patch:
+  stage: remediate
+  image: registry.example.com/ci/base@sha256:REPLACE_WITH_DIGEST
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  environment:
+    name: dependency-agent # protected environment; AGENT_PUSH_TOKEN is scoped to it
+  variables:
+    GIT_DEPTH: "0"
+    AGENT_GIT_NAME: "dependency-agent" # change: the author name for the patch commits
+    AGENT_GIT_EMAIL: "dependency-agent@example.com" # change: its email
+  script:
+    - |
+      set -Eeuo pipefail
+      : "${AGENT_JOB_ID:?pipeline variable: ID of the agent-fix-upgrade job}"
+      : "${PATCH_BRANCH:?pipeline variable: the renovate/ branch}"
+      : "${PATCH_BASE_SHA:?pipeline variable: head of that branch when the patch was made}"
+      if [[ ! "$PATCH_BRANCH" =~ ^renovate/[A-Za-z0-9._/-]+$ || ! "$PATCH_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+        echo "unexpected branch name or SHA" >&2
+        exit 1
+      fi
+      # This pipeline runs on the default branch, so the working tree holds the trusted guard.
+      guard="$(mktemp)"
+      cp ci/guard-agent-commit.sh "$guard"
+      if [[ ! -s "$guard" ]]; then
+        echo "ci/guard-agent-commit.sh is missing or empty" >&2
+        exit 1
+      fi
+      # The job token goes in through stdin, not the command line.
+      printf 'header = "JOB-TOKEN: %s"\n' "$CI_JOB_TOKEN" | curl --fail --silent --show-error --location --config - \
+        --output artifacts.zip "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${AGENT_JOB_ID}/artifacts"
+      unzip -p artifacts.zip agent.patch > agent.patch
+      git fetch --no-tags origin "refs/heads/${PATCH_BRANCH}"
+      if [[ "$(git rev-parse FETCH_HEAD)" != "$PATCH_BASE_SHA" ]]; then
+        echo "${PATCH_BRANCH} moved since the patch was made" >&2
+        exit 1
+      fi
+      git checkout --detach "$PATCH_BASE_SHA"
+      git -c core.hooksPath=/dev/null -c user.name="$AGENT_GIT_NAME" -c user.email="$AGENT_GIT_EMAIL" am agent.patch
+      bash "$guard" "$PATCH_BASE_SHA" HEAD agent </dev/null
+      askpass="$(mktemp)"
+      printf '#!/bin/sh\necho "$AGENT_PUSH_TOKEN"\n' > "$askpass"
+      chmod 700 "$askpass"
+      GIT_ASKPASS="$askpass" git push "https://oauth2@${CI_SERVER_FQDN}/${CI_PROJECT_PATH}.git" "HEAD:refs/heads/${PATCH_BRANCH}"
 
 agent-commit-guard:
   stage: test
@@ -106,33 +161,54 @@ agent-commit-guard:
         exit 1
       fi
       base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:?not a merge request pipeline}"
-      merges="$(git rev-list --merges "${base}..${CI_COMMIT_SHA}")"
+      # Merged results and merge train pipelines run on a temporary merge commit
+      # (CI_COMMIT_SHA); check the source branch head instead. The variable is
+      # empty in plain merge request pipelines, where CI_COMMIT_SHA is that head.
+      head="${CI_MERGE_REQUEST_SOURCE_BRANCH_SHA:-${CI_COMMIT_SHA}}"
+      if ! git merge-base --is-ancestor "${base}" "${head}"; then
+        echo "diff base ${base} is missing or not an ancestor of ${head}" >&2
+        exit 1
+      fi
+      merges="$(git rev-list --merges "${base}..${head}")"
       if [[ -n "$merges" ]]; then
         echo "merge commits on the bot branch are not allowed: ${merges}" >&2
         exit 1
       fi
-      git rev-list --reverse "${base}..${CI_COMMIT_SHA}" > "${CI_PROJECT_DIR}/commits.txt"
+      git rev-list --reverse "${base}..${head}" > "${CI_PROJECT_DIR}/commits.txt"
+      : > "${CI_PROJECT_DIR}/agent-files.txt"
       while read -r commit; do
         committer="$(git log -1 --format=%ce "$commit")"
+        mode="agent"
         if [[ "$committer" == "$DEP_BOT_EMAIL" ]]; then
-          continue
+          mode="bot"
         fi
-        echo "checking ${commit} committed by ${committer}"
-        bash "$guard" "${commit}^" "$commit"
+        echo "checking ${commit} (${mode}) committed by ${committer}"
+        bash "$guard" "${commit}^" "$commit" "$mode" </dev/null
+        if [[ "$mode" == "agent" ]]; then
+          git diff --no-renames --name-only "${commit}^" "$commit" >> "${CI_PROJECT_DIR}/agent-files.txt"
+        fi
       done < "${CI_PROJECT_DIR}/commits.txt"
+      total="$(sort -u "${CI_PROJECT_DIR}/agent-files.txt" | grep -c . || true)"
+      if (( total > ${MAX_AGENT_FILES:-15} )); then
+        echo "non-bot commits touch ${total} files in total (limit ${MAX_AGENT_FILES:-15})" >&2
+        exit 1
+      fi
 ```
 
 `when: manual` keeps a human choosing to spend agent time. Pipelines from forked projects cannot access the parent project's CI/CD variables by default, but running a merge request pipeline in the parent project for a fork makes all variables available to it, so do not expose write tokens to fork-controlled pipelines. `CI_MERGE_REQUEST_LABELS` is a comma-separated list and exists only when the merge request has at least one label.
 
-The default-branch fetch fixes only `ci/agent-fix.sh`. The job definition, including the `script:` above, still comes from `.gitlab-ci.yml` on the bot branch, because a merge request pipeline uses the source branch's pipeline configuration. A commit on `renovate/*`, from a Developer or from the agent's own patch, can therefore change what the token-bearing job runs, and the next person who starts the manual job runs that version. A protected environment limits who can start the job, not what it runs. The checkout the script works on is also untrusted: it holds an upgraded third-party dependency and agent-written code.
+### Why two jobs
 
-Mitigations that reduce this, none of which closes it on its own:
+A merge request pipeline uses the pipeline configuration of the source branch. A commit on `renovate/*`, from a Developer or from the agent's own patch, can therefore change `agent-fix-upgrade` completely: its `script:`, `image:`, variables and artifacts. Fetching `ci/agent-fix.sh` from the default branch pins only the script body, not the job. That is why this job has no `environment` and no push token, and why no unprotected project variable should hold a secret: the worst a changed definition can do is produce a different patch. The checkout holds an upgraded third-party dependency and agent-written code, and a `postinstall` script there runs as the job's user, so assume everything in that job can read everything in that job.
 
-- The trusted script runs the default-branch copy of `ci/guard-agent-commit.sh` on the agent's patch before it pushes, so the agent cannot push `.gitlab-ci.yml` or `ci/` changes.
-- The person who starts the job first checks that the merge request does not change `.gitlab-ci.yml` or `ci/`. CODEOWNERS approval (below) gates the merge, not a job that runs before it.
-- The script keeps the push token out of the agent's process and out of any install, build or test step it starts, and commits and pushes only afterwards. `env -u TOKEN` is not enough for this: it only stops inheritance, and a child process with the same user ID in the same container can read the parent shell's `/proc/<pid>/environ`, which still holds the token. A malicious `postinstall` script in the upgraded dependency is exactly that case. Use a separate job, user or sandbox.
+The patch is data until the push job accepts it. The push job comes from the default branch, runs the default-branch copy of `ci/guard-agent-commit.sh` on the patch and refuses to push one that changes `.gitlab-ci.yml` or `ci/`. This holds because the agent job never had the token. It checks paths, not content: a patch can still change `scripts` in a manifest or add harmful code, so a human reviews every upgrade MR.
 
-The more robust design never puts the token in a branch-controlled pipeline. Either run the agent from a pipeline on the protected default branch, or from a separate trusted project, with the token as a protected variable. Or split the work into two jobs: the agent job has no token and produces a patch artifact, and a push job, defined on the default branch, receives only that patch and holds the token. Give the push token to this job only: a project access token with the Developer role and the `write_repository` and `read_api` scopes (push, and read the failed job log), with an expiry, stored as a masked CI/CD variable scoped to the `dependency-agent` environment. Protect that environment so only the owning group can start the job. If the protected environment does not stop `action: prepare` jobs started by users outside the owning group (not checked, see Not verified), drop `action: prepare` or rely on protected variables only. GitLab cannot limit a token to `renovate/*` branches. A Developer can push to any unprotected branch and start branch pipelines as the bot user, so those pipelines must not receive sensitive variables (protected variables only reach protected refs). It cannot push to or merge into protected branches when those allow only Maintainers. So protect the default branch and every long-lived branch, leave the token's bot user out of every approval rule and CODEOWNERS entry, and turn on "Prevent approvals by users who add commits" so its commits cannot count as approval.
+- **Where the script starts.** In a merged results or merge train pipeline the agent job starts on the temporary merge commit, not on the branch. `ci/agent-fix.sh` therefore checks out the source branch head (`CI_MERGE_REQUEST_SOURCE_BRANCH_SHA`, or `CI_COMMIT_SHA` in a plain merge request pipeline) before the agent works, and builds `agent.patch` with `git format-patch` from that head. Otherwise the patch carries target-branch changes and the guard rejects it. The script is not shown here.
+- **The failing log.** Have the test job upload its log with `artifacts: when: always` and download it in the agent job with `CI_JOB_TOKEN`. That keeps `read_api` off the push token. With `read_api` the token can read every job log and artifact in the project, not only one failed log; if you add it, treat that as its reach.
+- **The push token.** A project access token with the Developer role and only the `write_repository` scope, with an expiry, stored as a masked CI/CD variable named `AGENT_PUSH_TOKEN`. Mark it protected (it reaches only protected refs, so only default-branch pipelines) and scope it to the `dependency-agent` environment. The agent job and every pipeline on a `renovate/*` branch must not receive it.
+- **Who can start the push job.** Protected environments need GitLab Premium or Ultimate. Where you have them, protect `dependency-agent` so only the owning group can run the job. Without them, the protected variable still keeps the token away from branch pipelines, but anyone who can run a pipeline on the default branch can start the push job; check who that is. A separate trusted project does the same job and keeps the token out of this project entirely, at the cost of a job token allowlist entry and a second repository to maintain.
+- **What the token can still do.** GitLab cannot limit a token to `renovate/*` branches. A Developer can push to any unprotected branch, create tags and start branch pipelines as the bot user, so those pipelines must not receive sensitive variables (protected variables only reach protected refs). Protect the default branch and every long-lived branch so that only Maintainers can push or merge, and protect release tag patterns (for example `v*`) so that only Maintainers can create them. Leave the token's bot user out of every approval rule and CODEOWNERS entry, and turn on "Prevent approvals by users who add commits" so its commits cannot count as approval.
+- **Do not merge the jobs.** A protected environment limits who starts a job, not what it runs. If the agent and the token share a job, a same-user process such as a `postinstall` script can read the token from `/proc/<pid>/environ`; `env -u TOKEN` only stops inheritance.
 
 ## What the agent gets
 
@@ -157,17 +233,36 @@ set -Eeuo pipefail
 
 base="${1:?base ref}"
 head="${2:?head ref}"
+mode="${3:-agent}" # agent: code changes only; bot: manifests and lockfiles only
 max_files="${MAX_AGENT_FILES:-15}"
 
-changed="$(git diff --name-only "$base...$head")"
+# --no-renames lists both the old and the new path, so moving a protected file is caught
+changed="$(git diff --no-renames --name-only "$base...$head")"
+
+case "$mode" in
+  bot)
+    # Fail closed: a commit that claims the bot's identity may touch manifests and lockfiles only.
+    outside="$(grep -Ev '(^|/)(package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|pyproject\.toml|poetry\.lock|go\.mod|go\.sum)$' <<<"$changed" || true)"
+    if [[ -n "$outside" ]]; then
+      echo "bot-attributed commit touches files outside the allowlist: ${outside}" >&2
+      exit 1
+    fi
+    exit 0
+    ;;
+  agent) ;;
+  *)
+    echo "unknown mode: ${mode}" >&2
+    exit 1
+    ;;
+esac
 
 if grep -Eq '(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|poetry\.lock|go\.sum)$' <<<"$changed"; then
   echo "agent commit touches a lockfile; regenerate in CI instead" >&2
   exit 1
 fi
 
-if grep -Eq '^(\.gitlab-ci\.yml|ci/|\.github/|renovate\.json)' <<<"$changed"; then
-  echo "agent commit touches CI or bot configuration" >&2
+if grep -Eq '^(\.gitlab-ci\.yml|\.gitlab/|ci/|\.github/|renovate\.json)|(^|/)(CODEOWNERS|\.npmrc|\.yarnrc\.yml|pip\.conf)$' <<<"$changed"; then
+  echo "agent commit touches CI, bot, ownership or registry configuration" >&2
   exit 1
 fi
 
@@ -178,7 +273,9 @@ if (( count > max_files )); then
 fi
 ```
 
-The `agent-commit-guard` job above runs it on every pipeline of a bot branch, on each commit the bot did not make, using the copy of the script on the default branch. It is a normal blocking job, so with "Pipelines must succeed" a failing check stops the merge. Bot commits are recognised by committer email. That is only safe with the push rule "Reject unverified users", which stops the agent's token from pushing commits that claim the bot's email. The pipeline configuration itself comes from the bot branch, so require a CODEOWNERS approval from the CI owners for `.gitlab-ci.yml` and `ci/`; otherwise a commit that deletes the guard job removes the check. The guard does not catch weakened tests: add your lint and scanner configuration paths to the protected list, and flag any change to test files for explicit reviewer attention, since a legitimate fix may need to update a test's call sites.
+The `agent-commit-guard` job above runs the default-branch copy of the script on every pipeline of a bot branch, once per commit. The push job runs it once on the whole patch before pushing. It is a normal blocking job, so with "Pipelines must succeed" a failing check stops the merge. With merged results or merge train pipelines on, `CI_COMMIT_SHA` is a temporary merge commit, so the job checks the source branch head (`CI_MERGE_REQUEST_SOURCE_BRANCH_SHA`) instead, and does not see target-branch commits or the merge commit itself.
+
+Bot commits are recognised by committer email, which any pusher can set, so they are not skipped. A commit with the bot's email runs in `bot` mode and may touch manifests and lockfiles only; adjust the allowlist to what your bot is configured to update, and never add the protected paths to it. A bot-attributed commit can still change `scripts` in a manifest, so the human review of the diff stays the control. The push rule "Reject unverified users" narrows who can use that email, but the guard does not depend on it. The file cap applies to each commit and to the union of files changed by all non-bot commits, so splitting a change into many commits does not avoid it. The protected list covers CI files (including `.gitlab/`), bot configuration, `CODEOWNERS` and registry configuration (`.npmrc`, `.yarnrc.yml`, `pip.conf`). The pipeline configuration itself comes from the bot branch, so require a CODEOWNERS approval from the CI owners for `.gitlab-ci.yml` and `ci/`; otherwise a commit that deletes the guard job removes the check. The guard does not catch weakened tests: add your lint and scanner configuration paths to the protected list, and flag any change to test files for explicit reviewer attention, since a legitimate fix may need to update a test's call sites.
 
 ## Supply-chain checks before merge
 
@@ -211,10 +308,10 @@ Track time from release to merged upgrade, share of agent fixes accepted without
 - [ ] Majors need explicit approval and are never auto-merged.
 - [ ] A release-age delay is configured in the bot and, where available, the package manager.
 - [ ] The agent receives version-specific release notes and must cite them.
-- [ ] Diff scope, file count and protected paths are enforced by a blocking CI job that runs the guard from the default branch.
+- [ ] Diff scope, file count and protected paths are enforced by a blocking CI job that runs the guard from the default branch, and again by the push job before anything is pushed.
 - [ ] Lockfiles are regenerated by tooling, never hand-edited.
 - [ ] Full CI plus supply-chain checks run on the new version.
-- [ ] Agent token is a Developer project access token scoped to one protected environment; it cannot merge or approve, and a human reviews every upgrade MR.
+- [ ] The agent job holds no token. The push token is a Developer project access token with only `write_repository`, a protected variable used by a default-branch job; it cannot merge or approve, and a human reviews every upgrade MR.
 - [ ] Acceptance, rejection, rollback and cost are tracked.
 
 ## Evidence
@@ -241,8 +338,12 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI trigger exa
 - Hand-edited lockfile, package-manager checksum and registry behaviour: not checked.
 - General engineering guidance (division of labour, scope caps, metrics, failure modes, checklist) is not a documented claim.
 - `CI_MERGE_REQUEST_DIFF_BASE_SHA`, `GIT_DEPTH: "0"`, and fetching the default branch inside a merge request pipeline: not checked against the current GitLab docs.
-- That a merge request pipeline takes the job definition from the source branch, that `/proc/<pid>/environ` of a parent process is readable by a same-user child in a CI container, and that the pipeline-on-default-branch and two-job designs avoid both: not checked against current GitLab docs or a runner. The `guard-agent-commit.sh` call from the trusted script is described, not shown or run.
-- Project access token roles and scopes (`write_repository`, `read_api`), environment-scoped variables, and whether a protected environment blocks starting a job with `action: prepare`: not checked. Confirm that a user outside the owning group cannot start the job.
+- That a merge request pipeline takes the job definition from the source branch, that `/proc/<pid>/environ` of a parent process is readable by a same-user child in a CI container, and that the pipeline-on-default-branch and two-job designs avoid both: not checked against current GitLab docs or a runner. The `ci/agent-fix.sh` script and the guard calls are described or shown, not run.
+- Project access token roles and the `write_repository` scope, protected and environment-scoped variables, and which GitLab tier protected environments need (stated above as Premium or Ultimate): not checked. Who can run a pipeline on the default branch, and whether a protected environment stops a user outside the owning group from starting the push job: not checked.
+- Protected tag patterns and the role needed to create tags, and the reach of a `read_api` token (every job log and artifact in the project): not checked.
+- The push job steps (downloading a job's artifacts with `CI_JOB_TOKEN`, `git format-patch` and `git am` on the agent patch, pushing through a `GIT_ASKPASS` helper with a project access token, a job token allowlist for a separate trusted project) and the test job's log artifact: described, not run or checked.
+- `git diff --no-renames --name-only` listing both paths of a rename, and the `bot` allowlist file names: not checked against the git docs.
+- `CI_MERGE_REQUEST_SOURCE_BRANCH_SHA` (set only in merged results and merge train pipelines) and that the merge ref's history contains the source head with `GIT_DEPTH: "0"`: not checked against the current GitLab docs.
 - The push rule "Reject unverified users", "Prevent approvals by users who add commits", CODEOWNERS approval and the GitLab tier each needs: not checked.
 - Nothing was run.
 
