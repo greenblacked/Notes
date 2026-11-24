@@ -9,7 +9,7 @@ tags:
   - networking
 status: proposed
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 aliases:
   - ADR-0023
@@ -21,14 +21,14 @@ External and internal HTTP traffic enters our clusters through Ingress resources
 
 Gateway API is the Kubernetes successor to Ingress. It splits responsibilities into roles: an infrastructure provider supplies a `GatewayClass`, the platform team owns `Gateway` objects, and application teams own `HTTPRoute` objects. GKE ships a Gateway controller backed by Google Cloud load balancers.
 
-There is also external pressure: the Kubernetes project announced the retirement of the ingress-nginx controller. Anyone running it must choose a replacement, which makes this decision unavoidable rather than optional (verify the date and scope on the project announcement).
+There is also external pressure. On 2025-11-11 the Kubernetes project announced the retirement of the Ingress NGINX controller: best-effort maintenance continued until March 2026, and after that there are no further releases, no bug fixes and no updates for security vulnerabilities. Existing deployments keep working, and the published charts and images stay available ([Ingress NGINX retirement](https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/), read 2026-11-24). That date has passed, so a cluster still running ingress-nginx runs an unpatched edge component. That makes this decision unavoidable rather than optional.
 
 ## Decision
 
 Proposed: new external and internal HTTP entry points use the GKE Gateway controller with `HTTPRoute`, not `Ingress`.
 
 - **Owner:** the platform team decides; the application teams are consulted.
-- **Trigger to close:** the pilot on one non-production cluster passes the criteria below, and the ingress-nginx retirement timeline is confirmed. Target review is at the next platform planning cycle.
+- **Trigger to close:** the pilot on one non-production cluster passes the criteria below. **Decision deadline: 2027-03-31.** The deadline is proposed by this record; if the owner moves it, the new date and the reason are written here.
 
 Proposed shape:
 
@@ -90,7 +90,7 @@ flowchart LR
 ```
 
 > [!info] Claims not checked against current docs
-> The GatewayClass names (`gke-l7-global-external-managed` and the regional and internal variants), which Gateway API features GKE supports in the version we run, certificate options on the GKE controller, and the ingress-nginx retirement date. Check the GKE Gateway documentation.
+> The GatewayClass names (`gke-l7-global-external-managed` and the regional and internal variants), which Gateway API features GKE supports in the version we run, certificate options on the GKE controller. Check the GKE Gateway documentation. The ingress-nginx retirement facts were checked on 2026-11-24 against the Kubernetes blog post and the project README.
 
 Pilot criteria:
 
@@ -142,5 +142,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://checkout.example.com/healthz
 
 - GKE Gateway API: https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api
 - Gateway API project: https://gateway-api.sigs.k8s.io/
+- Ingress NGINX retirement (Kubernetes blog, 2025-11-11, read 2026-11-24): https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/
+- Related note: [[tools/gke-gateway-vs-envoy-gateway-vs-ingress-nginx]]
 - Related notes: [[network-troubleshooting-dns-mtu-tls-load-balancers]], [[service-mesh-on-gke]], [[zero-downtime-deployments-kubernetes]], [[tls-certificate-renewal]]
 - Related ADRs: [[0020-default-deny-network-policies]]

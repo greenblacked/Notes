@@ -8,7 +8,7 @@ tags:
   - security
   - gke
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
@@ -192,6 +192,8 @@ Start shared per environment, with namespace selection, and split out services t
 
 ## Migrating from Ingress
 
+If your Ingress controller is ingress-nginx, this migration has a deadline that has already passed. The Kubernetes project announced its retirement on 2025-11-11; best-effort maintenance ended in March 2026, and there are no further releases, bug fixes or security fixes after that. Existing deployments keep working, which makes the risk easy to miss (announcement read 2026-11-24, see Sources). The controller comparison and annotation mapping are in [[tools/gke-gateway-vs-envoy-gateway-vs-ingress-nginx]], and the decision is proposed in [[0023-gateway-api-for-north-south-traffic]].
+
 1. Inventory Ingress objects, annotations and the behaviour they rely on (rewrites, timeouts, health checks, redirects).
 2. Create the Gateway alongside the existing Ingress, with a different address.
 3. Translate routes one service at a time into HTTPRoutes. Annotations rarely map one-to-one; use policy resources and filters, and check feature support in the current GKE docs.
@@ -268,6 +270,7 @@ The direct request must fail. If it returns 200, the origin is exposed. Re-run t
 - Cloud Armor: https://cloud.google.com/armor/docs
 - GKE Gateway API: https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api
 - Kubernetes Gateway API: https://gateway-api.sigs.k8s.io/
+- Ingress NGINX retirement (Kubernetes blog, 2025-11-11, read 2026-11-24): https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/
 
 Check the current docs, particularly for GatewayClass names and Cloudflare range endpoints.
 

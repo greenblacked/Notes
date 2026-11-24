@@ -10,7 +10,7 @@ tags:
   - security
 status: accepted
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 decided: 2026-10-21
 draft: false
 aliases:
@@ -253,20 +253,47 @@ kubectl get secrets --all-namespaces -o json \
 From inside a Pod running as the workload's KSA, the metadata server must answer with a token, and the identity must not be the node's:
 
 ```bash
-NAMESPACE="orders"
-KSA="orders-api"
+set -euo pipefail
+NAMESPACE="orders"                                  # change: the workload's namespace
+KSA="orders-api"                                    # change: the workload's Kubernetes service account
+CURL_IMAGE="curlimages/curl@sha256:<digest>"        # change: the digest you reviewed
 
-kubectl run wi-check --namespace "${NAMESPACE}" --rm -it --restart=Never \
-  --image=curlimages/curl:latest \
-  --overrides="{\"spec\":{\"serviceAccountName\":\"${KSA}\"}}" \
-  -- sh -c '
-    curl -sf -H "Metadata-Flavor: Google" \
-      http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email; echo
-    curl -sf -o /dev/null -w "token HTTP %{http_code}\n" -H "Metadata-Flavor: Google" \
-      http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token'
+# The Pod runs as the workload's identity: run it only where you may act as that workload.
+kubectl apply --namespace "${NAMESPACE}" -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: wi-check
+spec:
+  serviceAccountName: ${KSA}
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: wi-check
+      image: ${CURL_IMAGE}
+      command: ["sh", "-c"]
+      args:
+        - >-
+          curl -sf -H "Metadata-Flavor: Google"
+          http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email; echo;
+          curl -sf -o /dev/null -w "token HTTP %{http_code}\n" -H "Metadata-Flavor: Google"
+          http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+EOF
+kubectl wait --namespace "${NAMESPACE}" pod/wi-check \
+  --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s || true
+kubectl logs --namespace "${NAMESPACE}" wi-check
+kubectl delete pod --namespace "${NAMESPACE}" wi-check --wait=false
 ```
 
-Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. Pin the image by digest in real use. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
+Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. The Pod meets Pod Security `restricted` ([[0022-admission-policy-pod-security-vap-and-kyverno]]). It prints the token's HTTP status, never the token. Delete it as soon as you have the output. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
 
 ## References
 
