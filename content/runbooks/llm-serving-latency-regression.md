@@ -461,6 +461,7 @@ Read the authentication header from a file as shown (curl 7.55 or newer); do not
 - The effect of GPU time-slicing on a model server's inter-token latency, which is stated generically.
 - GPU-level telemetry such as DCGM exporter metrics (for example `DCGM_FI_DEV_FB_USED`) and throttling indicators: not available locally and not used in any command.
 - Prefix cache reset and replica-spread causes in 4c, the HPA failure patterns in 4f and the gateway caps in step 2b are operating guidance, not documented claims.
+- The `--enable-autoscaling`, `--total-min-nodes` and `--total-max-nodes` flags and the node pool `--node-labels` and `--node-taints` flags were confirmed on 2026-11-02, after the 2026-11-01 review; the other claims were checked on the review date.
 - Nothing was run against a live cluster.
 
 ### Environment

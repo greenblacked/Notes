@@ -383,6 +383,7 @@ Run the load that failed (a replay of the peak, or a load test through the gatew
 - The pod status reason string `Evicted` and the IAM permission needed for `gcloud container clusters get-credentials` (commonly `container.clusters.get`); neither is in the local sources.
 - That `kubectl set resources` without `-c` changes all containers, the `helm upgrade` values-reuse behaviour, and the helm-diff plugin: these come from the `kubectl`/Helm tools' own help, not read locally here.
 - Helm chart layout (`./charts/vllm`), values keys and the HPA name in the commands are examples for this note's variables block.
+- The `--node-labels` and `--node-taints` flags and the Terraform `labels` and `taint` fields were confirmed on 2026-11-02, after the review; the other claims were checked on the review date.
 - Nothing was run against a live cluster.
 
 ### Environment
