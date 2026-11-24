@@ -11,7 +11,7 @@ tags:
   - ci-cd
   - cost
 created: 2026-10-21
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 ---
 
@@ -196,7 +196,7 @@ variables:
     - gcloud auth login --cred-file="$CRED_DIR/cred.json" --quiet
     - gcloud container clusters get-credentials "$GKE_CLUSTER" --location "$GKE_LOCATION" --project "$GKE_PROJECT"
   after_script:
-    - rm -rf "${CI_BUILDS_DIR}/${CI_JOB_ID}"
+    - rm -rf -- "${CI_BUILDS_DIR:?}/${CI_JOB_ID:?}"
 
 .review:
   extends: .review-auth
@@ -444,6 +444,9 @@ The stop job is the main cleanup path, but it fails in known ways (see Troublesh
 
 GitLab's `stop_stale` API is not a replacement: it only accepts a cutoff at least one week in the past. The janitor below works from Kubernetes and the merge request API instead.
 
+> [!warning] The janitor deletes namespaces and everything in them
+> Run it with `DRY_RUN=true` first, against the review cluster only. The script refuses names that do not start with `review-` and stops after `MAX_DELETES` deletions in one run, so a bad label query cannot empty the cluster.
+
 ```bash title="scripts/review-janitor.sh"
 #!/usr/bin/env bash
 # Deletes review namespaces whose merge request is merged or closed, or that are older than MAX_AGE_HOURS.
@@ -454,6 +457,8 @@ set -euo pipefail
 GITLAB_URL="${CI_SERVER_URL:?}"            # set by GitLab
 MAX_AGE_HOURS="${MAX_AGE_HOURS:-120}"     # change: hard upper bound on any review copy
 DRY_RUN="${DRY_RUN:-true}"                # set to false once the output looks right
+MAX_DELETES="${MAX_DELETES:-20}"          # change: the most namespaces one run may delete
+deleted=0
 
 now_epoch="$(date -u +%s)"
 mr_json="$(mktemp)"
@@ -469,6 +474,7 @@ kubectl get namespaces -l review.example.com/managed=true -o json \
     ] | @tsv' \
   | while IFS=$'\t' read -r ns project_id mr_iid created phase; do
       [[ "$phase" == "Terminating" ]] && { echo "skip $ns: already terminating"; continue; }
+      [[ "$ns" == review-* ]] || { echo "skip $ns: name does not start with review-"; continue; }
       [[ "$project_id" =~ ^[0-9]+$ && "$mr_iid" =~ ^[0-9]+$ ]] || { echo "skip $ns: project-id or mr-iid label missing"; continue; }
 
       created_epoch="$(date -u -d "$created" +%s)"   # GNU date; the job image is Linux
@@ -494,7 +500,9 @@ kubectl get namespaces -l review.example.com/managed=true -o json \
       if [[ -n "$reason" ]]; then
         echo "delete $ns ($reason)"
         if [[ "$DRY_RUN" == "false" ]]; then
+          (( deleted < MAX_DELETES )) || { echo "STOP: reached MAX_DELETES=$MAX_DELETES; check the label query" >&2; exit 1; }
           kubectl delete namespace "$ns" --wait=false
+          deleted=$(( deleted + 1 ))
         fi
       fi
     done
@@ -626,7 +634,7 @@ Check the merge request's latest pipeline for a `stop-review` job; if it is miss
 
 - A bad review deploy: push a fix, or re-run the previous pipeline's deploy job. Nothing in production depends on review environments, so there is no rollback urgency.
 - A bad baseline or RBAC change: revert it in the platform repository and re-apply. Existing namespaces keep their objects until recreated.
-- Switching review environments off: remove `deploy-review` and `stop-review` from the CI configuration, stop all review environments from the Environments page, then run the janitor with `MAX_AGE_HOURS=0` and `DRY_RUN=false`, and finally delete the review node pool. Delete the wildcard DNS record last.
+- Switching review environments off: remove `deploy-review` and `stop-review` from the CI configuration, stop all review environments from the Environments page, then run the janitor with `MAX_AGE_HOURS=0`, `MAX_DELETES` set to the number of review namespaces you expect, and `DRY_RUN=false`, and finally delete the review node pool. Delete the wildcard DNS record last.
 
 ## Related
 
