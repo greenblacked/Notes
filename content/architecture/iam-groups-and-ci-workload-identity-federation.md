@@ -9,7 +9,7 @@ tags:
   - gitlab-ci
   - jenkins
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
@@ -19,7 +19,7 @@ This note describes an IAM design for GCP in two parts: how people get access (g
 > Written against Cloud IAM, Workload Identity Federation and GitLab CI OIDC `id_tokens`, based on the Google Cloud IAM and Workload Identity Federation documentation and the GitLab CI documentation at docs.gitlab.com. Examples use gitlab.com as the issuer; self-managed GitLab uses its own issuer URL.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the exact GitLab OIDC claim names (`project_path`, `ref_protected`, `namespace_path`); the `gcloud iam workload-identity-pools create-cred-config` flags for a file-based OIDC token source; the name and configuration of the Jenkins OIDC plugin. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: the exact GitLab OIDC claim names (`project_path`, `ref_protected`, `namespace_path`); the `gcloud iam workload-identity-pools create-cred-config` flags for a file-based OIDC token source; the name and configuration of the Jenkins OIDC plugin; the GitLab keywords `artifacts:access`, `resource_group` and protected-environment approval settings; and that Terraform refuses to apply a saved plan when the state changed after the plan. Check them before relying on them.
 
 ## Principles
 
@@ -208,7 +208,6 @@ variables:
   GCP_PROJECT_NUMBER: "123456789012" # change: number of the project hosting the pool
   GCP_WIF_POOL: "gitlab-ci"
   GCP_WIF_PROVIDER: "gitlab-oidc"
-  GCP_SERVICE_ACCOUNT: "tf-apply-prod@my-project.iam.gserviceaccount.com" # change
 
 .gcp-auth:
   id_tokens:
@@ -231,21 +230,49 @@ variables:
   after_script:
     - rm -rf "${CI_BUILDS_DIR}/${CI_JOB_ID}"
 
-terraform-apply:
-  stage: apply
-  extends: .gcp-auth
+.terraform-image:
   image:
     name: hashicorp/terraform:1.9.8 # change: pin the tag you tested, or use a digest
     entrypoint: [""]
+
+terraform-plan:
+  stage: plan
+  extends: [.gcp-auth, .terraform-image]
+  variables:
+    GCP_SERVICE_ACCOUNT: "tf-plan-prod@my-project.iam.gserviceaccount.com" # change: read-only plan account
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
   script:
     - terraform init -input=false
-    - terraform apply -input=false -auto-approve
+    - terraform plan -input=false -lock=false -out=plan.tfplan
+    - terraform show -no-color plan.tfplan > plan.txt
+  artifacts:
+    paths: [plan.tfplan, plan.txt]
+    access: developer # the saved plan can hold secrets; check artifacts:access in your GitLab version
+    expire_in: 1 day
+
+terraform-apply:
+  stage: apply
+  extends: [.gcp-auth, .terraform-image]
+  variables:
+    GCP_SERVICE_ACCOUNT: "tf-apply-prod@my-project.iam.gserviceaccount.com" # change: apply account
+  needs:
+    - job: terraform-plan
+      artifacts: true
+  resource_group: terraform-prod # one apply at a time for this state
+  environment:
+    name: infra/prod # protect it: owner group only, approval required, approver is not the author
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+      when: manual
+  script:
+    - terraform init -input=false
+    - terraform apply -input=false plan.tfplan # the reviewed saved plan, never a fresh plan
 ```
 
-That image does not contain `gcloud`. In practice use your own pinned runner image that has both `gcloud` and `terraform`; the sample shows the authentication shape, not the image. Notes:
+The Terraform image does not contain `gcloud`. In practice use your own pinned runner image that has both `gcloud` and `terraform`; the sample shows the authentication shape, not the image. Notes:
 
+- The apply job follows [[adr/0035-terraform-plan-policy-gate-and-ci-only-apply]]: the default-branch pipeline saves a plan, a person reads `plan.txt`, and a manual job in the protected `infra/prod` environment applies that saved file with the apply account. It never runs `-auto-approve` on a fresh plan. If the state changed after the plan, Terraform should refuse the stale plan; re-run the pipeline and review again. Without a protected environment and an approval rule, `when: manual` only means "anyone with Developer access can click". `resource_group` keeps two applies off the same state. The plan job uses the read-only plan account with `-lock=false` (see the state bucket paragraph above). The full delivery flow, including merge request plans and the policy gate, is in [[architecture/infrastructure-delivery-terraform-pipelines-and-drift]].
 - The token is a secret for its lifetime. Write it with `umask 077`, delete it in `after_script` and never print it.
 - `id_tokens` is per job. Jobs that do not need cloud access do not get a token.
 - Terraform needs `GOOGLE_APPLICATION_CREDENTIALS` pointing at the credential file (set in `before_script`); the provider reads Application Default Credentials, not the `gcloud auth login` store. `gcloud auth login` is only for `gcloud` steps. The paths are per job (`CI_JOB_ID`) so concurrent jobs on a shared runner do not collide. Check the provider docs for the current behaviour.
@@ -308,7 +335,7 @@ gcloud iam service-accounts get-iam-policy "${SA_EMAIL}" \
   --format="yaml(bindings)"
 ```
 
-For federation, run a plan job on an unprotected branch, an apply job on an unprotected branch and an apply job on the protected branch. The apply job on the unprotected branch must fail at impersonation (the `project_ref_protected` binding does not match) while the plan job on a merge request must succeed as `tf-plan-<env>`; the apply job on the protected branch must authenticate and show the service account as the active identity with `gcloud auth list`.
+For federation, run a plan job on an unprotected branch, a temporary job on an unprotected branch that sets `GCP_SERVICE_ACCOUNT` to the apply account and an apply job on the protected branch. The apply job on the unprotected branch must fail at impersonation (the `project_ref_protected` binding does not match) while a job using the plan account must succeed as `tf-plan-<env>`; the apply job on the protected branch must authenticate and show the service account as the active identity with `gcloud auth list`.
 
 If a leaked credential is suspected, follow [[runbooks/leaked-credential-rotation]].
 
@@ -329,3 +356,4 @@ If a leaked credential is suspected, follow [[runbooks/leaked-credential-rotatio
 - [[patterns/gitlab-ci-pipeline-structure]]: where authentication and the plan and apply stages sit in a pipeline.
 - [[patterns/jenkins-shared-libraries]]: sharing pipeline code, including the cloud authentication step, across Jenkins jobs.
 - [[compliance/access-reviews-gcp-and-gke]]: the periodic review that keeps the group memberships honest.
+- [[adr/0035-terraform-plan-policy-gate-and-ci-only-apply]]: the decision behind the saved-plan, manual, protected-environment apply.
