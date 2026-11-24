@@ -143,10 +143,10 @@ resource "google_container_cluster" "prod" {
 
 Two paths, both from ADR 0055; there is no public endpoint to fall back to.
 
-| Option                                         | How it works                                                                                                      | Trade-off                                                                                     |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Option                                         | How it works                                                                                                     | Trade-off                                                                                     |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | DNS-based endpoint                             | The runner authenticates with its Google identity (Workload Identity Federation) and IAM decides on each request | Works from SaaS runners and laptops; no runner IPs to list; needs an IAM grant on the cluster |
-| Runner inside the VPC (or a connected network) | Runner talks to the private endpoint; its subnet is in authorized networks                                        | Best network control; you operate the runners ([[patterns/gitlab-runners-on-gke]])            |
+| Runner inside the VPC (or a connected network) | Runner talks to the private endpoint; its subnet is in authorized networks                                       | Best network control; you operate the runners ([[patterns/gitlab-runners-on-gke]])            |
 
 Fleet-registered clusters can also be reached through Connect Gateway, which is IAM only as well. Kubernetes RBAC still applies after IAM on every path. Prefer GitOps ([[adr/0001-gitops-with-argocd]]): the cluster pulls from Git, so CI rarely needs Kubernetes API access.
 

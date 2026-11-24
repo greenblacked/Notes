@@ -79,12 +79,12 @@ Use `_member` (additive) resources for groups, not `_iam_policy` or `_iam_bindin
 
 A pipeline needs at least two identities, and for sensitive environments more:
 
-| Service account  | Used by                        | Roles                                                                                                                                                   |
-| ---------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Service account  | Used by                                                 | Roles                                                                                                                                                   |
+| ---------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tf-plan-<env>`  | Merge request pipelines and the default-branch plan job | Read-only: `roles/viewer` on the target project is too broad; use the predefined viewer roles of the services you manage, plus read on the state bucket |
-| `tf-apply-<env>` | Protected branch pipeline only | The roles needed to create the resources of that environment, nothing more                                                                              |
-| `deploy-<env>`   | Deploy stage                   | `roles/container.developer` on the environment cluster, `roles/artifactregistry.reader` where used                                                      |
-| `build`          | Build stage                    | Write on the artifact registry only                                                                                                                     |
+| `tf-apply-<env>` | Protected branch pipeline only                          | The roles needed to create the resources of that environment, nothing more                                                                              |
+| `deploy-<env>`   | Deploy stage                                            | `roles/container.developer` on the environment cluster, `roles/artifactregistry.reader` where used                                                      |
+| `build`          | Build stage                                             | Write on the artifact registry only                                                                                                                     |
 
 Two things matter more than the exact roles. First, the plan account cannot change anything, so a merge request from a branch cannot alter infrastructure even if its pipeline is compromised. Second, only the pipeline on a protected branch or tag can impersonate the apply account; this is enforced in the federation binding below, not in a CI variable.
 
