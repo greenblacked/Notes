@@ -9,7 +9,7 @@ tags:
   - supply-chain
   - linux
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -18,7 +18,7 @@ A surprising share of "works on my machine" incidents in infrastructure work are
 The fix is to pin the toolchain in the repository and to make CI fail when what runs differs from what is pinned. This note compares three ways to do the pinning, **mise**, **asdf** and **dev containers**, and recommends a setup where the CI toolbox image is the source of truth and a version file mirrors it for laptops.
 
 > [!info] Not checked against current releases
-> Checked on 2026-10-21 against the mise documentation source on its main branch (which mentions release v2026.10.4 and can be ahead of the version you install: compare with your `mise --version`), the asdf changelog and README, the Dev Container specification, the Kubernetes version skew policy, Helm's chart documentation and Terraform's language documentation. Not verified: mirroring mise tool downloads through Artifactory (only a mirror for mise's own release binaries is documented); Renovate support for `mise.toml` and `mise.lock`; per-tool behaviour on Windows and Apple Silicon; mise version syntax beyond exact versions; asdf plugin pinning commands and asdf's Windows support; dev container host support and CLI flags for CI; the `terraform providers lock` platform flag; and the exact JSON field names printed by `terraform`, `kubectl` and `helm` (the drift check below parses them and was tested only with stand-in binaries for those three).
+> Checked on 2026-10-21 against the mise documentation source on its main branch (which mentions release v2026.10.4 and can be ahead of the version you install: compare with your `mise --version`), the asdf changelog and README, the Dev Container specification, the Kubernetes version skew policy, Helm's chart documentation and Terraform's language documentation. Not verified: mirroring mise tool downloads through Artifactory (only a mirror for mise's own release binaries is documented); Renovate support for `mise.toml` and `mise.lock`; per-tool behaviour on Windows and Apple Silicon; mise version syntax beyond exact versions; asdf plugin pinning commands and asdf's Windows support; dev container host support and CLI flags for CI; the `terraform providers lock` platform flag; and the exact JSON field names printed by `terraform`, `kubectl` and `helm` (the drift check below parses them and was tested only with stand-in binaries for those three). The trust and safe-mode behaviour was re-checked against the published mise pages on 2026-11-24; which environment variable mise uses to detect CI was not.
 
 ## Pin inside the tools too
 
@@ -106,7 +106,7 @@ Points that matter in production:
 - **Integrity.** mise verifies downloads itself, with checks that depend on the backend and on what upstream publishes; a failed check aborts the install. `mise tool terraform` shows which checks apply to a tool.
 - **Backends.** In the mise registry, `terraform`, `kubectl`, `helm` and `opentofu` resolve through aqua backends. `gcloud` resolves only through vfox and asdf backends, so do not assume lockfile or checksum guarantees for it, and on macOS it also needs a matching Python already installed. Install gcloud from the CI image or Google's own installer instead.
 - **Plugins.** The mise security page calls asdf plugins dangerous because a plugin repository can be compromised and inject code, and the asdf-plugin backend does not support the lockfile. Avoid asdf-backed tools where an aqua or GitHub release backend exists.
-- **Trust.** Config that can run code (tasks, hooks, `[env]` templates) needs `mise trust`; a plain `[tools]` table does not. In CI mise trusts config automatically. A job that reads branches you did not write while holding secrets should set `MISE_SAFE=1`, which refuses tasks, plugin installs and project environment variables.
+- **Trust.** Config that can run code (tasks with `secrets`, hooks, template syntax, `[env]`) needs `mise trust`. A file with only `min_version`, plain `[tools]` versions and tasks without `secrets` does not, outside paranoid mode. Commands that run project code (`mise run`, `mise install`, `mise exec`) trust their active config automatically. When mise detects CI, it trusts every config file without prompting unless paranoid mode is on, so tasks, hooks and `[env]` from the checked-out branch run. A job that reads branches you did not write while holding secrets should set `MISE_SAFE=1`. It refuses tasks, template `exec()` and plugin installs, skips hooks, and ignores project environment variables and settings. (mise CI and `mise trust` pages, checked 2026-11-24.)
 - **Activation.** `mise activate` is for interactive shells, `mise activate --shims` for editors and login profiles, and `mise exec` or `mise run` for scripts and CI, where no activation is needed. The shim directory is `~/.local/share/mise/shims`.
 
 In CI, run the same file:
@@ -303,3 +303,5 @@ Rollback is a revert of the bump merge request: the previous image digest and th
 - [Terraform: dependency lock file](https://developer.hashicorp.com/terraform/language/files/dependency-lock)
 - [Helm: charts](https://helm.sh/docs/topics/charts/) (`kubeVersion`)
 - [Helm: version skew](https://helm.sh/docs/topics/version_skew/)
+- [mise: continuous integration](https://mise.jdx.dev/continuous-integration.html): automatic trust in CI, `MISE_SAFE`, the tool-cache warning, checked 2026-11-24.
+- [mise trust](https://mise.jdx.dev/cli/trust.html): which configs need trust, automatic trust by command, paranoid mode, checked 2026-11-24.
