@@ -9,7 +9,7 @@ tags:
   - prometheus
   - reliability
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 aliases:
   - canary deployments
@@ -217,8 +217,8 @@ Add a latency metric next to the error metric for services where slow is as bad 
 
 ## Traffic routing options
 
-> [!warning] ingress-nginx retirement
-> The Kubernetes project announced the retirement of the community ingress-nginx controller, with best-effort maintenance ending around March 2026. Check its current status before adopting it. For new setups prefer the Gateway API plugin or a service mesh, and treat the NGINX examples here as a teaching shape.
+> [!warning] ingress-nginx is retired
+> Best-effort maintenance of the community ingress-nginx controller ended in March 2026, and its repository was archived on 2026-03-24; it gets no further releases or security fixes (Kubernetes blog, 2025-11-11, and the GitHub repository, checked 2026-11-24). For new setups use the Gateway API plugin or a service mesh, and treat the NGINX examples here as a teaching shape.
 
 | Router                     | How weights are applied                           | Notes                                                                                |
 | -------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------ |

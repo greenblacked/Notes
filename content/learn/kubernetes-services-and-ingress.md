@@ -7,7 +7,7 @@ tags:
   - kubernetes
   - networking
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
@@ -345,8 +345,10 @@ spec:
 
 The Gateway API CRDs are not built into Kubernetes. They are installed separately, and you also need a controller that implements them. Managed platforms often ship one: GKE has its own Gateway controller with Google-provided `GatewayClass` names.
 
-> [!warning] Check before relying on this
-> Two points were not confirmed for this page and change over time. First, the community `ingress-nginx` controller: its retirement was announced for 2026, so check its current status in the project's repository and the Kubernetes blog before you build anything new on it. Second, which Gateway API features are in the standard channel (stable) and which are experimental, and which GKE `GatewayClass` names exist, depend on the Gateway API release and your GKE version. The Ingress API itself remains in Kubernetes, but it is frozen, and the Kubernetes documentation points new work to the Gateway API.
+> [!warning] ingress-nginx is retired
+> The Kubernetes project announced on 2025-11-11 that the community `ingress-nginx` controller would get best-effort maintenance only until March 2026, and after that "no further releases, no bugfixes, and no updates to resolve any security vulnerabilities". Its GitHub repository was archived (read-only) on 2026-03-24. Existing installations keep working but get no security fixes, so do not build anything new on it and plan a move to the Gateway API or another supported controller (checked 2026-11-24 against the Kubernetes blog and the repository).
+>
+> Not confirmed for this page and still changing: which Gateway API features are in the standard channel (stable) and which are experimental, and which GKE `GatewayClass` names exist; both depend on the Gateway API release and your GKE version. The Ingress API itself remains in Kubernetes, but it is frozen, and the Kubernetes documentation points new work to the Gateway API.
 
 **Default for new work:** use the Gateway API. Use Ingress when the platform already runs a supported controller and an existing app needs a small change, and plan to migrate. For the senior view of controlling which Pods may talk to your Service, see [[patterns/kubernetes-network-policies]].
 
@@ -509,24 +511,28 @@ Do these in the kind cluster `lab`. Check `kubectl config current-context` print
 8. **Optional: route with the Gateway API on kind.** This needs a Gateway API implementation in the cluster and takes the longest, so treat it as a stretch goal. Pick one implementation that documents a kind quick start, install the Gateway API CRDs and the controller as its documentation describes, and then apply the `gateway.yaml` from earlier with `gatewayClassName` set to a name from `kubectl get gatewayclass`.
 
    ```bash
+   GATEWAY_CLASS="CHANGE-ME"   # change: a name from the list below, also set in gateway.yaml
    kubectl get gatewayclass
+   kubectl wait --for=condition=Accepted "gatewayclass/${GATEWAY_CLASS}" --timeout=60s
    kubectl apply -f gateway.yaml
-   kubectl get gateway web-gateway
+   kubectl wait --for=condition=Programmed gateway/web-gateway --timeout=120s
    kubectl get httproute web
    ```
 
    Expected: the Gateway shows `PROGRAMMED` as `True` once the controller has set it up. On kind there is no cloud load balancer, so it may have no external address; reach it by running `kubectl port-forward` against the Service the controller created for the Gateway, then call it with `curl -H 'Host: web.example.com' http://127.0.0.1:8080/`.
-   If you see something else: `no matches for kind "Gateway"` means the CRDs are not installed. A Gateway stuck without `PROGRAMMED` points to a wrong `gatewayClassName` or a controller that is not running; read `kubectl describe gateway web-gateway` conditions. Which implementation to use and its install steps were not verified here: follow its own documentation for your version.
+   If you see something else: if the `Accepted` wait times out, the controller for that class is not running or rejected it; read `kubectl describe gatewayclass "$GATEWAY_CLASS"` and do not apply the Gateway. `no matches for kind "Gateway"` means the CRDs are not installed. A Gateway stuck without `PROGRAMMED` points to a wrong `gatewayClassName` or a controller that is not running; read `kubectl describe gateway web-gateway` conditions. Which implementation to use and its install steps were not verified here: follow its own documentation for your version.
 
 9. **Clean up.**
 
    ```bash
+   kubectl delete -f gateway.yaml --ignore-not-found
    kubectl delete -f web.yaml --ignore-not-found
    kubectl delete pod client --ignore-not-found
    kubectl delete namespace other --ignore-not-found
+   kubectl get gateway,httproute -A 2>/dev/null | grep -E 'web-gateway|web' || echo "no gateway objects left"
    ```
 
-   Expected: the Deployment, Service and Pods are removed, and the `other` namespace and everything in it with it.
+   Expected: the Gateway, Deployment, Service and Pods are removed, and the `other` namespace and everything in it with it. If you installed a Gateway API controller in exercise 8, uninstall it with its own documented steps. Remove the CRDs only on this lab cluster; on a shared cluster other teams' routes depend on them. If you skipped exercise 8, the first command can fail because the Gateway CRDs are not installed; skip it.
    If you see something else: a namespace stuck in `Terminating` usually has a resource with a finalizer that is waiting on something; list what remains with `kubectl get all -n other`.
 
 ## Common mistakes
@@ -577,6 +583,7 @@ To go deeper:
 - Kubernetes documentation, "DNS for Services and Pods" (https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/).
 - Kubernetes documentation, "Ingress" and "Ingress Controllers" (https://kubernetes.io/docs/concepts/services-networking/ingress/), and "Gateway API" (https://kubernetes.io/docs/concepts/services-networking/gateway/).
 - Gateway API project documentation (https://gateway-api.sigs.k8s.io/), including the list of implementations.
+- Kubernetes blog, "Ingress NGINX Retirement: What You Need to Know" (https://kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/) and the `kubernetes/ingress-nginx` repository (https://github.com/kubernetes/ingress-nginx), for the March 2026 end of maintenance and the 2026-03-24 archive; checked 2026-11-24.
 - Kubernetes documentation, "Use Port Forwarding to Access Applications in a Cluster" (https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/).
 - Google Cloud documentation, "LoadBalancer Service concepts" for GKE (https://cloud.google.com/kubernetes-engine/docs/concepts/service-load-balancer).
-- Not checked against a running cluster for this page. The `ingress-nginx` retirement status, `kube-proxy` mode defaults, the Endpoints deprecation, the GKE load balancer details and the Docker Hub image tags (`nginxinc/nginx-unprivileged`, `curlimages/curl`) are not verified.
+- Not checked against a running cluster for this page. `kube-proxy` mode defaults, the Endpoints deprecation, the GKE load balancer details, the Docker Hub image tags (`nginxinc/nginx-unprivileged`, `curlimages/curl`) and the `Accepted`/`Programmed` condition names on your implementation are not verified.
