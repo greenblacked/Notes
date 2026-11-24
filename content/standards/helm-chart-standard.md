@@ -9,7 +9,7 @@ tags:
   - ci-cd
   - delivery
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
@@ -179,7 +179,7 @@ Use the Kubernetes version your clusters run for `-kubernetes-version`; `1.30.0`
 
 ## Exceptions and expiry
 
-A chart that must break a MUST rule (for example a chart that installs a CRD and a `ClusterRole` for an operator) records the exception in the chart's README and in the exception register: the rule, the reason, the compensating control, the approver, and an expiry date. The default maximum is 180 days (a proposed team default), after which the record is re-approved or the chart is fixed. A CI job fails on an expired record. Cluster-scoped charts additionally need approval from the platform owners, since they can affect every tenant.
+A chart that must break a MUST rule (for example a chart that installs a CRD and a `ClusterRole` for an operator) records the exception in the chart's README and in the exception register: the rule, the reason, the compensating control, the approver, and an expiry date. Expiry and renewal follow [[policy-exception-and-waiver-process#Rules]]; at expiry the record is re-approved as a new request or the chart is fixed. A CI job fails on an expired record. Cluster-scoped charts additionally need approval from the platform owners, since they can affect every tenant.
 
 ## Reviewer checklist
 

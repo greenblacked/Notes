@@ -9,7 +9,7 @@ tags:
   - audit
   - policy-as-code
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -152,7 +152,7 @@ Restricted or Confidential data found where its class does not allow it (a produ
 
 ## Exceptions
 
-An exception records the data set, the class, the rule that cannot be met, the reason, a compensating control, the data owner's approval, security's review and an expiry date (proposed default 90 days), through [[compliance/policy-exception-and-waiver-process]]. Restricted data in non-production environments, in CI artifacts or in AI tools is not accepted as an exception.
+An exception records the data set, the class, the rule that cannot be met, the reason, a compensating control, the data owner's approval, security's review and an expiry date within the maximum set in [[compliance/policy-exception-and-waiver-process#Rules]]. Restricted data in non-production environments, in CI artifacts or in AI tools is not accepted as an exception.
 
 ## Reviewer checklist
 

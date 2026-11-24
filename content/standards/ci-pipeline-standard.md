@@ -9,7 +9,7 @@ tags:
   - jenkins
   - supply-chain
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
@@ -232,7 +232,7 @@ The Jenkins `retry` step retries any failure inside it, so wrap only the steps t
 
 ## Exceptions
 
-A pipeline that cannot meet a rule records the rule, the reason, an owner and an expiry (default 90 days, a proposed team default) in the repository and the exception register. A moving `include:` reference, a missing scan stage and an unprotected production deploy are never accepted as exceptions.
+A pipeline that cannot meet a rule records the rule, the reason, an owner and an expiry (within the maximum in [[policy-exception-and-waiver-process#Rules]]) in the repository and the exception register. A moving `include:` reference, a missing scan stage and an unprotected production deploy are never accepted as exceptions.
 
 ## Reviewer checklist
 

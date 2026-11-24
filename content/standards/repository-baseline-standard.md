@@ -10,7 +10,7 @@ tags:
   - gitlab-ci
   - team-process
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -359,7 +359,7 @@ Run either script against a list of repositories from the central audit job and 
 
 ## Exceptions
 
-A repository that cannot meet a rule (a mirror of an upstream project, a plan without code owners, an archived repository kept for reference) records the rule, the reason, an owner and an expiry date (proposed default 90 days) through [[compliance/policy-exception-and-waiver-process]]. Unprotected default branches, human bypass actors and missing owners are not accepted as exceptions.
+A repository that cannot meet a rule (a mirror of an upstream project, a plan without code owners, an archived repository kept for reference) records the rule, the reason, an owner and an expiry date within the maximum set in [[compliance/policy-exception-and-waiver-process#Rules]]. Unprotected default branches, human bypass actors and missing owners are not accepted as exceptions.
 
 ## Reviewer checklist
 

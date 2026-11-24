@@ -9,7 +9,7 @@ tags:
   - security
   - ci-cd
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
@@ -192,7 +192,7 @@ The `ARG` values above are non-secret metadata, which is the only kind of `ARG` 
 
 Some images cannot meet every rule, for example a vendor image that must run as root, or a debug image with unpinned tools.
 
-- An exception is a short record in the exception register: the rule, the Dockerfile, the reason, the compensating control, an owner and an **expiry date**. The default maximum is 90 days (a proposed team default), renewable once with a reason.
+- An exception is a short record in the exception register: the rule, the Dockerfile, the reason, the compensating control, an owner and an **expiry date**. Expiry and renewal follow [[policy-exception-and-waiver-process#Rules]].
 - The `.hadolint.yaml` ignore comment points at the record. When the date passes, the CI job for the register fails the pipeline, so exceptions expire rather than accumulate.
 - A root runtime user always needs a compensating control: a read-only root filesystem, dropped capabilities, and a runtime policy that restricts the pod.
 

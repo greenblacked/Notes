@@ -11,7 +11,7 @@ tags:
   - observability
   - reliability
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -399,7 +399,7 @@ A scheduled job that changes production on its own (cleanups, scaling, rotations
 
 ## Exceptions
 
-A job that cannot meet a rule (a vendor job without a deadline setting, a host job without a lock) records the rule, the reason, a compensating control, an owner and an expiry date (proposed default 90 days) through [[policy-exception-and-waiver-process]]. Missing alerts and an owner who is a single person are not accepted as exceptions.
+A job that cannot meet a rule (a vendor job without a deadline setting, a host job without a lock) records the rule, the reason, a compensating control, an owner and an expiry date within the maximum set in [[policy-exception-and-waiver-process#Rules]]. Missing alerts and an owner who is a single person are not accepted as exceptions.
 
 ## Reviewer checklist
 
