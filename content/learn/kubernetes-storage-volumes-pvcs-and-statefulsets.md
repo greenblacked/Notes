@@ -260,6 +260,12 @@ kubectl get events -n "$NS" --sort-by=.lastTimestamp | tail -20
 
 Do these in the kind cluster `lab`. Names start with `k9-`. Check that `kubectl config current-context` prints `kind-lab` first.
 
+The commands below use the current namespace. Pin it first so the cleanup finds what you created:
+
+```bash
+kubectl config set-context kind-lab --namespace=default
+```
+
 > [!warning] Exercises are not verified
 > The commands and outputs were written from the Kubernetes documentation and the kind sources and were not run for this page. Output is illustrative. Image tags are examples; pin the ones you use. Read the "If you see something else" lines first.
 
