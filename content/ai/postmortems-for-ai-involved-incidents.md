@@ -8,7 +8,7 @@ tags:
   - reliability
   - team-process
 created: 2026-11-01
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -124,9 +124,9 @@ Run the cases in CI on changes to a prompt template, model pin or retrieval inde
 ```yaml
 agent-regression:
   stage: test
-  image: python:3.12-slim
+  image: python@sha256:<digest> # change: the Python 3.12 slim image you have reviewed, pinned by digest
   script:
-    - pip install -r evals/requirements.txt
+    - pip install --require-hashes --no-cache-dir -r evals/requirements.txt # change: a requirements file with a hash for every package
     - python evals/run.py --suite incident-regressions --fail-on-forbidden-tool-call
   rules:
     # Merge request pipelines: CI_COMMIT_BRANCH is not set there, so match on the pipeline source

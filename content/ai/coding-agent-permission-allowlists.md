@@ -8,7 +8,7 @@ tags:
   - policy-as-code
   - audit
 created: 2026-10-27
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -92,7 +92,7 @@ Treat each new `allow` line like an access-grant diff. Add the settings files to
 ```yaml title=".gitlab-ci.yml"
 agent-permissions-lint:
   stage: test
-  image: node:22-alpine # pin to a digest in real pipelines
+  image: node@sha256:<digest> # change: the Node.js 22 image you have reviewed, pinned by digest
   script:
     - node scripts/lint-agent-permissions.mjs .agent/settings.json .mcp.json
   rules:
@@ -166,7 +166,7 @@ No evidence level is claimed. A review on 2026-11-02 checked the Git, GitLab, Ku
 - Every coding-agent rule behaviour: evaluation order, wildcard and trailing-wildcard matching, compound-command and environment-assignment handling, file-deny coverage of shell commands, symlinks, bare-tool-name denies, the `mcp__<server>__<tool>` form and the settings file layout. Also unchecked: whether and where "do not ask again" choices are saved, whether a tool has a permissions view that lists every rule, and whether it warns about unknown rule names at startup. The agent's own documentation was not available; the note presents these as things to confirm per tool.
 - That other authorisation systems pick the most specific rule: not checked.
 - NIST SP 800-53 Rev. 5 controls AC-5 and AC-6: not available locally.
-- CODEOWNERS behaviour and the `node:22-alpine` image tag: not checked.
+- CODEOWNERS behaviour and the Node.js image you pin: not checked.
 - Engineering guidance, not documented claims: scoped file layout, review and audit routines, the lint rules, and the rule-design pitfalls.
 - Nothing was run.
 

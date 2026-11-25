@@ -8,7 +8,7 @@ tags:
   - reliability
   - team-process
 created: 2026-11-01
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -101,7 +101,7 @@ echo "candidate ${CANDIDATE} pass_rate ${rate}"
 ```yaml title=".gitlab-ci.yml"
 eval-gate:
   stage: test
-  image: registry.example.com/platform/eval-runner:1.4.0
+  image: registry.example.com/platform/eval-runner@sha256:<digest>
   script:
     - ./scripts/gate-eval.sh "$CI_COMMIT_SHORT_SHA"
   rules:

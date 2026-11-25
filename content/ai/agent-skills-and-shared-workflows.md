@@ -8,7 +8,7 @@ tags:
   - team-process
   - security
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -221,11 +221,11 @@ validate-agent-files:
   stage: test
 ```
 
-Keep the template minimal and readable, and pin job images by explicit tag or digest ([[patterns/gitlab-ci-pipeline-structure]]):
+Keep the template minimal and readable, and pin job images by digest ([[patterns/gitlab-ci-pipeline-structure]]):
 
 ```yaml title="ci-templates/agent-skill-checks.yml"
 .agent-skill-checks:
-  image: python:3.12-slim # pin by digest in real use
+  image: python@sha256:<digest> # change: the Python 3.12 slim image you have reviewed, pinned by digest
   script:
     - pip install --no-cache-dir "pyyaml==6.0.2" # change: the version you have reviewed
     - python scripts/validate-manifests.py
@@ -289,6 +289,6 @@ Source-reviewed on 2026-11-02. Nothing was run. The review covered the GitLab pr
 - GitLab CODEOWNERS behaviour was not checked (that CODEOWNERS is advisory unless code owner approval is required, that code owners appear as required merge request approvers, section syntax, one approval per section, several owners on one line meaning any one is enough, behaviour of the same path in several sections); the code owners pages are not in the local copy. See [GitLab code owners](https://docs.gitlab.com/user/project/codeowners/).
 - Which GitLab tier offers code owner sections beyond the protected-branch setting noted above.
 - Any specific agent product's skill file format, and the manifest fields; the manifest is illustrative.
-- Workload Identity on GKE (Google Cloud documentation was not available), the PyYAML and `python:3.12-slim` image details, and the Jenkins shared-library comparison.
+- Workload Identity on GKE (Google Cloud documentation was not available), the PyYAML details and the Python base image you pin, and the Jenkins shared-library comparison.
 - Engineering guidance, not documented claims: semantic-versioning rules for skills, least-privilege tool lists, test strategy for skills, review checklist, and treating catalogue content as untrusted.
 - Nothing was run, including the validation script and the CI template.

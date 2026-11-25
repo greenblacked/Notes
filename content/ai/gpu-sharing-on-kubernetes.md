@@ -8,7 +8,7 @@ tags:
   - gke
   - reliability
 created: 2026-11-01
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -171,7 +171,7 @@ A sudden jump in allocatable GPUs on a node can mean someone enabled time-slicin
 ```yaml title=".gitlab-ci.yml"
 gpu-quota-check:
   stage: test
-  image: registry.example.com/platform/kubectl:1.0.0
+  image: registry.example.com/platform/kubectl@sha256:<digest>
   script:
     - set -Eeuo pipefail
     - kubectl apply --dry-run=server -f gpu-quota.yaml
