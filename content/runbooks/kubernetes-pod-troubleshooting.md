@@ -7,7 +7,7 @@ tags:
   - kubernetes
   - reliability
 created: 2026-10-16
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -192,7 +192,7 @@ while read -r p; do kubectl delete pod -n "$NS" "$p"; done < evicted-pods.txt
 When the image has no shell (distroless) or the pod crashes too fast to exec, attach an ephemeral debug container. Ephemeral containers cannot be removed from a pod, so they are cleaned up when the pod is replaced.
 
 > [!warning] A node debug pod has host access
-> `kubectl debug node/` runs a pod in the node's IPC, network and PID namespaces with the node's root filesystem at `/host`. It is not privileged by default (`--profile=sysadmin` makes it privileged), but it can read host files and see every process. Use it only with change approval, and delete it when done.
+> `kubectl debug node/` runs a pod in the node's IPC, network and PID namespaces with the node's root filesystem at `/host`. It does not set `privileged` by default (`--profile=sysadmin` does), but it runs as root with the node's filesystem mounted read-write at `/host`; treat it as root on the node, because it can read kubelet credentials and write static Pod manifests. Use it only with change approval, and delete it when done.
 
 ```bash
 # Share the process namespace of the target container

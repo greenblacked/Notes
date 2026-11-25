@@ -36,8 +36,13 @@ Day-to-day publishing of notes needs none of this: merging to `main` deploys sta
   # run from the repository root, so the absolute path below is right
   WRANGLER="$PWD/tools/node_modules/.bin/wrangler"
   "$WRANGLER" --version          # the version pinned in tools/package.json
-  read -rs CLOUDFLARE_API_TOKEN && export CLOUDFLARE_API_TOKEN
   export CLOUDFLARE_ACCOUNT_ID='<account-id>'   # change: the account that owns the Worker
+  ```
+
+  Then read the token in a block of its own. The cursor waits silently for the token, so paste nothing else with it. Use a token scoped to this Worker, with an expiry:
+
+  ```bash
+  read -rs CLOUDFLARE_API_TOKEN && export CLOUDFLARE_API_TOKEN
   ```
 
 ## The release path
@@ -139,6 +144,14 @@ Only the 100 most recently published versions can be rolled back to. Rollback is
 To redeploy a tag, including an older good one: **Actions**, **Deploy production**, **Run workflow**, select the **tag** (for example `v0.1.0`) as the ref, and approve. This rebuilds the tag and deploys it with the same checks, and rolls back automatically if they fail. Production deploys refuse any ref that is not a `vX.Y.Z` tag, and the tagged commit must have a successful `ci.yml` push run on `main` and be on `main`, so a tag whose CI run is no longer available cannot be redeployed; use a rollback in that case. On commits that include the dispatch-only workflow, pushing a tag starts nothing (a tag on an older commit runs that commit's own workflow file): **Deploy production** runs only by dispatch, from **Cut release** or by hand on the tag.
 
 Stage recovers by merging a fix into `main` (stage redeploys). To remove it: `"$WRANGLER" preview delete --name stage`.
+
+### Drop the token
+
+When the manual commands are done, remove the token from the shell so later processes do not inherit it. Revoke it in the Cloudflare dashboard if it was not given an expiry.
+
+```bash
+unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+```
 
 ## Troubleshooting
 

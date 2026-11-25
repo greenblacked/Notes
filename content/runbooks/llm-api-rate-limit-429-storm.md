@@ -65,6 +65,15 @@ APP=invoice-summarizer
 #   export PROVIDER_TOKEN=...           (provider test key, only from an approved host)
 ```
 
+Put each token in a header file that only you can read, so it never appears in the `curl` argument list (visible to other local users and process accounting). `printf` is a shell builtin, so the token is not on a command line either. The header file form needs curl 7.55 or newer. Skip the files for tokens you do not have:
+
+```bash
+umask 077
+AUTH_DIR=$(mktemp -d)
+printf 'Authorization: Bearer %s\n' "$LLM_GATEWAY_TOKEN" > "$AUTH_DIR/gateway.hdr"
+printf 'Authorization: Bearer %s\n' "$LLM_GATEWAY_ADMIN_TOKEN" > "$AUTH_DIR/admin.hdr"
+```
+
 The helper runs an instant PromQL query and prints one line per series.
 
 ```bash
@@ -112,7 +121,7 @@ A 429 can come from the provider, from our gateway, or from something between (a
 
 ```bash
 curl -i -sS "$GATEWAY/v1/chat/completions" \
-  -H "Authorization: Bearer $LLM_GATEWAY_TOKEN" \
+  -H @"$AUTH_DIR/gateway.hdr" \
   -H 'Content-Type: application/json' \
   -d '{"model":"'"$MODEL"'","messages":[{"role":"user","content":"ping"}],"max_tokens":8}' \
   | head -30
@@ -123,7 +132,7 @@ Read, in this order:
 1. **The status line and body.** A JSON error body names a limit in words when the layer is cooperative. Note the exact message.
 2. **`Retry-After`.** This response header is meant to tell the client how long to wait before another request, as a number of seconds or an HTTP date (RFC 9110, cited as remembered and not re-read, see Evidence; check the current RFC). The 429 status itself is defined in RFC 6585. A missing `Retry-After` does not mean "retry now"; it means the server did not say.
 3. **Who added the headers.** Our gateway should add a stable marker, for example a `server` or `x-gateway-request-id` header, and a reason header or body field (this site's gateway uses `x-gateway-limit` with `key`, `team` or `global`). Headers from the provider typically carry the provider's own request id and may carry limit and remaining counters under provider-specific names, often `x-ratelimit-*`. The names and meaning are not verified here; read the provider's current API reference.
-4. **Compare with a direct call.** If your policy allows a test with a provider key from a safe host, call the provider directly with a tiny request (`curl -i -sS "$PROVIDER_CHAT_URL" -H "Authorization: Bearer $PROVIDER_TOKEN" ...`, with the path and auth scheme from the provider's API reference). If the direct call succeeds while the gateway path returns 429, the gateway (or something before it) is the limiter. If both fail, the provider is.
+4. **Compare with a direct call.** If your policy allows a test with a provider key from a safe host, call the provider directly with a tiny request (`curl -i -sS "$PROVIDER_CHAT_URL" -H @"$AUTH_DIR/provider.hdr" ...`, with the path and auth scheme from the provider's API reference; write that header file the same way as the gateway one). If the direct call succeeds while the gateway path returns 429, the gateway (or something before it) is the limiter. If both fail, the provider is.
 
 Then check the logs, which are more reliable than one probe:
 
@@ -246,7 +255,7 @@ kubectl -n "$NS" logs -l "$GW_LABEL" --since=30m --tail=-1 --prefix --max-log-re
 kubectl -n "$APP_NS" get deploy "$APP" -o yaml > "$INC_DIR/$APP-deploy-before.yaml"
 kubectl -n "$APP_NS" get hpa -o yaml > "$INC_DIR/hpa-before.yaml"
 kubectl -n "$APP_NS" get cronjob,job -o wide > "$INC_DIR/cronjobs-before.txt"
-curl -sS -H "Authorization: Bearer $LLM_GATEWAY_ADMIN_TOKEN" "$GATEWAY/admin/teams/$TEAM/limits" > "$INC_DIR/limits-before.json"
+curl -sS -H @"$AUTH_DIR/admin.hdr" "$GATEWAY/admin/teams/$TEAM/limits" > "$INC_DIR/limits-before.json"
 ```
 
 The limits call is this site's example admin API. If a GitOps controller (for example Argo CD) manages these objects, it may revert manual `set env`, `scale` or patch changes; pause its sync for them first.
@@ -255,7 +264,7 @@ The limits call is this site's example admin API. If a GitOps controller (for ex
 
 ```bash
 curl -sS -X PATCH "$GATEWAY/admin/teams/$TEAM/limits" \
-  -H "Authorization: Bearer $LLM_GATEWAY_ADMIN_TOKEN" \
+  -H @"$AUTH_DIR/admin.hdr" \
   -H 'Content-Type: application/json' \
   -d '{"priority_class":"batch","action":"defer","max_inflight":2,"reason":"INC-0000 429 storm"}' | jq .
 ```
@@ -377,7 +386,7 @@ The 5% threshold and 10-minute duration are examples. Test the rule with `promto
 q "sum by (status) (rate(llm_gateway_requests_total{team=\"$TEAM\"}[5m]))"                     # 429 near zero
 q "sum(rate(llm_client_attempts_total{app=\"$APP\"}[5m])) / sum(rate(llm_client_requests_total{app=\"$APP\"}[5m]))"   # close to 1.0
 q "sum by (team) (llm_gateway_inflight_requests{team=\"$TEAM\"})"                               # below the concurrency limit
-curl -i -sS "$GATEWAY/v1/chat/completions" -H "Authorization: Bearer $LLM_GATEWAY_TOKEN" \
+curl -i -sS "$GATEWAY/v1/chat/completions" -H @"$AUTH_DIR/gateway.hdr" \
   -H 'Content-Type: application/json' \
   -d '{"model":"'"$MODEL"'","messages":[{"role":"user","content":"ping"}],"max_tokens":8}' | head -1   # HTTP/2 200
 ```
@@ -464,7 +473,7 @@ The 429 share stays unchanged after retries are slowed (the limit is too low or 
 
 ### Cleanup and rollback
 
-See the Rollback section: remove client retry overrides, scale back up in steps, resume suspended jobs one at a time and restore gateway limits from the saved state.
+Delete the token header files when the incident is over (`rm -rf -- "$AUTH_DIR"`). See the Rollback section: remove client retry overrides, scale back up in steps, resume suspended jobs one at a time and restore gateway limits from the saved state.
 
 ## Sources
 
