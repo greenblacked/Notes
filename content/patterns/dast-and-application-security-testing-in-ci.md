@@ -130,12 +130,12 @@ Deploy a review app that deliberately omits `X-Content-Type-Options`. The job mu
 
 ## Troubleshooting
 
-| Symptom                                           | Cause and fix                                                                                                                              |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Exit 3 immediately                                | Target unreachable from the runner (DNS, Access, NetworkPolicy). Curl the URL from the same job image first.                               |
-| Report missing from artifacts                     | `cp` into the project dir was denied for the `zap` user. Run the job with the project dir writable by uid 1000, or copy with `cat > file`. |
-| Scan hits the WAF or rate limit                   | Add a skip rule for the scanner's source only in review and staging ([[edge-waf-rate-limiting]]).                                          |
-| Same finding on every MR, unrelated to the change | It is a platform default (ingress headers). Fix it once at the ingress, not per app.                                                       |
+| Symptom                                           | Cause and fix                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exit 3 immediately                                | Target unreachable from the runner (DNS, Access, NetworkPolicy). Curl the URL from the same job image first.                                                                                                                                                                                    |
+| Report missing from artifacts                     | `cp` into the project dir was denied for the `zap` user, and `cat >` fails the same way. Make the build dir writable for uid 1000 in an earlier job or runner config, or collect the reports from `/zap/wrk` if the runner mounts it as a volume. Run as root only where your policy allows it. |
+| Scan hits the WAF or rate limit                   | Add a skip rule for the scanner's source only in review and staging ([[edge-waf-rate-limiting]]).                                                                                                                                                                                               |
+| Same finding on every MR, unrelated to the change | It is a platform default (ingress headers). Fix it once at the ingress, not per app.                                                                                                                                                                                                            |
 
 ## Rollback
 
