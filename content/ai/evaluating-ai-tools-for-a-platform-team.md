@@ -9,7 +9,7 @@ tags:
   - team-process
   - delivery
 created: 2026-10-19
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -87,8 +87,11 @@ Conditions that keep the result honest:
 #!/usr/bin/env bash
 set -euo pipefail
 
-TOOL="$1"      # change: the tool identifier from your registry
-TASK_ID="$2"   # change: the task directory name, for example 0007-fix-values
+TOOL="${1:?usage: run-task.sh TOOL TASK_ID}"     # change: the tool identifier from your registry
+TASK_ID="${2:?usage: run-task.sh TOOL TASK_ID}"  # change: the task directory name, for example 0007-fix-values
+# Both become path components below: allow only one plain name, never ../ or a leading dash.
+[[ "$TOOL" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "invalid TOOL: $TOOL" >&2; exit 2; }
+[[ "$TASK_ID" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "invalid TASK_ID: $TASK_ID" >&2; exit 2; }
 HARNESS="$CI_PROJECT_DIR"
 : "${LLM_GATEWAY_URL:?set LLM_GATEWAY_URL}"            # change: the gateway the tool may call
 : "${LLM_GATEWAY_KEY_FILE:?set LLM_GATEWAY_KEY_FILE}"  # change: a file holding the tool's gateway key
@@ -103,11 +106,39 @@ git -C "$HARNESS" remote set-url origin "${CI_SERVER_URL}/${CI_PROJECT_PATH}.git
 # checkout and LLM_GATEWAY_KEY_FILE (give that file group access for the user).
 as_tool=(sudo -n -u bakeoff-tool --)
 
+# Kill whatever the tool left running as its uid: timeout stops only the adapter's main process, and
+# a leftover process could read the check script or change the work tree during the check.
+stop_tool_processes() {
+  local attempt
+  for attempt in 1 2 3; do
+    "${as_tool[@]}" pkill -KILL -u bakeoff-tool || true
+    sleep 1
+    "${as_tool[@]}" pgrep -u bakeoff-tool >/dev/null || return 0
+  done
+  echo "harness fault: processes of the tool user are still running" >&2
+  return 1
+}
+work="" tool_home="" check_home=""
+cleanup() {
+  stop_tool_processes || true
+  local dir
+  for dir in "$work" "$tool_home" "$check_home"; do
+    [[ -z "$dir" ]] || "${as_tool[@]}" rm -rf -- "$dir" || true
+  done
+}
+trap cleanup EXIT
+
 # Work outside the harness checkout, in a fresh clone of the target repository, owned by the tool user.
+# Use one runner per tool, or one job or container per run (the stronger option): the uid, its /tmp
+# files and any survivor of the kill above are otherwise shared with the next tool and task.
 work="$("${as_tool[@]}" mktemp -d)"
 tool_home="$("${as_tool[@]}" mktemp -d)"
-"${as_tool[@]}" git clone --quiet "$(cat "$HARNESS/tasks/${TASK_ID}/repo-url")" "$work"
-"${as_tool[@]}" git -C "$work" checkout --quiet "$(cat "$HARNESS/tasks/${TASK_ID}/start-commit")"
+check_home="$("${as_tool[@]}" mktemp -d)"
+repo_url="$(cat "$HARNESS/tasks/${TASK_ID}/repo-url")"
+start_commit="$(cat "$HARNESS/tasks/${TASK_ID}/start-commit")"
+[[ "$start_commit" =~ ^[0-9a-f]{7,64}$ ]] || { echo "invalid start-commit for $TASK_ID" >&2; exit 2; }
+"${as_tool[@]}" git clone --quiet -- "$repo_url" "$work"
+"${as_tool[@]}" git -C "$work" checkout --quiet "$start_commit"
 "${as_tool[@]}" git -C "$work" switch --quiet -c "bakeoff/${TOOL}/${TASK_ID}"
 
 # The tool and the checks get an empty environment plus this allowlist: no CI_JOB_TOKEN, no
@@ -120,7 +151,8 @@ tool_env=(
   LLM_GATEWAY_URL="$LLM_GATEWAY_URL"
   LLM_GATEWAY_KEY_FILE="$LLM_GATEWAY_KEY_FILE"
 )
-check_env=(PATH=/usr/local/bin:/usr/bin:/bin HOME="$tool_home" LANG=C.UTF-8)
+# The checks get their own empty HOME, so nothing the tool wrote there is read by the check step.
+check_env=(PATH=/usr/local/bin:/usr/bin:/bin HOME="$check_home" LANG=C.UTF-8)
 
 # Run a command inside the work directory, as the tool user. The directory is mode 0700 and owned
 # by that user, so the cd has to happen in the tool user's process, not in the job shell.
@@ -190,6 +222,7 @@ tool_rc=0
 if [[ "$tool_rc" -eq 97 ]]; then echo "harness fault: could not enter the work directory" >&2; exit 1; fi
 [[ "$tool_rc" -eq 0 ]] || echo "tool exited with status ${tool_rc} (124 means the time limit)"
 tool_seconds=$(( $(date +%s) - started ))
+stop_tool_processes || exit 1
 
 # change: fetch-check is your command that pulls the check script from outside the job workspace; it runs only after the tool step.
 fetch-check "$TASK_ID" > "$HARNESS/check.sh"
@@ -202,10 +235,10 @@ jq -cn --arg tool "$TOOL" --arg task "$TASK_ID" --arg tests "$tests" \
   --argjson tool_exit "$tool_rc" --argjson tool_seconds "$tool_seconds" --argjson total "$(( $(date +%s) - started ))" \
   '{tool: $tool, task: $task, tests: $tests, tool_exit: $tool_exit, tool_seconds: $tool_seconds, seconds_to_check_done: $total}' \
   >> "$HARNESS/results.jsonl"
-"${as_tool[@]}" rm -rf -- "$work" "$tool_home"
+# The EXIT trap stops leftover processes and removes the three directories, on every exit path.
 ```
 
-The `tasks/` directory holds only `repo-url`, `start-commit` and `prompt.txt` while the tool runs. Keep known-good diffs and check scripts out of the job workspace: the script fetches the check only after the tool step. The tool works in a clone outside the harness checkout, and both the tool and the checks run as a separate unprivileged user under `env -i` with an explicit allowlist, so `CI_JOB_TOKEN` and the project variables are not in their environment. `env -i` alone is not enough: it empties only the tool's own environment, while the job shell's environment block, token and project variables included, stays readable through `/proc/<ancestor>/environ` by any process with the same uid, and `unset` in the parent does not change it. Yama `ptrace_scope=1` does not stop that read. So the adapter runs as a different uid, or in a separate job or container that never receives `CI_JOB_TOKEN`. Three canaries fail the run if the token is still reachable from the tool's environment, from files, or from `/proc/*/environ`. The file and `/proc` canaries each have a positive control that plants a known value and must find it, so a canary that cannot fire stops the run. The file canary reads its pattern from stdin because `sudo` closes descriptors above stderr, and the `/proc` canary does not let `cat`'s exit status decide the result. The `cd` into the work directory happens inside the tool user's process, because the directory is private to that user, and `results.jsonl` records the tool's exit status so a tool that never started is not scored as a failed task. The job token stays valid while the job runs. File-type CI/CD variables are written to a temporary file that the variable points to, and any process running as the job user can read that file, which the separate user also covers when the file is not group-readable. So define no file-type variables for this job other than the gateway key, and give the gateway key its own narrow budget ([[llm-api-cost-control]]). If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
+The `tasks/` directory holds only `repo-url`, `start-commit` and `prompt.txt` while the tool runs. Keep known-good diffs and check scripts out of the job workspace: the script fetches the check only after the tool step. The tool works in a clone outside the harness checkout, and both the tool and the checks run as a separate unprivileged user under `env -i` with an explicit allowlist, so `CI_JOB_TOKEN` and the project variables are not in their environment. `env -i` alone is not enough: it empties only the tool's own environment, while the job shell's environment block, token and project variables included, stays readable through `/proc/<ancestor>/environ` by any process with the same uid, and `unset` in the parent does not change it. Yama `ptrace_scope=1` does not stop that read. So the adapter runs as a different uid, or in a separate job or container that never receives `CI_JOB_TOKEN`. Three canaries fail the run if the token is still reachable from the tool's environment, from files, or from `/proc/*/environ`. The file and `/proc` canaries each have a positive control that plants a known value and must find it, so a canary that cannot fire stops the run. The file canary reads its pattern from stdin because `sudo` closes descriptors above stderr, and the `/proc` canary does not let `cat`'s exit status decide the result. The adapter name and task name are checked against a fixed shape before they reach a path, and the clone URL is passed after `--` so it cannot be read as an option. After the tool step the harness kills every process of the tool user and the check step gets its own empty `HOME`; an `EXIT` trap does the same and removes the directories when a canary stops the run early. `timeout` alone stops only the adapter's main process. The `cd` into the work directory happens inside the tool user's process, because the directory is private to that user, and `results.jsonl` records the tool's exit status so a tool that never started is not scored as a failed task. The job token stays valid while the job runs. File-type CI/CD variables are written to a temporary file that the variable points to, and any process running as the job user can read that file, which the separate user also covers when the file is not group-readable. So define no file-type variables for this job other than the gateway key, and give the gateway key its own narrow budget ([[llm-api-cost-control]]). If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
 
 Each adapter is a thin script that feeds the prompt to the tool non-interactively; write them once and review them like production code.
 
@@ -256,7 +289,7 @@ Hand the result to the rollout process ([[rolling-out-ai-tools-in-a-team]]) and 
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the checkable statements about git commands, GitLab job token handling in the replay script, and the OWASP risks the scorecard rows map to.
+Source-reviewed on 2026-11-02. Nothing was run, apart from a `bash -n` syntax check of the replay script on 2026-11-25. Scope: the checkable statements about git commands, GitLab job token handling in the replay script, and the OWASP risks the scorecard rows map to.
 
 ### Sources checked
 
@@ -280,7 +313,8 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the checkable statements 
 - That `CI_SERVER_URL` and `CI_PROJECT_PATH` are set in your runner version (not re-read on 2026-11-24).
 - The canary, the `sudo` user switch and `env -i` behaviour were not run in a pipeline. That `/proc/<pid>/environ` of same-uid processes is readable and that Yama `ptrace_scope=1` does not restrict it comes from kernel and Yama documentation that was not re-read for this note.
 - The revised `run-task.sh` (stdin pattern for the file canary, the `/proc` count, the positive controls, the in-process `cd` and the exit-status record) was not run in this note's revision. That `sudo` closes descriptors above stderr and that `cat` exits non-zero on unreadable `environ` files are reported behaviour from a reviewer's reproduction, not from documentation read for this note.
-- Nothing was run.
+- That the process kill, the `EXIT` trap and the sudo rule behave as described on your runner: `run-task.sh` was syntax-checked with `bash -n` on 2026-11-25 and not executed, and `pkill` and `pgrep` options were not checked against their manual pages.
+- Nothing else was run.
 
 ## Sources
 
