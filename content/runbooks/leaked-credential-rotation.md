@@ -86,7 +86,7 @@ rm -P new-key.json 2>/dev/null || shred -u new-key.json   # best effort, see the
 **Tokens already issued.** Disabling or deleting a key does not revoke the short-lived credentials already issued from it. To cut those off, disable the service account, add an IAM deny policy or delete the account; each one stops every workload that uses the account at once. Then wait at least 60 minutes after disabling the account, or as long as the extended token lifetime your organisation allows (up to 12 hours), before you treat issued tokens as expired, and keep watching the audit log. Google's order for replacing a key is: create the new key, disable the old one and confirm the new one works, then delete the old one.
 
 > [!warning] Disabling the service account stops all its workloads
-> `gcloud iam service-accounts disable "$SA"` is reversible with `gcloud iam service-accounts enable "$SA"`. Use it while you investigate an over-privileged account or when you cannot tell what the key did, and re-enable it as soon as the consumers hold a new credential.
+> `gcloud iam service-accounts disable "$SA"` is reversible with `gcloud iam service-accounts enable "$SA"`. Use it while you investigate an over-privileged account or when you cannot tell what the key did, and re-enable it only when the consumers hold a new credential and the wait described above has passed (at least 60 minutes after disabling, or the extended token lifetime, up to 12 hours). Re-enabling earlier can revive a stolen token that has not yet expired.
 
 `shred` is not on macOS and is not reliable on SSDs or copy-on-write file systems; write the key only to a temporary directory you delete, and treat the Secret Manager copy as the only copy.
 

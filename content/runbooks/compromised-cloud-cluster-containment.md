@@ -411,10 +411,10 @@ Success looks like: no new audit entries for the contained identities after the 
 
 ## Rollback and reversibility
 
-- Disabled keys and disabled service accounts can be re-enabled (`keys enable`, `service-accounts enable`). Do that only on the security lead's instruction, never to "see if it fixes the outage".
+- Disabled keys and disabled service accounts can be re-enabled (`keys enable`, `service-accounts enable`). Do that only on the security lead's instruction, never to "see if it fixes the outage". Re-enable a service account only after the consumers hold a new credential and at least 60 minutes have passed since disabling it (or the extended token lifetime, up to 12 hours), so a stolen token has expired.
 - Removing the quarantine label (`kubectl label pod "$POD" -n "$NS" quarantine-`) restores the pod's network access. Do it only after the pod is deleted or cleared.
 - `kubectl uncordon "$NODE"` returns the node to scheduling. Re-enable node auto-repair afterwards with `gcloud container node-pools update "$POOL_NAME" --cluster "$CLUSTER" --location "$LOCATION" --enable-autorepair`, and remove the autoscaler annotation with `kubectl annotate node "$NODE" cluster-autoscaler.kubernetes.io/scale-down-disabled-`.
-- Re-enable a service account key or account with `gcloud iam service-accounts keys enable "$KEY_ID" --iam-account "$SA"` and `gcloud iam service-accounts enable "$SA"`, and restore a removed Workload Identity binding with `add-iam-policy-binding` and the policy saved in `sa-policy.json`. Re-enabling the federation provider needs its own flag, see `--help`.
+- After the wait above has passed and the consumers hold a new credential, re-enable a service account key or account with `gcloud iam service-accounts keys enable "$KEY_ID" --iam-account "$SA"` and `gcloud iam service-accounts enable "$SA"`, and restore a removed Workload Identity binding with `add-iam-policy-binding` and the policy saved in `sa-policy.json`. Re-enabling the federation provider needs its own flag, see `--help`.
 - Delete the quarantine policy (`kubectl delete -f quarantine-deny-all.yaml`) only when no pod carries the label any more.
 - Deleted keys, deleted snapshots and drained pods cannot be recovered, which is why this runbook disables, labels and cordons instead.
 
