@@ -126,8 +126,26 @@ spec:
             cidr: 199.36.153.4/30 # change: your Google APIs endpoint (restricted.googleapis.com VIP with Private Google Access)
       ports:
         - { protocol: TCP, port: 443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metadata-server
+  namespace: restore-drill
+spec:
+  podSelector:
+    matchLabels:
+      drill-gcs-client: "true" # set on the Artifactory pod only
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: METADATA_CIDR # change: the GKE metadata server address from the Workload Identity docs for your dataplane and version
+      ports:
+        - { protocol: TCP, port: METADATA_PORT } # change: the port from the same docs
 ```
 
+- The Artifactory pod gets its Workload Identity token from the GKE metadata server on the node, so `allow-metadata-server` is needed next to `allow-scratch-gcs`. Without it the pod cannot authenticate to the scratch bucket. Take the address and port from the GKE Workload Identity docs, not from this note ([[kubernetes-network-policies]], [[gke-workload-identity]]).
 - Responders reach the drill pods with `kubectl port-forward`, which does not go through the pod network.
 - Jenkins gets no allow rule. Its pods carry neither `drill-db-client` nor `drill-gcs-client`, so they keep deny-all plus DNS.
 - The scratch DB password goes into a Kubernetes Secret in `restore-drill`, created from a file, never from argv. Delete it with the namespace.
@@ -255,7 +273,7 @@ Commit it where [[audit-evidence-collection-and-retention]] expects evidence. A 
 ## Validation
 
 - Every system in scope has a record for the quarter with `result: pass`, or an open defect with an owner.
-- `kubectl get networkpolicy -n restore-drill` shows `deny-all` and exactly the three allow rules `allow-dns`, `allow-scratch-db` and `allow-scratch-gcs`, each reviewed. No other egress rule exists.
+- `kubectl get networkpolicy -n restore-drill` shows `deny-all` and exactly the four allow rules `allow-dns`, `allow-scratch-db`, `allow-scratch-gcs` and `allow-metadata-server`, each reviewed. No other egress rule exists.
 - The drill GSA has no role outside the scratch bucket: `gcloud storage buckets get-iam-policy gs://<production-bucket>` does not list it.
 - No drill resource outlives the drill (see Rollback).
 
@@ -290,7 +308,7 @@ gcloud compute disks delete "jenkins-home-drill-YYYYMMDD" --project="$PROJECT" -
 - `gcloud compute disks create --source-snapshot` and the `gs://...#generation` copy syntax.
 - Terraform state JSON field names.
 - PSA `restricted` compatibility of the vendor images.
-- The drill allow rules: the Google APIs endpoint range, the Workload Identity binding and whether Artifactory's GCS filestore works through it, and Cloud SQL private IP connectivity from the cluster.
+- The drill allow rules: the Google APIs endpoint range, the GKE metadata server address and port for `allow-metadata-server` (left as `METADATA_CIDR` and `METADATA_PORT` until taken from the docs), the Workload Identity binding and whether Artifactory's GCS filestore works through it, and Cloud SQL private IP connectivity from the cluster.
 
 ## Related
 
