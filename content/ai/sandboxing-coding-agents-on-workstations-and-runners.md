@@ -388,7 +388,7 @@ Rollback is configuration only: engineers can run the agent outside the sandbox 
 
 ## Evidence
 
-Source-reviewed on 2026-11-01. Nothing was run. The review covered the documented behaviour of Docker rootless mode, Dev Container properties, gVisor, Pod Security Standards, `kubectl create token`, gcloud flags and GitLab project access tokens that this note relies on.
+Source-reviewed on 2026-11-01. Nothing was run, apart from a `bash -n` syntax check of the Kubernetes token script on 2026-11-25. The review covered the documented behaviour of Docker rootless mode, Dev Container properties, gVisor, Pod Security Standards, `kubectl create token`, gcloud flags and GitLab project access tokens that this note relies on.
 
 ### Sources checked
 
