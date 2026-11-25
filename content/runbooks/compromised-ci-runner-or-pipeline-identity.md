@@ -54,7 +54,7 @@ Use something else for these cases:
 
 ```bash title="00-env.sh"
 #!/usr/bin/env bash
-set -euo pipefail
+# Sourced into the responder's shell: no `set -e`/`-u`, they would close the shell on the first non-zero exit.
 GITLAB_URL="https://gitlab.example.com" # change: your GitLab
 RUNNER_ID="6"                           # change: the suspect runner's ID
 T0="2026-11-20T00:00:00Z"               # change: earliest credible compromise time
@@ -69,7 +69,7 @@ unset GL_TOKEN
 glapi() { curl --fail --silent --show-error --header @"$HDR_FILE" "$@"; }
 ```
 
-Source this file in the responder's bash shell. Delete `$HDR_FILE` at the end (see Rollback).
+Source this file in the responder's bash shell. It sets no `set -e`, `set -u` or `pipefail` on purpose: those options persist in a sourced shell, and an expected non-zero exit later (`grep -F -f` with no match, a `jq` error, a 404 from `glapi`) would close the terminal mid-incident. Check the exit code of the commands that matter yourself. Delete `$HDR_FILE` at the end (see Rollback).
 
 ### 1. Stop new jobs on the runner
 
@@ -155,7 +155,14 @@ while read -r IMAGE; do
 done < "$CASE_DIR/deployed-digests.txt" | tee "$CASE_DIR/verify-results.txt"
 ```
 
-- `deployed-digests.txt` holds one `registry/repo@sha256:...` per line. Generate it with `kubectl get pods -A -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.imageID}{"\n"}{end}{end}' | sort -u`.
+- `deployed-digests.txt` holds one `registry/repo@sha256:...` per line. Generate it with the command below, which keeps only first-party images and strips a `docker-pullable://` prefix some runtimes add. Change the registry prefix to your own; an `imageID` that is a bare `sha256:...` has no registry path, so look up its image name in the pod spec instead.
+
+```bash
+REGISTRY_PREFIX="europe-docker.pkg.dev/example-project/" # change: your first-party registry or repository prefix
+kubectl get pods -A -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.imageID}{"\n"}{end}{end}' \
+  | sed 's#^docker-pullable://##' | grep -F "$REGISTRY_PREFIX" | sort -u > "$CASE_DIR/deployed-digests.txt"
+```
+
 - Check the SBOMs of suspect digests ([[sbom-generation-and-storage]]) for unexpected components.
 
 ### 6. Rebuild clean
@@ -176,7 +183,7 @@ done < "$CASE_DIR/deployed-digests.txt" | tee "$CASE_DIR/verify-results.txt"
 
 - The runner shows paused, then is deleted.
 - New jobs land only on the new runner.
-- `verify-results.txt` has no `FAIL` for running workloads.
+- `verify-results.txt` has no `FAIL` for first-party workloads. Images from kube-system, GKE and third parties are out of this check; review them separately if the pipeline could have pushed to their registries.
 - No digest from `suspect-digests.txt` runs: `grep -F -f suspect-digests.txt` over the step 5 pod listing returns nothing.
 - After the step 4 removals, Cloud Audit Logs show no further use of the WIF principal; see [[gcp-audit-logs-siem]].
 
