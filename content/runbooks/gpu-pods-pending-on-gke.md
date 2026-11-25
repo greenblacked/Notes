@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - reliability
 created: 2026-11-01
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -275,7 +275,7 @@ gcloud compute regions describe "$REGION" --flatten=quotas \
 
 The output has one row per quota metric. The Compute Engine quotas page (read 2026-11-24) says GPU quota is regional and named per GPU type (for example `NVIDIA_T4_GPUS`), that Spot and preemptible GPUs count against a separate preemptible quota (for example `PREEMPTIBLE_NVIDIA_H100_GPUS`), and that projects also have a global `GPUs (all regions)` quota, which this regional view does not show. The `/GPU/` filter matches those names; if it returns nothing, print the whole table. (The GKE GPU page words it as quota "in your selected zone".)
 
-When usage equals the limit, a new node cannot be created and the managed instance group records the failure. Read those errors with the loop in [[gke-cluster-autoscaler-not-scaling-up]], step 4, with `POOL` set to the GPU pool. Which error codes appear for GPUs is **not verified**; that runbook's codes for regular machine types (`ZONE_RESOURCE_POOL_EXHAUSTED`, `QUOTA_EXCEEDED`) are likely but not guaranteed.
+When usage equals the limit, a new node cannot be created and the managed instance group records the failure. Read those errors with the loop in [[gke-cluster-autoscaler-not-scaling-up]], step 4, after changing the `POOL=general` line of that block to the GPU pool name. Pasted unchanged, the block reads the `general` pool's errors and resets `POOL` in your shell, so the later commands here that use `"$POOL"` would target `general`. Which error codes appear for GPUs is **not verified**; that runbook's codes for regular machine types (`ZONE_RESOURCE_POOL_EXHAUSTED`, `QUOTA_EXCEEDED`) are likely but not guaranteed.
 
 **The GPU type may not be offered in the zone.** Not every zone offers every accelerator type. Ask Compute Engine which zones list the type:
 

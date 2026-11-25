@@ -8,7 +8,7 @@ tags:
   - kubernetes
   - reliability
 created: 2026-11-24
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-24
@@ -88,17 +88,15 @@ The pool shows the old labels plus the new one, every node shows the new value, 
 
 ## Rollback
 
-Re-apply the saved set:
+Re-apply the saved set. If `OLD_LABELS` comes out empty (the pool had no user labels), the guard stops the command: how to clear every label with this flag is not verified here.
 
 ```bash
 OLD_LABELS=$(jq -r '(.config.labels // {}) | to_entries | map("\(.key)=\(.value)") | join(",")' \
   "node-pool-$POOL-before.json")
 printf '%s\n' "$OLD_LABELS"
-gcloud container node-pools update "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
+[ -n "$OLD_LABELS" ] && gcloud container node-pools update "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
   --node-labels="$OLD_LABELS"
 ```
-
-If `OLD_LABELS` is empty (the pool had no user labels), stop: how to clear every label with this flag is not verified here.
 
 ## Troubleshooting
 
@@ -107,11 +105,6 @@ If `OLD_LABELS` is empty (the pool had no user labels), stop: how to clear every
 | Pods `Pending` with `didn't match node affinity` | A label was left out of `--node-labels`    | Roll back with the saved set   |
 | The label comes back or goes again later         | Terraform or another tool manages the pool | Change the labels in that tool |
 | `update` refuses the flag combination            | More than one update flag in one call      | Run one `update` per change    |
-
-## Related
-
-- [[gke-cluster-upgrade]], [[gke-cluster-autoscaler-not-scaling-up]], [[gke-node-notready-triage]] and [[gpu-pods-pending-on-gke]]: the runbooks that label pools.
-- [[runbooks/index|Runbooks]].
 
 ## Evidence
 
@@ -150,3 +143,8 @@ The `update` call fails; any saved label is missing afterwards; Pods start going
 ### Cleanup and rollback
 
 See Rollback. Delete `node-pool-$POOL-before.json` once the change has held.
+
+## Related
+
+- [[gke-cluster-upgrade]], [[gke-cluster-autoscaler-not-scaling-up]], [[gke-node-notready-triage]] and [[gpu-pods-pending-on-gke]]: the runbooks that label pools.
+- [[runbooks/index|Runbooks]].
