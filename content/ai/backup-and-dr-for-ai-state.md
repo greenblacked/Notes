@@ -149,6 +149,8 @@ Add AI state to the quarterly drill list:
 - Whether hosted embedding models are available per region.
 - Neither script was run.
 
+The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
+
 ## Related
 
 - [[tool-estate-restore-drills]]

@@ -249,6 +249,8 @@ The same rules apply to engineers pulling models locally. Their laptop holds Git
 - How kernel-download libraries behave at load.
 - The script was not run.
 
+The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
+
 ## Related
 
 - [[model-supply-chain-verification]]
