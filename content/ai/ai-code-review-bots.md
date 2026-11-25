@@ -177,7 +177,7 @@ def render_findings(raw):
             item = json.loads(line)
             severity, path, message = item["severity"], item["file"], item["message"]
             line_no = int(item.get("line", 0))
-        except (ValueError, KeyError, TypeError, OverflowError):  # OverflowError: "line": 1e999
+        except (ValueError, KeyError, TypeError, OverflowError, RecursionError):  # OverflowError: "line": 1e999; RecursionError: deeply nested JSON
             dropped += 1
             continue
         if severity not in SEVERITIES or not PATH_SHAPE.fullmatch(str(path)) or not message:
