@@ -10,7 +10,7 @@ tags:
   - security
 status: accepted
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 decided: 2026-10-21
 draft: false
 aliases:
@@ -258,6 +258,9 @@ NAMESPACE="orders"                                  # change: the workload's nam
 KSA="orders-api"                                    # change: the workload's Kubernetes service account
 CURL_IMAGE="curlimages/curl@sha256:<digest>"        # change: the digest you reviewed
 
+# Remove the check Pod on every exit, including when it never produces logs.
+trap 'kubectl delete pod --namespace "${NAMESPACE}" wi-check --ignore-not-found --wait=false' EXIT
+
 # The Pod runs as the workload's identity: run it only where you may act as that workload.
 kubectl apply --namespace "${NAMESPACE}" -f - <<EOF
 apiVersion: v1
@@ -293,10 +296,9 @@ EOF
 kubectl wait --namespace "${NAMESPACE}" pod/wi-check \
   --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s || true
 kubectl logs --namespace "${NAMESPACE}" wi-check
-kubectl delete pod --namespace "${NAMESPACE}" wi-check --wait=false
 ```
 
-Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. The Pod meets Pod Security `restricted` ([[0022-admission-policy-pod-security-vap-and-kyverno]]). It prints the token's HTTP status, never the token. Delete it as soon as you have the output. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
+Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. The Pod meets Pod Security `restricted` ([[0022-admission-policy-pod-security-vap-and-kyverno]]). It prints the token's HTTP status, never the token. The script deletes the Pod on exit. If the wait times out, the Pod ended `Failed` (the metadata call was refused, so `curl -f` exited non-zero) or never started (image pull or admission error); read `kubectl describe pod` for the reason. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
 
 ## References
 

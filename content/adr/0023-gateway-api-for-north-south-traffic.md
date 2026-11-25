@@ -9,7 +9,7 @@ tags:
   - networking
 status: proposed
 created: 2026-10-19
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 aliases:
   - ADR-0023
@@ -90,7 +90,7 @@ flowchart LR
 ```
 
 > [!info] Claims not checked against current docs
-> The GatewayClass names (`gke-l7-global-external-managed` and the regional and internal variants), which Gateway API features GKE supports in the version we run, certificate options on the GKE controller. Check the GKE Gateway documentation. The ingress-nginx retirement facts were checked on 2026-11-24 against the Kubernetes blog post and the project README.
+> The GatewayClass names (`gke-l7-global-external-managed` and the regional and internal variants), which Gateway API features GKE supports in the version we run, certificate options on the GKE controller. Check the GKE Gateway documentation.
 
 Pilot criteria:
 

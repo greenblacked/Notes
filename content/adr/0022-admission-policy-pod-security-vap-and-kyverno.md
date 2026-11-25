@@ -9,7 +9,7 @@ tags:
   - security
 status: accepted
 created: 2026-10-19
-modified: 2026-11-24
+modified: 2026-11-25
 decided: 2026-10-19
 draft: false
 aliases:
@@ -105,7 +105,7 @@ spec:
 
 The policy checks the Pod template of every workload kind and bare Pods, for both `containers` and `initContainers`. Checking Pods as well catches Pods created by any controller. Ephemeral containers, which are added through the `pods/ephemeralcontainers` subresource, are not covered. The binding is limited to namespaces with an `owner` label, so system namespaces are not affected.
 
-Rollout follows [[policy-rollout-audit-to-enforce]]: warn and audit, read the audit annotations and Kyverno reports, fix or exempt, then enforce namespace by namespace. Exemptions are explicit in Git and time-boxed.
+Rollout follows [[policy-rollout-audit-to-enforce]]: warn and audit, read the audit annotations and Kyverno reports, fix or exempt, then enforce namespace by namespace. Exemptions are explicit in Git and time-boxed. The policy above also matches Pod `UPDATE`, so before a binding moves to `Deny`, existing Pods must already comply: otherwise metadata-only updates (label changes, finalizer removal) on a running Pod that uses a `latest` tag are rejected.
 
 > [!info] Claims not checked against current docs
 > That VAP is generally available on the GKE version we run, the exact CEL syntax above (including the `variables` block and the conditional over kinds), and which Pod Security `restricted` rules changed in recent Kubernetes releases. Check the current Kubernetes and GKE release notes before relying on them.
