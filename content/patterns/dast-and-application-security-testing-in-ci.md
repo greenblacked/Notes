@@ -113,7 +113,7 @@ dast-baseline:
 - For review apps behind Cloudflare Access, give the scan a service token ([[cloudflare-access-service-tokens]]), added as a header via the context. Do not open the app to the internet.
 - Run authenticated scans only on runners whose job pods deny ingress ([[gitlab-runners-on-gke]]): the recorded requests include the test user's session and the Cloudflare Access service token.
 - Treat the review-scan user and the service token as known to every developer: the variable is not protected, so anyone who can open a merge request can change the job and print it, and masking does not prevent that. Limit the user to review data, limit the service token's Access policy to review hostnames, give both an expiry and rotate them on a schedule.
-- Put URLs that must never be requested (logout, delete and account-change endpoints) in the context's exclude regexes, in the context file passed with `-n`, so the spider and scanner skip them. A `/logout` hit would otherwise end the authenticated session and leave the protected pages untested. Do not rely on `OUTOFSCOPE` lines for this: in the `-n` path they only filter alerts (see False positives and triage). The context regexes must match the whole URL.
+- Put URLs that must never be requested (logout, delete and account-change endpoints) in the context's exclude regexes, in the context file passed with `-n`. The `-n` path passes the context to the spider (and, in the full scan, to the active scanner), so its excludes are expected to keep those URLs out. This is inferred from the scripts and was not run; see Not verified. A `/logout` hit would otherwise end the authenticated session and leave the protected pages untested. Do not rely on `OUTOFSCOPE` lines for this: in the legacy path used with `-n` they only filter alerts (see False positives and triage). The context regexes must match the whole URL.
 - Check the ZAP authentication docs for your version: they were not read for this note.
 
 ## False positives and triage
@@ -121,7 +121,7 @@ dast-baseline:
 - Triage owner: the service team. AppSec reviews new FAIL promotions.
 - A false positive goes to IGNORE with a reason in the MR description.
 - A real finding that cannot be fixed now goes to [[vulnerability-exception-register]] with an expiry.
-- Use `OUTOFSCOPE` lines (`<rule-id>`, tab, `OUTOFSCOPE`, tab, regex) only to suppress findings on matching URLs. In a scan run with `-n` or `-U` they do not stop requests, so they are not a way to keep the scanner away from `/logout`; use the context exclusions under Authenticated scans.
+- Use `OUTOFSCOPE` lines (`<rule-id>`, tab, `OUTOFSCOPE`, tab, regex) to suppress findings on matching URLs. In a scan run with `-n` or `-U` (the legacy path), they only filter alerts and do not stop requests. Under the Automation Framework path, `*` lines are also copied into the context's `excludePaths`. Either way, put never-request URLs in the context exclusions under Authenticated scans.
 - Re-read the full scan report weekly, deduplicated by rule and URL pattern.
 
 ## Enforcement
@@ -151,7 +151,7 @@ Deploy a review app that deliberately omits `X-Content-Type-Options`. The job mu
 - The `zap-full-scan.py` and `zap-api-scan.py` options.
 - ZAP authentication via context files.
 - The exact syntax for exclude regexes inside a context file (the XML element names and the ZAP page that defines them): not read.
-- Whether the context exclusions are applied by the legacy spider path used with `-n`: inferred from `zap-baseline.py` calling `zap_import_context` and the spider using the context name, not run.
+- Whether the context exclusions are applied by the legacy spider path used with `-n`, and by the active scanner in the full scan: inferred from the scripts passing the context to the spider and the active scan, not run. Which other options (`-g`, `-p`, `-i`, `-l`, `--hook`, `--autooff`) force the legacy path was not read.
 - GitLab variable behaviour for the masked, hidden, protected and environment-scoped settings described under Authenticated scans.
 - The rule IDs and names in the example.
 - Whether `/zap/wrk` exists and is writable in the image when no volume is mounted.
@@ -166,8 +166,7 @@ Deploy a review app that deliberately omits `X-Content-Type-Options`. The job mu
 
 ## Sources
 
-- [ZAP baseline scan](https://zaproxy.org/docs/docker/baseline-scan/): options, one-minute spider, passive only, exit codes 0 to 3, config file format, `ghcr.io/zaproxy/zaproxy:stable`. Read 2026-11-24.
-- [ZAP baseline scan](https://zaproxy.org/docs/docker/baseline-scan/): `-n` and `-U` options and the `OUTOFSCOPE` rule-file line format, with `*` for all rules. Re-read 2026-11-25.
+- [ZAP baseline scan](https://zaproxy.org/docs/docker/baseline-scan/): options, one-minute spider, passive only, exit codes 0 to 3, config file format, `ghcr.io/zaproxy/zaproxy:stable`; also the `-n` and `-U` options and the `OUTOFSCOPE` rule-file line format, with `*` for all rules. Read 2026-11-24, re-read 2026-11-25 for `-n`, `-U` and `OUTOFSCOPE`.
 - [ZAP contexts](https://www.zaproxy.org/docs/desktop/start/features/contexts/): context regexes must match the whole URL. Read 2026-11-25. The page does not cover exclusions.
 - [zap_common.py](https://github.com/zaproxy/zaproxy/blob/main/docker/zap_common.py) and [zap-baseline.py](https://github.com/zaproxy/zaproxy/blob/main/docker/zap-baseline.py) on `main`: `zap_get_alerts` skips alerts for which `is_in_scope` is false, `load_config` stores `OUTOFSCOPE` regexes, `-n` and `-U` mark the Automation Framework as unsupported so the legacy path runs, and only `get_af_env` (Automation Framework plans) copies `*` rules into context `excludePaths`. Read 2026-11-25.
 - [ZAP Docker user guide](https://www.zaproxy.org/docs/docker/about/): image names, the `/zap/wrk` mount convention and the warning about the exposed ZAP API. Read 2026-11-24.
