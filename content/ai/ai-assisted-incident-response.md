@@ -8,7 +8,7 @@ tags:
   - on-call
   - kubernetes
 created: 2026-10-17
-modified: 2026-11-01
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -52,7 +52,7 @@ Two reasons hold up under pressure. First, the assistant has no accountability a
 
 ## Read-only access design
 
-Give the assistant its own identity, separate from any human or CI identity, and make the default "can look, cannot touch". For reusable skills and workflows, see [the owner's AI skills catalogue](https://ai.szolotov.com); keep the access rules below regardless of which skill or tool you pick.
+Give the assistant its own identity, separate from any human or CI identity, and make the default "can look, cannot touch".
 
 Design rules:
 
@@ -63,62 +63,35 @@ Design rules:
 - Log every request the assistant makes with its identity, so the postmortem can show what it saw.
 - Prefer a pre-built evidence file over live access: a script collects, a person reviews, then the assistant reads the file.
 
-```yaml title="incident-assistant-rbac.yaml"
-# Read-only access for an AI assistant. Change: the namespace (shop), the
-# service account name and the GCP service account annotation to match your setup.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: incident-assistant
-  namespace: shop
-  annotations:
-    iam.gke.io/gcp-service-account: incident-assistant@my-project.iam.gserviceaccount.com # change: the read-only GCP service account
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: incident-assistant-read
-rules:
-  - apiGroups: [""]
-    resources: ["pods", "events"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: incident-assistant-read
-  namespace: shop
-subjects:
-  - kind: ServiceAccount
-    name: incident-assistant
-    namespace: shop
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: incident-assistant-read
-```
+The canonical manifests are in [[kubernetes-rbac-for-ai-agents]]. That note defines the `agent-reader` ServiceAccount with `automountServiceAccountToken: false`, the hand-written `agent-troubleshoot-read` role bound per namespace, and the `pods/log` decision. Use them as they are, so there is one role to review and test; do not keep a second, diverging copy here. Two points from that note matter most during an incident:
 
-This is one reusable ClusterRole, bound per namespace with a RoleBinding, so it grants nothing cluster-wide. See [[patterns/gke-workload-identity]] for the annotation. Note that `get` and `list` on pods return pod specs, including plaintext `env` values that can hold credentials, so keep secrets out of plain env (use secret references) before granting this.
-
-The role has no `pods/log` subresource on purpose: logs can contain customer data and instructions from outsiders. Add `pods/log` only if you accept that, and prefer the redacted evidence bundle below.
+- `get` and `list` on pods return pod specs, including plaintext `env` values that can hold credentials. Keep secrets out of plain env (use secret references) before granting this.
+- The default role has no `pods/log`: logs can contain customer data and instructions from outsiders. Prefer the redacted evidence bundle below.
 
 Check what the account can and cannot do before the first incident:
 
 ```bash
-set -euo pipefail
+set -uo pipefail   # no -e: "kubectl auth can-i" exits 1 when the answer is "no"
 
-NAMESPACE="shop"  # change: the namespace to test
-SA="system:serviceaccount:${NAMESPACE}:incident-assistant"
+NAMESPACE="shop"  # change: a namespace the agent is bound in
+SA="system:serviceaccount:ai-agents:agent-reader"   # the canonical agent identity
+fail=0
 
-kubectl auth can-i list pods -n "$NAMESPACE" --as "$SA"          # expect: yes
-kubectl auth can-i get secrets -n "$NAMESPACE" --as "$SA"        # expect: no
-kubectl auth can-i create pods --subresource=exec -n "$NAMESPACE" --as "$SA" # expect: no
-kubectl auth can-i get pods --subresource=log -n "$NAMESPACE" --as "$SA"      # expect: no
-kubectl auth can-i list secrets -n "$NAMESPACE" --as "$SA"                    # expect: no
-kubectl auth can-i delete deployments -n "$NAMESPACE" --as "$SA" # expect: no
+# expect WANT VERB...: run can-i, compare the printed answer, and keep going after a mismatch.
+expect() {
+  local want=$1 got; shift
+  got="$(kubectl auth can-i "$@" -n "$NAMESPACE" --as "$SA" 2>/dev/null || true)"
+  got="${got%% *}"  # a denial can print "no - <reason>"; compare the first word only
+  [[ "$got" == "$want" ]] || { echo "FAIL: can-i $* -> '$got' (want $want)" >&2; fail=1; }
+}
+
+expect yes list pods
+expect no get secrets
+expect no create pods --subresource=exec
+expect no get pods --subresource=log
+expect no list secrets
+expect no delete deployments
+exit "$fail"
 ```
 
 ### Evidence bundle script
@@ -228,7 +201,6 @@ Keep the blameless rules from [[standards/blameless-postmortems]]: tell the assi
 - [[runbooks/kubernetes-pod-troubleshooting]]: the diagnostic steps to follow with or without help.
 - [[runbooks/helm-release-rollback]]: a rollback is a human action; this is how to do it.
 - [[ai/securing-ai-agents-in-ci-and-cloud]]: the wider controls for agents with cloud access.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
 
 ## Evidence
 
@@ -247,7 +219,7 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the kubectl, RBAC, Helm a
 
 ### Not verified
 
-- GKE and Google Cloud documentation: the `iam.gke.io/gcp-service-account` annotation, Workload Identity behaviour and the `k8s_container` log filter fields were not checked; the docs were not available.
+- GKE and Google Cloud documentation: Workload Identity behaviour and the `k8s_container` log filter fields were not checked; the docs were not available.
 - That `get` and `list` on pods exposes plaintext `env` values, and that an incident-time `kubectl get events --sort-by=.lastTimestamp` ordering is oldest first, follow from the API objects and were not confirmed in a specific page.
 - Vendor incident-tool AI features are deliberately not named and were not checked.
 - Engineering guidance, not documented claims: assistant access design, prompting patterns, the automation table, postmortem drafting advice and the pitfalls list.

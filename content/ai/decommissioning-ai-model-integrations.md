@@ -8,7 +8,7 @@ tags:
   - reliability
   - audit
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -16,11 +16,47 @@ draft: false
 
 Use this runbook when a model endpoint, provider integration, prompt workflow, or internal inference service is being retired. Retirement can affect live requests, queued jobs, audit records, caches, evaluation sets, credentials, provider commitments, and user data. This document intentionally does not provide direct commands for deleting resources, revoking credentials, disabling endpoints, or removing records. Those actions require the organization's approved change and evidence process.
 
+> [!danger] Revocation and deletion cannot be undone
+> Revoking provider keys, deleting caches, indexes or logs, and closing a provider account are irreversible. Each needs the owner in the table below, the evidence in its last column, and a change record. Take exports of anything under retention first.
+
+| Decision                                     | Owner                                        | Evidence before it happens                       |
+| -------------------------------------------- | -------------------------------------------- | ------------------------------------------------ |
+| Approve retirement and date                  | Service owner                                | Change record with reason, date and replacement  |
+| Stop routing traffic                         | Implementation owner                         | Zero requests on the route for the agreed window |
+| Revoke provider keys and gateway credentials | Security owner                               | Owner confirmation that no caller remains        |
+| Delete data, caches and indexes              | Data owner, after privacy and records review | Retention decision recorded; legal hold checked  |
+| Close the provider account or commitment     | Finance or vendor owner                      | Contract terms and final invoice reviewed        |
+
 Start with the inventory record and named service owner. Confirm the business reason, target date, affected users, contractual commitments, retention obligations, and replacement behavior. If the integration is involved in an incident, legal hold, or active investigation, stop the ordinary retirement workflow and follow the responsible incident, records, or legal process. [[model-inventory-and-owner-registration]] describes the inventory fields and ownership expectations.
 
 ## Discover dependents and define end state
 
 Find every caller and related asset: gateway routes, application configuration, agents, scheduled jobs, queues, feature flags, evaluation pipelines, dashboards, alerts, cost reports, cache namespaces, retrieval indexes, telemetry exporters, and support procedures. Use repository search, deployment inventory, traffic data, and owner confirmation; no single source is complete. Check for dormant integrations that can still be called through a shared endpoint. Capture a dependency map and baseline request volume before moving traffic.
+
+These checks only read. Run them before and after cutover and keep the output with the change record.
+
+```bash title="find-callers.sh"
+set -euo pipefail
+
+MODEL_ID="example-model-2026-01"         # change: the model or endpoint identifier being retired
+ROUTE="summarise-v1"                     # change: the gateway route that serves it
+REPOS_DIR="$HOME/src/platform-repos"     # change: a directory of fresh clones of every repository that may call it
+PROM_URL="https://prometheus.example.com" # change: your Prometheus or query frontend
+
+# Code and configuration that still name the model or route.
+grep -rIl --exclude-dir=.git -e "$MODEL_ID" -e "$ROUTE" "$REPOS_DIR" || echo "no references in $REPOS_DIR"
+
+# Live configuration in the clusters you run.
+kubectl get configmaps -A -o json \
+  | jq -r --arg m "$MODEL_ID" '.items[] | select(tostring | contains($m)) | "\(.metadata.namespace)/\(.metadata.name)"'
+
+# Traffic on the route over the last 7 days, per team (gateway metrics: see llm-observability-tracing-and-slos).
+curl -sS -G "$PROM_URL/api/v1/query" \
+  --data-urlencode "query=sum by (team) (increase(llm_gateway_requests_total{route=\"$ROUTE\"}[7d]))" \
+  | jq -r '.data.result[] | "\(.metric.team) \(.value[1])"'
+```
+
+A team with traffic is a caller, whatever the inventory says. No traffic over 7 days is not proof that no caller exists: monthly jobs and fallback routes may be quiet. The gateway metrics are described in [[llm-observability-tracing-and-slos]].
 
 Write the intended end state for each component. A caller may transition to a new model, a human workflow, a limited service mode, or no function. Record the compatibility requirements and the user-facing message. Decide whether queued work will complete, be reprocessed, or be stopped through an approved procedure. Identify data that must remain for accounting, audit, or legal reasons separately from data that can follow the approved retention schedule. Engineering guidance is not legal advice; privacy, records, and legal owners determine retention requirements.
 
@@ -50,10 +86,7 @@ Close the inventory entry with retirement date, replacement or successor, approv
 
 If any owner cannot confirm the state of a dependent system, treat retirement as incomplete and keep the exception visible. Do not equate a lack of requests in one dashboard with proof that no caller exists. Follow [[llm-change-management-and-release-gates]] for change controls, [[data-retention-and-deletion-in-llm-systems]] for lifecycle evidence, and [[model-version-pinning-and-upgrade-evals]] for model retirement and upgrade tracking.
 
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
-
 ## Sources
 
 - [Google SRE: Role of Release Engineer and Best Practices](https://sre.google/sre-book/release-engineering/): controlled releases and change accountability.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [NIST AI Risk Management Framework Playbook](https://airc.nist.gov/airmf-resources/playbook/): risk-management lifecycle context for AI RMF 1.0; the NIST page states revision is underway.

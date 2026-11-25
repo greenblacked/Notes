@@ -9,7 +9,7 @@ tags:
   - security
   - networking
 created: 2026-10-21
-modified: 2026-11-02
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -262,16 +262,18 @@ REGION="europe-west4"                 # change: the region you chose
 NAMESPACE="llm-gateway"
 KSA="llm-gateway"
 : "${MODEL:?set MODEL to a model ID that the Vertex AI locations page lists for REGION}"
+: "${GCLOUD_IMAGE:?set GCLOUD_IMAGE to gcr.io/google.com/cloudsdktool/google-cloud-cli:slim@sha256:<digest>}"
 
 kubectl -n "$NAMESPACE" run vertex-check --rm -i --restart=Never \
-  --image=gcr.io/google.com/cloudsdktool/google-cloud-cli:slim \
+  --image="$GCLOUD_IMAGE" \
   --overrides="{\"spec\":{\"serviceAccountName\":\"${KSA}\"}}" \
   --env="PROJECT_ID=${PROJECT_ID}" --env="REGION=${REGION}" --env="MODEL=${MODEL}" \
   -- bash -c '
     set -euo pipefail
     getent hosts "${REGION}-aiplatform.googleapis.com"   # expect an address in 199.36.153.4/30 or your PSC address
-    curl -sS -X POST \
-      -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+    umask 077
+    printf "Authorization: Bearer %s\n" "$(gcloud auth print-access-token)" > /tmp/auth-header
+    curl -sS -X POST -H @/tmp/auth-header \
       -H "Content-Type: application/json" \
       "https://${REGION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${REGION}/publishers/google/models/${MODEL}:generateContent" \
       -d "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Reply with the word ok.\"}]}]}" \
@@ -328,6 +330,7 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the gcloud commands and f
 ### Not verified
 
 - Nothing was run against a real project; no credentials or API calls were available.
+- That `curl -H @file` reads request headers from a file (added in curl 7.55.0 according to the curl maintainer's blog, not re-read on 2026-11-24) and that the pinned Cloud SDK image's `curl` is that version or later. The script keeps the token off curl's command line; it was not run.
 - Google Cloud documentation was not reachable, so these are unconfirmed: the VIP ranges `199.36.153.4/30` and `199.36.153.8/30` and their API coverage; what `roles/aiplatform.user` and `roles/aiplatform.admin` contain and that `aiplatform.endpoints.predict` alone suffices (the permission name does not appear in the local API definitions); the Vertex AI VPC Service Controls statements (blocked public access, protected artifacts, features needing extra setup, Pipelines and PyPI); regional versus global endpoint residency behaviour; data governance, caching and CMEK statements, including whether CMEK covers prompts; 429 causes and Provisioned Throughput behaviour; Data Access log types, the `roles/logging.privateLogViewer` requirement, the VPC-SC audit log type URL and field names, and the violation error texts and codes; the principal identifier format and shared pool behaviour of Workload Identity Federation for GKE and the metadata server token flow; whether the Cloud SDK `slim` image ships `curl` and `getent`; the DNS names a Private Service Connect endpoint needs; that some APIs may not accept federated principals so impersonating a Google service account is the fallback; that private GKE nodes have no external addresses; that either VIP needs DNS resolving `*.googleapis.com`, a route and an egress firewall rule; that the VPC-SC dry-run log is `cloudaudit.googleapis.com%2Fpolicy` and can be routed to BigQuery; that Admin Activity audit logs are always on and cannot be disabled; that `set-iam-policy` replaces the whole policy and a kept `etag` makes a concurrent write fail.
 - Terraform behaviour when a perimeter is changed outside state follows from the provider docs only in outline; it was not exercised.
 - General engineering guidance (retry with capped backoff and jitter, circuit breakers, never retrying 400 or 403, rollout timing, keeping retries in the gateway) is not a documented claim.
@@ -360,4 +363,3 @@ The Google Cloud documentation pages above could not be read during review; see 
 - [[private-gke-and-controlled-egress]]: removing public egress from the cluster.
 - [[redacting-sensitive-data-before-llm-calls]]: sending less in the first place.
 - [[self-hosted-llm-inference-on-gke]]: the self-hosted alternative.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

@@ -1,6 +1,6 @@
 ---
 title: Deterministic hooks for coding agents
-description: Use harness-level tool hooks and git hooks to enforce rules a coding agent must never break, with fail-closed guards, canary tests and CI as the backstop.
+description: Use harness-level tool hooks and git hooks to enforce rules a coding agent must never break, with text guards that fail closed, canary tests and server-side controls as the real boundary.
 type: pattern
 tags:
   - ai
@@ -8,7 +8,7 @@ tags:
   - policy-as-code
   - reliability
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -31,13 +31,15 @@ Instruction files (`AGENTS.md`, system prompts, rules files) are advisory. The m
 
 Layer the controls: permission allow/deny rules first, a sandbox for filesystem and network second, hooks for policy and audit third, CI last. Pattern matching on a shell string is bypassable through quoting, `sh -c`, variables or aliases, so say "reduces" rather than "prevents" when you describe a guard.
 
-## A fail-closed pre-tool guard
+## A pre-tool text guard that fails closed (not a boundary)
 
 In the common design, a pre-tool-use hook is matched by tool name (for example a shell tool, or an edit/write tool), receives the call as JSON on stdin, and blocks it with a specific exit code, with stderr returned to the model. Check the current hooks documentation for the exact contract. The trap: other non-zero exit codes are usually non-blocking errors, so a guard that crashes fails open. Handle that explicitly.
 
+The guard below matches text. It normalises quotes, backslashes and spacing, and it catches common spellings (`git -C dir push --force`, `+main` and `:main` refspecs, `rm -fr /`, quoted paths). It cannot see through variables (`g=git; $g push -f`, `rm -rf $PWD`), aliases, functions or a script file the agent wrote first, and it matches only the spellings in its patterns: a glob that does not spell `.en` or `.env` (`cat .e*`), a space-separated option value such as `git --git-dir x push -f`, or a path that expands to a protected one are not caught. It checks each command separately (split at `;`, `|` and `&` only, so a substitution or redirection stays inside its command). Newlines are not separators: a multi-line command is checked as one command, so it can be blocked for a flag that belongs to another line (for example `rm -rf build` followed by `git add .`), and only the Terraform apply rule re-checks the rest of such a command. The guard cannot know whether a plan file was reviewed. It reduces mistakes; it does not stop a determined or injected agent. The real control for pushes is server-side branch protection (no force-push, no deletion) in [[branching-and-merge-standard]]. For files and network, the real control is the sandbox in [[sandboxing-coding-agents-on-workstations-and-runners]]. For Terraform, the real control is the agent's identity: give it no credential that can apply (a plan-only role), and apply only in CI from a reviewed plan artifact, as in [[adr/0035-terraform-plan-policy-gate-and-ci-only-apply]] and [[agent-tool-authorization-boundaries]].
+
 ```bash
 #!/usr/bin/env bash
-# .agent/hooks/guard-bash.sh - illustrative; adapt to your tool's hook contract
+# .agent/hooks/guard-bash.sh - a text guard, not a security boundary. Adapt to your tool's hook contract.
 set -Eeuo pipefail
 
 deny() { echo "Blocked by guard-bash: $1. Use the documented alternative." >&2; exit 2; }
@@ -45,13 +47,50 @@ trap 'deny "guard error (failing closed)"' ERR
 
 input=$(cat)
 cmd=$(printf '%s' "$input" | jq -er '.tool_input.command')
+# Normalise before matching: drop quotes and backslashes, put spaces around shell operators,
+# squeeze whitespace, pad with spaces. This catches rm -rf "/", r\m -rf / and cat .env;true;
+# it cannot see through variables, aliases or decoding.
+norm=" $(printf '%s' "$cmd" | tr -d "\"'\\\\" | sed -E 's/[;|&<>()`]+/ & /g' | tr -s '[:space:]' ' ') "
 
-case "$cmd" in
-  *"rm -rf /"*|*"rm -rf ~"*)            deny "recursive delete of a root path" ;;
-  *"git push"*"--force"*|*"git push -f"*) deny "force push" ;;
-  *"terraform apply"*)                   [[ "$cmd" == *"tfplan"* ]] || deny "apply without a reviewed plan file" ;;
-  *".env"*|*".pem"*|*"id_rsa"*)          deny "secret file access" ;;
-esac
+# Regexes live in variables: bash parses them reliably that way.
+re_nested='(^| |;|&|\|)(sh|bash|zsh|dash) -c |(^| |;)eval |base64 (-d|--decode)|\| ?(sh|bash|zsh|dash) '
+re_push='[ /]git( -[cC] [^ ]+| -[^ ]+)* push '
+re_push_bad=' (-[a-zA-Z]*[fd][a-zA-Z]*|--force|--force-with-lease[^ ]*|--force-if-includes|--mirror|--delete|--prune) | \+[^ ]+ | :[^ ]+ '
+re_rm='[ /]rm( [^ ]+)*'  # the target must follow the rm token, so find . -exec rm -rf {} + is allowed
+re_rm_rec=' (-[a-zA-Z]*[rR][a-zA-Z]*|--recursive) '
+re_rm_target=' (/|/\*|~|~/|~/\*|\$HOME|\$HOME/|\$HOME/\*|\$\{HOME\}|\$\{HOME\}/|\$\{HOME\}/\*|\.|\./|\.\*|\.\.|\.\./|\.\./\*|--no-preserve-root) '
+re_tf_destroy='[ /]terraform( -[^ ]+)* destroy '
+re_tf_apply='[ /]terraform( -[^ ]+)* apply '
+re_tf_apply_plan='[ /]terraform( -[^ ]+)* apply( -[^ ]+)* ([^ -][^ ]*[./])?tfplan(( [0-9]+)? [<>]+&?( [^ ]+)?)* $'  # a trailing redirection such as 2>&1 is allowed
+re_tf_plan_out='[ /]terraform( -[^ ]+)* plan( [^ ]+)* -out'
+re_secret='[ /](\.env([.][^ ]*|[*?][^ ]*)?|\.en[?*][^ ]*|[^ ]*\.pem|id_rsa|id_ed25519|\.kube/config) '
+
+[[ "$norm" =~ $re_nested ]] && deny "nested shell or decoded command"
+[[ "$norm" =~ $re_secret ]] && deny "secret file access"
+# The same call must not create a plan and apply it: nobody reviewed that plan.
+if [[ "$norm" =~ $re_tf_apply ]] && [[ "$norm" =~ $re_tf_plan_out ]]; then deny "plan and apply in one call"; fi
+
+# One check per command, so a flag in one command does not count against another. Split only at
+# ; | and & runs: substitutions and redirections stay inside their command, so
+# git push origin $(git branch --show-current) --force is one command. No mapfile and no \n in
+# the sed replacement: a one-byte separator and tr avoid both bash 4 and GNU sed features.
+sep=$(printf '\001')
+split=$(printf '%s' "$norm" | sed -E "s/ [;|&]+ /${sep}/g" | tr "$sep" '\n')
+while IFS= read -r part; do
+  part=" ${part} "
+  while [[ "$part" == *"  "* ]]; do part=${part//  / }; done
+  if [[ "$part" =~ $re_push ]] && [[ "$part" =~ $re_push_bad ]]; then deny "force, delete or mirror push"; fi
+  if [[ "$part" =~ $re_rm_rec ]] && [[ "$part" =~ ${re_rm}${re_rm_target} ]]; then
+    deny "recursive delete of a root, home, current or parent path"
+  fi
+  if [[ "$part" =~ $re_tf_destroy ]]; then deny "terraform destroy"; fi
+  if [[ "$part" =~ $re_tf_apply ]]; then
+    [[ "$part" =~ $re_tf_apply_plan ]] || deny "apply without a saved plan file"
+    # A second apply in the same part (a newline-separated command) must have a plan file too.
+    rest=${part/"${BASH_REMATCH[0]}"/ }
+    ! [[ "$rest" =~ $re_tf_apply ]] || deny "apply without a saved plan file"
+  fi
+done <<<"$split"
 exit 0
 ```
 
@@ -73,6 +112,7 @@ Wire it up in settings with a short timeout. Check what your tool does when a ho
 Design rules that hold across tools:
 
 - Catch every error, including JSON parse failures and a missing `jq`, and exit with the blocking code. Where the harness has a block-on-failure setting for timeouts and hooks that fail to start, turn it on for guards.
+- A syntax error in the guard is not caught by the `ERR` trap: the script never starts, and the exit code may not be the blocking one. Run the canaries below in CI on every change to the guard.
 - Keep messages short and actionable: what was blocked, which rule, what to do instead. Hook output enters the model's context, so do not paste policy text.
 - Deny the agent write access to the hook scripts and the settings files. An agent that can edit its guard has no guard.
 - Review hooks as code, keep them pinned in the repository, and give each rule an owner.
@@ -118,7 +158,7 @@ and repeat it in CI so skipping locally changes nothing:
 ```yaml title=".gitlab-ci.yml"
 secret-scan:
   stage: test
-  image: registry.example.com/ci/secret-scan@sha256:REPLACE_WITH_DIGEST # change: your scanner image, pinned by digest
+  image: registry.example.com/ci/secret-scan@sha256:<digest> # change: your scanner image, pinned by digest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   script:
@@ -136,12 +176,91 @@ See [[secret-scanning-pre-commit-and-ci]] for scanner choices. Make a bypass vis
 
 A hook that silently stopped working is worse than none, because everyone assumes it protects them. Write a canary: a harmless call that the guard must block, such as a shell command echoing a fake secret filename. Run the agent once in a sandbox with a fixed prompt, and assert the block message appears in the transcript.
 
-```bash
+```bash title="ci/guard-canaries.sh"
 #!/usr/bin/env bash
-set -Eeuo pipefail
-out=$(printf '{"tool_input":{"command":"cat .env"}}' | .agent/hooks/guard-bash.sh 2>&1 || true)
-grep -q "Blocked by guard-bash" <<<"$out" || { echo "canary failed: guard did not block"; exit 1; }
+# Each must_block line must be blocked; a pass means the guard has a hole.
+set -uo pipefail
+guard=.agent/hooks/guard-bash.sh
+fail=0
+must_block=(
+  'cat .env'
+  'cat ".env"'
+  'cat .env; true'
+  'echo $(cat .env)'
+  'cat .env|base64'
+  'cat .env>out'
+  'cat .env*'
+  'cat .en?'
+  'git push --force origin main'
+  'git push -f origin main'
+  'git push -fu origin main'
+  'git -C ../repo push --force origin main'
+  'git --no-pager push --force origin main'
+  '/usr/bin/git push -f origin main'
+  'git push origin +main'
+  'git push origin :main'
+  'git push origin $(git branch --show-current) --force'
+  'git push origin `git branch --show-current` --force'
+  'git push -u origin $(git rev-parse --abbrev-ref HEAD) -f'
+  'rm -rf $(echo x) /'
+  'git push --delete origin main'
+  'git push --force-with-lease origin main'
+  'rm -rf /'
+  'rm -fr /'
+  'rm -r -f /'
+  'rm -rf "/"'
+  'rm -rf /; true'
+  'rm --recursive --force ~'
+  'rm -rf .'
+  'rm -rf ${HOME}'
+  '/bin/rm -rf /'
+  'r\m -rf /'
+  'bash -c "git push --force"'
+  'echo Z2l0IHB1c2ggLWY= | base64 -d | sh'
+  'terraform apply -auto-approve'
+  'terraform -chdir=infra destroy'
+  'terraform destroy tfplan'
+  '/usr/bin/terraform destroy'
+  './terraform apply -auto-approve'
+  'terraform destroy -auto-approve; echo tfplan'
+  'terraform apply -auto-approve -var-file=prod.tfplan'
+  'terraform plan -out=tfplan && terraform apply tfplan'
+  'terraform apply -auto-approve; terraform apply tfplan'
+  $'terraform apply -auto-approve\nterraform apply tfplan'
+)
+must_allow=(
+  'git push origin feat/x'
+  'git push -u origin feat/x'
+  'git status'
+  'rm -rf ./build'
+  "find . -name '*.pyc' -exec rm -rf {} +"
+  'cat .envrc'
+  'ls -ld . && git push origin feat/x'
+  'git push origin feat/x && docker run -d img'
+  'terraform plan -input=false'
+  'terraform apply plan.tfplan'
+  'terraform apply -input=false tfplan'
+  'terraform apply tfplan 2>&1 | tee apply.log'
+  'terraform apply tfplan > apply.log 2>&1'
+  'terraform apply tfplan >> apply.log 2>&1'
+  'terraform apply tfplan > out.log 2> err.log'
+  'ls -la'
+)
+for c in "${must_block[@]}"; do
+  out=$(jq -cn --arg c "$c" '{tool_input:{command:$c}}' | "$guard" 2>&1); rc=$?
+  if [[ $rc -ne 2 ]] || ! grep -q "Blocked by guard-bash" <<<"$out"; then echo "HOLE: $c"; fail=1; fi
+done
+for c in "${must_allow[@]}"; do
+  out=$(jq -cn --arg c "$c" '{tool_input:{command:$c}}' | "$guard" 2>&1); rc=$?
+  if [[ $rc -ne 0 ]]; then echo "FALSE BLOCK: $c ($out)"; fail=1; fi
+done
+# Malformed input must fail closed.
+out=$(printf 'not json' | "$guard" 2>&1); rc=$?
+[[ $rc -eq 2 ]] || { echo "HOLE: malformed input exits $rc"; fail=1; }
+exit "$fail"
 ```
+
+The canaries document the guard's reach, including what it cannot catch: `g=git; $g push -f` passes, because the command name is only known at run time. Do not add such a line to `must_block` to make the list look complete. Rely on branch protection for it. The `must_allow` lines guard against the opposite failure, a guard so broad that people disable it. Add a line to `must_block` whenever someone finds a spelling the patterns should catch, and list the ones they cannot catch next to the variable example.
 
 Run the script-level test in CI. Run the end-to-end agent canary after every settings change and every CLI upgrade, since a renamed matcher or event silently disables the guard. Also confirm the configuration is loaded from the layer you expect (project, user or managed), using the CLI's own config view.
 
@@ -149,7 +268,7 @@ Run the script-level test in CI. Run the end-to-end agent canary after every set
 
 - A crashing, timed-out or missing guard counts as a non-blocking error and the call proceeds.
 - Matcher names change between versions and the hook never runs.
-- Regex guards are bypassed by `bash -c "$(...)"`, encoded strings or a different tool that does the same thing (a file-edit tool instead of a shell write).
+- Text guards are bypassed by variables, aliases, a script file written first, or a different tool that does the same thing (a file-edit tool instead of a shell write). The guard is a text guard, not a boundary.
 - Local git hooks are treated as a control, then skipped.
 - Hooks are slow, so developers turn them off.
 - The agent can write to `.agent/hooks/` or the settings file.
@@ -164,12 +283,13 @@ Run the script-level test in CI. Run the end-to-end agent canary after every set
 - [ ] A canary proves each guard blocks, and runs after upgrades.
 - [ ] Config precedence was checked in the tool's own view.
 - [ ] Git hooks are mirrored by CI and branch protection.
+- [ ] Pushes are blocked by server-side branch protection, not only by the guard.
 - [ ] Hook output is short and contains no secrets.
 - [ ] Each hook has an owner and is code-reviewed.
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the git hook, `git diff` and GitLab CI statements in this note were checked against local copies of the documentation; the agent-tool hook contract was not.
+Source-reviewed on 2026-11-02. Nothing was run, apart from a helper check on 2026-11-25 (see Lab run). Scope: the git hook, `git diff` and GitLab CI statements in this note were checked against local copies of the documentation; the agent-tool hook contract was not.
 
 ### Sources checked
 
@@ -188,12 +308,29 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the git hook, `git diff` 
 - That a non-zero exit from a GitLab `script` command fails the job (the comment in the CI example relies on it): not found in the local GitLab docs subset.
 - The GitLab `stage: test` default and `image:` digest pinning in the CI job were not located in the local GitLab docs subset.
 - Secret scanner choice and bypass patterns of regex guards are engineering guidance, not documented claims.
-- Nothing was run, including the guard, canary and CI snippets.
+- The guard is a text guard; the bypasses listed in the guard section and under the canaries are known holes, not an exhaustive or tested list. Other spellings may pass.
+- That the Terraform rules match every spelling of `terraform` (wrapper scripts, a path containing a space, `tofu`, a `TF_CLI_ARGS` environment variable, a binary under another name): not tested.
+- The guard and its canaries ran with bash 5.2 and GNU sed on Linux only. Bash 3.2 and BSD sed on macOS were not run: the guard avoids `mapfile` and `\n` in the sed replacement, but run the canaries on each platform before relying on it there. Shell operators are padded with spaces, and commands are split only at `;`, `|` and `&`, so a command that hides the token from the matcher by other means (variables, aliases, encoded text) still passes.
+- Multi-line commands: newlines are squeezed into spaces and are not separators, so a multi-line command is checked as one command. Ordinary multi-line commands can be blocked wrongly (`rm -rf build` then `git add .`; `ls -ld .` then `git push origin feat/x`), and only the `terraform apply` rule re-checks the rest of the command. Not tested beyond the canaries.
+- Nothing else was run: the post-tool hook and the CI job were not executed.
+
+### Lab run
+
+A helper check, not the note's main procedure (the guard was not run inside any agent harness). Host: Ubuntu 24.04.5 LTS, Linux 6.18.44-fc-v880. Versions as printed: `GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)`, `jq-1.7`. Date: 2026-11-25 (rerun after the guard was changed to split commands only at `;`, `|` and `&`; the 2026-11-24 run covered the earlier version). The guard and `ci/guard-canaries.sh` exactly as shown in this note, with the guard at `.agent/hooks/guard-bash.sh`:
+
+```bash
+bash ci/guard-canaries.sh; echo "exit=$?"
+jq -cn --arg c 'g=git; $g push -f' '{tool_input:{command:$c}}' | .agent/hooks/guard-bash.sh; echo "exit=$?"
+```
+
+```text
+exit=0
+exit=0
+```
+
+The first command runs every `must_block` and `must_allow` line, including the operator spellings (`cat .env; true`, `echo $(cat .env)`, `cat .env|base64`, `cat .env>out`, `rm -rf /; true`), the saved-plan spellings `terraform apply -input=false tfplan` and `terraform apply tfplan 2>&1 | tee apply.log`, `terraform apply tfplan > apply.log 2>&1` (and the `>>` and `2> err.log` forms), the two-line `terraform apply -auto-approve` then `terraform apply tfplan`, push and delete spellings with a command substitution or backticks, `/usr/bin/terraform destroy`, and the spellings the first version let through (a command path (also for `terraform`), combined short flags, a global git option, `.env*` globs, `rm -rf .`, `rm -rf ${HOME}`, `terraform destroy`, a plan token that is not the plan argument, plan and apply in one call), plus allowed lines such as `git push -u origin feat/x`. The second command shows the documented hole: a push through a variable is not blocked.
 
 ## Sources
 
-- Your coding agent's own documentation for hook events, matchers, the exit code that blocks a call, and timeout and failure behaviour. This was not read for this note; the tool-specific behaviour given as an example varies by tool and version, so check it there before copying any configuration.
 - [githooks documentation](https://git-scm.com/docs/githooks) - which client-side hooks exist, that a non-zero exit aborts pre-commit and commit-msg, and that `--no-verify` skips them.
 - [pre-commit framework](https://pre-commit.com/) - not read for this note; the official home for installing and configuring pre-commit hooks.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
