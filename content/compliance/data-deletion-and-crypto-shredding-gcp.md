@@ -9,7 +9,7 @@ tags:
   - gke
   - audit
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 aliases:
   - crypto-shredding
@@ -148,6 +148,9 @@ gcloud sql backups list --instance="${INSTANCE}"
 ```
 
 Cloud Logging: there is no per-entry delete in the Logging API surface we read; check the current docs. `gcloud logging logs delete LOG_NAME` deletes all entries of a log, and only in the global `_Default` bucket; the API notes that entries written shortly before the call might not be deleted, and the log reappears when new entries arrive. For other buckets, entries leave only when bucket retention expires. That is the main reason to keep personal data out of long-retention log buckets in the first place ([[adr/0044-central-log-sinks-and-retention-tiers|ADR-0044]]).
+
+> [!danger] Deleting a log removes every entry in it, for every tenant
+> `gcloud logging logs delete` cannot be undone and cannot be limited to one customer: it removes all entries of that log name in the `_Default` bucket. Before you run it, check for legal holds ([[compliance/legal-hold-for-logs-and-artifacts]]), record in the deletion record what the log held and why it goes, and make it a reviewed change with a second approver, like the key destruction below. If other tenants' entries in the same log must be kept, do not delete: let bucket retention expire them.
 
 Artifactory and CI: delete the artifacts and builds, then follow the platform's own trash can and garbage collection behaviour (check the current JFrog docs) before you call it deleted. CI artifacts, job logs and caches expire by project settings; delete them explicitly for the affected pipelines, and do not forget runner caches and disks.
 

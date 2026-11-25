@@ -9,7 +9,7 @@ tags:
   - ci-cd
 status: accepted
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-25
 decided: 2026-10-19
 draft: false
 aliases:
@@ -40,22 +40,25 @@ sign-image:
   script:
     - cosign sign --yes "${IMAGE_REPO}@${IMAGE_DIGEST}"
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/ && $CI_COMMIT_REF_PROTECTED == "true"
 ```
 
 ```bash title="verify-signature.sh"
 set -euo pipefail
 IMAGE="artifactory.example.com/payments-docker-prod-local/payments/api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
+# Any SemVer release tag of this one project; never a wildcard over the instance.
 cosign verify "${IMAGE}" \
-  --certificate-identity "https://gitlab.example.com/payments/api//.gitlab-ci.yml@refs/tags/v1.2.3" \
+  --certificate-identity-regexp '^https://gitlab\.example\.com/payments/api//\.gitlab-ci\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
   --certificate-oidc-issuer "https://gitlab.example.com"
 ```
+
+The regexp is anchored at both ends and matches only release tags of this project. It cannot prove that the tag was protected. Protection comes from protecting `v*` tags in GitLab, so that only maintainers can create them. The rule above only stops the job from signing by mistake on an unprotected ref; it lives in the repository and is not a control against someone who can push a tag. Verification also accepts every release tag ever signed, so it does not stop a redeploy of an older signed digest: that is limited by the deploy path ([[0047-semver-release-tags-and-protected-production-deploys]], [[0048-rollback-by-redeploying-previous-digest]]), not by the signature check.
 
 The digest is a placeholder. Use the real digest from your push step.
 
 > [!info] Claims not checked against current docs
-> Current cosign flags (`--yes`, identity and issuer flags, key URI syntax for KMS), the GitLab `id_tokens` audience requirements, the exact certificate identity format GitLab produces, and Rekor behaviour. Check the Sigstore and GitLab documents listed below before copying.
+> Current cosign flags (`--yes`, identity and issuer flags, key URI syntax for KMS), the GitLab `id_tokens` audience requirements, the exact certificate identity format GitLab produces, `CI_COMMIT_REF_PROTECTED` and its value `"true"`, and Rekor behaviour. Check the Sigstore and GitLab documents listed below before copying.
 
 ## Consequences
 

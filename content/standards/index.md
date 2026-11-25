@@ -5,13 +5,14 @@ tags:
   - standards
   - meta
 created: 2026-10-10
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
 Standards say how the team works: how notes are written, how production changes are made and reviewed, and how incidents are written up.
 
 - [[writing-notes|Writing notes]]: file naming, required frontmatter, tagging taxonomy, wikilinks, callouts and the ADR lifecycle.
+- [[experience-and-evidence|Experience and evidence]]: where a note's claims come from, what each evidence level requires, and the rule that an operational claim must point at the case that proves it.
 
 ## Engineering standards
 

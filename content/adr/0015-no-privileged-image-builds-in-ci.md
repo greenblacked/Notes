@@ -10,7 +10,7 @@ tags:
   - supply-chain
 status: accepted
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 decided: 2026-10-19
 draft: false
 aliases:
@@ -60,8 +60,8 @@ build-image:
 
 Treat the snippet as a starting point: pin the builder image by digest, confirm the attestation options against your BuildKit version, and set `IMAGE_REPO` to your registry path.
 
-> [!warning] kaniko status
-> The kaniko project's maintenance status changed, and the upstream repository was archived. Check its current status, and whether a maintained fork fits your risk appetite, before choosing it. It is not our default.
+> [!warning] kaniko is archived
+> The upstream repository's README ([GoogleContainerTools/kaniko](https://github.com/GoogleContainerTools/kaniko), read 2026-11-24) says: "This project is archived and no longer developed or maintained." The date it was archived was not confirmed from a primary source. Third-party forks exist; check their maintenance and your risk appetite before choosing one. It is not our default.
 
 ## Consequences
 
@@ -84,11 +84,11 @@ Harder or newly required:
 
 - **Privileged Docker-in-Docker.** Works with every Dockerfile and every existing script, but gives each job a path to the node. Rejected on shared runners.
 - **Mounting the host Docker socket.** Fast and cache-friendly, but equivalent to host root and shares images across jobs. Rejected.
-- **kaniko.** Daemonless and was widely used in GitLab on Kubernetes, but its maintenance status changed (see the warning above). Not chosen as default; revisit if a maintained successor is adopted.
+- **kaniko.** Daemonless and was widely used in GitLab on Kubernetes, but the upstream project is archived (see the warning above). Not chosen as default; revisit if a maintained successor is adopted.
 - **Dedicated privileged builder VMs.** Isolates the risk to a separate machine, at the cost of another fleet to run and patch. Reasonable for legacy builds that cannot move, but not the standard.
 
 > [!info] Claims not checked against current docs
-> BuildKit rootless prerequisites on GKE, the `attest:` option syntax for your BuildKit version, kaniko's present status and forks, Cloud Build pricing and limits, and Pod Security behaviour for user namespaces were not verified for this record. Check the current documentation.
+> BuildKit rootless prerequisites on GKE, the `attest:` option syntax for your BuildKit version, the state of kaniko forks, Cloud Build pricing and limits, and Pod Security behaviour for user namespaces were not verified for this record. Check the current documentation.
 
 ## Validation
 

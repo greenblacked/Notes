@@ -10,7 +10,7 @@ tags:
   - kubernetes
   - observability
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -135,7 +135,7 @@ From the [cert-manager Certificate documentation](https://cert-manager.io/docs/u
 
 ## Lifetimes
 
-**Public certificates** follow the CA/Browser Forum Baseline Requirements. Version 2.3.1 (dated 2026-10-04, read 2026-10-21), section 6.3.2, caps the validity of publicly trusted TLS server certificates by issue date:
+**Public certificates** follow the CA/Browser Forum Baseline Requirements. Version 2.3.1 (dated 2026-10-04, read 2026-10-21; the dates below were re-checked on 2026-11-24 against its Relevant Dates in section 1.2.2), section 6.3.2, caps the validity of publicly trusted TLS server certificates by issue date:
 
 | Issued                             | Maximum validity |
 | ---------------------------------- | ---------------- |
@@ -300,7 +300,7 @@ Exceptions follow [[policy-exception-and-waiver-process]]. Typical cases: a part
 
 ## Sources
 
-- [CA/Browser Forum TLS Baseline Requirements](https://cabforum.org/working-groups/server/baseline-requirements/), version 2.3.1, section 6.3.2 (validity periods)
+- [CA/Browser Forum TLS Baseline Requirements](https://cabforum.org/working-groups/server/baseline-requirements/), version 2.3.1, section 6.3.2 (validity periods); version 2.3.1 and the 200, 100 and 47-day dates, and the 200, 100 and 10-day validation reuse, re-checked 2026-11-24 against [the 2.3.1 PDF](https://cabforum.org/working-groups/server/baseline-requirements/documents/CA-Browser-Forum-TLS-BR-2.3.1.pdf), section 1.2.2
 - [TLSRef server-side TLS guidelines](https://docs.tlsref.org/server-side-tls.html) and [configurator](https://configurator.tlsref.org/), read 2026-10-21 from their [source repository](https://github.com/tlsref/docs); the [archived Mozilla configurator repository](https://github.com/mozilla/ssl-config-generator) records the move
 - Terraform [`google_compute_ssl_policy`](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_ssl_policy) and [`google_certificate_manager_certificate`](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/certificate_manager_certificate)
 - [Google Cloud SSL policies](https://cloud.google.com/load-balancing/docs/ssl-policies-concepts) (not verified for this note)

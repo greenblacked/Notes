@@ -10,7 +10,7 @@ tags:
   - security
   - audit
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 aliases:
   - gitlab-security-policies
@@ -50,7 +50,7 @@ All security policy types need GitLab Ultimate. Compliance frameworks and the co
 | Merge request approval policy    | Extra approvals when findings exceed a threshold; branch protections | No, unless the policy is in `warn` mode, which allows a merge with a recorded reason                             | Ultimate                      |
 | Compliance framework label       | Nothing by itself; it scopes policies and reports                    | Applying and removing labels needs a high role; check who has it                                                 | Premium, Ultimate             |
 
-Compliance pipelines were deprecated in GitLab 17.3 in favour of pipeline execution policies. Their documentation names the planned removal as 19.0 in one place and 20.0 in another, so check the deprecations page for your version. Do not enable a pipeline execution policy on a project that still uses a compliance pipeline: the compliance pipeline replaces the project pipeline while the policy is applied to the original project pipeline, which gives duplicated jobs or missing checks. Migrate first.
+Compliance pipelines were deprecated in GitLab 17.3 in favour of pipeline execution policies. As of 2026-11-24, GitLab's compliance pipelines page says they are "planned for removal in 20.0", and the deprecations list (read in its ja-jp edition; the docs site serves version 19.7) files them under the GitLab 20.0 breaking changes. The migration section of the same page still says "will be removed in GitLab 19.0"; that sentence is out of date. Check the deprecations page for your version before you set a migration date. Do not enable a pipeline execution policy on a project that still uses a compliance pipeline: the compliance pipeline replaces the project pipeline while the policy is applied to the original project pipeline, which gives duplicated jobs or missing checks. Migrate first.
 
 For tiers below Ultimate, keep the central include and a CODEOWNERS rule on `.gitlab-ci.yml` as in [[adr/0013-versioned-central-ci-templates]] and [[patterns/gitlab-ci-components-and-includes]]. That is a review control, not enforcement; record it as such in your control matrix. What else lower tiers offer is not verified here.
 
@@ -305,7 +305,8 @@ Jenkins has no group-level policy engine. The usual equivalent is a mandatory st
 - GitLab, [Scan execution policies](https://docs.gitlab.com/user/application_security/policies/scan_execution_policies/).
 - GitLab, [Merge request approval policies](https://docs.gitlab.com/user/application_security/policies/merge_request_approval_policies/).
 - GitLab, [Security policy projects](https://docs.gitlab.com/user/application_security/policies/enforcement/security_policy_projects/): creating, linking and unlinking.
-- GitLab, [Compliance pipelines (deprecated)](https://docs.gitlab.com/user/group/compliance_pipelines/).
+- GitLab, [Compliance pipelines (deprecated)](https://docs.gitlab.com/user/compliance/compliance_pipelines/) (removal version read 2026-11-24).
+- GitLab, [Deprecations and removals by version](https://docs.gitlab.com/update/deprecations/).
 - GitLab, [Compliance frameworks](https://docs.gitlab.com/user/group/compliance_frameworks/).
 - GitLab, [Compliance center](https://docs.gitlab.com/user/compliance/compliance_center/).
 - GitLab, [Audit events API](https://docs.gitlab.com/api/audit_events/).

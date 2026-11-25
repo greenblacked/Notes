@@ -9,7 +9,7 @@ tags:
   - audit
   - policy-as-code
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -84,6 +84,8 @@ The AI row is team policy. No vendor's data-retention or training terms were che
 
 Classes are useful only when tools can read them. Use the same lowercase values everywhere: `public`, `internal`, `confidential`, `restricted`.
 
+This table is the single list of key names for the data class; other notes link here. Tags drive controls (organisation policy and IAM conditions), and labels drive inventory and cost reports. KMS keys use `data_class` because [[adr/0059-cmek-where-data-classification-requires-it|ADR-0059]] set it. Key rules differ by service, so check the limits below and the docs for each service.
+
 | Where                                                        | Key                                      | Purpose                                                                                                |
 | ------------------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | GCP resource labels (projects, buckets, datasets, instances) | `data-classification`                    | Inventory, cost and search ([[gcp-resource-naming-and-labels-standard]])                               |
@@ -152,7 +154,7 @@ Restricted or Confidential data found where its class does not allow it (a produ
 
 ## Exceptions
 
-An exception records the data set, the class, the rule that cannot be met, the reason, a compensating control, the data owner's approval, security's review and an expiry date (proposed default 90 days), through [[compliance/policy-exception-and-waiver-process]]. Restricted data in non-production environments, in CI artifacts or in AI tools is not accepted as an exception.
+An exception records the data set, the class, the rule that cannot be met, the reason, a compensating control, the data owner's approval, security's review and an expiry date within the maximum set in [[compliance/policy-exception-and-waiver-process#Rules]]. Restricted data in non-production environments, in CI artifacts or in AI tools is not accepted as an exception.
 
 ## Reviewer checklist
 

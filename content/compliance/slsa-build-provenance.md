@@ -9,7 +9,7 @@ tags:
   - gitlab-ci
   - jenkins
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 aliases:
   - SLSA
@@ -133,7 +133,7 @@ provenance:
     - cosign attest --yes --type https://slsa.dev/provenance/v1 --predicate predicate.json "${IMAGE_REPO}@${IMAGE_DIGEST}"
 ```
 
-GitLab has its own mechanisms for emitting build metadata and provenance for some artifact types. Whether and how they apply to container images on your GitLab version is not verified here; check the GitLab documentation before replacing the job above. The job signs keylessly against the public Sigstore instance, which accepts only the OIDC issuers it is configured for (`https://gitlab.com` is one). A self-managed GitLab such as `gitlab.example.com` needs a private Sigstore deployment (Fulcio and Rekor, with `--fulcio-url` and `--rekor-url`) or a KMS key; the verification below assumes the same. Not verified: check the current Fulcio issuer list. This job is honest about its limit: it is a separate job and uses the platform OIDC token, which is close to level 2, but the runner that executes it is still yours (see the gaps below).
+GitLab has its own mechanisms for emitting build metadata and provenance for some artifact types. Whether and how they apply to container images on your GitLab version is not verified here; check the GitLab documentation before replacing the job above. The job signs keylessly against the public Sigstore instance. The issuer limit and the options for a self-managed GitLab are the same as for SBOM attestations ([[compliance/sbom-generation-and-storage#Generating in CI]]), and the verification below assumes the same setup. This job is honest about its limit: it is a separate job and uses the platform OIDC token, which is close to level 2, but the runner that executes it is still yours (see the gaps below).
 
 On Jenkins, produce the same predicate in a stage that runs on a dedicated, locked-down agent, and sign with a Cloud KMS key the build agents cannot reach, using `cosign attest --key gcpkms://...` as in the SBOM note. Cosign uploads to the public Rekor log by default even with a key; add `--tlog-upload=false` (flag name: check for your pinned cosign version) if that is unacceptable, and verify with `--insecure-ignore-tlog=true`.
 
