@@ -166,7 +166,7 @@ while read -r IMAGE; do
 done < "$CASE_DIR/deployed-digests.txt" | tee "$CASE_DIR/verify-results.txt"
 ```
 
-- A signature verifying is not enough: a valid keyless signature made inside the window is the attacker's, so the loop prints `SIGNED`, not `OK`. Treat a `SIGNED` image as trusted only after you have recorded its transparency-log time in `$CASE_DIR/log-times.tsv` (image, log time) and found it outside the window `T0..T1`. `T1` is the time the suspect runner was stopped and the step 4 revocations were finished: write it to `$CASE_DIR/t1.txt` when they are done (`date -u +%Y-%m-%dT%H:%M:%SZ`). An image signed after `T1` is trusted only if it is one of the step 6 rebuilds, signed by the new runner and listed in `$CASE_DIR`. Add every image whose log time is inside `T0..T1`, or after `T1` but not a listed rebuild, or that you cannot read a log time for, to `suspect-digests.txt`. The loop does not check the time itself, and the exact field that carries it is not verified.
+- A signature verifying is not enough: a valid keyless signature made inside the window is the attacker's, so the loop prints `SIGNED`, not `OK`. Treat a `SIGNED` image as trusted only after you have recorded its transparency-log time in `$CASE_DIR/log-times.tsv` (image, log time) and found it outside the window `T0..T1`. `T1` is the time the suspect runner was stopped and the step 4 revocations were finished: write it to `$CASE_DIR/t1.txt` when they are done (`date -u +%Y-%m-%dT%H:%M:%SZ`). An image signed after `T1` is trusted only if it is one of the step 6 rebuilds, built by a job on the new runner and listed in `$CASE_DIR/rebuilt-digests.txt`. Add every image whose log time is inside `T0..T1`, or after `T1` but not in `rebuilt-digests.txt`, or that you cannot read a log time for, to `suspect-digests.txt`. The loop does not check the time itself, and the exact field that carries it is not verified.
 
 - `deployed-digests.txt` holds one `registry/repo@sha256:...` per line. Generate it with the command below, which writes first-party images to `deployed-digests.txt` and the rest to `other-digests.txt`, and strips a `docker-pullable://` prefix some runtimes add. Change the registry prefix to your own; an `imageID` that is a bare `sha256:...` has no registry path, so look up its image name in the pod spec instead.
 
@@ -188,7 +188,7 @@ Compare `other-digests.txt` with the expected platform and third-party list: a s
 - Register a new runner with new tags.
 - Re-add WIF bindings with the narrowest attribute condition.
 - Before the first rebuild, empty the distributed runner cache bucket and any build-layer cache, use new cache keys, and purge proxy and dependency caches the CI identity could write to. A poisoned cache entry is otherwise restored into the first "clean" build.
-- Rebuild every suspect artifact from a known-good commit (step 4a) on the clean runner, and redeploy by digest.
+- Rebuild every suspect artifact from a known-good commit (step 4a) on the clean runner, write each rebuilt digest and its job ID to `$CASE_DIR/rebuilt-digests.txt`, and redeploy by digest.
 - Compare the old and new SBOMs.
 
 ### 7. Jenkins agents and controllers
@@ -201,7 +201,7 @@ Compare `other-digests.txt` with the expected platform and third-party list: a s
 
 - The runner shows paused, then is deleted.
 - New jobs land only on the new runner.
-- `verify-results.txt` has no `FAIL` for first-party workloads, every `SIGNED` image has a log time outside `T0..T1` recorded in `log-times.tsv` (after `T1` only for the listed step 6 rebuilds), and no deployed digest is in `suspect-digests.txt`. Images from kube-system, GKE and third parties are out of this check; review them separately if the pipeline could have pushed to their registries.
+- `verify-results.txt` has no `FAIL` for first-party workloads, every `SIGNED` image has a log time outside `T0..T1` recorded in `log-times.tsv` (after `T1` only for digests in `rebuilt-digests.txt`), and no deployed digest is in `suspect-digests.txt`. Images from kube-system, GKE and third parties are out of this check; review them separately if the pipeline could have pushed to their registries.
 - No digest from `suspect-digests.txt` runs: `grep -F -f suspect-digests.txt` over the step 5 pod listing returns nothing.
 - After the step 4 removals and once already-issued access tokens have expired, Cloud Audit Logs show no further use of the WIF principal; see [[gcp-audit-logs-siem]].
 
