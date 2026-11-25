@@ -8,7 +8,7 @@ tags:
   - reliability
   - observability
 created: 2026-11-01
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -409,12 +409,20 @@ See Rollback. Delete the temporary clone of the prompt repository and any trace 
 TMP_ROOT="${TMPDIR:-/tmp}"; TMP_ROOT="${TMP_ROOT%/}"
 for d in "${CONFIG_DIR:-}" "${PROMPTS_DIR:-}"; do
   case "$d" in
-    "$TMP_ROOT"/tmp.*) rm -rf -- "$d" ;;
+    */../*|*/..) printf 'skip: %s contains ..\n' "$d" ;;
+    "$TMP_ROOT"/tmp.*) [ -d "$d" ] && [ ! -L "$d" ] && rm -rf -- "$d" ;;
     *) printf 'skip: %s is unset or not a mktemp directory\n' "${d:-<unset>}" ;;
   esac
 done
-# Trace exports in the incident working directory: list, check, then delete
+```
+
+Trace exports in the incident working directory: list them, check the list, then delete in a separate step.
+
+```bash
 find . -maxdepth 1 -type f \( -name 'before.jsonl' -o -name 'after.jsonl' -o -name 'traces*.jsonl' \) -print
+```
+
+```bash
 find . -maxdepth 1 -type f \( -name 'before.jsonl' -o -name 'after.jsonl' -o -name 'traces*.jsonl' \) -delete
 ```
 

@@ -51,6 +51,9 @@ kubectl config current-context                      # must be the same cluster
 ```bash
 gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
   --format=json > "node-pool-$POOL-before.json"
+jq -e --arg p "$POOL" '.name == $p' "node-pool-$POOL-before.json" > /dev/null \
+  && echo "saved" \
+  || echo "stop: the saved pool description is empty or is not $POOL; fix the login or project and repeat"
 jq '.config.labels // {}' "node-pool-$POOL-before.json"
 kubectl get nodes -l cloud.google.com/gke-nodepool="$POOL" -L "$NEW_KEY"
 ```
@@ -61,7 +64,7 @@ kubectl get nodes -l cloud.google.com/gke-nodepool="$POOL" -L "$NEW_KEY"
 LABELS=$(jq -r --arg k "$NEW_KEY" --arg v "$NEW_VALUE" \
   '(.config.labels // {}) + {($k): $v} | to_entries | map("\(.key)=\(.value)") | join(",")' \
   "node-pool-$POOL-before.json")
-printf '%s\n' "$LABELS"   # every label printed by step 1 must still be here
+printf '%s\n' "$LABELS"   # every label printed by step 1 must still be here, plus the new one
 ```
 
 Avoid keys that clash with the labels Kubernetes and GKE set themselves; the API reference says the result of a clash is unpredictable.
@@ -71,8 +74,12 @@ Avoid keys that clash with the labels Kubernetes and GKE set themselves; the API
 Run the label change as its own update call; the reference lists the update flags in a group of which exactly one must be given.
 
 ```bash
-gcloud container node-pools update "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
-  --node-labels="$LABELS"
+case ",$LABELS," in
+  *",$NEW_KEY=$NEW_VALUE,"*)
+    gcloud container node-pools update "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
+      --node-labels="$LABELS" ;;
+  *) echo "stop: LABELS is empty or does not contain $NEW_KEY=$NEW_VALUE; redo step 2" ;;
+esac
 ```
 
 ## Validation

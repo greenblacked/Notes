@@ -9,7 +9,7 @@ tags:
   - gitops
   - reliability
 created: 2026-10-16
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -105,8 +105,15 @@ helm upgrade --install "$RELEASE" ./chart -n "$NS" \
 
 ```bash
 helm history "$RELEASE" -n "$NS"
-GOOD_REV=7   # change: the last revision whose STATUS is deployed or superseded
-helm rollback "$RELEASE" "$GOOD_REV" -n "$NS"
+GOOD_REV=    # set: the last revision whose STATUS is deployed or superseded
+```
+
+```bash
+if [ -n "$GOOD_REV" ]; then
+  helm rollback "$RELEASE" "$GOOD_REV" -n "$NS"
+else
+  echo "stop: set GOOD_REV from the helm history output first"
+fi
 ```
 
 If rollback is also refused:
@@ -116,15 +123,33 @@ If rollback is also refused:
 
 ```bash
 kubectl get secret -n "$NS" -l owner=helm,name="$RELEASE" --show-labels
-STUCK_REV=9   # change: the revision helm history shows as pending-install, pending-upgrade or pending-rollback
-SECRET="sh.helm.release.v1.${RELEASE}.v${STUCK_REV}"
-kubectl get secret "$SECRET" -n "$NS" -o json \
-  | jq 'del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.managedFields)' \
-  > "helm-secret-${RELEASE}-v${STUCK_REV}-backup.json"
-kubectl delete secret "$SECRET" -n "$NS"
+STUCK_REV=   # set: the revision helm history shows as pending-install, pending-upgrade or pending-rollback
 ```
 
-To undo: `kubectl create -f "helm-secret-${RELEASE}-v${STUCK_REV}-backup.json" -n "$NS"`. Keep the backup file safe: it holds the rendered release, which can include Secret values.
+```bash
+if [ -z "$STUCK_REV" ]; then
+  echo "stop: set STUCK_REV from the helm history output first"
+else
+  SECRET="sh.helm.release.v1.${RELEASE}.v${STUCK_REV}"
+  STATUS=$(kubectl get secret "$SECRET" -n "$NS" -o jsonpath='{.metadata.labels.status}')
+  BACKUP="helm-secret-${RELEASE}-v${STUCK_REV}-backup.json"
+  case "$STATUS" in
+    pending-install|pending-upgrade|pending-rollback)
+      ( umask 077
+        kubectl get secret "$SECRET" -n "$NS" -o json \
+          | jq 'del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.managedFields)' \
+          > "$BACKUP" )
+      if jq -e '.data.release' "$BACKUP" > /dev/null; then
+        kubectl delete secret "$SECRET" -n "$NS"
+      else
+        echo "stop: the backup is empty or incomplete, nothing was deleted"
+      fi ;;
+    *) echo "stop: $SECRET has status '${STATUS:-none}', not a pending one" ;;
+  esac
+fi
+```
+
+To undo: `kubectl create -f "helm-secret-${RELEASE}-v${STUCK_REV}-backup.json" -n "$NS"`. Keep the backup file safe: it holds the rendered release, which can include Secret values. Delete it, or move it to access-controlled incident storage, once the release is healthy.
 
 This edits Helm's bookkeeping, not the workload, and is a last resort. Re-run `helm history`, and then upgrade.
 

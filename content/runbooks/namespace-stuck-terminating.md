@@ -8,7 +8,7 @@ tags:
   - gke
   - reliability
 created: 2026-10-19
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -105,9 +105,12 @@ Anything listed is a remaining object. Normal deletion normally removes them; if
 
 ```bash
 KIND=widgets.example.com   # change: a kind listed by the loop above
-kubectl get ns "$NS" -o jsonpath='{.status.phase}{"\n"}'   # must print Terminating
 kubectl get "$KIND" -n "$NS" -o name                       # what will be deleted
-kubectl delete "$KIND" --all -n "$NS" --wait=false
+if [ "$(kubectl get ns "$NS" -o jsonpath='{.status.phase}')" = Terminating ]; then
+  kubectl delete "$KIND" --all -n "$NS" --wait=false
+else
+  echo "stop: $NS is not Terminating, nothing was deleted"
+fi
 ```
 
 ### 4. Finalizers whose controller is gone
