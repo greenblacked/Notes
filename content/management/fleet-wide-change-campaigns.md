@@ -10,7 +10,7 @@ tags:
   - helm
   - gitlab-ci
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -312,9 +312,10 @@ Standard library only.
 
 Input CSV columns: project (ID or full path), file (path of Chart.yaml in the repo).
 
-  read -rs GITLAB_TOKEN && export GITLAB_TOKEN   # paste the bot token; not echoed, not in history
-  GITLAB_URL=https://gitlab.example.com \
-    python3 open_mrs.py targets.csv --chart platform-lib --to 3.0.0 --campaign PLAT-123 [--apply]
+  # The subshell keeps the token out of the parent shell's environment once the script ends.
+  ( read -rs GITLAB_TOKEN && export GITLAB_TOKEN   # paste the bot token; not echoed, not in history
+    GITLAB_URL=https://gitlab.example.com \
+      python3 open_mrs.py targets.csv --chart platform-lib --to 3.0.0 --campaign PLAT-123 [--apply] )
 """
 import argparse
 import csv
@@ -402,7 +403,11 @@ def main() -> int:
     if not token:
         print("export GITLAB_TOKEN (api scope, from a bot account)", file=sys.stderr)
         return 2
-    gl = GitLab(os.environ.get("GITLAB_URL", "https://gitlab.example.com"), token)
+    base_url = os.environ.get("GITLAB_URL", "https://gitlab.example.com")
+    if not base_url.startswith("https://"):
+        print("GITLAB_URL must start with https://: the token is sent with every request", file=sys.stderr)
+        return 2
+    gl = GitLab(base_url, token)
     branch = f"campaign/{args.campaign.lower()}-{args.chart}-{args.to}"
     failures = 0
 
