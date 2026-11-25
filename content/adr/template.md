@@ -25,7 +25,7 @@ tags:
   - <topic tag>
 status: proposed # proposed | accepted | rejected | deprecated | superseded
 created: YYYY-MM-DD
-modified: 2026-11-25
+modified: YYYY-MM-DD
 decided: YYYY-MM-DD # the day it was accepted; leave out while proposed
 draft: false
 aliases:

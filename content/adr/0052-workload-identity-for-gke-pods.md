@@ -293,12 +293,14 @@ spec:
         requests: { cpu: 10m, memory: 32Mi }
         limits: { memory: 32Mi }
 EOF
-kubectl wait --namespace "${NAMESPACE}" pod/wi-check \
-  --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s || true
+if ! kubectl wait --namespace "${NAMESPACE}" pod/wi-check \
+  --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s; then
+  kubectl describe pod --namespace "${NAMESPACE}" wi-check || true
+fi
 kubectl logs --namespace "${NAMESPACE}" wi-check
 ```
 
-Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. The Pod meets Pod Security `restricted` ([[0022-admission-policy-pod-security-vap-and-kyverno]]). It prints the token's HTTP status, never the token. The script deletes the Pod on exit. If the wait times out, the Pod ended `Failed` (the metadata call was refused, so `curl -f` exited non-zero) or never started (image pull or admission error); read `kubectl describe pod` for the reason. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
+Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. The Pod meets Pod Security `restricted` ([[0022-admission-policy-pod-security-vap-and-kyverno]]). It prints the token's HTTP status, never the token. The script deletes the Pod on exit. If the wait times out, the script prints `kubectl describe pod` before it deletes the Pod: the Pod ended `Failed` (the metadata call was refused, so `curl -f` exited non-zero) or never started (image pull error, for example an unreplaced digest). An admission denial fails at `kubectl apply` instead. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
 
 ## References
 

@@ -33,7 +33,7 @@ type: pattern
 tags:
   - topic-tag
 created: 2026-10-10
-modified: 2026-11-25
+modified: 2026-10-10
 draft: false
 ---
 ```
@@ -113,7 +113,7 @@ type: runbook
 tags:
   - runbooks
 created: 2026-10-10
-modified: 2026-11-25
+modified: 2026-10-20
 draft: false
 evidence: source-reviewed
 reviewed: 2026-10-20
