@@ -8,7 +8,7 @@ tags:
   - audit
   - team-process
 created: 2026-10-27
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -18,7 +18,7 @@ review-due: 2027-05-02
 This note covers an AI assistant that platform or on-call engineers talk to in Slack (or a similar chat tool) to look things up and, with approval, trigger operations. It is for the team building or approving such a bot. It focuses on request verification, scopes, channel boundaries, authorization, approvals, data exposure, audit and rate limits. It does not cover the incident workflow itself ([[ai-assisted-incident-response]]), the approval state model in depth ([[human-approval-state-machine]]), or scheduled agents ([[scheduled-autonomous-agent-jobs]]).
 
 > [!note] Not verified
-> Slack's request-signing, Events API, token rotation and Web API rate-limit pages were read on 2026-11-24 (see Evidence). Still check on the current vendor docs: per-method rate-limit tiers (no figures are quoted here); which plans include audit logs; channel rename and reuse behaviour; and app-approval workflows. Microsoft Teams has a different identity, consent and permission model, and nothing here transfers to it without checking. Nothing was run against Slack.
+> Slack's request-signing, Events API, token rotation and Web API rate-limit pages were read on 2026-11-24 (see Evidence). Still check on the current vendor docs: per-method rate-limit tiers (no figures are quoted here); which plans include audit logs; channel rename and reuse behaviour; and app-approval workflows. Microsoft Teams has a different identity, consent and permission model, and nothing here transfers to it without checking. Nothing was run.
 
 ## Start read-only, with a short list of verbs
 
@@ -168,13 +168,13 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the general agency, least
 - Slack behaviour not on the four pages above: channel renaming and reuse of a deleted channel name, ephemeral replies, audit-log availability by plan, app manifest scopes and app-approval workflows; the Security best practices page under Sources was not read. De-duplicating on `event_id` is this note's advice: the Events API page defines the ID but does not prescribe de-duplication.
 - Library APIs named as examples (Python `hmac.compare_digest`, Node.js `crypto.timingSafeEqual`, the Bolt built-in verifier) were not checked against their docs.
 - Microsoft Teams behaviour; nothing here transfers to it without checking.
-- The shell script was not run against a Slack workspace.
+- The shell script, including the embedded Python, was not run.
 - Engineering guidance, not documented claims: closed tool lists, default-deny channel policy keyed on channel IDs, hash-bound and expiring approvals, two-person review, idempotent execution, audit outside chat, per-channel budgets.
 - Nothing was run.
 
 ## Sources
 
-- [Slack: Verifying requests from Slack](https://docs.slack.dev/authentication/verifying-requests-from-slack): signing secret and `X-Slack-Signature` verification; confirm the timestamp tolerance.
+- [Slack: Verifying requests from Slack](https://docs.slack.dev/authentication/verifying-requests-from-slack): signing secret and `X-Slack-Signature` verification and the five-minute timestamp tolerance.
 - [Slack: Events API](https://docs.slack.dev/apis/events-api/): acknowledgement window, retries and event IDs.
 - [Slack: Security best practices](https://docs.slack.dev/concepts/security): least-privilege scopes and token handling.
 - [Slack: Using token rotation](https://docs.slack.dev/authentication/using-token-rotation): expiring access tokens and refresh-token exchange.
