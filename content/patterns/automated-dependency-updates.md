@@ -9,7 +9,7 @@ tags:
   - gitlab-ci
   - security
 created: 2026-10-16
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -34,10 +34,9 @@ Renovate is a dependency update bot. Against GitLab it runs as a scheduled pipel
   "labels": ["dependencies"],
   "packageRules": [
     {
-      "description": "Group digest-only updates and merge them when the pipeline passes",
+      "description": "Group digest-only updates into one merge request for review",
       "matchUpdateTypes": ["digest", "pin"],
-      "groupName": "image digests",
-      "automerge": true
+      "groupName": "image digests"
     },
     {
       "description": "Let new major releases age before a merge request is opened",
@@ -49,7 +48,7 @@ Renovate is a dependency update bot. Against GitLab it runs as a scheduled pipel
 }
 ```
 
-`pinDigests` makes Renovate add the digest to tags that have none and keep it fresh afterwards. Automerge only happens when the project's required checks pass; keep "pipelines must succeed" on for the target branch.
+`pinDigests` makes Renovate add the digest to tags that have none and keep it fresh afterwards. The digest rule does not automerge: a digest that changes under an unchanged tag is also what a re-pushed or tampered tag looks like, so a person looks at it first (see Policy).
 
 ## Images in .gitlab-ci.yml variables
 
@@ -95,7 +94,7 @@ Renovate's Terraform manager updates provider constraints and supports `lockFile
 ## Policy
 
 - **Who reviews.** The team that owns the repository reviews the merge requests; the platform team owns the shared templates and the Renovate configuration itself.
-- **Automerge.** Only for digest and pin updates, and only with a passing pipeline. Anything that changes behaviour waits for a person.
+- **Automerge.** Off by default, including for digest and pin updates, because a digest change under the same tag is exactly what a tampered tag looks like and an automerge would take it without a person, including for CI tool images that run with deploy credentials. If you turn it on, limit it with a package rule to images from registries you control or mirror, require a passing pipeline, and keep "pipelines must succeed" on for the target branch; check the Renovate docs for the rule fields your version supports. Anything that changes behaviour waits for a person.
 - **Major updates.** Each needs a named owner and a short note on what was checked. Do not let majors pile up; a stale major is a larger upgrade later.
 - **Security alerts.** A security fix is not held back by the release-age delay. Route vulnerability findings from the image scan to the same owners and handle them as normal merge requests, with the severity deciding the deadline; for exposed credentials follow [[leaked-credential-rotation]] instead.
 - **Noise.** Group updates, limit concurrent merge requests, and schedule runs outside working hours so the queue stays reviewable.
@@ -113,7 +112,7 @@ Revert the bump merge request. If the cause was a bad image, pin the previous di
 
 - HashiCorp Developer, "Dependency lock file" (https://developer.hashicorp.com/terraform/language/files/dependency-lock): what the file records, that it covers providers and not modules, `terraform init -upgrade` and `terraform providers lock` with `-platform`; checked 2026-11-24.
 - Renovate documentation, Terraform manager (https://docs.renovatebot.com/modules/manager/terraform/): provider updates and `lockFileMaintenance`; checked 2026-11-24.
-- Not verified: `terraform init -lockfile=readonly` and whether Renovate refreshes hashes for every platform on a provider bump.
+- Not verified: `terraform init -lockfile=readonly`, whether Renovate refreshes hashes for every platform on a provider bump, and the Renovate package-rule fields for limiting automerge to chosen registries.
 
 ## Related
 

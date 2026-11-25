@@ -11,7 +11,7 @@ tags:
   - helm
   - docker
 created: 2026-10-16
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -277,7 +277,7 @@ Notes on the example:
 - The `package` stage comes before `scan` because `image-scan` needs `docker-build`, and a job can only need jobs in the same or an earlier stage.
 - The Docker build, scan and deploy jobs are excluded from merge request pipelines. MRs get build, test, lint and SAST; the image only exists for commits on the default branch or tags.
 - `--atomic` rolls the release back if the upgrade fails, and `--wait` makes Helm wait for the workload to become ready. See [[helm-release-rollback]] for the manual path.
-- `docker:dind` needs a runner with privileged mode. If your runners are not privileged, use a rootless builder; check the maintenance status of any tool you pick, because some popular builders have been archived.
+- `docker:dind` needs a runner with privileged mode, which gives the job root-equivalent access to the node and conflicts with [[0015-no-privileged-image-builds-in-ci]]. This example is shown only for runners that are already privileged and dedicated to builds. If your runners are not privileged, use a rootless builder; check the maintenance status of any tool you pick, because some popular builders have been archived.
 - Production deploys use the same image tag as staging. Nothing is rebuilt.
 - `deploy-production` lists only `deploy-staging` in `needs`. That is safe because deploy-staging has no needs and therefore waited for every earlier stage; if you ever add needs to deploy-staging, list the same gates here too.
 - Deploying by tag is shown for brevity. To deploy exactly what was scanned and promoted, capture the digest after push (for example `docker inspect --format "{{index .RepoDigests 0}}" "$IMAGE"`), pass it to later jobs as a dotenv artifact, and deploy by digest if your chart supports it.
