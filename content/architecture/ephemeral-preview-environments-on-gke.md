@@ -19,7 +19,7 @@ This note describes how to give every merge request its own short-lived environm
 > [!info] Scope and sources
 > Written against the GitLab environments, review apps, variables and merge request pipeline docs, the Argo CD ApplicationSet pull request generator docs, the Kubernetes ResourceQuota, LimitRange and NetworkPolicy docs, cert-manager DNS-01 and the Let's Encrypt challenge types, read from their documentation sources on 2026-10-21.
 >
-> Not verified: that `oldObject` holds the namespace on a DELETE admission request, the janitor policy's CEL, that kubectl runs cleanly with a read-only root filesystem and `/tmp` as `HOME`, and the Argo CD fields `managedNamespaceMetadata` and `clusterResourceWhitelist` (names and behaviour in your version), including how the `preview-expires-at` label is set when the labels come from the template, since the template has no clock.
+> Not verified: that `oldObject` holds the namespace on a DELETE admission request, the janitor policy's CEL, that kubectl runs cleanly with a read-only root filesystem and `/tmp` as `HOME`, the Argo CD fields `managedNamespaceMetadata`, `clusterResourceWhitelist` and multiple `sources` (names and behaviour in your version), and that `date -u -d @<epoch>` and the string `\<` test work in your kubectl image's shell.
 
 > [!note] Not verified
 > Nothing here was run. Check before relying on it: exactly when GitLab runs the stop job on merge or close; how often GitLab's `auto_stop_in` worker runs (about hourly is stated below) and whether each deploy resets the timer; the setting name that lets merge request pipelines read protected variables; what Argo CD does to a preview Application and its namespace when the merge request closes; Cloudflare Access and IAP configuration for wildcard hostnames; GKE Gateway class names, Spot node labels and taints; and Let's Encrypt rate limits (none are quoted here).
@@ -100,16 +100,19 @@ spec:
       name: "orders-api-review-1234-{{.number}}"
     spec:
       project: previews # fixed; never derived from merge request data
-      source:
-        repoURL: https://gitlab.example.com/team-orders/orders-api.git
-        targetRevision: "{{.head_sha}}"
-        path: deploy/chart
-        helm:
-          parameters:
-            - name: image.tag
-              value: "{{.head_sha}}"
-            - name: host
-              value: "mr-1234-{{.number}}.preview.example.com"
+      sources:
+        - repoURL: https://gitlab.example.com/team-orders/orders-api.git
+          targetRevision: "{{.head_sha}}"
+          path: deploy/chart
+          helm:
+            parameters:
+              - name: image.tag
+                value: "{{.head_sha}}"
+              - name: host
+                value: "mr-1234-{{.number}}.preview.example.com"
+        - repoURL: https://gitlab.example.com/platform/preview-baseline.git # platform-owned, not the merge request's repository
+          targetRevision: v1 # fixed tag or commit; never the merge request's head
+          path: namespace-kit # holds the kit below without the Namespace object and with no namespace field
       destination:
         server: https://kubernetes.default.svc
         namespace: "review-1234-{{.number}}"
@@ -124,7 +127,7 @@ spec:
             preview-mr: "{{.number}}"
 ```
 
-Notes: the Argo CD `previews` project restricts destinations to `review-*` namespaces on the preview cluster and source repositories to the ones you allow. Only administrators may create or change ApplicationSets, because a template can reference Secrets and projects. `CreateNamespace=true` creates a bare namespace. The merge request controls `deploy/chart` at `head_sha`, so the guardrails must not live there: set the namespace labels in the template with `managedNamespaceMetadata`, deliver the namespace kit below (quota, LimitRange, NetworkPolicies) from a platform-owned second source at a fixed revision, and leave `clusterResourceWhitelist` of the `previews` project empty, so a chart cannot render a `Namespace` or any other cluster-scoped object. Check the field names against the Argo CD project and sync documentation for your version. Until CI has pushed the image for `head_sha`, the Application shows image pull errors; that is expected. What happens to the Application and namespace when the merge request closes depends on your Argo CD version and deletion settings; test it and keep the janitor as a backstop.
+Notes: the Argo CD `previews` project restricts destinations to `review-*` namespaces on the preview cluster and source repositories to the ones you allow. Only administrators may create or change ApplicationSets, because a template can reference Secrets and projects. `CreateNamespace=true` creates a bare namespace. The merge request controls `deploy/chart` at `head_sha`, so the guardrails must not live there: set the namespace labels in the template with `managedNamespaceMetadata`, deliver the namespace kit below (quota, LimitRange, NetworkPolicies) from the platform-owned second source in the example, at a fixed revision (the pull-model kit carries no `__NS__`, `__MR__` or `__EXPIRES__` placeholders and lives in the platform repository, not under the app's `deploy/`; Argo CD sets the destination namespace), and leave `clusterResourceWhitelist` of the `previews` project empty, so a chart cannot render a `Namespace` or any other cluster-scoped object. Check the field names against the Argo CD project and sync documentation for your version. Until CI has pushed the image for `head_sha`, the Application shows image pull errors; that is expected. What happens to the Application and namespace when the merge request closes depends on your Argo CD version and deletion settings; test it. In this model the namespace has no `preview-expires-at` label, because the template has no clock; the janitor then expires a `review-*` namespace labelled `preview=true` by its server-set `creationTimestamp` plus the same three days, so it is the only expiry for pull-model previews, not just a backstop. That age is counted from first creation and is not reset by later pushes.
 
 ## Namespace kit
 
@@ -138,7 +141,7 @@ metadata:
   labels:
     preview: "true"
     preview-mr: "__MR__"
-    preview-expires-at: "__EXPIRES__" # epoch seconds; the janitor reads it
+    preview-expires-at: "__EXPIRES__" # epoch seconds; the janitor reads it (push model only)
     team: team-orders
 ---
 apiVersion: v1
@@ -276,12 +279,12 @@ The same rule applies to any other token in merge request jobs, such as a scanne
 - **Deploy job** sets `environment:name: review/$CI_COMMIT_REF_SLUG`, an `on_stop` job and `auto_stop_in`. Each deploy resets the timer. GitLab's stop worker runs about hourly, so stops can be late.
 - **Stop job** has `environment:action: stop`, `GIT_STRATEGY: none` (the branch may be gone), the same `rules` as the deploy job, the same stage, and a `when`. With `when: manual` inside `rules`, also set `allow_failure: true`.
 - **Merge or close.** Check the current GitLab docs for when the stop job runs automatically for merge request environments; do not depend on it alone.
-- **Janitor.** A CronJob in the preview cluster deletes namespaces whose `preview-expires-at` label is in the past. It catches stops that never ran, environments stuck in `stopping` after a deleted branch, and ApplicationSet leftovers.
+- **Janitor.** A CronJob in the preview cluster deletes namespaces whose `preview-expires-at` label is in the past. Pull-model namespaces have no such label, so for a `review-*` namespace labelled `preview=true` without it, the janitor uses the namespace's `creationTimestamp` plus the same three days. It catches stops that never ran, environments stuck in `stopping` after a deleted branch, and ApplicationSet leftovers.
 - **Stuck namespaces.** A namespace that hangs in `Terminating` usually has a finalizer waiting on a controller; follow [[runbooks/namespace-stuck-terminating]].
 
 The complete push-model jobs (keyless authentication, `resource_group`, the namespace baseline and the Helm flags) are in [[patterns/gitlab-review-environments-on-gke#The CI jobs|Review environments per merge request on GKE]]. For this design, two additions: the deploy job renders the namespace kit above with the namespace, the merge request IID and an expiry of the current time plus the TTL (`__EXPIRES__`, the same three days as `auto_stop_in`), so the janitor below can find expired previews; and the deploy and stop jobs share the rule `if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_PATH == $CI_MERGE_REQUEST_PROJECT_PATH`, which skips fork merge requests. Names follow the pattern: `review-$CI_PROJECT_ID-$CI_MERGE_REQUEST_IID`, used the same way in the kit, the jobs and the janitor's filter.
 
-The janitor, in the preview cluster only. Its identity can list and delete namespaces. RBAC cannot restrict `delete` by name, so an admission policy limits it to preview namespaces. The policy comes first in the file, and the CronJob ships suspended: apply the file, run the guard check under Blast radius, and only then set `suspend: false` in a second change. If the policy is rejected (API version not served, a CEL error), the CronJob stays inert.
+The janitor, in the preview cluster only. Its identity can list and delete namespaces. RBAC cannot restrict `delete` by name, so an admission policy limits it to preview namespaces. The policy comes first in the file, and the CronJob ships suspended: apply the file, run the guard check under Blast radius, and only then set `suspend: false` in a second change. If the policy is rejected (API version not served, a CEL error), the CronJob stays inert only because it is suspended: `kubectl apply` continues past a failed document, so the ClusterRole with cluster-wide namespace delete is already in place. Fix and re-apply the policy before unsuspending.
 
 ```yaml title="preview-system/janitor.yaml"
 # RBAC grants delete on every namespace; this policy narrows it for the janitor only.
@@ -353,15 +356,25 @@ spec:
               args:
                 - |
                   set -eu
+                  ttl=259200 # three days, the same as auto_stop_in
                   now=$(date +%s)
+                  # RFC 3339 UTC timestamps of fixed width compare correctly as strings,
+                  # so no date parsing is needed; date -u -d @<epoch> works in GNU and busybox
+                  cutoff=$(date -u -d "@$((now - ttl))" +%Y-%m-%dT%H:%M:%SZ)
                   # List first: sh has no pipefail, so a failed kubectl get piped into
                   # the loop would end the Job as Complete without deleting anything
                   list=$(kubectl get ns -l preview=true \
-                    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.labels.preview-expires-at}{"\n"}{end}')
+                    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.creationTimestamp}{" "}{.metadata.labels.preview-expires-at}{"\n"}{end}')
                   printf '%s\n' "$list" |
-                  while read -r ns exp; do
+                  while read -r ns created exp; do
                     case "$ns" in review-*) ;; *) continue ;; esac
-                    if [ -n "$exp" ] && [ "$exp" -lt "$now" ]; then
+                    expired=0
+                    if [ -n "$exp" ]; then
+                      if [ "$exp" -lt "$now" ]; then expired=1; fi
+                    elif [ -n "$created" ] && [ "$created" \< "$cutoff" ]; then
+                      expired=1 # no label (pull model): age by creationTimestamp
+                    fi
+                    if [ "$expired" = 1 ]; then
                       echo "deleting expired preview $ns"
                       kubectl delete ns "$ns" --wait=false
                     fi
@@ -408,7 +421,7 @@ subjects:
     namespace: preview-system
 ```
 
-**Blast radius.** Without the admission policy, the janitor's identity can delete any namespace in the preview cluster, such as `gateway-system` and `preview-system`. The script's name filter is not a control. The policy limits deletes to `review-*` namespaces labelled `preview=true`. A namespace without the kit's `preview=true` label, such as one made by Argo CD's `CreateNamespace=true` before the kit is applied, is refused by the guard and stays behind, so set the labels in the ApplicationSet template and deliver the kit from a platform-owned source, never from the merge request's chart. The janitor has no rights on admission policies, so it cannot remove the guard. Anyone who can create namespaces in this cluster can still create a `review-*` namespace the janitor will delete, which is why the cluster holds previews only. Check before relying on it, with throwaway namespaces that cost nothing to lose (the commands are below): RBAC must say `yes`, and the server-side delete must be denied with the guard's own message ("preview-janitor may delete only review-* namespaces labelled preview=true"). Do not probe with `gateway-system` or any live namespace: if the guard is missing, RBAC allows the delete. Do not use `kube-system`, `default` or `kube-public` either: Kubernetes itself refuses to delete them, so a denial proves nothing about the guard. Rollback: suspend the CronJob (`kubectl -n preview-system patch cronjob preview-janitor -p '{"spec":{"suspend":true}}'`). A deleted namespace cannot be restored; the preview is redeployed from its merge request.
+**Blast radius.** Without the admission policy, the janitor's identity can delete any namespace in the preview cluster, such as `gateway-system` and `preview-system`. The script's name filter is not a control. The policy limits deletes to `review-*` namespaces labelled `preview=true`. A namespace created without the template's labels (for example by hand) is refused by the guard and stays behind, so set the labels in the ApplicationSet template (`managedNamespaceMetadata`) and deliver the kit from a platform-owned source, never from the merge request's chart. The janitor has no rights on admission policies, so it cannot remove the guard. Anyone who can create namespaces in this cluster can still create a `review-*` namespace the janitor will delete, which is why the cluster holds previews only. Check before relying on it, with throwaway namespaces that cost nothing to lose (the commands are below): RBAC must say `yes`, and the server-side delete must be denied with the guard's own message ("preview-janitor may delete only review-* namespaces labelled preview=true"). Do not probe with `gateway-system` or any live namespace: if the guard is missing, RBAC allows the delete. Do not use `kube-system`, `default` or `kube-public` either: Kubernetes itself refuses to delete them, so a denial proves nothing about the guard. Rollback: suspend the CronJob (`kubectl -n preview-system patch cronjob preview-janitor -p '{"spec":{"suspend":true}}'`). A deleted namespace cannot be restored; the preview is redeployed from its merge request.
 
 ```bash title="guard check"
 JANITOR="system:serviceaccount:preview-system:preview-janitor"
