@@ -7,7 +7,7 @@ tags:
   - gcp
   - cost
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-25
 draft: false
 ---
 
@@ -253,12 +253,12 @@ A **storage class** sets the price per GB stored against the price of reading da
 The **minimum storage duration** is a billing rule, not a lock. If you delete or overwrite an object in a colder class before the minimum, you are still charged as if it had stayed for the full period. For lab files that you delete in a day, use `STANDARD`. The class of a bucket is its default for new objects, and a lifecycle rule can move objects between classes as they age.
 
 > [!warning] Check before relying on this
-> The class names and the minimum durations above may change; check "Storage classes" before relying on them. Storage classes, retrieval fees, soft-delete behaviour and the optional Autoclass feature (which moves objects between classes for you) change over time. Read "Storage classes" and the pricing page before you choose a class for real data. Without `--location`, `gcloud storage buckets create` uses Cloud Storage's default location, which is a US multi-region at the time of writing (verify), so always pass `--location`.
+> The class names and the minimum durations above may change; check "Storage classes" before relying on them. Storage classes, retrieval fees, soft-delete behaviour and the optional Autoclass feature (which moves objects between classes for you) change over time. Read "Storage classes" and the pricing page before you choose a class for real data. Without `--location`, `gcloud storage buckets create` uses Cloud Storage's default location, which is `us` (gcloud reference, checked 2026-11-24), so always pass `--location`.
 
 ### Versioning, soft delete and lifecycle
 
 - **Object versioning** keeps older versions of an object when it is overwritten or deleted, so you can recover from a mistake. Each kept version is stored, and billed, as an object. Turn it on for data you cannot recreate, and pair it with a lifecycle rule so old versions do not pile up forever.
-- **Soft delete** is a separate feature: deleted objects are kept for a retention period before they are gone for good. New buckets have it on by default, and `--soft-delete-duration` sets the period (verify the default and its cost in the documentation).
+- **Soft delete** is a separate feature: deleted objects are kept for a retention period before they are gone for good. New buckets have it on by default, and `--soft-delete-duration` sets the period (7 days by default; check the cost on the pricing page).
 - A **lifecycle rule** is an automatic action on objects by condition: delete objects older than N days, move objects to a colder class after N days, or delete old noncurrent versions. A lifecycle rule is how you stop a "temporary" bucket from becoming permanent spend.
 
 The rule used in the exercise deletes objects after 7 days:
@@ -433,7 +433,7 @@ BUCKET="${PROJECT_ID}-gcp01"            # Bucket names are global; the project I
 
    > [!warning] Costs money
    >
-   > A small bucket stores data that is billed by size and time, plus operations. Delete it in the last exercise: `gcloud storage rm --recursive --all-versions "gs://${BUCKET}"`. Soft-deleted data can still bill during the retention period, which is why the lab bucket sets `--soft-delete-duration=0`.
+   > A small bucket stores data that is billed by size and time, plus operations. Delete it in the last exercise: `gcloud storage rm --recursive --all-versions "gs://${BUCKET:?}"`. Soft-deleted data can still bill during the retention period, which is why the lab bucket sets `--soft-delete-duration=0` (`0` turns soft delete off; the default is 7 days, per the `gcloud storage buckets create` reference, checked 2026-11-24).
 
    ```bash
    gcloud storage buckets create "gs://${BUCKET}" \
@@ -442,7 +442,7 @@ BUCKET="${PROJECT_ID}-gcp01"            # Bucket names are global; the project I
      --default-storage-class=STANDARD \
      --uniform-bucket-level-access \
      --public-access-prevention \
-     --soft-delete-duration=0 # lab only: no retention of deleted objects (verify flag)
+     --soft-delete-duration=0 # lab only: 0 turns soft delete off
    gcloud storage buckets update "gs://${BUCKET}" --versioning
    printf 'hello\n' > hello.txt
    gcloud storage cp hello.txt "gs://${BUCKET}/hello.txt"
@@ -599,7 +599,7 @@ BUCKET="${PROJECT_ID}-gcp01"            # Bucket names are global; the project I
 10. **Clean up.** Remove the bucket and its versions, and the local files.
 
     ```bash
-    gcloud storage rm --recursive --all-versions "gs://${BUCKET}"
+    gcloud storage rm --recursive --all-versions "gs://${BUCKET:?}"
     rm -f hello.txt lifecycle.json
     gcloud storage buckets list --project="$PROJECT_ID" --format='value(name)'
     ```
@@ -659,5 +659,6 @@ To go deeper:
 - Google Cloud documentation, "Application Default Credentials" (https://docs.cloud.google.com/docs/authentication/application-default-credentials).
 - Google Cloud documentation, Cloud Storage: "Create buckets", "Uniform bucket-level access", "Public access prevention", "Storage classes", "Object Versioning", "Object Lifecycle Management" and "Bucket locations" (all under https://docs.cloud.google.com/storage/docs/).
 - Google Cloud documentation, Cloud Billing: "Create, edit, or delete budgets and budget alerts" (https://docs.cloud.google.com/billing/docs/how-to/budgets), "View your cost reports" and "Export Cloud Billing data to BigQuery" (under https://docs.cloud.google.com/billing/docs/how-to/). Pricing pages for Cloud Storage and network (https://cloud.google.com/storage/pricing and https://cloud.google.com/vpc/network-pricing).
+- Google Cloud documentation, `gcloud storage buckets create` reference (https://docs.cloud.google.com/sdk/gcloud/reference/storage/buckets/create): the `--soft-delete-duration` default of 7 days and `0` to disable it, the default location `us`, and `--public-access-prevention`; checked 2026-11-24.
 - Checked in this environment: `gcloud` 570.0.0 on Linux, offline. Ran `gcloud config configurations create`, `list` (with `--filter`, `--sort-by` and the `value()`, `table()`, `csv[no-heading]()`, `yaml()` and `json()` formats), `activate` and `delete`, `gcloud config set` and `get`, and read `--help` for `storage buckets create`, `update`, `describe`, `list`, `storage rm`, `billing budgets create`, `projects create`, `projects update`, `auth login` and `auth application-default`. Nothing was run against a real project, bucket or billing account, so every cloud output is illustrative.
-- Not verified: all `docs.cloud.google.com` URLs (the host was not reachable from the writing environment, so the paths are unchecked and must be verified); storage class minimum durations and retrieval fees; the default bucket location and the default soft-delete period; external IPv4, Cloud NAT, GKE management fee and logging ingestion pricing; the `daysSinceNoncurrentTime` lifecycle field; whether `gcloud beta projects update --update-labels` is available on your version; the `--filter='-users:*'` unattached-disk idiom; and the `default` network that enabling Compute Engine may create.
+- Not verified: the other `docs.cloud.google.com` URLs (the host was not reachable from the writing environment, so the paths are unchecked and must be verified); storage class minimum durations and retrieval fees; external IPv4, Cloud NAT, GKE management fee and logging ingestion pricing; the `daysSinceNoncurrentTime` lifecycle field; whether `gcloud beta projects update --update-labels` is available on your version; the `--filter='-users:*'` unattached-disk idiom; and the `default` network that enabling Compute Engine may create.

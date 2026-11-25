@@ -9,18 +9,14 @@ tags:
   - gcp
   - gke
 created: 2026-10-17
-modified: 2026-10-20
-evidence: source-reviewed
-reviewed: 2026-10-20
-review-due: 2027-04-20
-destructive: true
+modified: 2026-11-25
 draft: false
 ---
 
 Something in a GCP project, a GKE cluster or a CI system is probably controlled by someone who should not control it. This runbook isolates it without destroying the evidence. The order is fixed: **preserve, contain, investigate, and only then clean up or rebuild**. Deleting the pod, rebooting the node or wiping the service account feels like progress, but it removes the facts you need to know how far the attacker got.
 
 > [!info] Scope and what was not checked
-> The commands below were checked against Google Cloud and Kubernetes documentation on 2026-10-20 (through search excerpts, see Evidence), but never run against a cluster or a cloud project, so the note is not marked `verified`. Check current `gcloud` flags with `--help` before an incident, not during it. General guidance only: legal, regulatory and customer notification duties are decided by your security lead and counsel. Several steps are a judgement, not a vendor procedure; Evidence says which.
+> The commands below were compared on 2026-10-20 with search excerpts of Google Cloud and Kubernetes documentation, not with the pages themselves, so the note declares no evidence level; on 2026-11-24 the Google Cloud service-account pages were read directly (see Evidence). Nothing was run against a cluster or a cloud project, so the note is not marked `verified`. Check current `gcloud` flags with `--help` before an incident, not during it. General guidance only: legal, regulatory and customer notification duties are decided by your security lead and counsel. Several steps are a judgement, not a vendor procedure; Evidence says which.
 
 > [!danger] Most containment steps destroy evidence if done in the wrong order
 > Deleting a pod or node, draining, scaling to zero, deleting a key or snapshot, and rebuilding all remove facts you cannot get back (memory, container filesystems, `emptyDir` data, local logs). Each of those steps below says what is lost and what to copy or snapshot first. Preserve first; disable, label and cordon instead of deleting.
@@ -153,7 +149,7 @@ gcloud iam service-accounts keys disable "$KEY_ID" --iam-account "$SA"
 gcloud iam service-accounts disable "$SA"
 ```
 
-Short-lived access tokens that were already issued keep working until they expire: Google documents up to 60 minutes by default and up to 12 hours if an extended lifetime is configured, and they cannot be revoked like user tokens. Disabling a key does not revoke tokens issued from it; disabling or deleting the service account is what cuts them off. Wait at least 60 minutes (longer if your organisation allows longer lifetimes) and keep watching the audit log after disabling.
+Disabling a key does not revoke tokens already issued from it. Google's guidance for a compromised credential is to disable the service account (or add an IAM deny policy, or delete the account) and then **wait at least 60 minutes after disabling the service account** so that issued tokens expire. Wait longer if your organisation allows an extended token lifetime, up to 12 hours. Google's two pages differ on whether a disabled account's issued tokens stop at once: the keys page says that to revoke a compromised short-lived credential you must disable or delete the service account, and that workloads using it immediately lose access, while the compromised-credentials page still requires the wait. Keep the conservative assumption that they keep working until they expire. Keep watching the audit log for the whole window. The full rule, shared with the other credential runbooks, is in [[leaked-credential-rotation#GCP service account key]].
 
 > [!danger] Deleting a key or service account is not reversible here
 > Disable first. A deleted key cannot be brought back, and deleting a service account breaks every workload and binding that still uses it. Delete only after the evidence is saved (`service-accounts.json`, `iam-policy.json` and the key list above) and the security lead agrees.
@@ -411,21 +407,25 @@ gcloud logging read "protoPayload.authenticationInfo.principalEmail=\"$SA\" AND 
   --project "$PROJECT" --limit=10                                   # no new activity
 ```
 
-Success looks like: no new audit entries for the contained identities after the token lifetime has passed (at least 60 minutes by Google's guidance), no outbound traffic from the quarantined pod, and every snapshot in `READY` state.
+Success looks like: no new audit entries for the contained identities after the token lifetime has passed (at least 60 minutes after disabling the service account, or the extended lifetime your policy allows), no outbound traffic from the quarantined pod, and every snapshot in `READY` state.
 
 ## Rollback and reversibility
 
-- Disabled keys and disabled service accounts can be re-enabled (`keys enable`, `service-accounts enable`). Do that only on the security lead's instruction, never to "see if it fixes the outage".
+- Disabled keys and disabled service accounts can be re-enabled (`keys enable`, `service-accounts enable`). Do that only on the security lead's instruction, never to "see if it fixes the outage". Re-enable a service account only after the consumers hold a new credential and at least 60 minutes have passed since disabling it (or the extended token lifetime, up to 12 hours), so a stolen token has expired.
 - Removing the quarantine label (`kubectl label pod "$POD" -n "$NS" quarantine-`) restores the pod's network access. Do it only after the pod is deleted or cleared.
 - `kubectl uncordon "$NODE"` returns the node to scheduling. Re-enable node auto-repair afterwards with `gcloud container node-pools update "$POOL_NAME" --cluster "$CLUSTER" --location "$LOCATION" --enable-autorepair`, and remove the autoscaler annotation with `kubectl annotate node "$NODE" cluster-autoscaler.kubernetes.io/scale-down-disabled-`.
-- Re-enable a service account key or account with `gcloud iam service-accounts keys enable "$KEY_ID" --iam-account "$SA"` and `gcloud iam service-accounts enable "$SA"`, and restore a removed Workload Identity binding with `add-iam-policy-binding` and the policy saved in `sa-policy.json`. Re-enabling the federation provider needs its own flag, see `--help`.
+- After the wait above has passed and the consumers hold a new credential, re-enable a service account key or account with `gcloud iam service-accounts keys enable "$KEY_ID" --iam-account "$SA"` and `gcloud iam service-accounts enable "$SA"`, and restore a removed Workload Identity binding with `add-iam-policy-binding` and the policy saved in `sa-policy.json`. Re-enabling the federation provider needs its own flag, see `--help`.
 - Delete the quarantine policy (`kubectl delete -f quarantine-deny-all.yaml`) only when no pod carries the label any more.
 - Deleted keys, deleted snapshots and drained pods cannot be recovered, which is why this runbook disables, labels and cordons instead.
 
 ## Evidence
 
+This note declares no evidence level. The checks below were made on 2026-10-20 through search excerpts, because the official pages could not be fetched. That does not meet `source-reviewed`, so the level was removed on 2026-11-24. Treat each claim as unconfirmed until you have read the linked page, except where a bullet says it was read directly.
+
 ### Sources checked
 
+- [Respond to compromised Google Cloud credentials](https://docs.cloud.google.com/docs/security/compromised-credentials), read directly on 2026-11-24: token lifetime up to 60 minutes by default and up to 12 hours with an extended lifetime; tokens cannot be invalidated through the Admin console; disable the service account, add a deny policy or delete it, then wait at least 60 minutes after disabling the account; workloads that use a disabled or deleted account lose access immediately.
+- [Disable and enable service account keys](https://docs.cloud.google.com/iam/docs/keys-disable-enable) and [Disable and enable service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-disable-enable), read directly on 2026-11-24: disabling a key does not revoke short-lived credentials issued from it; disabling an account is reversible; the account page does not say whether issued tokens stop at once.
 - [Respond to compromised Google Cloud credentials](https://docs.cloud.google.com/docs/security/compromised-credentials): replace a compromised service account key, review every API call in the incident window, check for new keys and service accounts, service account access tokens last up to 60 minutes (up to 12 hours with an extended lifetime) and cannot be revoked, wait at least 60 minutes after disabling, checked 2026-10-20 (search excerpt, the page could not be fetched).
 - [Disable and enable service account keys](https://docs.cloud.google.com/iam/docs/keys-disable-enable) and [Disable and enable service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-disable-enable): `gcloud iam service-accounts keys disable KEY_ID --iam-account`, `gcloud iam service-accounts disable`, disabling is reversible, a disabled key does not revoke issued tokens, checked 2026-10-20 (search excerpts).
 - [`update-oidc` reference](https://docs.cloud.google.com/sdk/gcloud/reference/iam/workload-identity-pools/providers/update-oidc) and [Manage workload identity pools and providers](https://docs.cloud.google.com/iam/docs/manage-workload-identity-pools-providers): the `--disabled` flag, a disabled provider cannot exchange tokens, existing tokens still grant access, checked 2026-10-20 (search excerpts).
@@ -454,7 +454,8 @@ Corrections made on 2026-10-20: the manifest command was replaced by a rerun-saf
 - The full steps of the GKE "Mitigate security incidents" page, the current revision of NIST SP 800-61, and notification deadlines, which are not stated in this note.
 - That snapshots capture disk but not memory, and the rebuild-versus-clean criteria, which are judgement and not vendor statements.
 - The `date -u -v-15M` form on macOS was not run.
-- Everything was reached through search excerpts only, because the lab could not fetch the vendor pages; no cluster, project, key or snapshot was touched.
+- Whether tokens issued before a service account was disabled stop working immediately. The keys page (read on 2026-11-25) says workloads lose access immediately, the compromised-credentials page requires a 60-minute wait, and the service-accounts-disable-enable page read on 2026-11-24 is silent; the note follows the conservative reading.
+- Every page not marked as read directly was reached through search excerpts only, because the lab could not fetch the vendor pages; no cluster, project, key or snapshot was touched.
 
 ### Environment
 

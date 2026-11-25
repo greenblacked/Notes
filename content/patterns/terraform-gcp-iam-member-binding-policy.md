@@ -8,7 +8,7 @@ tags:
   - gcp
   - security
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -40,6 +40,9 @@ The provider page states the rules that follow from this:
 1. **Default to `_iam_member`.** One resource per role and principal. Adding or removing a grant touches only that grant; other roots, Google's own service agents and the emergency path are untouched.
 2. **Use `_iam_binding` only when one root owns the role completely**, and you want drift removed: a custom role that exists only for this system, or a high-risk role such as `roles/owner` where any extra principal must disappear on the next apply. Before you switch, list who holds the role today (see Verify). Every principal not in `members` will be removed.
 3. **Do not use `_iam_policy`** on projects, folders or the organization. The one defensible case is a small resource-level policy fully owned by one module (for example a service account's own policy, where the set of principals that may impersonate it is the whole point). Even there, `_iam_binding` per role is usually enough.
+
+> [!warning] `_iam_binding` and `_iam_policy` revoke access on apply
+> The first apply of an `_iam_binding` removes every principal of that role that is not in `members`, and an `_iam_policy` does the same for the whole policy, including Google's service agents and your own Terraform identity. Before that apply, save the live policy and list the role's current members with the commands in Verify, compare them with `members`, and read every `-` line in the plan (see Reviewing the plan). The way back is in Rollback.
 
 Then grant to **groups**, not people: `group:platform-oncall@example.com`, not `user:jane@example.com`. Joiners and leavers become group membership changes outside Terraform, the plan stays stable, and access reviews look at a handful of groups ([[access-reviews-gcp-and-gke]]). The group model and the CI identities are in [[iam-groups-and-ci-workload-identity-federation]].
 

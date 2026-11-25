@@ -8,7 +8,7 @@ tags:
   - gcp
   - ci-cd
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-25
 draft: false
 ---
 
@@ -17,7 +17,7 @@ draft: false
 Delivery 05 gave you remote state, modules and a pipeline. The next problem arrives the first time someone asks for "the same bucket, but for five teams". You reach for `count`, it works, and three months later removing the second team destroys and recreates the third and fourth buckets. This lesson explains **why that happens**, how `for_each` avoids it, how to move an existing resource from one to the other without destroying anything, when `dynamic` blocks help and when they hurt, what each `lifecycle` setting really protects, and how to write a first test with `terraform test`.
 
 > [!note] Nothing here was run for this page
-> There was no Terraform binary or GCP project where this page was written. The code and output follow the documentation and are **not verified**. Plan output is illustrative. The minimum Terraform versions for `terraform test`, mock providers and `removed` blocks, and the HashiCorp documentation paths, must be checked against the version you pin (check the current docs). Delivery 05 covers module inputs and outputs, `import` and the state lock; they are not repeated here.
+> There was no Terraform binary or GCP project where this page was written. The code and output follow the documentation and are **not verified**. Plan output is illustrative. The minimum Terraform versions are 1.6.0 for `terraform test`, 1.7.0 for mock providers and 1.7.0 for `removed` blocks (Terraform documentation and changelog, checked 2026-11-24). The HashiCorp documentation paths and the other version notes below are not verified. Delivery 05 covers module inputs and outputs, `import` and the state lock; they are not repeated here.
 
 ## What you will learn
 
@@ -209,7 +209,7 @@ Plan: 0 to add, 0 to change, 0 to destroy.
 
 _Illustrative._
 
-`moved` blocks are declarative and reviewable, which is why they are preferred to `terraform state mv` (Delivery 05 covers that). The `removed` block (for forgetting a resource without destroying it) needs a Terraform version that supports it: check the minimum version in the documentation before you pin it.
+`moved` blocks are declarative and reviewable, which is why they are preferred to `terraform state mv` (Delivery 05 covers that). The `removed` block (for forgetting a resource without destroying it) needs Terraform 1.7.0 or later.
 
 ## dynamic blocks
 
@@ -370,7 +370,7 @@ terraform apply -replace='google_storage_bucket_object.config'
 
 ## A first terraform test
 
-`terraform test` runs `.tftest.hcl` files. A test file contains `run` blocks; each `run` executes a `plan` (or an `apply`) with the given variables and checks `assert` conditions. With `command = plan` no resources are created, which makes it fast, free and safe for a first test. The command and file format need a recent Terraform (the first stable release with `terraform test` is version-dependent; check the docs for the minimum your version has).
+`terraform test` runs `.tftest.hcl` files. A test file contains `run` blocks; each `run` executes a `plan` (or an `apply`) with the given variables and checks `assert` conditions. With `command = plan` no resources are created, which makes it fast, free and safe for a first test. The command and file format need Terraform 1.6.0 or later.
 
 Put the module under `modules/team-buckets` and a test next to it. The second test below needs a `validation` block on the module's `team_buckets` variable, which is what the test proves works:
 
@@ -450,7 +450,7 @@ Points to know:
 
 - `expect_failures` lists the checkable objects (variables with validation, preconditions, postconditions) that are _expected_ to fail; the run passes if they do. This lets you test that your guardrails actually reject bad input.
 - `command = apply` really creates resources in the configured provider, then destroys them at the end of the test file. It needs credentials and costs money. Start with `plan`.
-- **Mock providers** (a `mock_provider` block) let a test run without any real cloud calls, by returning generated data for resources and data sources. They need a newer Terraform than plain `terraform test`: check the minimum version in the docs. A plan test against the real Google provider still needs the provider's configuration to initialise and, for some data sources, credentials.
+- **Mock providers** (a `mock_provider` block) let a test run without any real cloud calls, by returning generated data for resources and data sources. They need a newer Terraform than plain `terraform test`: 1.7.0 or later. A plan test against the real Google provider still needs the provider's configuration to initialise and, for some data sources, credentials.
 - Tests complement, not replace, `terraform validate`, formatting and policy checks. The broader strategy (unit, integration, contract) is in [[patterns/terraform-testing]], and module layout in [[patterns/terraform-module-and-state-layout]].
 
 > [!tip] OpenTofu
@@ -548,7 +548,7 @@ Use a scratch directory and the sandbox project. Steps with `plan` create nothin
 - **`ignore_changes = all`.** Why it bites: drift becomes invisible. Fix: the narrowest attribute, with a comment on who owns it.
 - **Using `create_before_destroy` on a resource with a fixed unique name.** Why it bites: the two objects collide. Fix: use it only where two can coexist.
 - **Applying in a test.** Why it bites: `command = apply` creates real resources and costs money. Fix: start with `plan`, apply only in a sandbox.
-- **Trusting the version numbers on this page.** Why it bites: features appeared in different versions. Fix: check the minimum Terraform versions for `terraform test`, mock providers, `optional()` and `removed` blocks in the docs for the version you pin.
+- **Trusting the version numbers on this page.** Why it bites: features appeared in different versions. Fix: check the minimum Terraform versions for `optional()` and `replace_triggered_by` in the docs. `terraform test` (1.6.0), mock providers (1.7.0) and `removed` blocks (1.7.0) were checked on 2026-11-24.
 
 ## Check your understanding
 
@@ -585,8 +585,8 @@ To go deeper:
 - HashiCorp Terraform documentation, `for_each` (https://developer.hashicorp.com/terraform/language/meta-arguments/for_each) and `count` (https://developer.hashicorp.com/terraform/language/meta-arguments/count).
 - HashiCorp Terraform documentation, "Dynamic Blocks" (https://developer.hashicorp.com/terraform/language/expressions/dynamic-blocks).
 - HashiCorp Terraform documentation, the `lifecycle` meta-argument (https://developer.hashicorp.com/terraform/language/meta-arguments/lifecycle), for `prevent_destroy`, `create_before_destroy`, `ignore_changes`, `replace_triggered_by`, preconditions and postconditions.
-- HashiCorp Terraform documentation, "Tests" (https://developer.hashicorp.com/terraform/language/tests), for `.tftest.hcl`, `run`, `assert`, `expect_failures` and mock providers.
+- HashiCorp Terraform documentation, "Tests" (https://developer.hashicorp.com/terraform/language/tests), for `.tftest.hcl`, `run`, `assert`, `expect_failures` and mock providers, and the Terraform 1.7 changelog (https://github.com/hashicorp/terraform/blob/v1.7/CHANGELOG.md), for the `removed` block; checked 2026-11-24 for the minimum versions 1.6.0 (`terraform test`) and 1.7.0 (mock providers, `removed`).
 - HashiCorp Terraform documentation, "Refactoring" (https://developer.hashicorp.com/terraform/language/modules/develop/refactoring), for `moved` blocks.
 - Terraform Registry, `google_storage_bucket` (https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket), for the bucket arguments. Check all documentation paths; HashiCorp reorganises them.
 - OpenTofu documentation (https://opentofu.org/docs/), for feature availability in OpenTofu.
-- Not verified: all plan output (illustrative), the minimum Terraform versions for `terraform test`, mock providers, `optional()` attributes, `replace_triggered_by` and `removed` blocks, bucket arguments for your provider version, and OpenTofu feature parity. Check the current docs.
+- Not verified: all plan output (illustrative), the minimum Terraform versions for `optional()` attributes and `replace_triggered_by`, bucket arguments for your provider version, and OpenTofu feature parity. Check the current docs.

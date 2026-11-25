@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - security
 created: 2026-10-10
-modified: 2026-10-16
+modified: 2026-11-24
 draft: false
 aliases:
   - workload-identity
@@ -224,9 +224,12 @@ If `gcloud auth list` shows the node's Compute Engine default service account, t
 | It worked a minute ago, now fails after a change                          | IAM changes can take a few minutes to propagate. Retry with backoff.                                                                                                      |
 | First call after a Pod or node starts fails, later calls succeed          | The metadata server can be briefly unavailable on a new node. Retry in the client, or have the entrypoint wait for the first token.                                       |
 | Calls time out only when a NetworkPolicy or default-deny egress is active | The Pod must still reach the GKE metadata server. Allow that egress explicitly; check the current GKE docs for the address and port. See [[kubernetes-network-policies]]. |
-| No credentials at all inside the Pod                                      | The Pod uses `hostNetwork: true`, which bypasses the GKE metadata server. Run it on the Pod network.                                                                      |
+| Pod with `hostNetwork: true` gets the node's identity, not its KSA        | Host-network Pods do not use Workload Identity Federation; GKE sends them to the Compute Engine metadata server. Run on the Pod network and forbid `hostNetwork`.         |
 | Pod uses the wrong KSA                                                    | `spec.serviceAccountName` unset, so the Pod uses `default` in its namespace.                                                                                              |
 | Client library ignores metadata and uses a key file                       | `GOOGLE_APPLICATION_CREDENTIALS` is set. Unset it so Application Default Credentials fall through to the metadata server.                                                 |
+
+> [!warning] Host-network Pods can use the node's identity
+> GKE's documentation says Pods with `hostNetwork: true` "don't use Workload Identity Federation for GKE" and that "GKE automatically routes requests from these Pods to the Compute Engine metadata server", so they can get the node's service account instead of their own. The one exception listed is the Cloud Storage FUSE CSI driver on Standard clusters from `1.33.3-gke.1226000`. Keep the node service account minimal and block `hostNetwork` for application namespaces with [[pod-security-admission]] (the `baseline` level blocks host namespaces, see that note). Checked 2026-11-24.
 
 Useful checks:
 
@@ -240,6 +243,10 @@ gcloud projects get-iam-policy "${PROJECT_ID}" \
 # Is the annotation what you expect (GSA method)?
 kubectl get serviceaccount "${KSA}" --namespace "${NAMESPACE}" -o yaml
 ```
+
+## Sources
+
+- Google Cloud, "About Workload Identity Federation for GKE" (https://docs.cloud.google.com/kubernetes-engine/docs/concepts/workload-identity): host-network Pods, the Compute Engine metadata server routing, the Cloud Storage FUSE exception and the limitations; checked 2026-11-24. The other rows of the troubleshooting table were not re-checked.
 
 ## Related
 

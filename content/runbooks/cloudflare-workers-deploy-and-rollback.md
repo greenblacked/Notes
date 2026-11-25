@@ -6,7 +6,7 @@ tags:
   - runbooks
   - reliability
 created: 2026-10-11
-modified: 2026-10-19
+modified: 2026-11-25
 verified: 2026-10-19
 draft: false
 ---
@@ -14,7 +14,7 @@ draft: false
 How this site reaches Cloudflare and how to undo a bad release. Production is the Worker `notes` at https://notes.szolotov.com; stage is a Worker Preview named `stage`[^preview] of the same Worker at https://stage.notes.szolotov.com, public and not indexed (noindex). Stage is the pre-production site; it is deployed automatically on every merge to `main`.
 
 > [!info] Checked against
-> `wrangler.jsonc`, `.github/workflows/{deploy-stage,deploy-production,cut-release}.yml`, `scripts/smoke-test.sh`, `scripts/write-version.mjs` and `docs/deployment.md` in the repository, and the Wrangler 4.149.0 CLI help (`npx wrangler rollback --help`). Cloudflare docs: [Rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/), [Wrangler commands for Workers](https://developers.cloudflare.com/workers/wrangler/commands/workers/) (`deployments`, `versions`, `preview`) [Previews on custom domains](https://developers.cloudflare.com/workers/previews/custom-domains/) and the [changelog entry](https://developers.cloudflare.com/changelog/post/2025-09-11-increased-version-rollback-limit/) that raised the rollback window from 10 to 100 versions. Worker Previews are in open beta, so flags may change.
+> `wrangler.jsonc`, `.github/workflows/{deploy-stage,deploy-production,cut-release}.yml`, `scripts/smoke-test.sh`, `scripts/write-version.mjs` and `docs/deployment.md` in the repository, and the Wrangler 4.149.0 CLI help (`wrangler rollback --help`). Cloudflare docs: [Rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/), [Wrangler commands for Workers](https://developers.cloudflare.com/workers/wrangler/commands/workers/) (`deployments`, `versions`, `preview`) [Previews on custom domains](https://developers.cloudflare.com/workers/previews/custom-domains/) and the [changelog entry](https://developers.cloudflare.com/changelog/post/2025-09-11-increased-version-rollback-limit/) that raised the rollback window from 10 to 100 versions. Worker Previews are in open beta, so flags may change. The `verified` date means that comparison with the repository files and the CLI help, not a live deploy. The repository now pins Wrangler 4.152.0 in `tools/package.json`; the help was not re-read for that version.
 
 ## When to use
 
@@ -29,7 +29,21 @@ Day-to-day publishing of notes needs none of this: merging to `main` deploys sta
 
 - Write access to the repository and, for production, approval rights on the `production` GitHub environment.
 - CI is green on the `main` commit you want to release. The Cut release workflow refuses a commit without a successful `ci.yml` push run.[^ci]
-- For manual Cloudflare commands: Node.js from `.nvmrc`, `npm ci` done, and `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` exported for the account that owns the Worker.
+- For manual Cloudflare commands: Node.js from `.nvmrc` and the same Wrangler the deploy jobs use, installed from `tools/` with its own lockfile and no lifecycle scripts, and `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment (read the token without echoing it, never pass it on the command line):
+
+  ```bash
+  npm ci --ignore-scripts --prefix tools
+  # run from the repository root, so the absolute path below is right
+  WRANGLER="$PWD/tools/node_modules/.bin/wrangler"
+  "$WRANGLER" --version          # the version pinned in tools/package.json
+  export CLOUDFLARE_ACCOUNT_ID='<account-id>'   # change: the account that owns the Worker
+  ```
+
+  Then read the token in a block of its own. The cursor waits silently for the token, so paste nothing else with it. Use a token with only the permissions listed in `docs/deployment.md`, limited to this account and zone, with an expiry:
+
+  ```bash
+  read -rs CLOUDFLARE_API_TOKEN && export CLOUDFLARE_API_TOKEN
+  ```
 
 ## The release path
 
@@ -92,8 +106,8 @@ curl -sI https://notes.szolotov.com | grep -i x-robots-tag   # no output: produc
 Check which deployment serves traffic (`deployments list` shows only the most recent ones; add `--json` for scripts):
 
 ```bash
-npx wrangler deployments status
-npx wrangler deployments list
+"$WRANGLER" deployments status
+"$WRANGLER" deployments list
 ```
 
 `status` must show a single version at 100%. More than one version means a gradual deployment is active, and the automatic rollback is skipped.
@@ -108,20 +122,20 @@ Production only; stage has no rollback.
 1. Find the version id to return to:
 
    ```bash
-   npx wrangler deployments list
-   npx wrangler versions list
+   "$WRANGLER" deployments list
+   "$WRANGLER" versions list
    ```
 
 2. Roll back, giving a reason (`--yes` skips the prompt; without a version id Wrangler picks the version uploaded before the latest one):
 
    ```bash
    VERSION_ID="<version-id>"
-   npx wrangler rollback "${VERSION_ID}" --message "Roll back vX.Y.Z: <reason>" --yes
+   "$WRANGLER" rollback "${VERSION_ID}" --message "Roll back vX.Y.Z: <reason>" --yes
    ```
 
    The rollback creates a new deployment and takes effect on all routes and domains at once. The dashboard offers the same under the Worker, **Deployments**, **Rollback**.
 
-3. Validate with `curl -s https://notes.szolotov.com/version.txt` and `npx wrangler deployments status`.
+3. Validate with `curl -s https://notes.szolotov.com/version.txt` and `"$WRANGLER" deployments status`.
 
 Only the 100 most recently published versions can be rolled back to. Rollback is also refused when a Durable Object class lifecycle change (migrations or exports) happened between the active version and that version, or when the target version binds an R2 bucket, KV namespace or queue that no longer exists; this Worker only has the `ASSETS` binding, so in practice the limit is the 100 versions. Rolling back from a gradual deployment replaces the split with the chosen version at 100%.
 
@@ -129,7 +143,15 @@ Only the 100 most recently published versions can be rolled back to. Rollback is
 
 To redeploy a tag, including an older good one: **Actions**, **Deploy production**, **Run workflow**, select the **tag** (for example `v0.1.0`) as the ref, and approve. This rebuilds the tag and deploys it with the same checks, and rolls back automatically if they fail. Production deploys refuse any ref that is not a `vX.Y.Z` tag, and the tagged commit must have a successful `ci.yml` push run on `main` and be on `main`, so a tag whose CI run is no longer available cannot be redeployed; use a rollback in that case. On commits that include the dispatch-only workflow, pushing a tag starts nothing (a tag on an older commit runs that commit's own workflow file): **Deploy production** runs only by dispatch, from **Cut release** or by hand on the tag.
 
-Stage recovers by merging a fix into `main` (stage redeploys). To remove it: `npx wrangler preview delete --name stage`.
+Stage recovers by merging a fix into `main` (stage redeploys). To remove it: `"$WRANGLER" preview delete --name stage`.
+
+### Drop the token
+
+When the manual commands are done, remove the token from the shell so later processes do not inherit it. Revoke it in the Cloudflare dashboard if it was not given an expiry.
+
+```bash
+unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+```
 
 ## Troubleshooting
 
@@ -146,7 +168,7 @@ Stage recovers by merging a fix into `main` (stage redeploys). To remove it: `np
 | Deploy production fails in the tag guard ("Tag ... points at ...", not a `vX.Y.Z` ref)  | The run was not started from a release tag, or the tag does not resolve to the commit being deployed. Re-run from the correct tag.                                                                                                                              |
 | Deploy production waits and never starts                                                | The `production` environment needs approval; approve it in the run.                                                                                                                                                                                             |
 | Cut release fails with "must be strictly greater than the latest tag"                   | Pick a higher `X.Y.Z`. Tags are never reused; if the failure came after the tag step, re-run only **Deploy production** from that tag.                                                                                                                          |
-| Run failed, unsure whether production is affected                                       | Run `npx wrangler deployments status` and `curl -s https://notes.szolotov.com/version.txt`. The job log says either "rolled back", or "failed before it went live".                                                                                             |
+| Run failed, unsure whether production is affected                                       | Run `"$WRANGLER" deployments status` and `curl -s https://notes.szolotov.com/version.txt`. The job log says either "rolled back", or "failed before it went live".                                                                                              |
 
 The full setup, token permissions and the stage history are in `docs/deployment.md` in the repository. For how changes are decided and recorded, see [[adr/index|the architecture decisions]]. If a bad release becomes an incident, follow [[incident-response]]; the checks before any production release are in [[production-change-checklist]].
 

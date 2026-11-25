@@ -8,18 +8,14 @@ tags:
   - incident-management
   - gcp
 created: 2026-10-16
-modified: 2026-10-20
-evidence: source-reviewed
-reviewed: 2026-10-20
-review-due: 2027-04-20
-destructive: true
+modified: 2026-11-25
 draft: false
 ---
 
 A secret has been exposed: committed to Git, printed in CI logs, pasted into a ticket or chat. Assume it is compromised from the moment it was visible to anyone who should not have it. Speed matters more than tidiness: revoke first, clean up after. This runbook is defensive and covers the response and prevention only.
 
-> [!info] Source-reviewed on 2026-10-20
-> The `gcloud`, GitLab, Artifactory, Git and Kubernetes claims were checked against vendor documentation. Only helper steps were run, in a throwaway lab: the Git history search, the `openssl rand` line, the stdin-versus-argv check and the key-file parsing. No cloud, GitLab, Artifactory or Kubernetes command was run. The Evidence section at the end lists the sources, what was not verified and the lab output.
+> [!info] Scope and what was checked
+> The `gcloud`, GitLab, Artifactory, Git and Kubernetes claims were compared on 2026-10-20 with search results that summarise the vendor pages, because the pages could not be fetched, so the note declares no evidence level. The Google Cloud key and service-account pages were read directly on 2026-11-24. Only helper steps were run, in a throwaway lab: the Git history search, the `openssl rand` line, the stdin-versus-argv check and the key-file parsing. No cloud, GitLab, Artifactory or Kubernetes command was run. The Evidence section at the end lists the sources, what was not verified and the lab output.
 
 > [!danger] This runbook revokes and deletes credentials
 > Deleting a service account key, revoking a token and rewriting Git history cannot be undone. Disable or rotate first where the step says so, and read the Cleanup and rollback part of the Evidence section before running anything.
@@ -87,10 +83,10 @@ rm -P new-key.json 2>/dev/null || shred -u new-key.json   # best effort, see the
 > [!danger] Deleting a key is permanent
 > Google's key pages describe disabling as reversible (`keys enable`) and recommend disabling before deleting, so you can confirm nothing still depends on the key. The pages I could reach describe no undo for `keys delete`; treat a deleted key as gone. If the key is clearly burned and you must delete it at once, do so, and recover by deploying a new key to the consumer, not by looking for the old one.
 
-Disabling or deleting a key does not cancel short-lived access tokens already issued from it. To cut those off, disable the service account or add an IAM deny policy; both interrupt every workload that uses the account.
+**Tokens already issued.** Disabling or deleting a key does not revoke the short-lived credentials already issued from it. To cut those off, disable the service account, add an IAM deny policy or delete the account. Disabling or deleting the account stops every workload that uses it at once; a deny policy only denies the permissions it lists. Then wait at least 60 minutes after disabling the account, or as long as the extended token lifetime your organisation allows (up to 12 hours), before you treat issued tokens as expired, and keep watching the audit log. Google's order for replacing a key is: create the new key, disable the old one and confirm the new one works, then delete the old one.
 
 > [!warning] Disabling the service account stops all its workloads
-> `gcloud iam service-accounts disable "$SA"` is reversible with `gcloud iam service-accounts enable "$SA"`. Use it while you investigate an over-privileged account or when you cannot tell what the key did, and re-enable it as soon as the consumers hold a new credential.
+> `gcloud iam service-accounts disable "$SA"` is reversible with `gcloud iam service-accounts enable "$SA"`. Use it while you investigate an over-privileged account or when you cannot tell what the key did, and re-enable it only when the consumers hold a new credential and the wait described above has passed (at least 60 minutes after disabling, or the extended token lifetime, up to 12 hours). Re-enabling earlier can revive a stolen token that has not yet expired.
 
 `shred` is not on macOS and is not reliable on SSDs or copy-on-write file systems; write the key only to a temporary directory you delete, and treat the Secret Manager copy as the only copy.
 
@@ -266,12 +262,14 @@ Finish with a [[blameless-postmortems|blameless postmortem]] that asks which con
 
 ## Evidence
 
-Source-reviewed on 2026-10-20. Only helper steps were run, in a disposable lab. Read this section before using the note.
+This note declares no evidence level. The checks below were made on 2026-10-20 through search excerpts, because the official pages could not be fetched. That does not meet `source-reviewed`, so the level was removed on 2026-11-24. Treat each claim as unconfirmed until you have read the linked page, except where a bullet says it was read directly. Only helper steps were run, in a disposable lab.
 
 ### Sources checked
 
 Each bullet gives the page, the claims it backs and the check date.
 
+- [Respond to compromised Google Cloud credentials](https://docs.cloud.google.com/docs/security/compromised-credentials), read directly on 2026-11-24: token lifetime up to 60 minutes by default and up to 12 hours with an extended lifetime; tokens cannot be invalidated through the Admin console; disable the service account, add a deny policy or delete it, then wait at least 60 minutes after disabling the account; workloads that use a disabled or deleted account lose access immediately. The same page gives the key replacement order: create the new key, disable the old one and confirm the new one works, then delete the old one.
+- [Disable and enable service account keys](https://docs.cloud.google.com/iam/docs/keys-disable-enable) and [Disable and enable service accounts](https://docs.cloud.google.com/iam/docs/service-accounts-disable-enable), read directly on 2026-11-24: disabling a key does not revoke short-lived credentials issued from it; the Service Account Key Admin role (`roles/iam.serviceAccountKeyAdmin`); disabling an account is reversible; the account page does not say whether issued tokens stop at once.
 - [Disable and enable service account keys](https://docs.cloud.google.com/iam/docs/keys-disable-enable): a disabled key stops authenticating and can be enabled again; disable before deleting; disabling does not revoke short-lived credentials already issued; the Service Account Key Admin role. Checked 2026-10-20.
 - [gcloud iam service-accounts keys list](https://docs.cloud.google.com/sdk/gcloud/reference/iam/service-accounts/keys/list) and [keys disable](https://docs.cloud.google.com/sdk/gcloud/reference/iam/service-accounts/keys/disable): `--managed-by` takes `user`, `system` or `any` (default `any`); `--iam-account` syntax. Checked 2026-10-20, and the same synopses were read from the installed `gcloud` 570.0.0 help for `keys delete`, `keys disable`, `keys enable`, `keys list`, `service-accounts disable` and `service-accounts enable`.
 - [Audit log examples for service accounts](https://docs.cloud.google.com/iam/docs/audit-logging/examples-service-accounts) and [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit): method name `google.iam.admin.v1.CreateServiceAccountKey`; field `protoPayload.authenticationInfo.serviceAccountKeyName`; Data Access logs are not on by default. Checked 2026-10-20. `gcloud logging read` flags `--freshness`, `--limit`, `--project` were read from the installed `gcloud` help.
@@ -286,8 +284,8 @@ Each bullet gives the page, the claims it backs and the check date.
 
 ### Not verified
 
-- Direct page fetches of `docs.gitlab.com`, `docs.cloud.google.com` and `docs.jfrog.com` were blocked in the review environment. The claims above were checked against search results that summarise those official pages, plus the installed `gcloud` help. Re-read the linked pages before relying on exact wording.
-- That `gcloud iam service-accounts keys delete` is irreversible: no page I could reach says so either way. The note says to treat it as gone.
+- Direct page fetches of `docs.gitlab.com`, `docs.cloud.google.com` and `docs.jfrog.com` were blocked in the review environment. The claims above were checked against search results that summarise those official pages, plus the installed `gcloud` help. The Google Cloud key and service-account pages were read directly on 2026-11-24; the GitLab and JFrog pages were not. Re-read the linked pages before relying on exact wording.
+- That `gcloud iam service-accounts keys delete` is irreversible: no page I could reach says so either way (the key page, read 2026-11-24, does not say either). The note says to treat it as gone.
 - The `--format` projection `table(name.basename(),validAfterTime,validBeforeTime,keyType)` in step 2, and the `gcloud projects get-iam-policy` filter.
 - Group access token endpoints (`/groups/:id/access_tokens`) were not individually fetched; the note points to the API page.
 - Runner token reset in current GitLab versions; the Artifactory UI menu path; the Artifactory revoke-by-value request shape.

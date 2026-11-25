@@ -8,7 +8,7 @@ tags:
   - kubernetes
   - gitops
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
@@ -212,7 +212,9 @@ set -euo pipefail
 kubectl get policyreports -A -o json | jq '[.items[].summary.fail] | add // 0'
 
 # A deliberately bad object is refused (server-side dry run changes nothing)
-kubectl create deployment policy-probe --image=docker.io/library/nginx:latest \
+# An image your registry policy allows, pinned by digest, so the probe fails only on the missing label
+IMAGE='registry.example.com/payments/api@sha256:<digest>'   # change: an allowed image and its digest
+kubectl create deployment policy-probe --image="$IMAGE" \
   --namespace payments --dry-run=server
 ```
 

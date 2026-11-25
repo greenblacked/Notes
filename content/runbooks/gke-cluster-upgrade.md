@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - reliability
 created: 2026-10-16
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 ---
 
@@ -163,7 +163,7 @@ Validate the control plane (below) before touching nodes.
 
 ### 7. Upgrade node pools
 
-One pool at a time, least critical first. The `pool` label used below is set by the operator on the node pool; it is not assumed. Before starting, list the labels the nodes actually have with `kubectl get nodes --show-labels`; a pool that lacks the label must be labelled with `gcloud container node-pools update` before the upgrade starts, because the pool cannot be updated while an upgrade is running. `--node-labels` replaces all user-set labels of the pool, so read them first with `gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$LOCATION" --format="yaml(config.labels)"` and pass every one of them again together with `pool="$POOL"`; otherwise the labels your workloads select on disappear right before the upgrade.
+One pool at a time, least critical first. The `pool` label used below is set by the operator on the node pool; it is not assumed. Before starting, list the labels the nodes actually have with `kubectl get nodes --show-labels`; a pool that lacks the label must be labelled with `gcloud container node-pools update` before the upgrade starts, because the pool cannot be updated while an upgrade is running. Add it as described in [[gke-node-pool-labels-update]], because `--node-labels` replaces every user-set label of the pool; or select the pool with the label GKE sets itself, `cloud.google.com/gke-nodepool`.
 
 ```bash
 gcloud container clusters upgrade "$CLUSTER" --location "$LOCATION" \
