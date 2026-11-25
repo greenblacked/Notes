@@ -254,15 +254,18 @@ From inside a Pod running as the workload's KSA, the metadata server must answer
 
 ```bash
 set -euo pipefail
-NAMESPACE="orders"                                  # change: the workload's namespace
-KSA="orders-api"                                    # change: the workload's Kubernetes service account
-CURL_IMAGE="curlimages/curl@sha256:<digest>"        # change: the digest you reviewed
+NAMESPACE="${NAMESPACE:?set NAMESPACE to the workload namespace}"
+KSA="${KSA:?set KSA to the workload Kubernetes service account}"
+CURL_IMAGE="${CURL_IMAGE:?set CURL_IMAGE to the curl image digest reference you reviewed}"
 
-# Remove the check Pod on every exit, including when it never produces logs.
-trap 'kubectl delete pod --namespace "${NAMESPACE}" wi-check --ignore-not-found --wait=false' EXIT
+# Both names go into the manifest below: accept only valid Kubernetes names.
+re='^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+[[ "${NAMESPACE}" =~ ${re} && "${KSA}" =~ ${re} ]] || { echo "invalid NAMESPACE or KSA" >&2; exit 2; }
 
 # The Pod runs as the workload's identity: run it only where you may act as that workload.
-kubectl apply --namespace "${NAMESPACE}" -f - <<EOF
+# create, not apply: it stops if a Pod named wi-check already exists, so the cleanup below
+# can only ever remove the Pod this run created.
+kubectl create --namespace "${NAMESPACE}" -f - <<EOF
 apiVersion: v1
 kind: Pod
 metadata:
@@ -293,14 +296,20 @@ spec:
         requests: { cpu: 10m, memory: 32Mi }
         limits: { memory: 32Mi }
 EOF
-if ! kubectl wait --namespace "${NAMESPACE}" pod/wi-check \
-  --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s; then
+# Set only after the create succeeded: remove the Pod on every exit, including when it never produces logs.
+trap 'kubectl delete pod --namespace "${NAMESPACE}" wi-check --ignore-not-found --wait=false' EXIT
+
+rc=0
+kubectl wait --namespace "${NAMESPACE}" pod/wi-check \
+  --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s || rc=1
+if [ "${rc}" -ne 0 ]; then
   kubectl describe pod --namespace "${NAMESPACE}" wi-check || true
 fi
-kubectl logs --namespace "${NAMESPACE}" wi-check
+kubectl logs --namespace "${NAMESPACE}" wi-check || true
+exit "${rc}"
 ```
 
-Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. The Pod meets Pod Security `restricted` ([[0022-admission-policy-pod-security-vap-and-kyverno]]). It prints the token's HTTP status, never the token. The script deletes the Pod on exit. If the wait times out, the script prints `kubectl describe pod` before it deletes the Pod: the Pod ended `Failed` (the metadata call was refused, so `curl -f` exited non-zero) or never started (image pull error, for example an unreplaced digest). An admission denial fails at `kubectl apply` instead. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
+Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. The Pod meets Pod Security `restricted` ([[0022-admission-policy-pod-security-vap-and-kyverno]]). It prints the token's HTTP status, never the token. The script deletes the Pod it created on exit and exits non-zero when the check fails, so a wrapper does not read a failure as a pass. If the wait fails, the script prints `kubectl describe pod` before it deletes the Pod: the Pod ended `Failed` (the metadata call was refused, so `curl -f` exited non-zero) or never started (image pull error, for example an unreplaced digest). An admission denial, or an existing Pod named `wi-check`, fails at `kubectl create` instead. Where [[0002-artifactory-as-single-artifact-store]] and [[0038-kyverno-verifies-image-signatures-at-admission]] are enforced, use the same digest through the internal registry path, or the Pod is refused at admission. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
 
 ## References
 

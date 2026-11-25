@@ -9,7 +9,7 @@ tags:
   - ci-cd
 status: accepted
 created: 2026-10-19
-modified: 2026-11-24
+modified: 2026-11-25
 decided: 2026-10-19
 draft: false
 aliases:
@@ -53,7 +53,7 @@ cosign verify "${IMAGE}" \
   --certificate-oidc-issuer "https://gitlab.example.com"
 ```
 
-The regexp is anchored at both ends and matches only release tags of this project. It cannot prove that the tag was protected. Protection comes from protecting `v*` tags in GitLab and from the sign job running only on protected refs (the rule above).
+The regexp is anchored at both ends and matches only release tags of this project. It cannot prove that the tag was protected. Protection comes from protecting `v*` tags in GitLab, so that only maintainers can create them. The rule above only stops the job from signing by mistake on an unprotected ref; it lives in the repository and is not a control against someone who can push a tag. Verification also accepts every release tag ever signed, so it does not stop a redeploy of an older signed digest: that is limited by the deploy path ([[0047-semver-release-tags-and-protected-production-deploys]], [[0048-rollback-by-redeploying-previous-digest]]), not by the signature check.
 
 The digest is a placeholder. Use the real digest from your push step.
 

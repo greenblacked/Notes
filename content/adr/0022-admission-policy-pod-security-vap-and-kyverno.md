@@ -99,11 +99,12 @@ spec:
   matchResources:
     namespaceSelector:
       matchExpressions:
-        - key: owner # application namespaces carry an owner label (see namespace.yaml)
-          operator: Exists
+        - key: kubernetes.io/metadata.name # exclude system namespaces by name, so an unlabelled namespace is still covered
+          operator: NotIn
+          values: ["kube-system", "kube-public", "kube-node-lease", "gke-managed-system"] # change: your system namespaces
 ```
 
-The policy checks the Pod template of every workload kind and bare Pods, for both `containers` and `initContainers`. Checking Pods as well catches Pods created by any controller. Ephemeral containers, which are added through the `pods/ephemeralcontainers` subresource, are not covered. The binding is limited to namespaces with an `owner` label, so system namespaces are not affected.
+The policy checks the Pod template of every workload kind and bare Pods, for both `containers` and `initContainers`. Checking Pods as well catches Pods created by any controller. Ephemeral containers, which are added through the `pods/ephemeralcontainers` subresource, are not covered. The binding excludes system namespaces by name instead of selecting application namespaces by label: a namespace created without an `owner` label, or with the label removed, is still covered, and `default` is not exempt. Keep the exclusion list short and review it when a platform component adds a namespace.
 
 Rollout follows [[policy-rollout-audit-to-enforce]]: warn and audit, read the audit annotations and Kyverno reports, fix or exempt, then enforce namespace by namespace. Exemptions are explicit in Git and time-boxed. The policy above also matches Pod `UPDATE`, so before a binding moves to `Deny`, existing Pods must already comply: otherwise metadata-only updates (label changes, finalizer removal) on a running Pod that uses a `latest` tag are rejected.
 
