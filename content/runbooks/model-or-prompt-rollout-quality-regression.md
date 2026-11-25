@@ -8,7 +8,7 @@ tags:
   - reliability
   - observability
 created: 2026-11-01
-modified: 2026-11-01
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -130,7 +130,7 @@ kubectl -n "$NS" get configmap "$GATEWAY_CONFIG" -o yaml | grep -E 'model|prompt
 git -C "$CONFIG_DIR" log --since="3 days ago" --format='%h %an %ad %s' --date=iso -- gateway/
 
 # Prompt and system-instruction history
-git clone --quiet "$PROMPT_REPO" /tmp/prompts-audit && git -C /tmp/prompts-audit log --since="3 days ago" --format='%h %an %ad %s' --date=iso
+PROMPTS_DIR=$(mktemp -d) && git clone --quiet "$PROMPT_REPO" "$PROMPTS_DIR" && git -C "$PROMPTS_DIR" log --since="3 days ago" --format='%h %an %ad %s' --date=iso
 ```
 
 Pinned versus floating is the first question about the model. A pinned model identifier names one build. A floating alias such as a "latest" or family name can be repointed by the provider without any change on your side. Read what you send and what answers:
@@ -382,6 +382,7 @@ Source-reviewed on 2026-11-01. Nothing was run and no live system was used. Read
 - The finish-reason string for a token-limit stop (often `length`) depends on the provider; the conventions show it only as an example.
 - Whether `seed` and `temperature` make a given provider's output reproducible: not checked and often false.
 - Thresholds for "recovered" (variance, sample size of 100, soak period) are not sourced; set them from your own measurements.
+- The `mktemp -d` path pattern (`$TMPDIR/tmp.*` or `/tmp/tmp.*`) used by the cleanup guard was not checked on every platform; a skipped directory is listed, not deleted.
 
 ### Environment
 
@@ -401,7 +402,29 @@ See Troubleshooting. Stop and escalate if: the regression cannot be confirmed wi
 
 ### Cleanup and rollback
 
-See Rollback. Delete the temporary clone of the prompt repository and any trace exports, which may contain personal data (`rm -rf /tmp/prompts-audit "$CONFIG_DIR" before.jsonl after.jsonl traces*.jsonl`) only after the regression cases are added and the postmortem is written; until then keep them in access-controlled incident storage, see [[llm-tracing-with-sensitive-data-controls]]. Lift the freeze (see "Lift the freeze" after step 6: resume the Deployment, restore Argo CD sync) in a controlled order, and record the final configuration in the incident record.
+See Rollback. Delete the temporary clone of the prompt repository and any trace exports, which may contain personal data (the commands below), only after the regression cases are added and the postmortem is written; until then keep them in access-controlled incident storage, see [[llm-tracing-with-sensitive-data-controls]]. Lift the freeze (see "Lift the freeze" after step 6: resume the Deployment, restore Argo CD sync) in a controlled order, and record the final configuration in the incident record.
+
+```bash
+# Only directories that mktemp created; an unset or other path is skipped
+TMP_ROOT="${TMPDIR:-/tmp}"; TMP_ROOT="${TMP_ROOT%/}"
+for d in "${CONFIG_DIR:-}" "${PROMPTS_DIR:-}"; do
+  case "$d" in
+    */../*|*/..) printf 'skip: %s contains ..\n' "$d" ;;
+    "$TMP_ROOT"/tmp.*) [ -d "$d" ] && [ ! -L "$d" ] && rm -rf -- "$d" ;;
+    *) printf 'skip: %s is unset or not a mktemp directory\n' "${d:-<unset>}" ;;
+  esac
+done
+```
+
+Trace exports in the incident working directory: list them, check the list, then delete in a separate step.
+
+```bash
+find . -maxdepth 1 -type f \( -name 'before.jsonl' -o -name 'after.jsonl' -o -name 'traces*.jsonl' \) -print
+```
+
+```bash
+find . -maxdepth 1 -type f \( -name 'before.jsonl' -o -name 'after.jsonl' -o -name 'traces*.jsonl' \) -delete
+```
 
 ## Sources
 

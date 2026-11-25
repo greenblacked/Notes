@@ -10,7 +10,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-21
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 ---
 
@@ -229,6 +229,8 @@ The error codes to look for (quote these; the full message wording varies):
 - `ZONE_RESOURCE_POOL_EXHAUSTED` or `ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS`: a **stockout**. The zone has no capacity for that machine type (or for Spot or GPU capacity) right now. Your quota is fine.
 - `QUOTA_EXCEEDED`: a regional or project **quota** is used up, commonly CPUs, a CPU family, in-use addresses, persistent disk or GPUs.
 
+For GPU pools, also run the GPU checks in [[gpu-pods-pending-on-gke]], step 6 (whether the GPU type is offered in the zone, and the GPU quota metrics).
+
 Check regional quota usage directly:
 
 ```bash
@@ -332,18 +334,9 @@ resource "google_container_node_pool" "general" {
 }
 ```
 
-Avoid relabelling a pool in the middle of an outage: the change is applied to the live nodes, and `--node-labels` on `update` replaces all user-set labels of the pool, so a label that workloads select on is removed unless you pass it again. If you must, read the current labels first and pass every one of them together with `pool`:
+Avoid relabelling a pool in the middle of an outage: the change is applied to the live nodes, and `--node-labels` replaces every user-set label of the pool. To select one pool's nodes without any label of your own, use `-l cloud.google.com/gke-nodepool="$POOL"`, which GKE sets on every node. If you must add `pool`, follow [[gke-node-pool-labels-update]].
 
-```bash
-# 1. The labels the pool has now
-gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
-  --format="yaml(config.labels)"
-# 2. All of them again, plus pool. Example for a pool that already had capacity=spot:
-gcloud container node-pools update "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
-  --node-labels=capacity=spot,pool="$POOL"
-```
-
-Pods then select the pool with `nodeSelector: {pool: general}` (or node affinity on `pool`). If a pool does not carry the label yet, list the labels its nodes actually have with `kubectl get nodes --show-labels`, and label the pool as above, with all its existing labels, before relying on `-l pool="$POOL"` or the `pool` column.
+Pods then select the pool with `nodeSelector: {pool: general}` (or node affinity on `pool`). If a pool does not carry the label yet, list the labels its nodes actually have with `kubectl get nodes --show-labels`, and add the label as described in [[gke-node-pool-labels-update]] before relying on `-l pool="$POOL"` or the `pool` column.
 
 | Blocker                                 | How to see it                                                                                            | Fix                                                                                                                                             |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |

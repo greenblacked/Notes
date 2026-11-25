@@ -9,7 +9,7 @@ tags:
   - reliability
   - incident-management
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
@@ -121,7 +121,10 @@ Roll out in a lower environment first. After the change, the consumer should hav
 
 ### 5. Retire the old key
 
-Disable before delete, and wait.
+Disable before delete, and wait. Disabling the key does not revoke tokens already issued from it; the rule for those, and Google's create, disable and confirm, then delete order, is in [[leaked-credential-rotation#GCP service account key]].
+
+> [!danger] Deleting a key cannot be undone here
+> The pages checked describe no undo for `keys delete`. Delete only after the grace period has shown nothing still uses the key.
 
 ```bash
 gcloud iam service-accounts keys disable "$KEY_ID" --iam-account "$SA"

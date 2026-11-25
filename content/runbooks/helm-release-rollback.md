@@ -9,7 +9,7 @@ tags:
   - gitops
   - reliability
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-11-25
 draft: false
 ---
 
@@ -30,6 +30,7 @@ If the pods are failing for a reason you do not yet know, diagnose with [[kubern
 
 - Access to the cluster and namespace, and the right context (`kubectl config current-context`).
 - Helm 3 installed. Helm 3 stores release state in the cluster; there is no Tiller.
+- `jq` installed (the Secret backup in the steps pipes through it).
 - You know whether the release is managed by GitOps. Check for Argo CD application labels or annotations:
 
 ```bash
@@ -104,16 +105,51 @@ helm upgrade --install "$RELEASE" ./chart -n "$NS" \
 
 ```bash
 helm history "$RELEASE" -n "$NS"
-helm rollback "$RELEASE" <last-deployed-revision> -n "$NS"
+GOOD_REV=    # set: the last revision whose STATUS is deployed or superseded
 ```
 
-If rollback is also refused, back up the stuck release Secret, then delete only the stuck revision's Secret:
+```bash
+if [ -n "$GOOD_REV" ]; then
+  helm rollback "$RELEASE" "$GOOD_REV" -n "$NS"
+else
+  echo "stop: set GOOD_REV from the helm history output first"
+fi
+```
+
+If rollback is also refused:
+
+> [!warning] This edits Helm's release state
+> Deleting a release Secret removes that revision from Helm's history. Back it up first, check it is the stuck revision, and delete nothing else.
 
 ```bash
 kubectl get secret -n "$NS" -l owner=helm,name="$RELEASE" --show-labels
-kubectl get secret sh.helm.release.v1."$RELEASE".v9 -n "$NS" -o yaml > helm-secret-v9-backup.yaml
-kubectl delete secret sh.helm.release.v1."$RELEASE".v9 -n "$NS"
+STUCK_REV=   # set: the revision helm history shows as pending-install, pending-upgrade or pending-rollback
 ```
+
+```bash
+if [ -z "$STUCK_REV" ]; then
+  echo "stop: set STUCK_REV from the helm history output first"
+else
+  SECRET="sh.helm.release.v1.${RELEASE}.v${STUCK_REV}"
+  STATUS=$(kubectl get secret "$SECRET" -n "$NS" -o jsonpath='{.metadata.labels.status}')
+  BACKUP="helm-secret-${RELEASE}-v${STUCK_REV}-backup.json"
+  case "$STATUS" in
+    pending-install|pending-upgrade|pending-rollback)
+      ( umask 077
+        kubectl get secret "$SECRET" -n "$NS" -o json \
+          | jq 'del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp, .metadata.managedFields)' \
+          > "$BACKUP" )
+      if jq -e '.data.release' "$BACKUP" > /dev/null; then
+        kubectl delete secret "$SECRET" -n "$NS"
+      else
+        echo "stop: the backup is empty or incomplete, nothing was deleted"
+      fi ;;
+    *) echo "stop: $SECRET has status '${STATUS:-none}', not a pending one" ;;
+  esac
+fi
+```
+
+To undo: `kubectl create -f "helm-secret-${RELEASE}-v${STUCK_REV}-backup.json" -n "$NS"`. Keep the backup file safe: it holds the rendered release, which can include Secret values. Delete it, or move it to access-controlled incident storage, once the release is healthy.
 
 This edits Helm's bookkeeping, not the workload, and is a last resort. Re-run `helm history`, and then upgrade.
 
@@ -161,7 +197,7 @@ Then check the application signals: error rate, latency, and the version endpoin
 
 ## Rollback
 
-Rolling back a rollback is another `helm rollback` to the revision you left (for example 8), because each rollback is a new revision. For a GitOps release, revert the revert. Backups taken above (values, manifests, Secret YAML) let you reconstruct a release by hand.
+Rolling back a rollback is another `helm rollback` to the revision you left (for example 8), because each rollback is a new revision. For a GitOps release, revert the revert. Backups taken above (values, manifests, Secret JSON) let you reconstruct a release by hand.
 
 ## Troubleshooting
 

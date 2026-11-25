@@ -7,7 +7,7 @@ tags:
   - kubernetes
   - reliability
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-11-25
 draft: false
 ---
 
@@ -30,6 +30,8 @@ If many pods across many nodes fail at once, treat it as an incident first: see 
 ```bash
 NS=my-namespace
 POD=my-pod-abc123
+CONTAINER=app                                   # change: the container name
+DEBUG_IMAGE='busybox@sha256:<digest>'           # change: a debug image from your registry, pinned by digest
 kubectl config current-context
 kubectl get pod "$POD" -n "$NS" -o wide
 ```
@@ -173,29 +175,45 @@ kubectl describe node "$(kubectl get pod "$POD" -n "$NS" -o jsonpath='{.spec.nod
 
 The message says what ran short: memory, `ephemeral-storage` or disk. Fix the cause (logs written to the container filesystem, `emptyDir` growth, missing ephemeral-storage requests) rather than deleting evicted pods. Delete the leftovers afterwards:
 
+> [!warning] Deleting failed Pods deletes their logs
+> `status.phase=Failed` also matches failed Job Pods, whose logs and exit codes are often the only record of the failure. Delete only Pods whose reason is `Evicted`, only for the workload you fixed, and after reading the list.
+
 ```bash
-kubectl delete pod -n "$NS" --field-selector=status.phase=Failed
+SELECTOR='app.kubernetes.io/name=my-app'   # change: the workload you fixed
+kubectl get pods -n "$NS" -l "$SELECTOR" --field-selector=status.phase=Failed -o json \
+  | jq -r '.items[] | select(.status.reason == "Evicted") | .metadata.name' > evicted-pods.txt
+cat evicted-pods.txt
+# after reading the list:
+while read -r p; do kubectl delete pod -n "$NS" "$p"; done < evicted-pods.txt
 ```
 
 ### 9. Debug with an ephemeral container
 
 When the image has no shell (distroless) or the pod crashes too fast to exec, attach an ephemeral debug container. Ephemeral containers cannot be removed from a pod, so they are cleaned up when the pod is replaced.
 
+> [!warning] A node debug pod has host access
+> `kubectl debug node/` runs a pod in the node's IPC, network and PID namespaces with the node's root filesystem at `/host`. It does not set `privileged` by default (`--profile=sysadmin` does), but it runs as root with the node's filesystem mounted read-write at `/host`; treat it as root on the node, because it can read kubelet credentials and write static Pod manifests. Use it only with change approval, and delete it when done.
+
 ```bash
 # Share the process namespace of the target container
-kubectl debug -it "$POD" -n "$NS" --image=busybox:1.36 --target="$CONTAINER" -- sh
+kubectl debug -it "$POD" -n "$NS" --image="$DEBUG_IMAGE" --target="$CONTAINER" -- sh
 
 # Debug a crashing pod on a copy, leaving the original untouched
 kubectl debug "$POD" -n "$NS" -it --copy-to="${POD}-debug" --container="$CONTAINER" -- sh
 
 # Node-level debugging (host filesystem mounted at /host)
-kubectl debug node/NODE_NAME -it --image=busybox:1.36
+NODE=my-node   # change: the node to inspect
+kubectl debug node/"$NODE" -it --image="$DEBUG_IMAGE"
 ```
 
 From inside, test DNS (`nslookup`), connectivity (`wget -qO- http://svc:port/healthz`) and the mounted files. Delete copies and node debug pods when done:
 
 ```bash
 kubectl delete pod "${POD}-debug" -n "$NS"
+kubectl get pods -A -o wide | grep node-debugger-          # the node debug pods you created
+DEBUG_POD=node-debugger-my-node-abcde   # change: the name kubectl printed
+DEBUG_NS=default                        # change: its namespace from the list
+kubectl delete pod "$DEBUG_POD" -n "$DEBUG_NS" --now
 ```
 
 ## Validation

@@ -10,7 +10,7 @@ tags:
   - reliability
   - observability
 created: 2026-11-01
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -299,7 +299,7 @@ kubectl get nodes -L pool,node.kubernetes.io/instance-type
 kubectl get nodes -l pool="$POOL"
 ```
 
-`pool` is a label the operator sets on the node pool, with `--node-labels=pool="$POOL"` on `gcloud container node-pools create` or `update` (or `labels` in the Terraform `node_config`); the GPU pool built in [[self-hosted-llm-inference-on-gke]] is also tainted with `dedicated=llm-inference:NoSchedule`, which the serving pods tolerate; read the taint your nodes actually carry with `kubectl describe node "$NODE" | grep -A3 Taints`. If the pool column is empty, list the labels the nodes actually have with `kubectl get nodes --show-labels`, and label the pool with `gcloud container node-pools update ... --node-labels` before relying on the selector; `update` replaces all user-specified labels, so repeat the ones the pool already has.
+`pool` is a label the operator sets on the node pool (see [[gke-node-pool-labels-update]] before adding one; `--node-labels` replaces every user-set label); the GPU pool built in [[self-hosted-llm-inference-on-gke]] is also tainted with `dedicated=llm-inference:NoSchedule`, which the serving pods tolerate; read the taint your nodes actually carry with `kubectl describe node "$NODE" | grep -A3 Taints`. If the pool column is empty, list the labels the nodes actually have with `kubectl get nodes --show-labels`, and add the label as described in [[gke-node-pool-labels-update]] before relying on the selector.
 
 Set `POD` to the slow pod (from the per-pod queries in step 1), then derive `NODE` from it. Do not reuse a `POD` left over from 4b unless it is the slow pod.
 
@@ -447,9 +447,9 @@ Read the authentication header from a file as shown (curl 7.55 or newer); do not
 - [Parallelism and Scaling - vLLM](https://docs.vllm.ai/en/latest/serving/parallelism_scaling/): the `GPU KV cache size` and `Maximum concurrency` start-up log lines. Checked 2026-11-01, commit 8530a77.
 - [Deployments | Kubernetes](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/): `kubectl rollout history`, `--revision`, `rollout undo`, `--to-revision` and `rollout status`; `maxUnavailable` in the rolling update strategy. [Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/): the HPA acts on the target named in `scaleTargetRef`. [Nodes](https://kubernetes.io/docs/concepts/architecture/nodes/): `kubectl cordon`. Checked 2026-11-01, Kubernetes website repository commit 491f14e.
 - [Query functions | Prometheus](https://prometheus.io/docs/prometheus/latest/querying/functions/) and [HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/): `histogram_quantile` over `sum by (le) (rate(..._bucket[...]))` and `GET /api/v1/query`. Checked 2026-11-01, Prometheus repository commit ef78ff6.
-- `gcloud container node-pools create --help` and `update --help`, SDK 570.0.0, 2026-11-02: `--enable-autoscaling`, `--total-min-nodes`, `--total-max-nodes`; `--node-labels` and `--node-taints` apply Kubernetes labels and taints to the nodes of a pool, and `update` replaces all user-specified labels (help text only).
-- [Terraform google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster): `node_config` `labels` and the `taint` block (`key`, `value`, `effect` `NO_SCHEDULE`). Checked 2026-11-02, commit c4248bd.
-- [Taints and Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) and [Assigning Pods to Nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): `NoSchedule` taints and tolerations, `nodeSelector` on node labels. Checked 2026-11-02, commit 491f14e.
+- `gcloud container node-pools create --help` and `update --help`, SDK 570.0.0, 2026-11-02, after the review: `--enable-autoscaling`, `--total-min-nodes`, `--total-max-nodes`; `--node-labels` and `--node-taints` apply Kubernetes labels and taints to the nodes of a pool (help text only).
+- [Terraform google_container_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster): `node_config` `labels` and the `taint` block (`key`, `value`, `effect` `NO_SCHEDULE`). Checked 2026-11-02, commit c4248bd. (added 2026-11-02, after the review)
+- [Taints and Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) and [Assigning Pods to Nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): `NoSchedule` taints and tolerations, `nodeSelector` on node labels. Checked 2026-11-02, commit 491f14e. (added 2026-11-02, after the review)
 
 ### Not verified
 
@@ -461,6 +461,7 @@ Read the authentication header from a file as shown (curl 7.55 or newer); do not
 - The effect of GPU time-slicing on a model server's inter-token latency, which is stated generically.
 - GPU-level telemetry such as DCGM exporter metrics (for example `DCGM_FI_DEV_FB_USED`) and throttling indicators: not available locally and not used in any command.
 - Prefix cache reset and replica-spread causes in 4c, the HPA failure patterns in 4f and the gateway caps in step 2b are operating guidance, not documented claims.
+- The `--enable-autoscaling`, `--total-min-nodes` and `--total-max-nodes` flags and the node pool `--node-labels` and `--node-taints` flags were confirmed on 2026-11-02, after the 2026-11-01 review; the other claims were checked on the review date.
 - Nothing was run against a live cluster.
 
 ### Environment
