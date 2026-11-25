@@ -7,11 +7,11 @@ tags:
   - security
   - supply-chain
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
-An AI model is a supply-chain artifact with a publisher, source repository, files, tokenizer or configuration, dependencies, conversion steps, and deployment process. A friendly model name is not a stable identity. Files may be updated, mirrored, converted, or served by a different account than expected. This note defines a verification workflow for model artifacts, not a claim that signatures or provenance can establish model behavior. It complements [[ai/model-artifacts-in-artifactory]] and [[ai/model-version-pinning-and-upgrade-evals]].
+An AI model is a supply-chain artifact with a publisher, source repository, files, tokenizer or configuration, dependencies, conversion steps, and deployment process. A friendly model name is not a stable identity. Files may be updated, mirrored, converted, or served by a different account than expected. This note defines a verification workflow for model artifacts, not a claim that signatures or provenance can establish model behavior. It covers identity, provenance and promotion decisions for any model; storing, proxying and scanning weights in a registry is in [[ai/model-artifacts-in-artifactory]], and pinning hosted model versions is in [[ai/model-version-pinning-and-upgrade-evals]].
 
 ## Identify exactly what is being trusted
 
@@ -60,4 +60,3 @@ If a model artifact is suspected compromised, suspend further promotion, preserv
 - [Sigstore Cosign: Verifying signatures](https://docs.sigstore.dev/cosign/verifying/verify/): verification of signatures and attestations.
 - [Hugging Face Hub model cards](https://huggingface.co/docs/hub/en/model-cards): model card structure and expected descriptive information; publisher claims still require review.
 - [NIST AI 600-1, Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): risk management context for GenAI components.
-- [Owner’s AI skills catalogue](https://ai.szolotov.com): reusable AI skills and workflows.

@@ -8,9 +8,12 @@ tags:
   - security
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
+
+> [!info] Scope
+> Step 2 of 4: who is affected and what happens to them when the system fails or is misused. The risk tier comes from [[ai-system-risk-classification]], attack paths and controls from [[ai-system-threat-modeling]], and control testing from [[ai-red-team-exercise-planning]].
 
 ## Assessment is a lifecycle activity
 
@@ -53,7 +56,9 @@ Legal classification and obligations require qualified advice for the relevant j
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[ai-system-risk-classification]]: step 1, the risk tier.
+- [[ai-system-threat-modeling]]: step 3, attack paths and controls.
+- [[ai-red-team-exercise-planning]]: step 4, testing the controls.
 
 ## Sources
 

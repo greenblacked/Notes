@@ -7,7 +7,7 @@ tags:
   - security
   - team-process
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -53,5 +53,3 @@ Common failures are passing credentials through context, losing the original use
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) — agentic security risks relevant to delegated authority and multi-agent systems.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — lifecycle risk governance; NIST says AI RMF 1.0 is under revision.
 - [OpenTelemetry GenAI Semantic Conventions](https://github.com/open-telemetry/semantic-conventions-genai) — evolving repository covering GenAI and MCP telemetry; verify current conventions before implementation.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

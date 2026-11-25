@@ -8,7 +8,7 @@ tags:
   - security
   - delivery
 created: 2026-10-27
-modified: 2026-10-27
+modified: 2026-11-24
 draft: false
 ---
 
@@ -142,5 +142,3 @@ Treat the agreement as a living document.
 
 - [GitLab Developer Experience handbook, AI section](https://handbook.gitlab.com/handbook/engineering/infrastructure-platforms/developer-experience/ai) - a published example of norms: prefer the sanctioned tool, keep human review on AI-generated code, keep confidential customer data out of external tools.
 - [NIST SP 800-218A](https://csrc.nist.gov/pubs/sp/800/218/a/final) - an SSDF community profile for generative AI and dual-use foundation models, aimed at AI model producers, AI system producers and AI system acquirers; background for producer and acquirer framing, not a rule for engineers using an assistant.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

@@ -8,7 +8,7 @@ tags:
   - docker
   - linux
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -16,8 +16,6 @@ review-due: 2027-05-02
 ---
 
 An agent that executes code is operating a general-purpose interpreter, not merely calling a safe “calculator” feature. Code may be generated, copied from a repository, downloaded as a dependency, or derived from an untrusted document. The code can be incorrect or malicious without the model recognizing it. Treat every execution request as untrusted input and ensure the runtime limits damage independently of model judgment. This note narrows the existing workstation and runner guidance in [[ai/sandboxing-coding-agents-on-workstations-and-runners]] to the execution boundary itself.
-
-The owner’s [AI skills catalogue](https://ai.szolotov.com) provides reusable skills and workflows.
 
 ## Define the execution contract
 

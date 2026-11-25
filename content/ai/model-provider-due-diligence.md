@@ -8,7 +8,7 @@ tags:
   - audit
   - reliability
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -53,9 +53,9 @@ An adoption decision should be conditional on evidence, not provider reputation.
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[model-data-use-contract-review]]: data-use terms.
+- [[model-version-pinning-and-upgrade-evals]]: model lifecycle and retirement.
 
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): risk-management framing; AI RMF 1.0 (2023) is noted as under revision on the NIST page.

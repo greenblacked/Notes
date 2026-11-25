@@ -7,7 +7,7 @@ tags:
   - reliability
   - security
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -48,10 +48,7 @@ Failure modes include measuring only completion, allowing prohibited side effect
 - Are tool traces and environment versions sufficient for diagnosis?
 - Has the harness been checked for goal-hacking loopholes?
 
-The owner's agent skills and workflows are listed in [the AI skills catalogue](https://ai.szolotov.com).
-
 ## Sources
 
 - [NIST AI RMF Playbook (AI RMF 1.0 (January 2023); page notes it is being updated, accessed 2026-10-26)](https://airc.nist.gov/airmf-resources/playbook/): evaluating systems in operational context and managing lifecycle risk; the linked page states AI RMF 1.0 is being updated (accessed 2026-10-26).
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Gen AI evaluation service overview (Google Cloud documentation accessed 2026-10-26)](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/evaluation-overview): evaluation design and metrics for generative applications.

@@ -6,7 +6,7 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -46,8 +46,6 @@ Run automated negative tests at API, retrieval, citation, cache, export and supp
 - Are missing context and policy-service failures deny-by-default?
 - Do negative tests cover same-name records, revocation, retries, exports and disaster recovery?
 - Are tenant-specific deletion and restoration procedures measurable and reviewed?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

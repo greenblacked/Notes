@@ -8,7 +8,7 @@ tags:
   - compliance
   - networking
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -48,8 +48,6 @@ Review the matrix after a new service, new telemetry destination, prompt cache, 
 - Capacity and latency are tested in each permitted region.
 - Claims cite current provider documentation and relevant contractual review.
 - Owners and revalidation triggers are named.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

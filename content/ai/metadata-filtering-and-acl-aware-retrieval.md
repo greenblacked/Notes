@@ -6,7 +6,7 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -46,8 +46,6 @@ Monitor ACL synchronization lag, failed identity lookups, missing policy metadat
 - Are negative cross-tenant and revocation tests run against the production query path?
 - Are provider-specific prefilter/postfilter semantics checked in current docs and service versions?
 - Does the source link perform a fresh access decision when opened?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

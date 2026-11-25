@@ -8,7 +8,7 @@ tags:
   - leadership
   - delivery
 created: 2026-10-17
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -164,7 +164,7 @@ Agree norms before the pilot starts and put them in the repository next to the c
 - Say in the merge request when a change was substantially generated, if your policy asks for it.
 - Tests and quality gates must pass; never lower a gate to merge generated code.
 - Agents that run commands or hold credentials need their own review, see [[ai/securing-ai-agents-in-ci-and-cloud]].
-- Share useful prompts and workflows in a team repository. For examples of reusable skills and workflows, see [the owner's AI skills catalogue](https://ai.szolotov.com).
+- Share useful prompts and workflows in a team repository ([[agent-skills-and-shared-workflows]]).
 
 Run a one-hour session at the start with examples from your own repositories: a good result, a plausible wrong result, and a prompt that leaked something it should not have.
 
@@ -201,7 +201,6 @@ If the answer is go, roll out in waves rather than all at once. Add one team at 
 - [[management/platform-team-operating-model]]: who owns shared tooling and standards.
 - [[ai/ai-generated-code-policy-and-provenance]]: the policy behind the team norms.
 - [[ai/securing-ai-agents-in-ci-and-cloud]]: technical controls for agents with access.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.
 
 ## Evidence
 
@@ -218,6 +217,5 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the PostgreSQL syntax in 
 - The DORA research programme and its four measures (dora.dev was not reachable).
 - Provider data-retention, training and licence terms for generated code: these are vendor terms and were not reachable.
 - `terraform plan` review advice, SonarQube quality gate behaviour and single sign-on or seat removal support: not checked against local sources.
-- The linked external skills catalogue (ai.szolotov.com) was not opened.
 - Engineering and management guidance (pilot length and group sizes, survey wording, cost tracking, norms, pitfalls) is judgement, not a documented claim.
 - Nothing was run.

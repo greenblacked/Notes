@@ -9,7 +9,7 @@ tags:
   - observability
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -53,8 +53,6 @@ Metrics have costs and gaps. High-cardinality labels increase monitoring load; f
 - Treat sustained queue growth as a demand-management issue, not a target utilization to chase.
 
 The tradeoff is direct: maximizing busy time can reduce idle cost, but leaves less slack for bursts and maintenance. A lower, deliberate utilization target may improve resilience. Set it from measured workload variance and provisioning time, not a generic rule.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

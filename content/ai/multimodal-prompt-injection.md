@@ -6,13 +6,11 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
 Multimodal systems process images, scans, audio, video, subtitles, and OCR alongside typed prompts. Media may carry instructions, context, speaker cues, or metadata that a reviewer does not see. This note focuses on untrusted media boundaries, extends [[ai/indirect-prompt-injection-in-documents]], and does not claim that every model is vulnerable to every technique.
-
-The owner’s [AI skills catalogue](https://ai.szolotov.com) provides reusable skills and workflows.
 
 ## Map the media pipeline
 
@@ -59,5 +57,4 @@ When a suspected manipulation or unsafe action occurs, preserve the original ass
 
 - [NIST AI 600-1, Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): risks and governance across generative AI systems.
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): LLM application risk taxonomy and mitigations.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [MITRE ATLAS](https://atlas.mitre.org/): catalog for organizing AI-system threats and defensive testing.

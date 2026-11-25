@@ -8,10 +8,10 @@ tags:
   - ci-cd
   - gitlab-ci
 created: 2026-10-17
-modified: 2026-10-20
+modified: 2026-11-25
 evidence: source-reviewed
-reviewed: 2026-10-20
-review-due: 2027-04-20
+reviewed: 2026-11-24
+review-due: 2027-05-24
 draft: false
 ---
 
@@ -21,7 +21,7 @@ This note sets the rules for running AI coding and operations agents inside CI j
 > Written for GitLab CI and GitHub Actions pipelines running on GKE or hosted runners, and for agents that read repositories, issues, logs or cloud APIs. It is based on the general threat guidance in the OWASP Top 10 for LLM Applications, the GitLab CI/CD documentation at https://docs.gitlab.com/ci/ and the GitHub Actions security documentation. No product is named as the agent; the rules apply to any tool that turns text into actions.
 
 > [!note] What was checked
-> The OWASP names, the GitLab merge request, fork and variable behaviour and the job token statements were checked against the documentation on 2026-10-20, and the trigger matrix was corrected where it disagreed. The GitHub Actions workflow, the GKE statements and the runtime behaviour of the YAML were not checked. See Evidence for the list.
+> The OWASP names, the GitLab merge request, fork and variable behaviour and the job token statements were first checked from search excerpts on 2026-10-20 and re-read on the pages themselves on 2026-11-24; the trigger matrix was corrected where it disagreed. The GitHub Actions workflow, the GKE statements and the runtime behaviour of the YAML were not checked. See Evidence for the list.
 
 ## Threat model
 
@@ -50,7 +50,7 @@ The rules are short on purpose, so a reviewer can check a pipeline against them.
 - Data classes sent to a model provider are written down, and secrets, personal data and customer data are excluded unless an approved agreement says otherwise.
 - Each job has a time limit, a token or request budget and a cap on tool calls.
 
-Reusable agent prompts and workflows, with the guardrails above written into them, are easier to keep safe when they live in one place. [The owner's AI skills catalogue](https://ai.szolotov.com) is one such collection.
+Reusable agent prompts and workflows, with the guardrails above written into them, are easier to keep safe when they live in one reviewed repository ([[agent-skills-and-shared-workflows]]).
 
 ## Trigger and token matrix
 
@@ -80,7 +80,7 @@ The job runs only for merge request pipelines whose source project is the target
 ```yaml title=".gitlab-ci.yml"
 ai-agent-review:
   stage: test
-  image: registry.example.com/ci/agent-runner:1.4.2 # change: your own image, pinned by tag or digest
+  image: registry.example.com/ci/agent-runner@sha256:<digest> # change: your own image, pinned by digest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID'
   timeout: 10 minutes
@@ -102,7 +102,7 @@ ai-agent-review:
 
 ai-agent-post:
   stage: .post
-  image: registry.example.com/ci/poster:1.0.0 # change: a small image with curl and jq, no agent, no repository code
+  image: registry.example.com/ci/poster@sha256:<digest> # change: a small image with curl and jq, no agent, no repository code
   needs:
     - job: ai-agent-review
       artifacts: true
@@ -119,13 +119,16 @@ ai-agent-post:
     # POSTER_TOKEN: masked project access token with the api scope and the Reporter role
     # (a bot that can comment but not push or merge), scoped to the ai-comment-poster
     # environment so the agent job does not receive it.
+    # The token goes to curl on stdin as a header file (printf is a shell builtin), so it never
+    # appears in the process arguments; the request body therefore comes from a file.
     - |
-      jq -Rs '{body: .}' review.md | curl --fail --silent --show-error \
-        --header "PRIVATE-TOKEN: $POSTER_TOKEN" --header "Content-Type: application/json" \
-        --data @- "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
+      jq -Rs '{body: .}' review.md > note.json
+      printf 'PRIVATE-TOKEN: %s\n' "$POSTER_TOKEN" | curl --fail --silent --show-error \
+        --header @- --header "Content-Type: application/json" \
+        --data @note.json "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
 ```
 
-Pitfalls to check against your GitLab version: protected variables are only exposed to pipelines on protected branches and tags. Merge request pipelines were treated differently across versions: the 17.9 documentation says they do not get protected variables, while the current documentation says they can when a Maintainer-controlled project setting (Settings > CI/CD > Variables, added in GitLab 18.1) is on, both the source and target branches are protected and in the same project, and the user who triggers the pipeline can push or merge to the target branch; never for pipelines from forks. A GitLab planning epic names the underlying setting `protect_merge_request_pipelines` and says it is on for new projects (not confirmed against the shipped behaviour), so an agent job on a merge request between two protected branches can receive protected variables. In a project that runs agent jobs, turn the setting off or keep the agent jobs off those merge requests. Do not rely on one behaviour; keep deploy secrets out of any project where an agent job runs, and check the page for your version. Masking only hides a value in job logs and is not a guarantee against a malicious job reading it; hidden variables cannot be revealed in the UI after saving but can still be used by jobs. Neither replaces keeping the secret away from the job. The agent token is an unprotected, masked variable that any pipeline in the project can read, which is acceptable only because it is read-only. Keep the poster token out of the agent job: scope `POSTER_TOKEN` to the `ai-comment-poster` environment only, so the agent job does not receive it. Environment scoping is not a hard boundary, because a branch author in the same project can still change `.gitlab-ci.yml`, so the token must stay limited to commenting (Reporter role, `api` scope). `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` is a documented predefined variable for merge request pipelines; still test the rule with a real fork on your instance. The job token (`CI_JOB_TOKEN`) is a separate credential: by default a project's job token allowlist contains only the project itself, and adding a project or group to the allowlist lets that project's jobs reach yours, so keep the allowlist short and do not disable it.
+Pitfalls to check against your GitLab version: protected variables are only exposed to pipelines on protected branches and tags. The current CI/CD variables page says merge request pipelines can optionally access protected variables. The Merge request pipelines page documents a project setting introduced in GitLab 18.1, "Control access to protected variables and runners": merge request pipelines can reach protected variables and runners only when the source and target branches are both protected, the user triggering the pipeline has push or merge access to the target branch, and both branches are in the same project; pipelines from forks never can. Maintainers and Owners change it under Settings > CI/CD > Variables > "Access protected resources in merge request pipelines" > "Allow merge request pipelines to access protected variables and runners". The page states no default, so check the checkbox in your project. Treat an agent job on a merge request between two protected branches as able to receive protected variables unless that checkbox is cleared: clear it in a project that runs agent jobs, or keep the agent jobs off those merge requests. Do not rely on one behaviour; keep deploy secrets out of any project where an agent job runs, and check the page for your version. Masking only hides a value in job logs and is not a guarantee against a malicious job reading it; hidden variables cannot be revealed in the UI after saving but can still be used by jobs. Neither replaces keeping the secret away from the job. The agent token is an unprotected, masked variable that any pipeline in the project can read, which is acceptable only because it is read-only. Keep the poster token out of the agent job: scope `POSTER_TOKEN` to the `ai-comment-poster` environment only, so the agent job does not receive it. Environment scoping is not a hard boundary, because a branch author in the same project can still change `.gitlab-ci.yml`, so the token must stay limited to commenting (Reporter role, `api` scope). `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` is a documented predefined variable for merge request pipelines; still test the rule with a real fork on your instance. The job token (`CI_JOB_TOKEN`) is a separate credential: by default a project's job token allowlist contains only the project itself, and adding a project or group to the allowlist lets that project's jobs reach yours, so keep the allowlist short and do not disable it.
 
 ### GitHub Actions: read-only, `pull_request` trigger
 
@@ -246,20 +249,21 @@ Route model traffic through an internal gateway where you can log requests, enfo
 
 ### Sources checked
 
-- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): 2025 IDs and names LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure, LLM05 Improper Output Handling, LLM06 Excessive Agency, LLM10 Unbounded Consumption, checked 2026-10-20 (IDs from search results, including the OWASP pages for LLM05 and LLM10; the list page itself could not be fetched).
-- [Merge request pipelines](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/): fork merge request pipelines run in the fork by default; a parent member can run one in the parent with the parent's variables; the security warning; the `ci_allow_fork_pipelines_to_run_in_parent_project` setting; `merge_request_event` as the pipeline source, checked 2026-10-20 (search excerpts).
-- [Predefined variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_MERGE_REQUEST_SOURCE_PROJECT_ID`, `CI_MERGE_REQUEST_IID` and the `CI_PIPELINE_SOURCE` values, checked 2026-10-20 (search excerpt).
-- [CI/CD variables](https://docs.gitlab.com/ci/variables/): protected variables only on protected branches and tags, the version difference for merge request pipelines, masking limits and hidden variables, checked 2026-10-20 (search excerpt; the 17.9 and current pages disagree, as stated in the note). The 18.1 project setting, its conditions and the `protect_merge_request_pipelines` name come from a search excerpt of the current page and a GitLab planning epic; re-read the page for your version.
-- [CI/CD job token](https://docs.gitlab.com/ci/jobs/ci_job_token/): the default allowlist contains only the project itself, checked 2026-10-20 (search excerpt).
+- [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): the 2025 IDs and names LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure, LLM05 Improper Output Handling, LLM06 Excessive Agency and LLM10 Unbounded Consumption. Checked 2026-11-24 (list page read).
+- [Merge request pipelines](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/): fork merge request pipelines run in the fork with the fork's variables by default; a parent member can run one in the parent, which then uses the parent's variables; the security warning; the `ci_allow_fork_pipelines_to_run_in_parent_project` setting; rules must match `CI_PIPELINE_SOURCE == "merge_request_event"`; the section "Control access to protected variables and runners" (introduced in GitLab 18.1) with its three conditions, the Maintainer or Owner role, the Settings path and the checkbox name. Checked 2026-11-24 (page read); the 18.1 section re-read 2026-11-25.
+- [Predefined variables](https://docs.gitlab.com/ci/variables/predefined_variables/): `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` (the ID of the source project of the merge request), `CI_MERGE_REQUEST_IID` and `CI_PROJECT_ID`. Checked 2026-11-24 (page read).
+- [CI/CD variables](https://docs.gitlab.com/ci/variables/): protected variables reach only pipelines on protected branches and tags, and merge request pipelines can optionally access them; masking is not a guaranteed way to keep a value from a malicious job; hidden variables cannot be revealed in the UI after saving; fork pipelines cannot access the parent's variables by default, but a merge request pipeline run in the parent gets all of them. Checked 2026-11-24 (page read).
+- [CI/CD job token](https://docs.gitlab.com/ci/jobs/ci_job_token/): by default a project's allowlist contains only the project itself. Checked 2026-11-24 (page read).
 
-Corrections made on 2026-10-20: OWASP names and IDs updated to the 2025 edition; the fork row of the trigger matrix no longer says a maintainer triggers a manual run, because that run exposes the parent's variables; the protected-variable statement was corrected to say the behaviour differs between GitLab versions; the masking limits and the job token allowlist were added; the GitLab documentation link now uses the current `/ci/` path.
+Corrections made on 2026-10-20: OWASP names and IDs updated to the 2025 edition; the fork row of the trigger matrix no longer says a maintainer triggers a manual run, because that run exposes the parent's variables; the protected-variable statement was corrected to say the behaviour differs between GitLab versions; the masking limits and the job token allowlist were added; the GitLab documentation link now uses the current `/ci/` path. On 2026-11-24 the GitLab and OWASP pages above were re-read in full instead of through search excerpts.
 
 ### Not verified
 
 - The GitHub Actions workflow (triggers, per-job permissions, `gh pr comment --body-file`, the runner label) was not checked.
 - The GKE statements (ephemeral pod per job, no workload identity binding by default) and the Kubernetes hardening links were not checked against Kubernetes or GKE documentation.
 - The project access token roles and scopes used in the YAML (Reporter with `read_api` or `api`) and the `environment: action: access` setting were not checked; the note already tells readers to check them for their version.
-- The YAML was never run in GitLab. The documentation pages were reached through search excerpts only, because the lab's network policy blocked fetching them.
+- The YAML was never run in GitLab.
+- The earlier 17.9 wording on protected variables in merge request pipelines, the default of the 18.1 setting (the page states none), the `protect_merge_request_pipelines` name and the "on for new projects" statement from a planning epic, and the full list of `CI_PIPELINE_SOURCE` values: none of these is on the pages read.
 - The Model Context Protocol is not cited in this note.
 - Nothing was verified against a real environment.
 
@@ -308,4 +312,3 @@ This shows only that exact (lower-cased) matching rejects a subdomain trick and 
 - [[architecture/iam-groups-and-ci-workload-identity-federation]]: short-lived cloud access for CI instead of key files.
 - [[ai/ai-code-review-bots]]: the advisory review pattern that follows these rules.
 - [[ai/ai-generated-code-policy-and-provenance]]: the review and audit side of AI-written code.
-- [The owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

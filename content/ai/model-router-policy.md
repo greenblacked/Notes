@@ -8,9 +8,12 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
+
+> [!info] Scope
+> Which approved model serves a request in normal operation. What happens when a provider or endpoint fails is in [[model-provider-failover-and-routing]], and choosing the fallback model is in [[fallback-model-selection-and-quality-degradation]].
 
 A model router chooses which approved model or endpoint receives a request. This can improve cost, latency, regional availability or task quality, but dynamic routing can also silently change data handling, safety behavior, output format and operational dependency. Route using explicit policy and tested capabilities, not a model's self-assessment or an unbounded “cheapest available” rule. Keep model inventory and upgrade evaluations in [[model-version-pinning-and-upgrade-evals]].
 
@@ -54,6 +57,3 @@ Common mistakes include aliases resolving to new model versions without review; 
 ## Sources
 
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance and risk management; NIST reports that AI RMF 1.0 is being revised.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

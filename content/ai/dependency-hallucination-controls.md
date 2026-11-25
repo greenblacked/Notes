@@ -7,7 +7,7 @@ tags:
   - supply-chain
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -51,7 +51,8 @@ If identity is ambiguous or the package cannot be verified, do not install it. R
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[ai-agent-package-installation-risks]]: installing packages inside agent workflows.
+- [[ai-generated-code-policy-and-provenance]]: the team policy for AI-generated code.
 
 ## Sources
 

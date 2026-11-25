@@ -7,7 +7,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -47,8 +47,6 @@ On failure, preserve the source corpus and disable the graph retrieval arm rathe
 - Do deletion, update, backup and recovery processes remove derived graph data too?
 - Is graph-assisted performance compared against a strong text-only baseline?
 - Is there a permission-safe fallback or explicit abstention path?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

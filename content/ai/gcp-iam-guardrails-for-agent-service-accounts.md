@@ -8,7 +8,7 @@ tags:
   - security
   - audit
 created: 2026-10-19
-modified: 2026-11-24
+modified: 2026-11-25
 evidence: source-reviewed
 reviewed: 2026-10-20
 review-due: 2027-04-20
@@ -312,4 +312,3 @@ The other candidates in the list (changing IAM policies, deleting projects, disk
 - [[zero-trust-access-iap-and-vpc-service-controls]]: perimeters and access levels.
 - [[gcp-audit-logs-siem]]: sending audit logs to the SIEM.
 - [[ai-assisted-incident-response]]: read-only access for assistants during incidents.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

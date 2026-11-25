@@ -6,7 +6,7 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -14,8 +14,6 @@ review-due: 2027-05-02
 ---
 
 Just-in-time (JIT) credentials replace standing secrets with credentials issued for a defined task, principal, resource, and time window. They reduce the period in which a leaked token can be reused, but expiry alone does not make a credential least-privileged. An agent that can repeatedly mint broad credentials still has durable authority. This note focuses on credential lifecycle and issuance rather than general runner isolation, which is covered in [[ai/sandboxing-coding-agents-on-workstations-and-runners]].
-
-The owner’s [AI skills catalogue](https://ai.szolotov.com) provides reusable skills and workflows.
 
 ## Define issuance policy
 

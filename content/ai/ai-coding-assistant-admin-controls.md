@@ -8,7 +8,7 @@ tags:
   - audit
   - team-process
 created: 2026-10-19
-modified: 2026-11-02
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -149,7 +149,6 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the general control theme
 
 ## Sources
 
-- Your coding agent's own documentation for settings files, permissions, managed policy and admin controls.
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/), OWASP: excessive agency, sensitive information disclosure and supply chain entries.
 - [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2026-07-28), tool safety and user consent principles.
 
@@ -162,4 +161,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the general control theme
 - [[policy-exception-and-waiver-process]]: how exceptions are approved and expire.
 - [[open-source-license-compliance]]: licence questions about generated code and extensions.
 - [[audit-evidence-collection-and-retention]]: keeping the verification results.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

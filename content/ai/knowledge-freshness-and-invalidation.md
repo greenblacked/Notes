@@ -6,7 +6,7 @@ tags:
   - ai
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -42,8 +42,6 @@ Typical failures are dropped webhook events, token pagination limits, clock skew
 - Does stale serving require explicit approval and a user-visible indication?
 - Are tests included for missed events, out-of-order updates, deleted records and source outages?
 - Can a source owner confirm that the chosen freshness objective is appropriate to impact?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

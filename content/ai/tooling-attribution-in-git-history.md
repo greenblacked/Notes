@@ -8,7 +8,7 @@ tags:
   - audit
   - supply-chain
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -56,7 +56,7 @@ A CI job that scans every commit in the merge request cannot be skipped by the a
 attribution-policy:
   stage: test
   image:
-    name: alpine/git@sha256:REPLACE_WITH_DIGEST # pin the reviewed tag by digest
+    name: alpine/git@sha256:<digest> # pin the reviewed tag by digest
     entrypoint: [""] # the image's entrypoint is git; clear it so script: runs
   variables:
     GIT_DEPTH: "0"
@@ -169,5 +169,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: git trailer and hook mech
 - [SLSA v1.2: distributing provenance](https://slsa.dev/spec/v1.2/distributing-provenance): provenance attestations distributed with an artifact, supporting provenance kept outside the commit message.
 - [git-commit documentation](https://git-scm.com/docs/git-commit): `--trailer` and `--no-verify`.
 - [GitLab predefined CI/CD variables](https://docs.gitlab.com/ci/variables/predefined_variables/): the merge request variables used in the job.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

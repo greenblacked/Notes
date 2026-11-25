@@ -8,7 +8,7 @@ tags:
   - supply-chain
   - policy-as-code
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -97,7 +97,7 @@ Enforce the allowlist in CI so an unapproved server cannot reach shared configur
 ```yaml title=".gitlab-ci.yml"
 mcp-config-policy:
   stage: test
-  image: registry.example.com/ci/tools@sha256:REPLACE_WITH_DIGEST # bash, jq and yq
+  image: registry.example.com/ci/tools@sha256:<digest> # bash, jq and yq
   script:
     - ./scripts/check-mcp-config.sh agent-config/approved-mcp-servers.yaml .mcp.json
   rules:
@@ -183,5 +183,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the MCP specification cla
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) - indirect prompt injection, supply chain vetting of suppliers and signed or hashed artifacts, and excess agency from third-party extensions.
 - [OWASP: MCP tool poisoning](https://owasp.org/www-community/attacks/MCP_Tool_Poisoning) - tool poisoning defined as indirect prompt injection carried in tool metadata (could not be read; see Evidence).
 - [Trail of Bits: Jumping the line](https://blog.trailofbits.com/2025/04/21/jumping-the-line-how-mcp-servers-can-attack-you-before-you-ever-use-them/) - server-side behaviour that acts before a tool is invoked, supporting review before approval (could not be read; see Evidence).
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

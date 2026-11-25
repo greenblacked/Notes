@@ -6,7 +6,7 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -14,8 +14,6 @@ review-due: 2027-05-02
 ---
 
 Indirect prompt injection occurs when an application processes content an attacker or unrelated contributor can influence: a PDF, email, issue, source file, transcript, retrieved chunk, or ordinary record. It need not look like an “attack”; the key is lower-trust text entering a workflow where it may influence actions. This note addresses document ingestion, not the broader CI-agent controls in [[ai/prompt-injection-test-harness-for-ci-agents]].
-
-The owner’s [AI skills catalogue](https://ai.szolotov.com) provides reusable skills and workflows.
 
 ## Define authority before ingestion
 
@@ -71,7 +69,7 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the note's statements abo
 ### Not verified
 
 - NIST AI 600-1 and the OWASP Top 10 for Agentic Applications 2026 are listed under Sources but were not available locally; they are cited for context only and none of the note's claims depend on them.
-- The model provider documentation entry is generic; provider data retention and processing terms were not checked.
+- Provider data retention and processing terms were not checked.
 - MITRE ATLAS data for the indirect injection technique was not present in the local checkout.
 - Engineering guidance, not a documented claim: that delimiters and labels are not a security boundary by themselves (LLM01 only says to separate and denote untrusted content to limit its influence), ingestion metadata, deletion propagation, size and rate limits, parser isolation, safe handling of active content, fixture design, fail-closed testing and the incident evidence steps.
 - Nothing was run.
@@ -80,5 +78,4 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the note's statements abo
 
 - [NIST AI 600-1, Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): lifecycle risk management and information integrity context.
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): agent trust boundaries and action risks.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): LLM application risk taxonomy.

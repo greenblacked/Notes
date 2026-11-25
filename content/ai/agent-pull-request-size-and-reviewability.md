@@ -8,7 +8,7 @@ tags:
   - ci-cd
   - delivery
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -57,7 +57,8 @@ If a reviewer cannot form a reliable view of impact, the right next step is a sm
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[ai-code-review-bots]]: advisory review on merge requests.
+- [[ai-generated-code-policy-and-provenance]]: the team policy for AI-generated code.
 
 ## Evidence
 

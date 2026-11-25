@@ -8,7 +8,7 @@ tags:
   - cost
   - security
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -48,8 +48,6 @@ Test permission revocation and deletion while cached entries are hot, including 
 - Are TTLs, cache outage behavior, stampede controls and backing capacity tested?
 - Are cache values protected and logs free of sensitive content?
 - Can an operator disable or roll back a cache generation without broad permission changes?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -53,8 +53,6 @@ Review telemetry access controls separately from inference access. An operator w
 - Escalate to separate processes or hardware boundaries when logical controls do not meet the threat model.
 
 The main tradeoff is cost and utilization versus stronger isolation and reduced blast radius. Choose the least costly boundary that meets documented requirements, then prove it with tests rather than relying on a product label or namespace alone.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

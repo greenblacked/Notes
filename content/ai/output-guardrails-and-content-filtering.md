@@ -8,7 +8,7 @@ tags:
   - reliability
   - observability
 created: 2026-11-01
-modified: 2026-11-02
+modified: 2026-11-25
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -92,7 +92,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: scanner
-          image: registry.example.com/ai/output-guardrail:1.4.2
+          image: registry.example.com/ai/output-guardrail@sha256:<digest>
           ports:
             - containerPort: 8080
           resources:
@@ -167,7 +167,7 @@ With `set -e`, a guardrail that is unreachable or returns an HTTP error stops th
 ```yaml title=".gitlab-ci.yml"
 guardrail-adversarial:
   stage: test
-  image: registry.example.com/ci/tools:2.1.0
+  image: registry.example.com/ci/tools@sha256:<digest>
   script:
     - ./run-guardrail-cases.sh
   rules:
@@ -246,5 +246,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the OWASP, MCP, OpenTelem
 [^otel]: Attribute names and stability vary by version; check the registry for the version you pin.
 
 [^mcp]: The MUST covers annotations; the two SHOULDs cover tool invocations generally.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

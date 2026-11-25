@@ -8,7 +8,7 @@ tags:
   - reliability
   - team-process
 created: 2026-11-01
-modified: 2026-11-02
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -96,7 +96,7 @@ spec:
       type: RuntimeDefault
   containers:
     - name: agent
-      image: registry.example.com/agents/runner@sha256:REPLACE_WITH_DIGEST
+      image: registry.example.com/agents/runner@sha256:<digest>
       resources:
         requests:
           cpu: 250m
@@ -124,9 +124,9 @@ Run the cases in CI on changes to a prompt template, model pin or retrieval inde
 ```yaml
 agent-regression:
   stage: test
-  image: python:3.12-slim
+  image: python@sha256:<digest> # change: the Python 3.12 slim image you have reviewed, pinned by digest
   script:
-    - pip install -r evals/requirements.txt
+    - pip install --require-hashes --no-cache-dir -r evals/requirements.txt # change: a requirements file with a hash for every package
     - python evals/run.py --suite incident-regressions --fail-on-forbidden-tool-call
   rules:
     # Merge request pipelines: CI_COMMIT_BRANCH is not set there, so match on the pipeline source
@@ -203,5 +203,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the MCP, OpenTelemetry Ge
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) for the governance, measurement and monitoring framing. Not read; see Not verified.
 - [OWASP Top 10 for LLM Applications 2025: LLM06 Excessive Agency](https://github.com/OWASP/www-project-top-10-for-large-language-model-applications/blob/99f4395/2_0_vulns/LLM06_ExcessiveAgency.md) for the excessive-agency framing behind the authorization checks.
 - [OpenTelemetry GenAI client inference conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/client-inference.md) and [span conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-spans.md) for the request and response model attributes and opt-in content capture (Development status).
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

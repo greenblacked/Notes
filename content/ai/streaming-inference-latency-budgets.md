@@ -8,7 +8,7 @@ tags:
   - observability
   - opentelemetry
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -61,8 +61,6 @@ Avoid optimizing the first-token measure by emitting non-informative filler. Tha
 
 The tradeoff is between fast initial response, full completion time, reliability under congestion, and the cost of continuing generation. A clear budget allows the team to decide which requests to queue, reject, truncate, or move to asynchronous processing.
 
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
-
 ## Evidence
 
 ### Sources checked
@@ -83,7 +81,6 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Generative AI semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai): current dedicated repository for OpenTelemetry GenAI conventions; use its maintained definitions rather than older docs pages, which may have moved.
 - [Engine Arguments - vLLM](https://docs.vllm.ai/en/latest/configuration/engine_args/): serving-engine configuration. Engine timing instrumentation is implementation-specific; check the current docs for your version.
 - [Metrics - vLLM](https://docs.vllm.ai/en/latest/design/metrics/): queue, prefill, decode, first-token and inter-token latency histograms for one serving engine.

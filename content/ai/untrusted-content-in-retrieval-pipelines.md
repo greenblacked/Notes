@@ -6,7 +6,7 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -47,9 +47,6 @@ If suspicious behavior occurs, stop or disable the affected action path, preserv
 - Are model, prompt, parser, source and tool changes included in regression runs?
 - Is there a response path for suspected manipulation that preserves evidence safely?
 
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
-
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): OWASP 2026 framework page, canonical URL confirmed by live fetch; use as risk guidance rather than a guarantee or exhaustive control catalog.

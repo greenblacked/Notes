@@ -8,9 +8,12 @@ tags:
   - reliability
   - security
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
+
+> [!info] Scope
+> Route changes when a provider, region or endpoint is unhealthy. The steady-state selection policy is in [[model-router-policy]]; quality limits for the fallback model are in [[fallback-model-selection-and-quality-degradation]].
 
 ## Failover is a semantic change
 
@@ -56,9 +59,6 @@ Keep routing policy simple enough to understand during an incident. A complex sc
 
 Failover trades availability against behavioral consistency and governance. Choose the accepted degradation explicitly. If no route preserves mandatory controls, fail safely and communicate the limitation rather than silently relaxing policy.
 
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
-
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Quotas for Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html): Amazon Bedrock quota documentation; quotas vary by account, model, and region.

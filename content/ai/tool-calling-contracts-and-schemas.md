@@ -7,7 +7,7 @@ tags:
   - security
   - reliability
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -57,7 +57,4 @@ Danger signs include generic passthrough tools; schema-only enforcement; descrip
 
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) — peer-reviewed agentic application risk framework; use as a starting point, not a substitute for authorization design.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

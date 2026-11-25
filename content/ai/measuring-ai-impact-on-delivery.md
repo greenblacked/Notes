@@ -8,7 +8,7 @@ tags:
   - team-process
   - observability
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
@@ -111,4 +111,3 @@ Review it **quarterly** with the engineering leads, as part of the regular engin
 - [[ai-code-review-bots]]: review-side effects to watch.
 - [[quarterly-engineering-review]]: where the dashboard is reviewed.
 - [[change-freezes-and-maintenance-windows]]: a common confounder.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

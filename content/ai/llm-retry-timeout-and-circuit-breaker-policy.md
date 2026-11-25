@@ -7,7 +7,7 @@ tags:
   - reliability
   - runbooks
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -48,8 +48,6 @@ Load-test transient failures, slow responses, partial streams, quota pressure, a
 - Test slow, failed, partially delivered, and recovering dependencies.
 
 The policy must be reviewed when provider behavior, client libraries, or streaming contracts change. Do not use retries to conceal persistent capacity or quality failures. See [[llm-observability-tracing-and-slos]] for instrumentation of model and tool calls.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

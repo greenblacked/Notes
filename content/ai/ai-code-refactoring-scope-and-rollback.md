@@ -8,7 +8,7 @@ tags:
   - delivery
   - ci-cd
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -52,7 +52,8 @@ If not, narrow the task or split it into independently reviewable changes. Do no
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[ai-assisted-test-generation-quality-gates]]: tests that prove behaviour is preserved.
+- [[agent-pull-request-size-and-reviewability]]: keeping agent changes reviewable.
 
 ## Sources
 

@@ -8,11 +8,8 @@ tags:
   - policy-as-code
   - audit
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-25
 draft: false
-evidence: source-reviewed
-reviewed: 2026-11-02
-review-due: 2027-05-02
 ---
 
 This note covers the allow, ask and deny rules a coding agent checks before it runs a shell command, touches a file or calls an MCP tool: scoping, precedence and wildcards, reviewing rule changes, and auditing auto-approvals. It is for engineers who own agent configuration in shared repositories. It does not cover OS-level isolation ([[sandboxing-coding-agents-on-workstations-and-runners]]), egress filtering ([[agent-network-egress-controls]]), hook scripts ([[deterministic-hooks-for-coding-agents]]), vetting a server before you trust it ([[third-party-mcp-server-vetting]]) or organisation-wide managed policy ([[ai-coding-assistant-admin-controls]]). The wider model of what an agent may be authorised to do is in [[agent-tool-authorization-boundaries]].
@@ -95,7 +92,7 @@ Treat each new `allow` line like an access-grant diff. Add the settings files to
 ```yaml title=".gitlab-ci.yml"
 agent-permissions-lint:
   stage: test
-  image: node:22-alpine # pin to a digest in real pipelines
+  image: node@sha256:<digest> # change: the Node.js 22 image you have reviewed, pinned by digest
   script:
     - node scripts/lint-agent-permissions.mjs .agent/settings.json .mcp.json
   rules:
@@ -153,7 +150,7 @@ Set expectations in [[team-norms-for-ai-assisted-engineering]]: who may add rule
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the general design claims, the Git force-push spellings, the GitLab CI example and the contrast with Kubernetes RBAC; coding-agent rule syntax is not covered.
+No evidence level is claimed. A review on 2026-11-02 checked the Git, GitLab, Kubernetes RBAC, MCP and OWASP statements under Sources checked, but no coding agent's rule syntax, precedence or matching behaviour could be checked, and the main example depends on them. Nothing was run.
 
 ### Sources checked
 
@@ -169,18 +166,15 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the general design claims
 - Every coding-agent rule behaviour: evaluation order, wildcard and trailing-wildcard matching, compound-command and environment-assignment handling, file-deny coverage of shell commands, symlinks, bare-tool-name denies, the `mcp__<server>__<tool>` form and the settings file layout. Also unchecked: whether and where "do not ask again" choices are saved, whether a tool has a permissions view that lists every rule, and whether it warns about unknown rule names at startup. The agent's own documentation was not available; the note presents these as things to confirm per tool.
 - That other authorisation systems pick the most specific rule: not checked.
 - NIST SP 800-53 Rev. 5 controls AC-5 and AC-6: not available locally.
-- CODEOWNERS behaviour and the `node:22-alpine` image tag: not checked.
+- CODEOWNERS behaviour and the Node.js image you pin: not checked.
 - Engineering guidance, not documented claims: scoped file layout, review and audit routines, the lint rules, and the rule-design pitfalls.
 - Nothing was run.
 
 ## Sources
 
-- Your coding agent's own documentation for rule syntax, precedence, wildcard matching, compound commands, MCP rules and OS-level sandboxing. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [NIST SP 800-53 Rev. 5](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final) — the least-privilege control (AC-6) and separation of duties (AC-5) used as the policy frame.
 - [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) — an allow-only authorisation model, as a contrast to deny-first precedence.
 - [git-push](https://git-scm.com/docs/git-push) — force-push spellings.
 - [GitLab job rules](https://docs.gitlab.com/ci/jobs/job_rules/) — the CI rules used in the lint job.
 - [MCP tools specification](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) — human in the loop for tool calls.
 - [OWASP LLM06:2025 Excessive Agency](https://genai.owasp.org/llm-top-10/) — least privilege and approval for agent actions.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

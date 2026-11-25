@@ -9,7 +9,7 @@ tags:
   - cost
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -53,8 +53,6 @@ Do not set cache utilization as high as possible without testing. A small remain
 - Revalidate after model, tokenizer, runtime, hardware, or cache-policy changes.
 
 The main tradeoff is predictable: larger contexts and more concurrent sessions improve flexibility but consume cache and reduce the number of requests that fit. Paging can improve allocation efficiency; it does not make memory infinite or eliminate service-level admission policy.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

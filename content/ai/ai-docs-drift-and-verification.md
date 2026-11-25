@@ -7,7 +7,7 @@ tags:
   - reliability
   - ci-cd
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-25
 draft: false
 ---
 
@@ -28,6 +28,42 @@ Classify content before editing: API reference, configuration example, architect
 7. **Close the loop.** Review the rendered page, not just markdown, and record any intentionally unverified assumptions. Schedule revalidation when a provider version, service contract, or operational procedure changes.
 
 Repository instruction files can help agents find the right docs, but they do not make the docs correct. See [[repository-context-packaging-for-coding-agents]] for ways to provide source paths and distinguish policy from examples.
+
+## Worked example: a claim map and a drift gate
+
+A claim map for a short change to a runbook, kept in the merge request description:
+
+| Claim in the draft                                | Source of truth                       | Checked by                |
+| ------------------------------------------------- | ------------------------------------- | ------------------------- |
+| `--timeout` defaults to 30 seconds                | `cmd/flags.go` at the merged commit   | Reviewer read the code    |
+| The restore step needs the `backup-operator` role | IAM module in the infrastructure repo | Owner confirmed in review |
+| The example config validates                      | `docs/examples/restore.yaml`          | CI job `docs-examples`    |
+
+For generated reference pages, regenerate in CI and fail when the committed copy differs. This sketch was not run; the generator script and paths are yours to replace.
+
+```yaml title=".gitlab-ci.yml"
+docs-drift:
+  stage: test
+  image: registry.example.com/ci/docs-toolbox@sha256:<digest> # change: an image with your doc generator, pinned by digest
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - api/**/*
+        - docs/reference/**/*
+        - scripts/gen-reference-docs.sh
+  script:
+    - ./scripts/gen-reference-docs.sh docs/reference
+    - |
+      if [ -n "$(git status --porcelain --ignored -- docs/reference)" ]; then
+        git status --porcelain --ignored -- docs/reference
+        echo "docs/reference is out of date: run scripts/gen-reference-docs.sh and commit the result" >&2
+        exit 1
+      fi
+```
+
+`git status --porcelain` also catches new files that the generator created and nobody committed, which `git diff --exit-code` misses; `--ignored` adds files under ignored paths, which plain `git status` hides, so the job also fails on an ignored cache that the generator legitimately writes under `docs/reference`: write that cache elsewhere or delete it before the check.
+
+The generator script comes from the merge request, so this job runs code the change under review controls. Give it no extra variables or deploy credentials, and do not run it on a runner or in a pipeline type that receives protected variables. GitLab always gives the job a job token, so keep that token's access to a short allowlist (see [[securing-ai-agents-in-ci-and-cloud]]).
 
 ## Failure modes and response
 
@@ -51,9 +87,9 @@ For low-risk conceptual prose, normal peer review may suffice. For security, dat
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[repository-context-packaging-for-coding-agents]]: source paths and instruction files for agents.
+- [[agent-done-criteria-and-verification]]: verification evidence in agent reports.
 
 ## Sources
 
 - [NIST SP 800-218, Secure Software Development Framework (SSDF) Version 1.1](https://csrc.nist.gov/pubs/sp/800/218/final): review and verification practices for software artifacts.
-- Your coding agent's own documentation for how the assistant reads and updates repository documentation. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.

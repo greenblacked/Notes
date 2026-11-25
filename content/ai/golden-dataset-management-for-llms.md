@@ -7,7 +7,7 @@ tags:
   - audit
   - reliability
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -60,8 +60,6 @@ Common failures include leakage of holdout answers into prompts; revision of rub
 - Does a change note explain additions, corrections and retirements?
 - Can a reviewer reproduce the release without exposing private raw data?
 
-The owner's agent skills and workflows are listed in [the AI skills catalogue](https://ai.szolotov.com).
-
 ## Evidence
 
 Source-reviewed on 2026-11-02. Nothing was run. Scope: the note is almost entirely engineering guidance on dataset governance; only the sensitive-data handling points could be compared with local sources.
@@ -78,11 +76,9 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the note is almost entire
 - The NIST AI RMF Playbook and NIST AI 600-1 listed under Sources, including the statement that AI RMF 1.0 is being updated: NIST publications were not reachable. The Sources entries are kept as pointers only.
 - The Git sources support only object naming by content hash and the difficulty of removing sensitive files from history; hashing canonical serialized records and manifests and attaching the hash to reports is the note's own engineering guidance.
 - General guidance (release manifest fields, immutable-release practice, holdout separation, coverage and duplicate diagnostics, synthetic versus human-written trade-offs, retirement of stale examples, the review checklist) is engineering guidance, not a documented claim.
-- The provider documentation entry in Sources is generic and was not checked.
 - Nothing was run.
 
 ## Sources
 
 - [NIST AI RMF Playbook (AI RMF 1.0 (January 2023); page notes it is being updated, accessed 2026-10-26)](https://airc.nist.gov/airmf-resources/playbook/): governance, measurement and documentation practices; the linked page states AI RMF 1.0 is being updated and the Playbook will follow revision (accessed 2026-10-26).
 - [Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile (NIST AI 600-1; July 2024)](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): risks and lifecycle considerations for generative AI evaluation and data.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).

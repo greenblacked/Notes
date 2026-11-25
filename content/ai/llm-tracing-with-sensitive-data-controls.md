@@ -7,7 +7,7 @@ tags:
   - observability
   - security
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -48,8 +48,6 @@ Make trace quality observable too. Track missing model identifiers, malformed sp
 
 If an incident indicates sensitive content reached telemetry, preserve enough metadata to investigate while following the organization's incident and privacy process. Do not independently alter retention or erase records during an investigation without the evidence owner and approved procedure. For privacy or jurisdictional obligations, engineering guidance is not legal advice; involve the organization's privacy and legal owners.
 
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
-
 ## Evidence
 
 ### Sources checked
@@ -72,4 +70,3 @@ The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com)
 
 - [GitHub: OpenTelemetry GenAI Semantic Conventions](https://github.com/open-telemetry/semantic-conventions-genai): current repository for evolving GenAI span attributes.
 - [OpenTelemetry Trace API](https://opentelemetry.io/docs/specs/otel/trace/api/): trace, span, and context model.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).

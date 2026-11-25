@@ -7,7 +7,7 @@ tags:
   - audit
   - reliability
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -50,10 +50,7 @@ Double-labeling every item raises cost; sampling a portion controls cost but req
 - Are unresolved ambiguities represented rather than forced into labels?
 - Are policy questions escalated to the right owner?
 
-The owner's agent skills and workflows are listed in [the AI skills catalogue](https://ai.szolotov.com).
-
 ## Sources
 
 - [NIST AI RMF Playbook (AI RMF 1.0 (January 2023); page notes it is being updated, accessed 2026-10-26)](https://airc.nist.gov/airmf-resources/playbook/): measurement uncertainty, documentation and ongoing monitoring; the linked page states AI RMF 1.0 is being updated (accessed 2026-10-26).
 - [Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile (NIST AI 600-1; July 2024)](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): evaluating and documenting generative AI system risks.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).

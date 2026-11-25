@@ -8,7 +8,7 @@ tags:
   - reliability
   - ci-cd
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -38,7 +38,7 @@ The model reviewer is never the only gate for something a tool can check. Run, i
 stages: [build, test, scan, agent-review]
 
 default:
-  image: registry.example.com/ci/agent-runner@sha256:REPLACE_WITH_DIGEST # change: your image, pinned by digest
+  image: registry.example.com/ci/agent-runner@sha256:<digest> # change: your image, pinned by digest
 
 unit-tests:
   stage: test
@@ -169,8 +169,5 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the CI variables and rule
 
 ## Sources
 
-- Your coding agent's own documentation for subagents with their own context and tool allowlists. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance framing for deciding where model output needs independent checks and human sign-off.
 - [LLM Evaluators Recognize and Favor Their Own Generations](https://arxiv.org/abs/2404.13076) — reported self-preference in model evaluators; results vary by task, so verify on your own outputs.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

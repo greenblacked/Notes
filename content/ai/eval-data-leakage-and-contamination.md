@@ -7,7 +7,7 @@ tags:
   - audit
   - security
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -50,10 +50,7 @@ Common failures include random splitting of correlated examples, use of the test
 - Is there a fresh holdout and policy for repeated peeking?
 - Can affected results be qualified and rerun after a leak?
 
-The owner's agent skills and workflows are listed in [the AI skills catalogue](https://ai.szolotov.com).
-
 ## Sources
 
 - [NIST AI RMF Playbook (AI RMF 1.0 (January 2023); page notes it is being updated, accessed 2026-10-26)](https://airc.nist.gov/airmf-resources/playbook/): data governance, documentation and ongoing risk management; the linked page states AI RMF 1.0 is being updated (accessed 2026-10-26).
 - [Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile (NIST AI 600-1; July 2024)](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): risks involving training data, evaluation and information integrity.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).

@@ -8,7 +8,7 @@ tags:
   - incident-management
   - audit
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -71,7 +71,6 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the OpenTelemetry GenAI t
 
 - The claim that the old OpenTelemetry documentation page is no longer maintained was removed; the local website docs have no GenAI page to confirm it.
 - The NIST AI 600-1 and AI RMF pages, and the OWASP Top 10 for Agentic Applications 2026 page, are listed in Sources but were not available locally and were not read.
-- The owner's skills catalogue link was not checked.
 - Hashing, chain of custody, legal hold, retention, redaction, clock-skew handling, minimization and timeline practice are engineering and incident-response guidance, not claims from a checked source.
 - Nothing was run.
 
@@ -82,4 +81,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the OpenTelemetry GenAI t
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): excessive agency, logging and human approval of high-impact actions.
 - [OpenTelemetry GenAI semantic conventions repository](https://github.com/open-telemetry/semantic-conventions-genai): current location of evolving GenAI telemetry conventions.
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): agent security risks relevant to evidence planning.
-- [Owner’s AI skills catalogue](https://ai.szolotov.com): reusable AI skills and workflows.

@@ -8,7 +8,7 @@ tags:
   - supply-chain
   - audit
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -205,5 +205,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the LLM-risk guidance, Gi
 - [NIST SP 800-40 Rev. 4](https://doi.org/10.6028/NIST.SP.800-40r4): enterprise patch management planning and risk-based prioritisation (not read).
 - [Protected branches API | GitLab](https://docs.gitlab.com/api/protected_branches/): code owner approval setting.
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): prompt injection, excessive agency, sensitive information disclosure and misinformation.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

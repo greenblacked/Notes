@@ -7,9 +7,12 @@ tags:
   - security
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
+
+> [!info] Scope
+> Step 4 of 4: plan an authorized exercise that tests the controls chosen in [[ai-system-threat-modeling]]. Scope and stop conditions follow the tier from [[ai-system-risk-classification]] and the affected groups from [[ai-impact-assessment-for-engineering-systems]].
 
 A defensive AI red-team exercise tests whether an organization’s safeguards prevent, detect, and contain failures in a system it owns or is explicitly authorized to assess. It is not a license to probe public services, attack third parties, or collect real credentials. The goal is to find control gaps safely and create actionable fixes. This planning guide complements the repeatable CI prompt-injection harness in [[ai/prompt-injection-test-harness-for-ci-agents]] by covering governance, scope, and exercise design.
 
@@ -54,10 +57,15 @@ Track fixes to closure and retest the failed boundary. Add safe regression fixtu
 - Are findings assigned to owners with retest and regression plans?
 - Are framework/catalog versions and residual uncertainties recorded?
 
+## Related
+
+- [[ai-system-risk-classification]]: step 1, the risk tier.
+- [[ai-impact-assessment-for-engineering-systems]]: step 2, who is affected and how.
+- [[ai-system-threat-modeling]]: step 3, attack paths and controls.
+
 ## Sources
 
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): AI RMF 1.0 risk-management functions and revision status.
 - [NIST AI 600-1, Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): GenAI-specific risks and risk-management practices.
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): risk categories for agentic systems.
 - [MITRE ATLAS](https://atlas.mitre.org/): AI-system tactics and techniques for organizing defensive exercises.
-- [Owner’s AI skills catalogue](https://ai.szolotov.com): reusable AI skills and workflows.

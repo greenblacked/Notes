@@ -7,7 +7,7 @@ tags:
   - reliability
   - ci-cd
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -48,10 +48,7 @@ A strict regression gate protects stable behavior but can block beneficial upgra
 - Is shadow/canary handling privacy-approved and representative?
 - Can the service return to the prior known configuration promptly?
 
-The owner's agent skills and workflows are listed in [the AI skills catalogue](https://ai.szolotov.com).
-
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [NIST AI RMF Playbook (AI RMF 1.0 (January 2023); page notes it is being updated, accessed 2026-10-26)](https://airc.nist.gov/airmf-resources/playbook/): measuring, monitoring and governing AI system changes; the linked page states AI RMF 1.0 is being updated (accessed 2026-10-26).
 - [Gen AI evaluation service overview (Google Cloud documentation accessed 2026-10-26)](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/evaluation-overview): evaluation metrics and model assessment approaches.

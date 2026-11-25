@@ -8,7 +8,7 @@ tags:
   - security
   - ci-cd
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -52,7 +52,8 @@ Defer the change if the rollback path is unclear, critical data invariants are u
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[validating-generated-sql-before-execution]]: checks for generated SQL.
+- [[validating-ai-generated-infrastructure-code]]: the same ladder for infrastructure code.
 
 ## Sources
 
