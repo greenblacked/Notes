@@ -8,7 +8,7 @@ tags:
   - gcp
   - ci-cd
 created: 2026-10-19
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -205,11 +205,12 @@ set +e
 terraform plan -detailed-exitcode -lock-timeout=60s
 rc=$?
 set -e
-echo "plan exit=${rc}"
 # Undo: gcloud storage cp "${STATE}#${LIVE_GEN}" "$STATE"
+echo "plan exit=${rc}"
+exit "${rc}"   # 0 or 2 is a result to read; 1 is an error
 ```
 
-Unfreeze only after the plan is understood. Full recovery cases are in [[terraform-state-recovery]].
+Unfreeze only after the plan is understood. The copy in `${BACKUP_DIR}` holds the live state, which can contain secrets: delete it once the rollback is signed off (the replaced generation stays in the bucket as a noncurrent version). The overwrite is not conditional on the generation just recorded, so keep the freeze until the plan is read; a conditional copy (an if-generation-match option in `gcloud storage cp`) was not checked against the current reference. Full recovery cases are in [[terraform-state-recovery]].
 
 ## When to choose which
 

@@ -8,7 +8,7 @@ tags:
   - jenkins
   - ci-cd
 created: 2026-10-16
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -50,10 +50,10 @@ stages: [build, test, deploy]
 
 .docker-build:
   stage: build
-  # Pin by digest: resolve the exact versions you tested, e.g. `crane digest docker:<version>-cli`.
-  image: docker:cli@sha256:<digest>
+  # Pin by digest: resolve the exact versions you tested, e.g. `crane digest docker:<version>-cli` and `crane digest docker:<version>-dind`.
+  image: docker:<version>-cli@sha256:<digest>
   services:
-    - name: docker:dind@sha256:<digest> # needs a privileged runner; a rootless builder is the alternative
+    - name: docker:<version>-dind@sha256:<digest> # needs a privileged runner; a rootless builder is the alternative
       alias: docker
   variables:
     DOCKER_HOST: tcp://docker:2376
@@ -61,7 +61,7 @@ stages: [build, test, deploy]
     DOCKER_TLS_VERIFY: "1"
     DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
 
-# Merge request pipelines build but never push: unreviewed code cannot publish to the registry.
+# Merge request pipelines build but do not push.
 build-mr:
   extends: .docker-build
   script:
@@ -80,7 +80,11 @@ build-push:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"
 ```
 
-Replace each `<digest>` with the digest of the image version you tested; it is not a literal.
+Replace each `<version>` and `<digest>` with the image version you tested and its digest; they are not literals.
+
+The TLS settings only work if the job and the Docker-in-Docker service share `/certs/client`: with the Kubernetes executor the runner must mount an emptyDir at `/certs/client`, and with the Docker executor `/certs/client` must be listed in the runner's volumes, as the Docker-in-Docker page describes. Without it the job fails to connect rather than falling back to an insecure connection. This was not run here.
+
+The merge request job does not push, but a merge request pipeline uses the `.gitlab-ci.yml` of the merge request branch, so its author could add a push job, and `CI_REGISTRY_PASSWORD` is available to every job. Enforcing the rule needs a registry-side control (container registry protection rules or protected tags; check what your GitLab version and tier offer), not this file alone.
 
 ## Plugins versus built-ins
 

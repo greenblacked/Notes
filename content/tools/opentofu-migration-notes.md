@@ -9,7 +9,7 @@ tags:
   - ci-cd
   - reliability
 created: 2026-10-19
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -127,7 +127,7 @@ tofu apply migrate.tfplan   # applies only the saved plan, no new prompt
 rm -f migrate.tfplan        # a saved plan can hold sensitive values
 ```
 
-**Gate 5:** the apply succeeds, `tofu plan -detailed-exitcode` exits 0 afterwards, and the state's `terraform_version` field now reflects the new tool. List generations again with `gcloud storage ls -a "${STATE}"` and confirm a new generation appeared.
+**Gate 5:** the apply succeeds, `tofu plan -detailed-exitcode` exits 0 afterwards, and the state's `terraform_version` field now reflects the new tool. List generations again with `gcloud storage ls -a "${STATE}"` and confirm a new generation appeared. If none appeared after a no-op apply (the backend may skip a write when the state content is unchanged; not confirmed), apply the tiny reviewed label change instead, then re-check this gate.
 
 ### Step 6: Switch the pipeline for this workspace only
 

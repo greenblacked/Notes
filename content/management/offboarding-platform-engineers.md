@@ -10,7 +10,7 @@ tags:
   - gcp
   - gitlab-ci
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -106,8 +106,10 @@ echo "project,service_account,key_id,created,expires,disabled" > "$OUT"
 for p in "${PROJECTS[@]}"; do
   gcloud iam service-accounts list --project="$p" --format="value(email)" |
     while read -r sa; do
+      # `disabled` field name not verified: compare one row with the default table output.
+      # < /dev/null keeps gcloud from reading the account list if it prompts.
       gcloud iam service-accounts keys list --iam-account="$sa" --managed-by=user \
-        --format="csv[no-heading](name.basename(),validAfterTime,validBeforeTime,disabled)" |
+        --format="csv[no-heading](name.basename(),validAfterTime,validBeforeTime,disabled)" < /dev/null |
         sed "s|^|${p},${sa},|"
     done
 done >> "$OUT"
