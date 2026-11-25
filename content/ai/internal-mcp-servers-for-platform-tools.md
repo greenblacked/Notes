@@ -9,7 +9,7 @@ tags:
   - observability
   - audit
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -68,6 +68,7 @@ The server-side half, independent of any SDK. It re-checks every limit the schem
 
 ```python title="promql_tool.py"
 """Validation and execution for the promql_query_range tool (standard library only)."""
+import http.client
 import json
 import logging
 import re
@@ -173,7 +174,7 @@ def run(args: dict) -> dict:
                 error_type = ""
             raise ToolError(f"query rejected: {error_type if ERROR_TYPE.fullmatch(error_type) else 'unknown'}") from None
         raise ToolError("upstream unavailable") from None
-    except (urllib.error.URLError, OSError, ValueError) as exc:  # connection, timeout, invalid JSON
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as exc:  # connection, timeout, invalid JSON, truncated or malformed HTTP
         log.warning("prometheus call failed: %s", exc)
         raise ToolError("upstream unavailable") from None
     if not isinstance(payload, dict) or payload.get("status") != "success":

@@ -9,7 +9,7 @@ tags:
   - security
   - audit
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -203,7 +203,7 @@ spec:
   automountServiceAccountToken: false
   containers:
     - name: agent
-      image: example.com/platform/troubleshoot-agent@sha256:0000000000000000000000000000000000000000000000000000000000000000 # change: your agent image, pinned by digest
+      image: example.com/platform/troubleshoot-agent@sha256:<digest> # change: your agent image, pinned by digest
       volumeMounts:
         - name: kube-api-token
           mountPath: /var/run/secrets/kubernetes.io/serviceaccount

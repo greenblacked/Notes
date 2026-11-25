@@ -9,7 +9,7 @@ tags:
   - policy-as-code
   - ci-cd
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -323,7 +323,7 @@ for f in "${failures[@]}"; do echo " - $f"; done
 ```yaml title="ci/validate-ladder.gitlab-ci.yml (illustrative, not run in a pipeline)"
 validate-ladder:
   stage: test
-  image: registry.example.com/platform/iac-toolbox@sha256:0000000000000000000000000000000000000000000000000000000000000000 # change: your toolbox image digest
+  image: registry.example.com/platform/iac-toolbox@sha256:<digest> # change: your toolbox image digest
   variables:
     K8S_VERSION: "" # change: set to the target Kubernetes version; the ladder script fails while it is empty
   script:

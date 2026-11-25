@@ -8,7 +8,7 @@ tags:
   - incident-management
   - on-call
 created: 2026-10-27
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -124,7 +124,7 @@ Add a lint check in CI so that the model cannot drop a warning when it rewrites 
 runbook-lint:
   stage: test
   # Any pinned image with find and awk; pin by digest, never a moving tag.
-  image: registry.example.com/ci/base:1.8.0@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  image: registry.example.com/ci/base:1.8.0@sha256:<digest>
   script:
     - |
       find runbooks -name '*.md' -exec awk '

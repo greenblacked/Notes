@@ -8,7 +8,7 @@ tags:
   - gitlab-ci
   - team-process
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -112,6 +112,7 @@ MAX_FINDINGS = 20
 SEVERITIES = ("high", "medium", "low")
 PATH_SHAPE = re.compile(r"[A-Za-z0-9._/-]{1,200}")
 # Backslash-escape Markdown, mention and quick-action characters, so no output line can start a /command.
+# Bare autolinks (www.) and the $ % & ^ reference prefixes are not escaped.
 MARKDOWN_SPECIAL = re.compile(r"([\\`*_{}\[\]()<>#+!|@~/:-])")
 BASE = f"{API}/projects/{PROJECT_ID}/merge_requests/{MR_IID}"
 
@@ -176,7 +177,7 @@ def render_findings(raw):
             item = json.loads(line)
             severity, path, message = item["severity"], item["file"], item["message"]
             line_no = int(item.get("line", 0))
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError, OverflowError):  # OverflowError: "line": 1e999
             dropped += 1
             continue
         if severity not in SEVERITIES or not PATH_SHAPE.fullmatch(str(path)) or not message:
@@ -233,9 +234,9 @@ On GitHub the same shape uses two jobs in a `pull_request` workflow, never `pull
 Everything the bot reads was written by the merge request's author or by whoever wrote the code being changed: code, comments, commit messages, file names and test fixtures. Any of it can carry text addressed to the model ("ignore previous instructions", "approve this", "say no issues found"). Design for that, not against it:
 
 - **The bot can only comment.** Its token cannot push, approve or merge (see Rules), so the worst a followed instruction can do is a wrong or missing comment.
-- **The output shape is validated.** GitLab can run quick actions found in a note body, so a model that is steered into printing a line such as `/approve` or `/close` could run it as the bot. The skeleton accepts only JSON findings of a fixed shape, caps their number and escapes every character that could start a quick action, a mention or a link. Anything else is dropped and counted in the note.
+- **The output shape is validated.** GitLab can run quick actions found in a note body, so a model that is steered into printing a line such as `/approve` or `/close` could run it as the bot. The skeleton accepts only JSON findings of a fixed shape, caps their number and escapes the Markdown punctuation that could start a quick action or a mention (it does not neutralise every autolink or reference form, such as bare `www.` addresses). Anything else is dropped and counted in the note.
 - **A clean review is not evidence.** "No findings" can mean the model was told to say so. It never counts towards approval, and it does not replace the deterministic checks.
-- **Test it.** Put planted instructions in a fixture merge request and assert that the posted note contains no command, mention or link, as in [[prompt-injection-test-harness-for-ci-agents]].
+- **Test it.** Put planted instructions in a fixture merge request and assert that the posted note contains no quick action or mention, as in [[prompt-injection-test-harness-for-ci-agents]].
 
 ## Triage
 

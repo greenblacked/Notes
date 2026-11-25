@@ -8,7 +8,7 @@ tags:
   - audit
   - team-process
 created: 2026-10-27
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -80,7 +80,7 @@ set -Eeuo pipefail
 event="$(cat)"
 tool="$(jq -r '.tool_name // "unknown"' <<<"$event")"
 cmd_hmac="$(jq -j '.tool_input.command // ""' <<<"$event" \
-  | python3 -I -c 'import hashlib, hmac, sys; key = open(sys.argv[1], "rb").read().strip(); print(hmac.new(key, sys.stdin.buffer.read(), digestmod=hashlib.sha256).hexdigest())' "$AUDIT_HMAC_KEY_FILE")"
+  | python3 -I -c 'import hashlib, hmac, sys; key = open(sys.argv[1], "rb").read().strip(); len(key) >= 32 or sys.exit("audit key missing or too short"); print(hmac.new(key, sys.stdin.buffer.read(), digestmod=hashlib.sha256).hexdigest())' "$AUDIT_HMAC_KEY_FILE")"
 
 jq -nc \
   --arg ts "$(date -u +%FT%TZ)" \

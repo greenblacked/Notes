@@ -9,7 +9,7 @@ tags:
   - on-call
   - gcp
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 destructive: true
 evidence: source-reviewed
@@ -133,17 +133,17 @@ set -euo pipefail
 # 1. Stop the controller first, or it scales the agent back up from Git.
 case "$GITOPS_TOOL" in
   argocd)
-    kubectl --context="$K8S_CONTEXT" -n "$ARGOCD_NS" get application "$GITOPS_APP" -o json \
+    kubectl --context="$K8S_CONTEXT" -n "$ARGOCD_NS" get applications.argoproj.io "$GITOPS_APP" -o json \
       > "evidence/$INCIDENT/gitops-before.json"
     argocd app set "$GITOPS_APP" --sync-policy none
-    [[ -z "$(kubectl --context="$K8S_CONTEXT" -n "$ARGOCD_NS" get application "$GITOPS_APP" -o jsonpath='{.spec.syncPolicy.automated}')" ]] \
+    [[ -z "$(kubectl --context="$K8S_CONTEXT" -n "$ARGOCD_NS" get applications.argoproj.io "$GITOPS_APP" -o jsonpath='{.spec.syncPolicy.automated}')" ]] \
       || { echo "Application $GITOPS_APP still has automated sync; stop here" >&2; exit 1; }
     ;;
   flux)
-    kubectl --context="$K8S_CONTEXT" -n "$GITOPS_NS" get kustomization "$GITOPS_APP" -o json \
+    kubectl --context="$K8S_CONTEXT" -n "$GITOPS_NS" get kustomizations.kustomize.toolkit.fluxcd.io "$GITOPS_APP" -o json \
       > "evidence/$INCIDENT/gitops-before.json"
     flux --context="$K8S_CONTEXT" suspend kustomization "$GITOPS_APP" -n "$GITOPS_NS"
-    [[ "$(kubectl --context="$K8S_CONTEXT" -n "$GITOPS_NS" get kustomization "$GITOPS_APP" -o jsonpath='{.spec.suspend}')" == "true" ]] \
+    [[ "$(kubectl --context="$K8S_CONTEXT" -n "$GITOPS_NS" get kustomizations.kustomize.toolkit.fluxcd.io "$GITOPS_APP" -o jsonpath='{.spec.suspend}')" == "true" ]] \
       || { echo "Kustomization $GITOPS_APP is not suspended; stop here" >&2; exit 1; }
     ;;
   none) echo "no GitOps controller declared for the agent; confirm that with the platform owner" >&2 ;;
@@ -481,7 +481,7 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the Kubernetes, GitLab, G
 - Terraform: the local copy has no documentation, so the `plan` flags (`-detailed-exitcode`, `-lock=false`, `-input=false`, `-chdir`) and exit codes were not checked; the HashiCorp page was not read on 2026-11-24 either.
 - Kubernetes: that a ServiceAccount subject without a namespace in a RoleBinding means the binding's namespace (the RBAC page was not found to state it).
 - GitLab: that a revoked token returns 401, the exact behaviour of the 429 limit on other endpoints, and the CI/GitOps sync-suspend commands (`flux suspend`, `argocd app set`), which belong to other tools.
-- The `flux --context` global flag, the Argo CD Application field path `.spec.syncPolicy.automated` read with kubectl, `argocd app set --self-heal` and `--auto-prune`, and the Flux `.spec.suspend` behaviour: none was read on 2026-11-24. The containment script itself was syntax-checked only.
+- The `flux --context` global flag, the Argo CD Application field path `.spec.syncPolicy.automated` read with kubectl, `argocd app set --self-heal` and `--auto-prune`, and the Flux `.spec.suspend` behaviour: none was read on 2026-11-24. The fully qualified resource names `applications.argoproj.io` and `kustomizations.kustomize.toolkit.fluxcd.io` were not checked against the CRDs of a live cluster. The containment script itself was syntax-checked only.
 - Your gateway's kill switch, audit log and fields; GitLab edition-specific audit events.
 - Engineering guidance, not a documented claim: the stop, contain, preserve, measure, revert, recover order, severity starting points, roles, evidence handling, and the postmortem questions.
 

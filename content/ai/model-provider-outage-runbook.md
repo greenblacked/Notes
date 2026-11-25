@@ -8,7 +8,7 @@ tags:
   - reliability
   - incident-management
 created: 2026-10-26
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -103,7 +103,7 @@ Unrated. The procedure is operating practice and has not been run. The checks be
 
 ### Not verified
 
-- The three entries under Sources (two provider quota pages and one article on timeouts, retries and backoff) are vendor websites that were not reachable. The statements about provider quota behaviour, quota scope and retry amplification attributed to them are unchecked. Their stated page titles, URLs and descriptions are unchecked as well.
+- The three entries under Sources (two provider quota pages and one article on timeouts, retries and backoff) were not read. The Vertex AI quota URL was seen only as the target of a 301 redirect from the old address on 2026-11-24 and its content was not read; the other two pages were not reached. The statements about provider quota behaviour, quota scope and retry amplification attributed to them are unchecked, and so are their stated page titles and descriptions.
 - Whether any given provider supports idempotency keys, and how provider status pages and quota responses behave; the text only says "where supported".
 - The incident process (roles, snapshot contents, communication cadence, rollback conditions, operator checklist) is general engineering guidance, not a documented claim.
 - The PromQL queries and thresholds were not run; the metric names come from this site's gateway design, not a product.

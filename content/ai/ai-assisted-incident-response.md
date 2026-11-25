@@ -8,7 +8,7 @@ tags:
   - on-call
   - kubernetes
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -71,17 +71,26 @@ The canonical manifests are in [[kubernetes-rbac-for-ai-agents]]. That note defi
 Check what the account can and cannot do before the first incident:
 
 ```bash
-set -euo pipefail
+set -uo pipefail   # no -e: "kubectl auth can-i" exits 1 when the answer is "no"
 
 NAMESPACE="shop"  # change: a namespace the agent is bound in
 SA="system:serviceaccount:ai-agents:agent-reader"   # the canonical agent identity
+fail=0
 
-kubectl auth can-i list pods -n "$NAMESPACE" --as "$SA"          # expect: yes
-kubectl auth can-i get secrets -n "$NAMESPACE" --as "$SA"        # expect: no
-kubectl auth can-i create pods --subresource=exec -n "$NAMESPACE" --as "$SA" # expect: no
-kubectl auth can-i get pods --subresource=log -n "$NAMESPACE" --as "$SA"      # expect: no
-kubectl auth can-i list secrets -n "$NAMESPACE" --as "$SA"                    # expect: no
-kubectl auth can-i delete deployments -n "$NAMESPACE" --as "$SA" # expect: no
+# expect WANT VERB...: run can-i, compare the printed answer, and keep going after a mismatch.
+expect() {
+  local want=$1 got; shift
+  got="$(kubectl auth can-i "$@" -n "$NAMESPACE" --as "$SA" 2>/dev/null || true)"
+  [[ "$got" == "$want" ]] || { echo "FAIL: can-i $* -> '$got' (want $want)" >&2; fail=1; }
+}
+
+expect yes list pods
+expect no get secrets
+expect no create pods --subresource=exec
+expect no get pods --subresource=log
+expect no list secrets
+expect no delete deployments
+exit "$fail"
 ```
 
 ### Evidence bundle script
