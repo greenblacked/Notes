@@ -7,7 +7,7 @@ tags:
   - gcp
   - security
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -485,7 +485,7 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
 
    > [!warning] Check before relying on this
    >
-   > On 2026-11-24 the current major version of `hashicorp/google` was 8 (v8.9.0, released 27 October 2026, per the provider's GitHub releases page), and the 7.0 and 8.0 upgrade guides list no breaking change for `google_service_account`. Check the Registry for the major version when you run this, and read the upgrade guide when you change majors. `terraform` was not run for this exercise.
+   > On 2026-11-24 the current major version of `hashicorp/google` was 8, and the 7.0 and 8.0 upgrade guides list no breaking change for `google_service_account`. Check the Registry for the major version when you run this, and read the upgrade guide when you change majors. `terraform` was not run for this exercise.
 
 10. **Clean up.** Remove the grant, the bucket, the service account and the local files.
 

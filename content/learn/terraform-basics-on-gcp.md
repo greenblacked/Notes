@@ -10,7 +10,7 @@ tags:
   - security
   - cost
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -84,7 +84,7 @@ terraform {
 `required_version` limits which Terraform binaries may run the code. `version = "~> 8.0"` means "8.0 or newer, but below 9.0": the last number may go up, the major version may not. Major versions can contain breaking changes, so you choose when to move.
 
 > [!warning] Check before relying on this
-> On 2026-11-24 the current major was 8 (v8.9.0, 27 October 2026; the 7.x line still gets patch releases). The 7.0 upgrade guide changes only `retention_period` (number to string) on `google_storage_bucket`, which this lesson does not use, and the 8.0 guide does not mention the resources used here. Before you rely on it, check the Registry for a newer major, run `terraform validate`, and read the upgrade guide for any major you skip.
+> On 2026-11-24 the current major was 8 (the 7.x line still gets patch releases). The 7.0 upgrade guide changes only `retention_period` (number to string) on `google_storage_bucket`, which this lesson does not use, and the 8.0 guide does not mention the resources used here. Before you rely on it, check the Registry for a newer major, run `terraform validate`, and read the upgrade guide for any major you skip.
 
 ## Authenticate without a key file
 
