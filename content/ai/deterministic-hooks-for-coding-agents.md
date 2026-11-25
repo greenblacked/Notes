@@ -47,9 +47,10 @@ trap 'deny "guard error (failing closed)"' ERR
 
 input=$(cat)
 cmd=$(printf '%s' "$input" | jq -er '.tool_input.command')
-# Normalise before matching: drop quotes and backslashes, squeeze whitespace, pad with spaces.
-# This catches rm -rf "/" and r\m -rf /; it cannot see through variables, aliases or decoding.
-norm=" $(printf '%s' "$cmd" | tr -d "\"'\\\\" | tr -s '[:space:]' ' ') "
+# Normalise before matching: drop quotes and backslashes, put spaces around shell operators,
+# squeeze whitespace, pad with spaces. This catches rm -rf "/", r\m -rf / and cat .env;true;
+# it cannot see through variables, aliases or decoding.
+norm=" $(printf '%s' "$cmd" | tr -d "\"'\\\\" | sed -E 's/[;|&<>()`]+/ & /g' | tr -s '[:space:]' ' ') "
 
 # Regexes live in variables: bash parses them reliably that way.
 re_nested='(^| |;|&|\|)(sh|bash|zsh|dash) -c |(^| |;)eval |base64 (-d|--decode)|\| ?(sh|bash|zsh|dash) '
@@ -59,7 +60,7 @@ re_rm=' rm '
 re_rm_rec=' (-[a-zA-Z]*[rR][a-zA-Z]*|--recursive) '
 re_rm_target=' (/|/\*|~|~/|~/\*|\$HOME|\$HOME/|\$HOME/\*|\.\.|\.\./|\.\./\*|--no-preserve-root) '
 re_tf=' terraform( -[^ ]+)* (apply|destroy) '
-re_tfplan='\.tfplan '
+re_tfplan='[ /]([^ ]*\.)?tfplan '
 re_secret='[ /](\.env(\.[A-Za-z0-9_-]+)?|[^ ]*\.pem|id_rsa|id_ed25519|\.kube/config) '
 
 [[ "$norm" =~ $re_nested ]] && deny "nested shell or decoded command"
@@ -163,6 +164,10 @@ fail=0
 must_block=(
   'cat .env'
   'cat ".env"'
+  'cat .env; true'
+  'echo $(cat .env)'
+  'cat .env|base64'
+  'cat .env>out'
   'git push --force origin main'
   'git push -f origin main'
   'git -C ../repo push --force origin main'
@@ -174,6 +179,7 @@ must_block=(
   'rm -fr /'
   'rm -r -f /'
   'rm -rf "/"'
+  'rm -rf /; true'
   'rm --recursive --force ~'
   'r\m -rf /'
   'bash -c "git push --force"'
@@ -186,6 +192,7 @@ must_allow=(
   'git status'
   'rm -rf ./build'
   'terraform apply plan.tfplan'
+  'terraform apply -input=false tfplan'
   'ls -la'
 )
 for c in "${must_block[@]}"; do
@@ -251,11 +258,12 @@ Source-reviewed on 2026-11-02. Nothing was run, apart from a helper check on 202
 - The GitLab `stage: test` default and `image:` digest pinning in the CI job were not located in the local GitLab docs subset.
 - Secret scanner choice and bypass patterns of regex guards are engineering guidance, not documented claims.
 - The guard is a text guard; the bypasses listed under the canaries are known holes, not tested limits.
+- The guard's `sed -E` step ran with GNU sed on Linux only; BSD sed on macOS was not run. Shell operators are padded with spaces, so a command that hides the token from the matcher by other means (variables, aliases, encoded text) still passes.
 - Nothing else was run: the post-tool hook and the CI job were not executed.
 
 ### Lab run
 
-A helper check, not the note's main procedure (the guard was not run inside any agent harness). Host: Ubuntu 24.04.5 LTS, Linux 6.18.44-fc-v819. Versions as printed: `GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)`, `jq-1.7`. Date: 2026-11-24. The guard and `ci/guard-canaries.sh` exactly as shown in this note, with the guard at `.agent/hooks/guard-bash.sh`:
+A helper check, not the note's main procedure (the guard was not run inside any agent harness). Host: Ubuntu 24.04.5 LTS, Linux 6.18.44-fc-v880. Versions as printed: `GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)`, `jq-1.7`. Date: 2026-11-24. The guard and `ci/guard-canaries.sh` exactly as shown in this note, with the guard at `.agent/hooks/guard-bash.sh`:
 
 ```bash
 bash ci/guard-canaries.sh; echo "exit=$?"
@@ -267,7 +275,7 @@ exit=0
 exit=0
 ```
 
-The second command shows the documented hole: a push through a variable is not blocked.
+The first command runs every `must_block` and `must_allow` line, including the operator spellings (`cat .env; true`, `echo $(cat .env)`, `cat .env|base64`, `cat .env>out`, `rm -rf /; true`) and the saved-plan spelling `terraform apply -input=false tfplan`. The second command shows the documented hole: a push through a variable is not blocked.
 
 ## Sources
 
