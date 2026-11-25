@@ -8,7 +8,7 @@ tags:
   - audit
   - team-process
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -129,6 +129,8 @@ PROJECT_ID = os.environ["CI_PROJECT_ID"]
 MR_IID = os.environ["CI_MERGE_REQUEST_IID"]
 TOKEN = os.environ["POLICY_CHECK_TOKEN"]  # read_api project access token (Reporter role, expiry set)
 MIN_HUMAN_APPROVALS = int(os.environ.get("MIN_HUMAN_APPROVALS", "1"))
+if MIN_HUMAN_APPROVALS < 1:  # a zero or negative value would pass with no approval
+    sys.exit("MIN_HUMAN_APPROVALS must be at least 1")
 # Usernames of agent and bot accounts, maintained by the platform team in the policy project,
 # not in the merge request. Their approvals never count.
 AGENT_USERNAMES = {u.strip() for u in os.environ.get("AGENT_USERNAMES", "").split(",") if u.strip()}

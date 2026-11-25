@@ -75,7 +75,8 @@ set -Eeuo pipefail
 
 # Reads one JSON event on stdin and appends a minimal audit line.
 # Stores a keyed hash (HMAC-SHA256) of the command, not the command text. The key lives in a
-# file outside the log store, readable only by the audit writer; its path is the only argument.
+# file outside the log store, mode 0600; its path is the only argument. If this hook runs as the agent's
+# user, the agent can read that file too: use a separate uid for the writer where that matters.
 # The key file holds at least 32 bytes, for example from `openssl rand -hex 32`; a shorter key makes the hash step exit non-zero.
 : "${AUDIT_HMAC_KEY_FILE:?set AUDIT_HMAC_KEY_FILE to the HMAC key file}"
 event="$(cat)"
@@ -93,7 +94,7 @@ jq -nc \
   >>"${AUDIT_FILE:-reports/agent-audit.jsonl}"
 ```
 
-The event field names above are an assumption for illustration. Check the payload your tool actually sends. A keyed hash lets you prove that a known command ran without storing it; keep the plain command only where policy allows. Recompute the HMAC of the candidate command with the same key and compare with `hmac.compare_digest`. A plain SHA-256 of a short or predictable command can be reversed by guessing; without the key, the HMAC cannot. The key never appears in an argument list or in the log, and rotating it means old lines can only be checked with the old key, so keep retired keys with the retention of the audit log.
+The event field names above are an assumption for illustration. Check the payload your tool actually sends. A keyed hash lets you prove that a known command ran without storing it; keep the plain command only where policy allows. Recompute the HMAC of the candidate command with the same key and compare with `hmac.compare_digest`. A plain SHA-256 of a short or predictable command can be reversed by guessing; without the key, the HMAC cannot. The key never appears in an argument list or in the log. This protects command text from people who can read the log store; it does not protect the audit trail from the agent. The hook runs as the same user as the agent, so the agent's shell tool can read the key file, append its own lines or truncate the audit file. For tamper evidence, ship each line to a store the agent's user cannot write to, or have a separate uid or service write it. Rotating the key means old lines can only be checked with the old key, so keep retired keys with the retention of the audit log.
 
 ## Sharing a transcript is an external disclosure
 

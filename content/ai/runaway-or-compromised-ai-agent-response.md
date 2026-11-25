@@ -75,6 +75,8 @@ export BOT_USER="agent-review-bot"                                  # change: th
 export GITOPS_TOOL="argocd"                                         # change: argocd, flux, or none if no controller deploys the agent
 export GITOPS_APP="ai-agent"                                        # change: the Argo CD Application or Flux Kustomization
 export ARGOCD_NS="argocd"                                           # change: where Argo CD Application objects live
+export ARGOCD_K8S_CONTEXT="${ARGOCD_K8S_CONTEXT:-$K8S_CONTEXT}"     # change: the cluster that holds the Application objects (a management cluster, if Argo CD runs there)
+export ARGOCD_SERVER="${ARGOCD_SERVER:-}"                           # change: the Argo CD server address, required when GITOPS_TOOL is argocd
 export GITOPS_NS="flux-system"                                      # change: the Flux Kustomization's namespace
 mkdir -p "evidence/$INCIDENT"
 printf 'Operator GitLab token: '; read -rs GL_TOKEN; echo; export GL_TOKEN
@@ -133,10 +135,11 @@ set -euo pipefail
 # 1. Stop the controller first, or it scales the agent back up from Git.
 case "$GITOPS_TOOL" in
   argocd)
-    kubectl --context="$K8S_CONTEXT" -n "$ARGOCD_NS" get applications.argoproj.io "$GITOPS_APP" -o json \
+    : "${ARGOCD_SERVER:?set ARGOCD_SERVER so argocd acts on the intended server}"
+    kubectl --context="$ARGOCD_K8S_CONTEXT" -n "$ARGOCD_NS" get applications.argoproj.io "$GITOPS_APP" -o json \
       > "evidence/$INCIDENT/gitops-before.json"
-    argocd app set "$GITOPS_APP" --sync-policy none
-    [[ -z "$(kubectl --context="$K8S_CONTEXT" -n "$ARGOCD_NS" get applications.argoproj.io "$GITOPS_APP" -o jsonpath='{.spec.syncPolicy.automated}')" ]] \
+    argocd --server "$ARGOCD_SERVER" app set "$GITOPS_APP" --sync-policy none
+    [[ -z "$(kubectl --context="$ARGOCD_K8S_CONTEXT" -n "$ARGOCD_NS" get applications.argoproj.io "$GITOPS_APP" -o jsonpath='{.spec.syncPolicy.automated}')" ]] \
       || { echo "Application $GITOPS_APP still has automated sync; stop here" >&2; exit 1; }
     ;;
   flux)
@@ -168,8 +171,8 @@ done
 
 - **Expected:** the suspend check passes (the script stops if the controller is still syncing), then one `scaled` line per workload and one `patched` line per CronJob. Pods terminate gracefully within their `terminationGracePeriodSeconds`; the Deployments stay.
 - **Verify:** `kubectl --context="$K8S_CONTEXT" -n "$AGENT_NS" get pods -l "$AGENT_SELECTOR"` returns no pods after the grace period, and stays empty for a few minutes.
-- **Watch out:** the script suspends the GitOps sync first and stops if it did not take. `argocd app set` talks to the Argo CD server, so log in with an operator account before the incident. If a parent object manages the agent's Application or Kustomization (an app-of-apps with automated sync and self-heal, or a parent Flux Kustomization), it can re-apply the sync policy and undo the suspend: suspend the parent first, or the whole tree, and run the suspend check again after scaling. Also check whether an HPA or another controller targets the workload. The HPA page documents that an HPA stops adjusting a target whose replicas you set to 0 while its `minReplicas` is above 0, until you scale the target up again; check the HPA page for your version.
-- **Rollback:** scale each workload back to the count recorded in `workloads-before.json`, and set `suspend` back to `false` (step 6). Then restore the sync policy recorded in `gitops-before.json`: `argocd app set "$GITOPS_APP" --sync-policy automated`, adding `--self-heal` and `--auto-prune` only if they were set before; or `flux resume kustomization "$GITOPS_APP" -n "$GITOPS_NS"`.
+- **Watch out:** the script suspends the GitOps sync first and stops if it did not take. `argocd app set` talks to the Argo CD server, so log in with an operator account before the incident. If the suspend step fails (a wrong server, an expired login), do not skip it: log in again, or patch the Application with `kubectl --context="$ARGOCD_K8S_CONTEXT"` to remove `.spec.syncPolicy.automated`, then run the check again before scaling. If a parent object manages the agent's Application or Kustomization (an app-of-apps with automated sync and self-heal, or a parent Flux Kustomization), it can re-apply the sync policy and undo the suspend: suspend the parent first, or the whole tree, and run the suspend check again after scaling. Also check whether an HPA or another controller targets the workload. The HPA page documents that an HPA stops adjusting a target whose replicas you set to 0 while its `minReplicas` is above 0, until you scale the target up again; check the HPA page for your version.
+- **Rollback:** scale each workload back to the count recorded in `workloads-before.json`, and set `suspend` back to `false` (step 6). Then restore the sync policy recorded in `gitops-before.json`: `argocd --server "$ARGOCD_SERVER" app set "$GITOPS_APP" --sync-policy automated`, adding `--self-heal` and `--auto-prune` only if they were set before; or `flux resume kustomization "$GITOPS_APP" -n "$GITOPS_NS"`.
 
 If you need the pods' memory or local files as evidence (an agent that may have written secrets to disk), copy what you need before scaling, as in the evidence section of [[compromised-cloud-cluster-containment]]; scaling to zero loses `emptyDir` data and process state.
 
@@ -481,7 +484,7 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the Kubernetes, GitLab, G
 - Terraform: the local copy has no documentation, so the `plan` flags (`-detailed-exitcode`, `-lock=false`, `-input=false`, `-chdir`) and exit codes were not checked; the HashiCorp page was not read on 2026-11-24 either.
 - Kubernetes: that a ServiceAccount subject without a namespace in a RoleBinding means the binding's namespace (the RBAC page was not found to state it).
 - GitLab: that a revoked token returns 401, the exact behaviour of the 429 limit on other endpoints, and the CI/GitOps sync-suspend commands (`flux suspend`, `argocd app set`), which belong to other tools.
-- The `flux --context` global flag, the Argo CD Application field path `.spec.syncPolicy.automated` read with kubectl, `argocd app set --self-heal` and `--auto-prune`, and the Flux `.spec.suspend` behaviour: none was read on 2026-11-24. The fully qualified resource names `applications.argoproj.io` and `kustomizations.kustomize.toolkit.fluxcd.io` were not checked against the CRDs of a live cluster. The containment script itself was syntax-checked only.
+- The `flux --context` global flag, the Argo CD Application field path `.spec.syncPolicy.automated` read with kubectl, `argocd app set --self-heal` and `--auto-prune`, the `argocd --server` global flag (check `argocd --help` for your version), and the Flux `.spec.suspend` behaviour: none was read on 2026-11-24. The fully qualified resource names `applications.argoproj.io` and `kustomizations.kustomize.toolkit.fluxcd.io` were not checked against the CRDs of a live cluster. The containment script itself was syntax-checked only.
 - Your gateway's kill switch, audit log and fields; GitLab edition-specific audit events.
 - Engineering guidance, not a documented claim: the stop, contain, preserve, measure, revert, recover order, severity starting points, roles, evidence handling, and the postmortem questions.
 

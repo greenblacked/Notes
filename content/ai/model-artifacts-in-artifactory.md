@@ -8,7 +8,7 @@ tags:
   - supply-chain
   - security
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -151,7 +151,7 @@ TEXT_EXT = {".json", ".txt", ".md"}  # .model (SentencePiece) is binary protobuf
 PICKLE_EXT = {".bin", ".pt", ".pth", ".pkl", ".pickle", ".ckpt"}
 MAX_HEADER = 100 * 1024 * 1024  # refuse absurd header sizes before reading them
 # Keys that make a loader import Python code from the model repository (custom model classes).
-CODE_KEYS = {"auto_map"}  # change: add any other key your loader uses to import repository code
+CODE_KEYS = {"auto_map"}  # change: add any other key your loader uses to import repository code (check your loader's documentation; `custom_pipelines` is a candidate that was not confirmed)
 
 
 def check_safetensors(path):
@@ -449,7 +449,7 @@ Source-reviewed on 2026-11-02. Nothing was run apart from a helper check of `che
 - PyTorch checkpoint format and the safetensors recommendation that libraries require safetensors: not checked.
 - GKE and Google Cloud egress behaviour in the serving and egress sections: not checked here.
 - Engineering guidance, not documented claims: repository layout, promotion flow, retention policy, rollback steps and the failure-mode list.
-- That `auto_map` is the only configuration key that makes a loader import repository code, that `trust_remote_code` is needed to load it, and that it defaults to off in every loader and serving engine you use. The Transformers custom-model pages were not read on 2026-11-24.
+- Whether `custom_pipelines` or any other configuration key also names repository code: not confirmed against the loader's documentation on 2026-11-25, so the gate does not check it. That `auto_map` is the only configuration key that makes a loader import repository code, that `trust_remote_code` is needed to load it, and that it defaults to off in every loader and serving engine you use. The Transformers custom-model pages were not read on 2026-11-24.
 - Nothing else was run: `check_weights.py` with the `auto_map` check passed the five fixtures in `test_check_weights.py` on 2026-11-24 with Python 3.13.18; the other scripts, the manifest and the pipeline are illustrations.
 
 ## Sources
