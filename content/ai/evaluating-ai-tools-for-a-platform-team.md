@@ -141,7 +141,6 @@ trap cleanup EXIT
 # (concurrent = 1) or give each job its own uid; a second job on the same uid would be killed.
 work="$("${as_tool[@]}" mktemp -d)"
 tool_home="$("${as_tool[@]}" mktemp -d)"
-check_home="$("${as_tool[@]}" mktemp -d)"
 repo_url="$(cat "$HARNESS/tasks/${TASK_ID}/repo-url")"
 start_commit="$(cat "$HARNESS/tasks/${TASK_ID}/start-commit")"
 [[ "$start_commit" =~ ^[0-9a-f]{7,64}$ ]] || { echo "invalid start-commit for $TASK_ID" >&2; exit 2; }
@@ -159,9 +158,6 @@ tool_env=(
   LLM_GATEWAY_URL="$LLM_GATEWAY_URL"
   LLM_GATEWAY_KEY_FILE="$LLM_GATEWAY_KEY_FILE"
 )
-# The checks get their own empty HOME, so nothing the tool wrote there is read by the check step.
-check_env=(PATH=/usr/local/bin:/usr/bin:/bin HOME="$check_home" LANG=C.UTF-8)
-
 # Run a command inside the work directory, as the tool user. The directory is mode 0700 and owned
 # by that user, so the cd has to happen in the tool user's process, not in the job shell.
 # Exit status 97 means the harness could not enter the directory: a harness fault, not a tool failure.
@@ -232,6 +228,11 @@ if [[ "$tool_rc" -eq 97 ]]; then echo "harness fault: could not enter the work d
 tool_seconds=$(( $(date +%s) - started ))
 stop_tool_processes || exit 1
 
+# The checks get their own empty HOME, created only now: the tool shares this uid, so a directory
+# made before the tool step could already have been read or filled by the tool.
+check_home="$("${as_tool[@]}" mktemp -d)"
+check_env=(PATH=/usr/local/bin:/usr/bin:/bin HOME="$check_home" LANG=C.UTF-8)
+
 # change: fetch-check is your command that pulls the check script from outside the job workspace; it runs only after the tool step.
 fetch-check "$TASK_ID" > "$HARNESS/check.sh"
 # The checks run the tool's code, so they get the same empty environment.
@@ -246,7 +247,7 @@ jq -cn --arg tool "$TOOL" --arg task "$TASK_ID" --arg tests "$tests" \
 # The EXIT trap stops leftover processes and removes the three directories, on every exit path.
 ```
 
-The `tasks/` directory holds only `repo-url`, `start-commit` and `prompt.txt` while the tool runs. Keep known-good diffs and check scripts out of the job workspace: the script fetches the check only after the tool step. The tool works in a clone outside the harness checkout, and both the tool and the checks run as a separate unprivileged user under `env -i` with an explicit allowlist, so `CI_JOB_TOKEN` and the project variables are not in their environment. `env -i` alone is not enough: it empties only the tool's own environment, while the job shell's environment block, token and project variables included, stays readable through `/proc/<ancestor>/environ` by any process with the same uid, and `unset` in the parent does not change it. Yama `ptrace_scope=1` does not stop that read. So the adapter runs as a different uid, or in a separate job or container that never receives `CI_JOB_TOKEN`. Three canaries fail the run if the token is still reachable from the tool's environment, from files, or from `/proc/*/environ`. The file and `/proc` canaries each have a positive control that plants a known value and must find it, so a canary that cannot fire stops the run. The file canary reads its pattern from stdin because `sudo` closes descriptors above stderr, and the `/proc` canary does not let `cat`'s exit status decide the result. The adapter name and task name are checked against a fixed shape before they reach a path, and the clone URL is passed after `--` so it cannot be read as an option. After the tool step the harness kills every process of the tool user and the check step gets its own empty `HOME`; an `EXIT` trap does the same and removes the directories when a canary stops the run early. `timeout` alone stops only the adapter's main process. The `cd` into the work directory happens inside the tool user's process, because the directory is private to that user, and `results.jsonl` records the tool's exit status so a tool that never started is not scored as a failed task. The job token stays valid while the job runs. File-type CI/CD variables are written to a temporary file that the variable points to, and any process running as the job user can read that file, which the separate user also covers when the file is not group-readable. So define no file-type variables for this job other than the gateway key, and give the gateway key its own narrow budget ([[llm-api-cost-control]]). If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
+The `tasks/` directory holds only `repo-url`, `start-commit` and `prompt.txt` while the tool runs. Keep known-good diffs and check scripts out of the job workspace: the script fetches the check only after the tool step. The tool works in a clone outside the harness checkout, and both the tool and the checks run as a separate unprivileged user under `env -i` with an explicit allowlist, so `CI_JOB_TOKEN` and the project variables are not in their environment. `env -i` alone is not enough: it empties only the tool's own environment, while the job shell's environment block, token and project variables included, stays readable through `/proc/<ancestor>/environ` by any process with the same uid, and `unset` in the parent does not change it. Yama `ptrace_scope=1` does not stop that read. So the adapter runs as a different uid, or in a separate job or container that never receives `CI_JOB_TOKEN`. Three canaries fail the run if the token is still reachable from the tool's environment, from files, or from `/proc/*/environ`. The file and `/proc` canaries each have a positive control that plants a known value and must find it, so a canary that cannot fire stops the run. The file canary reads its pattern from stdin because `sudo` closes descriptors above stderr, and the `/proc` canary does not let `cat`'s exit status decide the result. The adapter name and task name are checked against a fixed shape before they reach a path, and the clone URL is passed after `--` so it cannot be read as an option. After the tool step the harness kills every process of the tool user and the check step gets its own empty `HOME`, created only after those processes are gone; an `EXIT` trap does the same and removes the directories when a canary stops the run early. `timeout` alone stops only the adapter's main process. The `cd` into the work directory happens inside the tool user's process, because the directory is private to that user, and `results.jsonl` records the tool's exit status so a tool that never started is not scored as a failed task. The job token stays valid while the job runs. File-type CI/CD variables are written to a temporary file that the variable points to, and any process running as the job user can read that file, which the separate user also covers when the file is not group-readable. So define no file-type variables for this job other than the gateway key, and give the gateway key its own narrow budget ([[llm-api-cost-control]]). If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
 
 Each adapter is a thin script that feeds the prompt to the tool non-interactively; write them once and review them like production code.
 
