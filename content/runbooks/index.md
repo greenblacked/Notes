@@ -71,7 +71,7 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 - [[cloud-sql-point-in-time-recovery|Recover from a bad data change with Cloud SQL point-in-time recovery]]: stop the damage, pin the timestamp, clone the PostgreSQL instance to just before the bad change, verify it, then repair rows or cut over.
 - [[gcs-deleted-object-recovery|Restore deleted or overwritten Cloud Storage objects]]: stop the cause, check soft delete and versioning, then restore deleted or overwritten objects or a deleted bucket with gcloud storage, and prove it.
 - [[alert-fired-but-nobody-was-paged|An alert fired but nobody was paged]]: trace a missed page hop by hop from the Prometheus rule through Alertmanager routing, silences and inhibition to the receiver, then prove the path end to end.
-- [[postgres-lock-queue-triage|Postgres lock queue triage]]: find the head of a blocking chain, cancel the session that restores service without losing a transaction, then remove the holder for good. Lab-tested, from [[postgres-lock-queue-lab]].
+- [[postgres-lock-queue-triage|Postgres lock queue triage]]: find the head of a blocking chain, cancel the session that restores service without losing a transaction, then remove the holder for good. Lab-tested with a narrower step 2 query than the one printed, from [[postgres-lock-queue-lab]].
 
 ## AI and inference
 
