@@ -68,11 +68,14 @@ APP=invoice-summarizer
 Put each token in a header file that only you can read, so it never appears in the `curl` argument list (visible to other local users and process accounting). `printf` is a shell builtin, so the token is not on a command line either. The header file form needs curl 7.55 or newer. Skip the files for tokens you do not have:
 
 ```bash
-umask 077
+OLD_UMASK=$(umask); umask 077
 AUTH_DIR=$(mktemp -d)
-printf 'Authorization: Bearer %s\n' "$LLM_GATEWAY_TOKEN" > "$AUTH_DIR/gateway.hdr"
-printf 'Authorization: Bearer %s\n' "$LLM_GATEWAY_ADMIN_TOKEN" > "$AUTH_DIR/admin.hdr"
+[ -n "${LLM_GATEWAY_TOKEN:-}" ] && printf 'Authorization: Bearer %s\n' "$LLM_GATEWAY_TOKEN" > "$AUTH_DIR/gateway.hdr"
+[ -n "${LLM_GATEWAY_ADMIN_TOKEN:-}" ] && printf 'Authorization: Bearer %s\n' "$LLM_GATEWAY_ADMIN_TOKEN" > "$AUTH_DIR/admin.hdr"
+umask "$OLD_UMASK"
 ```
+
+The files stay on disk until you delete them. Run the cleanup at the end of this note even if you abandon the incident early.
 
 The helper runs an instant PromQL query and prints one line per series.
 

@@ -39,7 +39,7 @@ Day-to-day publishing of notes needs none of this: merging to `main` deploys sta
   export CLOUDFLARE_ACCOUNT_ID='<account-id>'   # change: the account that owns the Worker
   ```
 
-  Then read the token in a block of its own. The cursor waits silently for the token, so paste nothing else with it. Use a token scoped to this Worker, with an expiry:
+  Then read the token in a block of its own. The cursor waits silently for the token, so paste nothing else with it. Use a token with only the permissions listed in `docs/deployment.md`, limited to this account and zone, with an expiry:
 
   ```bash
   read -rs CLOUDFLARE_API_TOKEN && export CLOUDFLARE_API_TOKEN

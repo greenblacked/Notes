@@ -94,7 +94,7 @@ WHERE datname = current_database()
 ORDER BY pid;
 ```
 
-The lab did not run this exact query. If it fails with a column error on your version, drop `wait_event` and `xact_age`; the narrower form in Lab run was the one that ran. Expected shape, from the lab. The lab output comes from a narrower query (no `wait_event` or `xact_age` columns, query text aliased `q`), see Lab run:
+The lab did not run this exact query. If it fails, drop `wait_event` and `xact_age`. Expected shape, from the lab: the lab output comes from a narrower query (no `wait_event` or `xact_age` columns, query text aliased `q`), see Lab run:
 
 ```text
  pid |        state        | wait_event_type | blocked_by |                    q
