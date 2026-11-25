@@ -38,9 +38,14 @@ Version constraints say which release you want. They do not prove the package yo
 ```bash title="update-locks.sh"
 #!/usr/bin/env bash
 set -euo pipefail
-# Run from a root module. An empty CLI config means no mirror: hashes come from the origin registry.
-EMPTY_CFG="$(mktemp)"; trap 'rm -f "$EMPTY_CFG"' EXIT
-export TF_CLI_CONFIG_FILE="$EMPTY_CFG"
+# Run from a root module. The temporary CLI config installs directly from the origin registry, so hashes
+# come from the origin. An empty file would not do: Terraform would still use implied local mirror
+# directories such as ~/.terraform.d/plugins.
+unset TF_PLUGIN_CACHE_DIR
+umask 077
+ORIGIN_CFG="$(mktemp)"; trap 'rm -f -- "$ORIGIN_CFG"' EXIT
+printf 'provider_installation {\n  direct {}\n}\n' > "$ORIGIN_CFG"
+export TF_CLI_CONFIG_FILE="$ORIGIN_CFG"
 terraform init -backend=false -upgrade -input=false
 terraform providers lock \
   -platform=linux_amd64 \
@@ -51,7 +56,8 @@ git diff --stat -- .terraform.lock.hcl
 ```
 
 - Keep only the platforms you use. Every one you add is a hash someone reviews.
-- The MR that changes `.terraform.lock.hcl` needs CODEOWNERS approval from the platform team. Reviewers check the provider source address, the version jump, and the release's signing key against the provider's published key. Renovate MRs ([[automated-dependency-updates]], [[renovate-vs-dependabot]]) go through the same rule.
+- The `direct {}` config is a design choice, not a tested guarantee: see Not verified.
+- The MR that changes `.terraform.lock.hcl` and `ci.terraformrc` needs CODEOWNERS approval from the platform team. Reviewers check the provider source address, the version jump, and the release's signing key against the provider's published key. Renovate MRs ([[automated-dependency-updates]], [[renovate-vs-dependabot]]) go through the same rule.
 
 ## Serve providers from a mirror that cannot change them
 
@@ -71,6 +77,7 @@ provider_installation {
 ```
 
 - The CI job sets `TF_CLI_CONFIG_FILE` to this file.
+- The file sits in the project, so a merge request can change it together with `.terraform.lock.hcl`, and `terraform plan` then runs the resulting provider binaries with the plan job's credentials before any code owner has approved. CODEOWNERS gates the merge, not the pipeline. Put `ci.terraformrc` under the same CODEOWNERS rule, or supply it from a file-type CI/CD variable or the runner image so the branch cannot change it. The plan identity for merge request pipelines must be read-only ([[terraform-plan-policy-checks]]).
 - If the mirror uses a private CA, trust it as in [[private-ca-and-egress-proxy-trust]].
 
 > [!warning] Do not regenerate the lock through the mirror
@@ -123,16 +130,36 @@ CI check over the installed module manifest:
 set -euo pipefail
 # Run after terraform init. Fails on Git module sources not pinned to a full commit SHA.
 MANIFEST=".terraform/modules/modules.json"
-SHA_RE='[?&]ref=[0-9a-f]{40}(&|$)'
+SHA_RE='^[0-9a-f]{40}$'
 [[ -f "$MANIFEST" ]] || { echo "run terraform init first: $MANIFEST is missing"; exit 1; }
 # Read the manifest into a variable so a jq failure stops the script.
 rows="$(jq -r '.Modules[] | select(.Key != "") | [.Key, .Source] | @tsv' "$MANIFEST")"
+# Pinned means: a query with exactly one parameter named ref (after percent-decoding), a 40-hex value,
+# and no other parameter whose decoded name contains "ref".
+pinned() {
+  local src="$1" query part name value refs=0 sha_ok=0
+  local -a parts
+  [[ "$src" == *\?* ]] || return 1
+  query="${src#*\?}"; query="${query%%#*}"
+  IFS='&' read -r -a parts <<< "$query"
+  for part in "${parts[@]}"; do
+    name="${part%%=*}"; value=""; [[ "$part" == *=* ]] && value="${part#*=}"
+    name="$(printf '%b' "${name//%/\\x}" | tr 'A-Z' 'a-z')"
+    if [[ "$name" == "ref" ]]; then
+      refs=$((refs + 1))
+      [[ "$value" =~ $SHA_RE ]] && sha_ok=1
+    elif [[ "$name" == *ref* ]]; then
+      return 1
+    fi
+  done
+  [[ "$refs" -eq 1 && "$sha_ok" -eq 1 ]]
+}
 fail=0
 while IFS=$'\t' read -r key src; do
   [[ -n "$key" ]] || continue
   case "$src" in
     git::*|*.git*|github.com/*|bitbucket.org/*|hg::*)
-      if [[ ! "$src" =~ $SHA_RE ]]; then
+      if ! pinned "$src"; then
         echo "module '$key' is not pinned to a commit SHA: $src"
         fail=1
       fi
@@ -170,7 +197,8 @@ Registry pins are checked in review. The manifest records the resolved version, 
 
 - `terraform init -lockfile=readonly`.
 - The "Verify it works" tests were not run, and `check-module-pins.sh` was not run against a real `modules.json`.
-- `TF_CLI_CONFIG_FILE`, and the claim that an empty config file means direct installation.
+- `TF_CLI_CONFIG_FILE`, and that a `provider_installation { direct {} }` config with `TF_PLUGIN_CACHE_DIR` unset makes `providers lock` use only the origin registry.
+- Whether `modules.json` keeps the module source query as written (the pin check relies on it).
 - The `.terraform/modules/modules.json` structure (`Modules`, `Key`, `Source`).
 - Artifactory's Terraform mirror URL layout.
 - OpenTofu behaviour.

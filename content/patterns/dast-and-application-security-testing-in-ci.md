@@ -56,7 +56,7 @@ The IDs above are examples; take the real ones from your generated file. Long-li
 
 - The deploy job writes the review URL to a dotenv artifact.
 - The scan job reads it.
-- The ZAP API is not exposed: the job runs the packaged script inside its own container. ZAP's Docker guide warns that the packaged scans expose the unauthenticated ZAP API to the host they run on, so do not run them on a shared host with open ports.
+- The ZAP API is not exposed to other hosts, provided job pods deny ingress as in [[gitlab-runners-on-gke]]: the job runs the packaged script inside its own container. ZAP's Docker guide warns that the packaged scans expose the unauthenticated ZAP API to the host they run on, and on the Kubernetes executor the job pod has a cluster IP, so without that policy other pods, including other projects' jobs on a shared runner, can reach the API and read the recorded requests. Do not run them on a shared host with open ports.
 
 ```yaml title=".gitlab-ci.yml (excerpt)"
 stages: [build, deploy, dast]
@@ -111,6 +111,8 @@ dast-baseline:
 - Pass the credentials through a masked (and hidden) CI/CD variable read inside a ZAP context file (`-n`) and `-U`. Never put them in the command line or the rule file.
 - Scope the variable to the review environment for the MR scan, and make `dast-baseline` name that environment so it receives the value: GitLab exposes an environment-scoped variable only to jobs whose `environment` matches. Add `environment: { name: review/$CI_COMMIT_REF_SLUG, action: verify }` to the job (use the same name as the deploy job); `action: verify` does not create a deployment. A protected variable is exposed only to pipelines on protected branches and tags, so an MR pipeline from a feature branch would get an empty value. Use a protected variable only for the scheduled staging scan.
 - For review apps behind Cloudflare Access, give the scan a service token ([[cloudflare-access-service-tokens]]), added as a header via the context. Do not open the app to the internet.
+- Run authenticated scans only on runners whose job pods deny ingress ([[gitlab-runners-on-gke]]): the recorded requests include the test user's session and the Cloudflare Access service token.
+- Treat the review-scan user and the service token as known to every developer: the variable is not protected, so anyone who can open a merge request can change the job and print it, and masking does not prevent that. Limit the user to review data, limit the service token's Access policy to review hostnames, give both an expiry and rotate them on a schedule.
 - Check the ZAP authentication docs for your version: they were not read for this note.
 
 ## False positives and triage
