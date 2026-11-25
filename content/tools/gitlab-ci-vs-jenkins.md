@@ -64,7 +64,7 @@ stages: [build, test, deploy]
 # Merge request pipelines do not use this job: they build with an unprivileged builder.
 build-push:
   extends: .docker-build
-  tags: [dind-protected]   # example tag: use the tag of your protected, trusted-code runner
+  tags: [dind-protected] # example tag: use the tag of your protected, trusted-code runner
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
