@@ -6,12 +6,12 @@ tags:
   - adr
   - meta
 created: 2026-10-10
-modified: 2026-10-11
+modified: 2026-11-25
 draft: false
 ---
 
 > [!note] This is a template
-> Copy this file to `content/adr/NNNN-short-kebab-title.md`, replace the placeholders, and set `status`. Pick the next unused number from [[adr/index|the ADR index]], and add the new record to the table there.
+> Copy this file to `content/adr/NNNN-short-kebab-title.md`, replace the placeholders, and set `status`. Pick the next unused number from [[adr/index|the ADR index]], and add the new record to the table there, including its status.
 
 Frontmatter to use in the copy:
 
@@ -33,7 +33,7 @@ aliases:
 ---
 ```
 
-`type` and `decided` feed the metadata sheet under the title (see [[writing-notes#Metadata sheet|writing notes]]); `status` is kept in the source and not displayed. Add `verified: YYYY-MM-DD` only after checking the claims against their sources.
+`type` and `decided` feed the metadata sheet under the title (see [[writing-notes#Metadata sheet|writing notes]]); `status` is not rendered from the frontmatter; it is listed by hand in the Status column of the ADR index table, so a status change updates that row in the same change. Add `verified: YYYY-MM-DD` only after checking the claims against their sources.
 
 Body structure:
 

@@ -8,7 +8,7 @@ tags:
   - audit
   - ci-cd
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -47,8 +47,6 @@ If the canary degrades, pause expansion and investigate the cohort and change se
 - Post-release metrics are compared with a stable baseline.
 
 Review the gates periodically; a process can become ceremonial if it does not reflect real failure modes. The release record should support both repeatability and a clear explanation of what users experienced.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

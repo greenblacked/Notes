@@ -9,7 +9,7 @@ tags:
   - security
 status: accepted
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-25
 decided: 2026-10-19
 draft: false
 aliases:
@@ -58,17 +58,36 @@ spec:
   failurePolicy: Fail
   matchConstraints:
     resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
       - apiGroups: ["apps"]
         apiVersions: ["v1"]
         operations: ["CREATE", "UPDATE"]
-        resources: ["deployments"]
+        resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs", "cronjobs"]
+  variables:
+    - name: podSpec
+      expression: >-
+        object.kind == 'Pod' ? object.spec :
+        object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec :
+        object.spec.template.spec
+    - name: images
+      expression: >-
+        variables.podSpec.containers.map(c, c.image) +
+        (has(variables.podSpec.initContainers) ?
+          variables.podSpec.initContainers.map(c, c.image) : [])
   validations:
     - expression: >-
-        object.spec.template.spec.containers.all(c,
-        c.image.contains('@sha256:') ||
-        (c.image.split('/')[size(c.image.split('/'))-1].contains(':') &&
-        !c.image.endsWith(':latest')))
-      message: "Images must use a digest or an explicit non-latest tag."
+        variables.images.all(i,
+        i.contains('@sha256:') ||
+        (i.split('/')[size(i.split('/'))-1].contains(':') &&
+        !i.endsWith(':latest')))
+      message: "Images must use a digest or an explicit non-latest tag (containers and initContainers)."
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -77,12 +96,20 @@ metadata:
 spec:
   policyName: disallow-latest-tag
   validationActions: [Warn, Audit]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name # exclude system namespaces by name, so an unlabelled namespace is still covered
+          operator: NotIn
+          values: ["kube-system", "kube-public", "kube-node-lease", "gke-managed-system"] # change: your system namespaces
 ```
 
-Rollout follows [[policy-rollout-audit-to-enforce]]: warn and audit, read the audit annotations and Kyverno reports, fix or exempt, then enforce namespace by namespace. Exemptions are explicit in Git and time-boxed.
+The policy checks the Pod template of every workload kind and bare Pods, for both `containers` and `initContainers`. Checking Pods as well catches Pods created by any controller. Ephemeral containers, which are added through the `pods/ephemeralcontainers` subresource, are not covered. The binding excludes system namespaces by name instead of selecting application namespaces by label: a namespace created without an `owner` label, or with the label removed, is still covered, and `default` is not exempt. Keep the exclusion list short and review it when a platform component adds a namespace.
+
+Rollout follows [[policy-rollout-audit-to-enforce]]: warn and audit, read the audit annotations and Kyverno reports, fix or exempt, then enforce namespace by namespace. Exemptions are explicit in Git and time-boxed. The policy above also matches Pod `UPDATE`, so before a binding moves to `Deny`, existing Pods must already comply: otherwise metadata-only updates (label changes, finalizer removal) on a running Pod that uses a `latest` tag are rejected.
 
 > [!info] Claims not checked against current docs
-> That VAP is generally available on the GKE version we run, the exact CEL syntax above, and which Pod Security `restricted` rules changed in recent Kubernetes releases. Check the current Kubernetes and GKE release notes before relying on them.
+> That VAP is generally available on the GKE version we run, the exact CEL syntax above (including the `variables` block and the conditional over kinds), and which Pod Security `restricted` rules changed in recent Kubernetes releases. Check the current Kubernetes and GKE release notes before relying on them.
 
 ## Consequences
 

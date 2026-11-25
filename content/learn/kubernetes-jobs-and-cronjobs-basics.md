@@ -2,12 +2,14 @@
 title: "Kubernetes 12: Jobs and CronJobs: batch work, retries, concurrency and cleanup"
 description: Run one-off and scheduled work with Jobs and CronJobs, set retries, deadlines, concurrency and cleanup on purpose, and alert when a run fails or never happens.
 type: guide
+aliases:
+  - kubernetes-jobs-and-cronjobs
 tags:
   - learning
   - kubernetes
   - reliability
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-25
 draft: false
 ---
 

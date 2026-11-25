@@ -8,7 +8,7 @@ tags:
   - gke
   - kubernetes
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-25
 draft: false
 ---
 
@@ -82,8 +82,6 @@ flowchart TD
 Run the checks in this order from a Pod in the same namespace as the failing client when you can. A check from your laptop proves little about in-cluster paths.
 
 ```bash
-set -euo pipefail
-
 NAMESPACE="default"  # change: namespace of the affected workload
 
 kubectl -n "$NAMESPACE" apply -f netdebug.yaml
@@ -95,8 +93,6 @@ Alternatively, attach an ephemeral container to the failing Pod with `kubectl de
 ### 2. DNS
 
 ```bash
-set -euo pipefail
-
 NAMESPACE="default"                 # change: namespace of the affected workload
 NAME="orders.internal.example.com"  # change: the name that fails
 
@@ -106,26 +102,19 @@ kubectl -n "$NAMESPACE" exec netdebug -- cat /etc/resolv.conf
 # Resolve using the Pod's search path, then as a fully qualified name (trailing dot).
 kubectl -n "$NAMESPACE" exec netdebug -- dig +search "$NAME"
 kubectl -n "$NAMESPACE" exec netdebug -- dig "$NAME."
-
-# Cluster DNS health.
-kubectl -n kube-system get pods -l k8s-app=kube-dns
-kubectl -n kube-system logs -l k8s-app=kube-dns --all-containers --tail=50
 ```
 
 What to look for:
 
-- `ndots:5` (the Kubernetes default) makes names with fewer than five dots try every search suffix first. External names then cost several failed lookups. Use fully qualified names with a trailing dot in latency-sensitive code, or lower `ndots` in the Pod `dnsConfig`.
 - `NXDOMAIN` for the fully qualified name means the record does not exist in the zone the resolver consults. For private zones and forwarding, see [[architecture/cloud-dns-hybrid-and-multi-project]].
-- `SERVER FAILURE` or timeouts mean the upstream or the cluster DNS Pods are unhealthy or overloaded.
-- If the cluster uses Cloud DNS for GKE or NodeLocal DNSCache, the resolver address in `resolv.conf` differs; check the current documentation for your configuration.
+- The fully qualified name resolves quickly but the search-path lookup is slow or fails: search-domain amplification (`ndots`). Continue in [[gke-dns-failures-kube-dns-and-nodelocal]], step 4.
+- `SERVER FAILURE` or timeouts for every name, or only on some nodes: cluster DNS itself (kube-dns capacity, NodeLocal DNSCache, conntrack, NetworkPolicy). Continue in [[gke-dns-failures-kube-dns-and-nodelocal]] from step 1, which also finds which DNS provider and cache the cluster uses.
 
 ### 3. MTU and path MTU black holes
 
 Symptom: small requests work, large ones hang. Typical causes are a lower MTU on a VPN, interconnect or overlay than on the hosts, with ICMP "fragmentation needed" messages blocked.
 
 ```bash
-set -euo pipefail
-
 NAMESPACE="default"            # change: namespace of the affected workload
 TARGET="10.20.0.15"            # change: destination IP on the failing path
 SIZES="1372 1400 1432 1452 1472"  # ICMP payload sizes to try; packet size = payload + 28
@@ -144,8 +133,6 @@ done
 Compare the result with the VPC network MTU:
 
 ```bash
-set -euo pipefail
-
 NETWORK="my-vpc"  # change: your VPC network name
 
 gcloud compute networks describe "$NETWORK" --format="value(name,mtu)"
@@ -156,8 +143,6 @@ VPC MTU defaults and the allowed range differ by network configuration and produ
 ### 4. TLS
 
 ```bash
-set -euo pipefail
-
 HOST="app.example.com"   # change: the hostname clients use
 IP="203.0.113.10"        # change: the load balancer or backend IP to test
 
@@ -184,8 +169,6 @@ What to look for:
 ### 5. Load balancer health checks
 
 ```bash
-set -euo pipefail
-
 BACKEND_SERVICE="my-backend-service"  # change: backend service name
 PROJECT_ID="my-project"               # change: your project ID
 
@@ -204,8 +187,6 @@ gcloud compute firewall-rules list --project "$PROJECT_ID" \
 For GKE:
 
 ```bash
-set -euo pipefail
-
 NAMESPACE="default"  # change: namespace of the Service or Ingress
 
 # Container-native load balancing uses network endpoint groups.
@@ -256,8 +237,6 @@ Also confirm the user-facing symptom is gone, not only the probe: run the origin
 Diagnosis makes no changes except a short-lived debug Pod. Remove it:
 
 ```bash
-set -euo pipefail
-
 NAMESPACE="default"  # change: namespace where you created the debug Pod
 
 kubectl -n "$NAMESPACE" delete pod netdebug --ignore-not-found
@@ -270,7 +249,7 @@ Any fix (firewall rules, MTU, health check, certificates, DNS records) is a chan
 | Symptom                              | Cause                                                         | Fix                                                                      |
 | ------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `NXDOMAIN` for an internal name      | Record or private zone missing, or wrong zone attached to VPC | Fix the zone or forwarding; see the DNS architecture note                |
-| Intermittent slow first request      | `ndots:5` search path expansion                               | Use trailing-dot names or set `dnsConfig` `ndots`                        |
+| Intermittent slow first request      | `ndots:5` search path expansion                               | See [[gke-dns-failures-kube-dns-and-nodelocal]], step 4                  |
 | Small requests work, large ones hang | Path MTU lower than host MTU, ICMP blocked                    | Align MTU, clamp TCP MSS, allow ICMP fragmentation-needed                |
 | Timeout from one namespace only      | NetworkPolicy blocks egress or ingress                        | Add the minimal allow rule; see [[patterns/kubernetes-network-policies]] |
 | Browser shows a certificate warning  | Wrong certificate, missing intermediate, or expired           | Fix the certificate mapping or renew                                     |

@@ -9,7 +9,7 @@ tags:
   - incident-management
   - delivery
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -143,7 +143,7 @@ What follows from it:
 
 ## Exceptions
 
-A service that cannot meet its tier's requirements yet (a new tier 1 service without a tested DR plan, a dependency without a fallback) records the requirement, the reason, the risk accepted, the plan and an expiry date (proposed default 90 days) through [[compliance/policy-exception-and-waiver-process]], approved by the engineering manager. A tier 0 or tier 1 service without an owner team or without paging is never accepted as an exception.
+A service that cannot meet its tier's requirements yet (a new tier 1 service without a tested DR plan, a dependency without a fallback) records the requirement, the reason, the risk accepted, the plan and an expiry date within the maximum set in [[compliance/policy-exception-and-waiver-process#Rules]], approved by the engineering manager. A tier 0 or tier 1 service without an owner team or without paging is never accepted as an exception.
 
 ## Reviewer checklist
 

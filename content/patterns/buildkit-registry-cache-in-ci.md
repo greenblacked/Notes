@@ -10,7 +10,7 @@ tags:
   - gitlab-ci
   - jenkins
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
@@ -72,7 +72,7 @@ variables:
 build-image:
   stage: build
   image:
-    name: moby/buildkit:rootless
+    name: moby/buildkit:<tested-version>-rootless@sha256:<digest> # a -rootless tag, pinned by digest
     entrypoint: [""]
   variables:
     BUILDKITD_FLAGS: --oci-worker-no-process-sandbox
@@ -92,6 +92,8 @@ build-image:
         ${CACHE_TO} \
         --output type=image,name=${IMAGE}:${CI_COMMIT_SHORT_SHA},push=true
 ```
+
+Tag names are examples: look up the current tag, then pin its digest.
 
 This is the rootless form required by [[0015-no-privileged-image-builds-in-ci]]: no privileged container and no Docker daemon. If your runner's security context or AppArmor profile blocks rootless BuildKit, check the rootless section of the BuildKit docs rather than switching to privileged Docker-in-Docker. Runner setup is in [[gitlab-runners-on-gke]].
 
@@ -116,7 +118,7 @@ pipeline {
         spec:
           containers:
             - name: buildkit
-              image: moby/buildkit:rootless
+              image: moby/buildkit:<tested-version>-rootless@sha256:<digest> # a -rootless tag, pinned by digest
               command: ["cat"]
               env:
                 - name: BUILDKITD_FLAGS

@@ -9,7 +9,7 @@ tags:
   - reliability
   - prometheus
 created: 2026-10-21
-modified: 2026-11-01
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-01
 review-due: 2027-05-01
@@ -19,7 +19,7 @@ draft: false
 An LLM-backed feature fails differently from a normal service. It can be slow to start answering and still fast to finish, or the reverse. It can return HTTP 200 with an answer that fails schema validation. It can be throttled by a provider while every one of your pods is healthy. An agent can make twelve tool calls where it used to make three, and the only symptom is cost. The token metrics in [[llm-api-cost-control]] cover spend; this note covers the rest: which signals to collect, how to trace a request across the gateway, the model and the tools with the OpenTelemetry GenAI conventions, how to keep prompts out of telemetry, and how to put LLM features under SLOs and burn-rate alerts like any other user-facing service.
 
 > [!info] Scope
-> Services and agents that call models through one internal gateway, with OpenTelemetry for traces ([[observability-pipeline-opentelemetry]]) and Prometheus for metrics and alerting. Applies to managed APIs ([[vertex-ai-private-access-from-gke|private access to a managed model API]]) and self-hosted models ([[self-hosted-llm-inference-on-gke]]) alike.
+> Services and agents that call models through one internal gateway, with OpenTelemetry for traces ([[observability-pipeline-opentelemetry]]) and Prometheus for metrics and alerting. Applies to managed APIs ([[vertex-ai-private-access-from-gke|private access to a managed model API]]) and self-hosted models ([[self-hosted-llm-inference-on-gke]]) alike. Choosing SLIs, denominators, windows and the error-budget policy is in [[llm-slo-definition-and-error-budgets]]; this note covers the telemetry and the Prometheus rules that implement them.
 
 > [!note] Convention status
 > The OpenTelemetry GenAI semantic conventions are in **Development** status: names and attributes change between versions (the model-call metric names below differ from older ones you may see in instrumentation libraries). See the Evidence section for what was checked and what was not. The burn-rate numbers come from [[slo-burn-rate-alerting]].
@@ -295,4 +295,3 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the OpenTelemetry GenAI a
 - [[redacting-sensitive-data-before-llm-calls]]: the filter content capture must sit behind.
 - [[timeouts-retries-load-shedding]]: retries, circuit breakers and shedding.
 - [[internal-mcp-servers-for-platform-tools]]: tool servers that continue the trace.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

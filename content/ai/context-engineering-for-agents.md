@@ -7,7 +7,7 @@ tags:
   - security
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -60,5 +60,3 @@ Keep the manifest small: task ID, source IDs/revisions, selection reason, token 
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — NIST describes AI RMF 1.0, released in 2023, and states that it is being revised; use as a risk-management framework, not as an unrevised current final standard.
 - [Google Cloud: RAG-capable generative AI application using Vertex AI](https://cloud.google.com/architecture/rag-capable-gen-ai-app-using-vertex-ai) — reference architecture for retrieval-augmented generation; the live page reports last reviewed 2026-02-04.
 - [OpenTelemetry GenAI Semantic Conventions](https://github.com/open-telemetry/semantic-conventions-genai) — repository for evolving GenAI spans, metrics and events; inspect the current docs before adopting attribute names.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

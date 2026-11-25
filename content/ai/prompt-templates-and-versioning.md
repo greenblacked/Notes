@@ -7,7 +7,7 @@ tags:
   - reliability
   - team-process
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -52,7 +52,4 @@ Use shared templates for stable, common behavior, but keep genuinely task-specif
 
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance and monitoring concepts. NIST says AI RMF 1.0 is being revised.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

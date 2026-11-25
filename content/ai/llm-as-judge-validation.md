@@ -7,7 +7,7 @@ tags:
   - reliability
   - audit
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-25
 draft: false
 ---
 
@@ -26,6 +26,98 @@ Compare judge and human labels using confusion matrices and per-class precision,
 Where the decision is pairwise preference, randomize answer order and test for position bias by swapping order on a sample. Evaluate model-family bias by comparing outputs from different providers and by using a judge from a distinct model family when feasible. Test paraphrases and formatting variants, and inspect whether irrelevant style cues move scores. Avoid repeated stochastic judgments that create false sample size; summarize repeated runs per item and report variability.
 
 Set acceptance rules based on the decision's risk and human-review capacity, not a universal agreement number. For a low-risk triage queue, a judge may prioritize work while humans decide. For a safety release gate, false acceptance may demand a stricter design or no automated judge gate at all. Explain the costs of false positive and false negative classifications.
+
+## Worked example: agreement and false passes
+
+Export the validation set as `item_id,human,judge` with labels `pass` or `fail` (the judge may also `abstain`), then gate on the upper bound of the false-pass rate rather than on overall agreement. The script uses the Python standard library only and is a sketch to adapt.
+
+```python title="judge_agreement.py"
+#!/usr/bin/env python3
+"""Compare judge labels with adjudicated human labels.
+
+Input: a CSV with columns item_id, human, judge. Labels are pass, fail or abstain
+(abstain is allowed for the judge only). Exits 1 when the upper bound of the
+false-pass rate is above the limit, or when the input is unusable.
+"""
+import csv
+import math
+import sys
+from collections import Counter
+
+LABELS = ("pass", "fail")
+
+
+def wilson_upper(k: int, n: int, z: float = 1.96) -> float:
+    if n == 0:
+        return 1.0
+    p = k / n
+    centre = p + z * z / (2 * n)
+    margin = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return min(1.0, (centre + margin) / (1 + z * z / n))
+
+
+def main(path: str, max_false_pass: float) -> int:
+    pairs = Counter()
+    seen = set()
+    with open(path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            item, human, judge = row["item_id"], row["human"].strip(), row["judge"].strip()
+            if item in seen:
+                print(f"duplicate item_id {item!r}", file=sys.stderr)
+                return 1
+            seen.add(item)
+            if human not in LABELS or judge not in LABELS + ("abstain",):
+                print(f"{item}: unexpected label human={human!r} judge={judge!r}", file=sys.stderr)
+                return 1
+            pairs[(human, judge)] += 1
+
+    total = sum(pairs.values())
+    if total == 0:
+        print("no rows", file=sys.stderr)
+        return 1
+    agree = pairs[("pass", "pass")] + pairs[("fail", "fail")]
+    abstain = pairs[("pass", "abstain")] + pairs[("fail", "abstain")]
+    human_fail = pairs[("fail", "pass")] + pairs[("fail", "fail")] + pairs[("fail", "abstain")]
+    false_pass = pairs[("fail", "pass")]
+    upper = wilson_upper(false_pass, human_fail)
+
+    print("human\\judge   pass   fail abstain")
+    for h in LABELS:
+        print(f"{h:<12}{pairs[(h, 'pass')]:>6}{pairs[(h, 'fail')]:>7}{pairs[(h, 'abstain')]:>8}")
+    print(f"items={total} exact_agreement={agree / total:.3f} abstention={abstain / total:.3f}")
+    print(f"false_pass={false_pass}/{human_fail} upper95={upper:.3f} limit={max_false_pass}")
+    return 0 if upper <= max_false_pass else 1
+
+
+if __name__ == "__main__":
+    usage = "usage: judge_agreement.py <labels.csv> <max-false-pass-rate, a fraction above 0 and below 1>"
+    if len(sys.argv) != 3:
+        sys.exit(usage)
+    try:
+        limit = float(sys.argv[2])
+    except ValueError:
+        sys.exit(usage)
+    # Rejects 10 (meant as 10 %), 1 and inf, which would let every input pass, and nan, which would fail every input.
+    if not 0 < limit < 1:
+        sys.exit(usage)
+    sys.exit(main(sys.argv[1], limit))
+```
+
+```bash
+python3 -I judge_agreement.py labels.csv 0.10
+```
+
+Illustrative output for 200 synthetic items, 40 of them human `fail`:
+
+```text
+human\judge   pass   fail abstain
+pass           149      9       2
+fail             0     37       3
+items=200 exact_agreement=0.930 abstention=0.025
+false_pass=0/40 upper95=0.088 limit=0.1
+```
+
+Zero observed false passes in 40 failing items still allows a true rate near 9 % at 95 % confidence. A stricter limit needs more failing items in the validation set, not a better-looking agreement figure. The limit itself is a policy choice for the decision the judge gates.
 
 ## Limitations and controls
 
@@ -46,9 +138,6 @@ Combine automatic grading with deterministic checks for schemas, exact requireme
 - Can the decision tolerate judge uncertainty at its consequence level?
 - Is ongoing human sampling planned?
 
-The owner's agent skills and workflows are listed in [the AI skills catalogue](https://ai.szolotov.com).
-
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [NIST AI RMF Playbook (AI RMF 1.0 (January 2023); page notes it is being updated, accessed 2026-10-26)](https://airc.nist.gov/airmf-resources/playbook/): measurement validity, uncertainty and documented governance; the linked page states AI RMF 1.0 is being updated (accessed 2026-10-26).

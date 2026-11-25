@@ -9,7 +9,7 @@ tags:
   - cost
   - reliability
 created: 2026-10-21
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -113,6 +113,7 @@ RELEASE="model-a-v2"                                 # change: model name and ve
 KSA="llm-server"                                     # the Kubernetes service account that reads the weights
 : "${VLLM_IMAGE:?set VLLM_IMAGE to the vLLM API server image you evaluated, pinned by digest}"
 : "${MODEL_URI:?set MODEL_URI to the versioned gs:// prefix that holds this model version}"
+: "${GCLOUD_IMAGE:?set GCLOUD_IMAGE to gcr.io/google.com/cloudsdktool/google-cloud-cli:slim@sha256:<digest>, the digest you reviewed}"
 
 kubectl apply -f - <<EOF
 apiVersion: apps/v1
@@ -138,7 +139,7 @@ spec:
         - { key: dedicated, operator: Equal, value: llm-inference, effect: NoSchedule }
       initContainers:
         - name: fetch-weights
-          image: gcr.io/google.com/cloudsdktool/google-cloud-cli:slim  # pin by digest
+          image: ${GCLOUD_IMAGE}
           command: ["gcloud", "storage", "cp", "--recursive", "${MODEL_URI}/*", "/models/"]
           volumeMounts:
             - { name: models, mountPath: /models }
@@ -315,7 +316,7 @@ Design notes ([[kubernetes-autoscaling]] covers HPA and the cluster autoscaler i
 
 - **Scale-up is slow by nature.** A new pod may need a new GPU node, the driver, the image and the weights. If your latency target cannot absorb that, keep `minReplicas` and the pool's minimum at one or more during working hours and accept the idle cost; let the gateway queue or shed load meanwhile ([[timeouts-retries-load-shedding]]).
 - **`maxReplicas` must match quota.** An HPA that asks for more pods than the pool can hold leaves pods Pending and makes the queue metric look worse, which asks for even more.
-- **Scale to zero** is possible with the node pool at `--min-nodes=0`, but the HPA above keeps at least `minReplicas: 1` pods. The Kubernetes documentation allows `minReplicas: 0` only for HPAs that use object or external metrics (not the `Pods` metric used here) and behind the `HPAScaleToZero` feature gate (enabled by default in the current docs), so scaling the Deployment to zero needs a different metric type, a scheduled job or an event-driven autoscaler. The first request after that waits for the whole cold start.
+- **Scale to zero** is possible with the node pool at `--min-nodes=0`, but the HPA above keeps at least `minReplicas: 1` pods. The Kubernetes documentation allows `minReplicas: 0` only for HPAs that use object or external metrics (not the `Pods` metric used here) and behind the `HPAScaleToZero` feature gate, so scaling the Deployment to zero needs a different metric type, a scheduled job or an event-driven autoscaler. The first request after that waits for the whole cold start. Whether the gate is enabled depends on your Kubernetes version, and on GKE on whether it is available in your cluster; check both before relying on `minReplicas: 0` (not verified here).
 
 ## Spot GPUs and preemption
 
@@ -507,6 +508,7 @@ For general pod failures see [[kubernetes-pod-troubleshooting]]; for nodes under
 - Container image names and tags (the vLLM image and the Cloud SDK image).
 - Every HPA `behavior` value and the probe timings are design starting points, not documented defaults.
 - Cluster autoscaler pool selection for a pending burst pod, and the memory and CPU sizing figures.
+- Whether the `HPAScaleToZero` feature gate is enabled by default in any Kubernetes version, and GKE support for it: the text no longer states a default, and the feature-gate table was not read for this revision.
 - Nothing was run against a real cluster.
 
 ## Sources
@@ -532,4 +534,3 @@ For general pod failures see [[kubernetes-pod-troubleshooting]]; for nodes under
 - [[private-gke-and-controlled-egress]]: egress for the serving namespace.
 - [[model-artifacts-in-artifactory]]: storing and promoting model weights.
 - [[llm-observability-tracing-and-slos]]: latency, queue and token signals.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

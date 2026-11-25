@@ -7,7 +7,7 @@ tags:
   - reliability
   - audit
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -47,10 +47,7 @@ Common failures include citations pointing to the parent but not a passage; chun
 - Can the team reproduce which source revisions produced an answer without retaining unnecessary text?
 - Do links escape unsafe metadata and avoid using model-generated destinations?
 
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
-
 ## Sources
 
 - [PROV-O: The PROV Ontology](https://www.w3.org/TR/prov-o/): W3C Recommendation of 30 April 2013; defines a model for provenance concepts and relationships.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [Generative AI with RAG](https://docs.cloud.google.com/architecture/rag-reference-architectures): Google Cloud's RAG architecture index, last reviewed 2025-09-22; supports retrieval flow context, not a universal citation correctness guarantee.

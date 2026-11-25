@@ -10,7 +10,7 @@ tags:
   - security
   - cost
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-25
 draft: false
 ---
 
@@ -75,16 +75,16 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 6.0"        # Change: the current major version from the Registry. See the warning below.
+      version = "~> 8.0"        # Change: the current major version from the Registry. See the warning below.
     }
   }
 }
 ```
 
-`required_version` limits which Terraform binaries may run the code. `version = "~> 6.0"` means "6.0 or newer, but below 7.0": the last number may go up, the major version may not. Major versions can contain breaking changes, so you choose when to move.
+`required_version` limits which Terraform binaries may run the code. `version = "~> 8.0"` means "8.0 or newer, but below 9.0": the last number may go up, the major version may not. Major versions can contain breaking changes, so you choose when to move.
 
 > [!warning] Check before relying on this
-> The provider version in this example (`~> 6.0`) may be out of date. Open the provider page on the Terraform Registry (`registry.terraform.io/providers/hashicorp/google`), note the current major version, and put that in `version`. Do the same for `required_version`. If the major version has changed since this page was written, some resource arguments in this lesson may also have changed: run `terraform validate` and read the provider's `google_storage_bucket` documentation.
+> On 2026-11-24 the current major was 8 (the 7.x line still gets patch releases). The 7.0 upgrade guide changes only `retention_period` (number to string) on `google_storage_bucket`, which this lesson does not use, and the 8.0 guide does not mention the resources used here. Before you rely on it, check the Registry for a newer major, run `terraform validate`, and read the upgrade guide for any major you skip.
 
 ## Authenticate without a key file
 
@@ -570,7 +570,8 @@ Nothing in this lesson was run (see the note near the top). The commands and exa
 - HashiCorp Developer, "Get started with Terraform on Google Cloud" (https://developer.hashicorp.com/terraform/tutorials/gcp-get-started). Version not verified.
 - HashiCorp Developer, Terraform language documentation (https://developer.hashicorp.com/terraform/language): resources, data sources, variables and validation, `locals`, outputs, `terraform` block and version constraints, and the dependency lock file.
 - HashiCorp Developer, Terraform CLI documentation (https://developer.hashicorp.com/terraform/cli) for `init`, `plan`, `apply`, `destroy`, `output` and `providers lock`.
-- Terraform Registry, `hashicorp/google` provider and the `google_storage_bucket` resource page (https://registry.terraform.io/providers/hashicorp/google/latest/docs). Not verified: the current major version, the resource arguments and defaults used here.
+- Terraform Registry, `hashicorp/google` provider and the `google_storage_bucket` resource page (https://registry.terraform.io/providers/hashicorp/google/latest/docs). Not verified: the resource arguments and defaults used here.
+- HashiCorp, `terraform-provider-google` releases (https://github.com/hashicorp/terraform-provider-google/releases) and the version 7 and version 8 upgrade guides (https://github.com/hashicorp/terraform-provider-google/blob/main/website/docs/guides/version_7_upgrade.html.markdown, https://github.com/hashicorp/terraform-provider-google/blob/main/website/docs/guides/version_8_upgrade.html.markdown), for the current major version and the upgrade notes; checked 2026-11-24.
 - Google Cloud, "Terraform on Google Cloud" and "Application Default Credentials" documentation (https://cloud.google.com/docs/terraform, https://cloud.google.com/docs/authentication/application-default-credentials). Not verified: the exact behaviour of user ADC in your `gcloud` version.
 - Google Cloud, "Cloud Storage buckets: naming, uniform bucket-level access, public access prevention" (https://cloud.google.com/storage/docs). Not verified: `gcloud storage buckets update --update-labels` flags in your version.
 - HashiCorp releases index (https://releases.hashicorp.com/terraform/): read on 2026-10-17 for the Terraform version line; read it yourself for the current version.

@@ -8,7 +8,7 @@ tags:
   - management
   - compliance
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -48,8 +48,6 @@ Track completeness as actionable fields rather than a single percentage. A missi
 - Inventory review detects stale owners and unregistered deployments.
 
 For risk frameworks, describe the version and status accurately. NIST says its AI RMF 1.0 is being revised; it can inform risk-management conversations but should not be called the current unrevised final standard. Engineering guidance is not legal advice. See [[ai-coding-assistant-admin-controls]] for assistant-specific administrative inventory concerns.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

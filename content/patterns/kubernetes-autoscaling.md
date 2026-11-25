@@ -9,7 +9,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
@@ -114,7 +114,7 @@ spec:
           memory: 64Mi
 ```
 
-The recommendation needs some days of representative traffic. Read it, compare it with current requests, and change requests through your normal review.
+The recommendation needs some days of representative traffic. How to turn it into requests (percentiles, headroom, review) is in [[kubernetes-resource-requests-and-limits#Sizing from real usage]]; this note only covers running the VPA safely next to the HPA.
 
 ## Cluster autoscaler and node auto-provisioning
 
@@ -171,24 +171,9 @@ Regional clusters spread nodes over zones, so whether limits apply per zone or i
 ## Interactions and conflicts
 
 - **HPA and VPA on the same metric.** If the VPA applies changes to CPU requests while the HPA scales on CPU utilization, the two fight: changing the request changes the utilization the HPA sees. Keep the VPA in `Off` mode, or use HPA on a custom metric when the VPA applies changes.
-- **PodDisruptionBudgets and scale-down.** The cluster autoscaler respects PDBs when it drains nodes. A PDB that allows zero disruptions blocks scale-down forever.
+- **PodDisruptionBudgets and scale-down.** The cluster autoscaler respects PDBs when it drains nodes. A PDB that allows zero disruptions blocks scale-down forever. Size them as in [[pod-disruption-budgets-for-stateless-services]].
 - **Requests drive everything.** The scheduler, the HPA's utilization ratio and the autoscaler's node choice all use requests. Wrong requests produce wrong scaling.
 - **Startup time.** HPA sees a new pod only after it is scheduled and ready. If nodes must also start, scale-up takes minutes. Keep some headroom (a higher `minReplicas`, or overprovisioning with low-priority placeholder pods).
-
-```yaml title="deploy/web/pdb.yaml"
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: web
-  namespace: shop
-spec:
-  maxUnavailable: 1
-  selector:
-    matchLabels:
-      app: web
-```
-
-Use `maxUnavailable: 1` (or a percentage) rather than `minAvailable` equal to the replica count, so nodes can still drain.
 
 ## Example: a web service
 
@@ -196,7 +181,7 @@ Putting it together for a stateless web service:
 
 1. Set realistic `requests` on the Deployment (CPU, memory), reviewed with the VPA recommendation.
 2. Add the HPA above with 3 minimum replicas spread by topology spread constraints.
-3. Add the PDB.
+3. Add a PDB ([[pod-disruption-budgets-for-stateless-services]]).
 4. Enable the cluster autoscaler on the node pool with a budgeted maximum.
 5. Add a readiness probe so new pods only receive traffic when ready (see [[patterns/zero-downtime-deployments-kubernetes]]).
 6. Load test, watch the scale-up and scale-down, and adjust the behavior policies.

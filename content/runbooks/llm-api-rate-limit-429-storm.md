@@ -8,7 +8,7 @@ tags:
   - reliability
   - cost
 created: 2026-11-01
-modified: 2026-11-01
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -18,7 +18,7 @@ review-due: 2027-05-01
 How to respond when callers get HTTP 429 (and sometimes 503 or 529) from the model API or from our own gateway while the provider is otherwise healthy. A 429 is a limit doing its job, but clients that retry at once turn a small overrun into a storm: every rejected request comes back, often together, and the limit stays hit. The order is: **find which layer said no, find which limit, check whether retries make it worse, contain, then fix the client and the limit.**
 
 > [!info] Scope and verification
-> Nothing here was run against a live system or a provider account. The HTTP meaning of 429 and `Retry-After` is cited from the RFCs but the RFC text could not be fetched in this session (see Not verified). The PromQL functions were checked against the Prometheus docs (commit ef78ff6) and the OpenTelemetry GenAI attributes against the semantic-conventions checkout (commit 244465e), both on 2026-11-01. Gateway metrics (`llm_gateway_*`) and the admin API are this site's example names, not a standard. Provider limit types, header names such as `x-ratelimit-*`, status 529 and quota procedures are provider specific and are not verified.
+> Nothing here was run against a live system or a provider account. RFC 6585 (429) was read on 2026-11-24, after the review; RFC 9110 (`Retry-After`, 503) could not be read in full and is listed under Not verified. The PromQL functions were checked against the Prometheus docs (commit ef78ff6) and the OpenTelemetry GenAI attributes against the semantic-conventions checkout (commit 244465e), both on 2026-11-01. Gateway metrics (`llm_gateway_*`) and the admin API are this site's example names, not a standard. Provider limit types, header names such as `x-ratelimit-*`, status 529 and quota procedures are provider specific and are not verified.
 
 ## When to use
 
@@ -64,6 +64,18 @@ APP=invoice-summarizer
 #   export LLM_GATEWAY_ADMIN_TOKEN=...  (operator token for admin calls)
 #   export PROVIDER_TOKEN=...           (provider test key, only from an approved host)
 ```
+
+Put each token in a header file that only you can read, so it never appears in the `curl` argument list (visible to other local users and process accounting). `printf` is a shell builtin, so the token is not on a command line either. The header file form needs curl 7.55 or newer. Skip the files for tokens you do not have:
+
+```bash
+OLD_UMASK=$(umask); umask 077
+AUTH_DIR=$(mktemp -d)
+[ -n "${LLM_GATEWAY_TOKEN:-}" ] && printf 'Authorization: Bearer %s\n' "$LLM_GATEWAY_TOKEN" > "$AUTH_DIR/gateway.hdr"
+[ -n "${LLM_GATEWAY_ADMIN_TOKEN:-}" ] && printf 'Authorization: Bearer %s\n' "$LLM_GATEWAY_ADMIN_TOKEN" > "$AUTH_DIR/admin.hdr"
+umask "$OLD_UMASK"
+```
+
+The files stay on disk until you delete them. Run the cleanup at the end of this note even if you abandon the incident early.
 
 The helper runs an instant PromQL query and prints one line per series.
 
@@ -112,7 +124,7 @@ A 429 can come from the provider, from our gateway, or from something between (a
 
 ```bash
 curl -i -sS "$GATEWAY/v1/chat/completions" \
-  -H "Authorization: Bearer $LLM_GATEWAY_TOKEN" \
+  -H @"$AUTH_DIR/gateway.hdr" \
   -H 'Content-Type: application/json' \
   -d '{"model":"'"$MODEL"'","messages":[{"role":"user","content":"ping"}],"max_tokens":8}' \
   | head -30
@@ -121,9 +133,9 @@ curl -i -sS "$GATEWAY/v1/chat/completions" \
 Read, in this order:
 
 1. **The status line and body.** A JSON error body names a limit in words when the layer is cooperative. Note the exact message.
-2. **`Retry-After`.** Per RFC 9110 this response header tells the client how long to wait before another request, either as a number of seconds or as an HTTP date. The 429 status itself is defined in RFC 6585. A missing `Retry-After` does not mean "retry now"; it means the server did not say.
+2. **`Retry-After`.** This response header is meant to tell the client how long to wait before another request, as a number of seconds or an HTTP date (RFC 9110, cited as remembered and not re-read, see Evidence; check the current RFC). The 429 status itself is defined in RFC 6585. A missing `Retry-After` does not mean "retry now"; it means the server did not say.
 3. **Who added the headers.** Our gateway should add a stable marker, for example a `server` or `x-gateway-request-id` header, and a reason header or body field (this site's gateway uses `x-gateway-limit` with `key`, `team` or `global`). Headers from the provider typically carry the provider's own request id and may carry limit and remaining counters under provider-specific names, often `x-ratelimit-*`. The names and meaning are not verified here; read the provider's current API reference.
-4. **Compare with a direct call.** If your policy allows a test with a provider key from a safe host, call the provider directly with a tiny request (`curl -i -sS "$PROVIDER_CHAT_URL" -H "Authorization: Bearer $PROVIDER_TOKEN" ...`, with the path and auth scheme from the provider's API reference). If the direct call succeeds while the gateway path returns 429, the gateway (or something before it) is the limiter. If both fail, the provider is.
+4. **Compare with a direct call.** If your policy allows a test with a provider key from a safe host, call the provider directly with a tiny request (`curl -i -sS "$PROVIDER_CHAT_URL" -H @"$AUTH_DIR/provider.hdr" ...`, with the path and auth scheme from the provider's API reference; write that header file the same way as the gateway one). If the direct call succeeds while the gateway path returns 429, the gateway (or something before it) is the limiter. If both fail, the provider is.
 
 Then check the logs, which are more reliable than one probe:
 
@@ -246,7 +258,7 @@ kubectl -n "$NS" logs -l "$GW_LABEL" --since=30m --tail=-1 --prefix --max-log-re
 kubectl -n "$APP_NS" get deploy "$APP" -o yaml > "$INC_DIR/$APP-deploy-before.yaml"
 kubectl -n "$APP_NS" get hpa -o yaml > "$INC_DIR/hpa-before.yaml"
 kubectl -n "$APP_NS" get cronjob,job -o wide > "$INC_DIR/cronjobs-before.txt"
-curl -sS -H "Authorization: Bearer $LLM_GATEWAY_ADMIN_TOKEN" "$GATEWAY/admin/teams/$TEAM/limits" > "$INC_DIR/limits-before.json"
+curl -sS -H @"$AUTH_DIR/admin.hdr" "$GATEWAY/admin/teams/$TEAM/limits" > "$INC_DIR/limits-before.json"
 ```
 
 The limits call is this site's example admin API. If a GitOps controller (for example Argo CD) manages these objects, it may revert manual `set env`, `scale` or patch changes; pause its sync for them first.
@@ -255,7 +267,7 @@ The limits call is this site's example admin API. If a GitOps controller (for ex
 
 ```bash
 curl -sS -X PATCH "$GATEWAY/admin/teams/$TEAM/limits" \
-  -H "Authorization: Bearer $LLM_GATEWAY_ADMIN_TOKEN" \
+  -H @"$AUTH_DIR/admin.hdr" \
   -H 'Content-Type: application/json' \
   -d '{"priority_class":"batch","action":"defer","max_inflight":2,"reason":"INC-0000 429 storm"}' | jq .
 ```
@@ -377,7 +389,7 @@ The 5% threshold and 10-minute duration are examples. Test the rule with `promto
 q "sum by (status) (rate(llm_gateway_requests_total{team=\"$TEAM\"}[5m]))"                     # 429 near zero
 q "sum(rate(llm_client_attempts_total{app=\"$APP\"}[5m])) / sum(rate(llm_client_requests_total{app=\"$APP\"}[5m]))"   # close to 1.0
 q "sum by (team) (llm_gateway_inflight_requests{team=\"$TEAM\"})"                               # below the concurrency limit
-curl -i -sS "$GATEWAY/v1/chat/completions" -H "Authorization: Bearer $LLM_GATEWAY_TOKEN" \
+curl -i -sS "$GATEWAY/v1/chat/completions" -H @"$AUTH_DIR/gateway.hdr" \
   -H 'Content-Type: application/json' \
   -d '{"model":"'"$MODEL"'","messages":[{"role":"user","content":"ping"}],"max_tokens":8}' | head -1   # HTTP/2 200
 ```
@@ -423,16 +435,20 @@ Then run a controlled load test in staging at 1.5x the expected peak. Confirm th
 
 ### Sources checked
 
-- [kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/): with a label selector and no `--tail`, kubectl returns only the last 10 lines per pod even when `--since` is set; `--tail=-1` lifts that cap. The `--tail=-1` claim was read on GitHub on 2026-11-01, not in a local checkout: https://github.com/kubernetes/kubectl/blob/8f64009/pkg/cmd/logs/logs.go (commit 8f64009; `selectorTail int64 = 10`, applied only when `--tail` was not given, so an explicit `--tail=-1` leaves the cap unset). Also checked 2026-11-02 in the local kubernetes/website docs, commit 491f14e, `content/en/docs/reference/kubectl/generated/kubectl_logs/_index.md`: `--tail` defaults to -1 with no selector and 10 with one; `-l/--selector`, `--prefix` and `--max-log-requests` are documented there.
+- [kubectl logs](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/): with a label selector and no `--tail`, kubectl returns only the last 10 lines per pod even when `--since` is set; `--tail=-1` lifts that cap. The `--tail=-1` claim was read on GitHub on 2026-11-01, not in a local checkout: https://github.com/kubernetes/kubectl/blob/8f64009/pkg/cmd/logs/logs.go (commit 8f64009; `selectorTail int64 = 10`, applied only when `--tail` was not given, so an explicit `--tail=-1` leaves the cap unset). Also checked 2026-11-02, after the review, in the local kubernetes/website docs, commit 491f14e, `content/en/docs/reference/kubectl/generated/kubectl_logs/_index.md`: `--tail` defaults to -1 with no selector and 10 with one; `-l/--selector`, `--prefix` and `--max-log-requests` are documented there.
 - [Prometheus querying functions](https://prometheus.io/docs/prometheus/latest/querying/functions/) and [operators](https://prometheus.io/docs/prometheus/latest/querying/operators/): `rate()`, `topk`, `sum by`, and the `offset` modifier (querying basics). Checked 2026-11-01 in the Prometheus repository docs, commit ef78ff6.
 - [OpenTelemetry semantic conventions for generative AI](https://github.com/open-telemetry/semantic-conventions-genai/tree/244465e/docs/gen-ai): `error.type` (conditionally required when the operation ends in an error; should match the error code returned by the provider or client library), `gen_ai.request.model`, `gen_ai.provider.name` (Development); `error.type` is Stable. The inference span document (docs/gen-ai/client-inference.md) is Development. Checked 2026-11-01 in the local semantic-conventions checkout, commit 244465e.
 - [Kubernetes Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) (default RollingUpdate: 25% max unavailable, 25% max surge), [CronJob](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/) (unsuspending without a starting deadline schedules missed Jobs immediately) and [Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/) (an HPA manages the Deployment's `replicas`). Checked 2026-11-01 in the local website checkout, commit 491f14e: concepts/workloads/controllers/deployment.md, concepts/workloads/controllers/cron-jobs.md, concepts/workloads/autoscaling/horizontal-pod-autoscale.md.
 - The notes linked above, for this site's retry, queue, gateway and fallback guidance. Read 2026-11-01.
 
+Checked after the review, on 2026-11-24:
+
+- [RFC 6585 §4](https://www.rfc-editor.org/rfc/rfc6585): 429 Too Many Requests; the response MAY include Retry-After; 429 responses MUST NOT be stored by a cache. Checked 2026-11-24.
+
 ### Not verified
 
 - Nothing was run against a live system, a gateway or a provider account; command output is an expectation.
-- The RFC citations were not re-read: [RFC 6585](https://www.rfc-editor.org/rfc/rfc6585) (429 Too Many Requests) and [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) (`Retry-After` as seconds or an HTTP date, 503 Service Unavailable) are cited from the RFC text as remembered, not re-read here; the host could not be reached.
+- [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) (`Retry-After` as delay-seconds or an HTTP date; 503): on 2026-11-24 every fetch stopped before §10.2.3, so these are cited as remembered, not read.
 - Provider limit types (requests, tokens, concurrency, per model, per organisation), whether requested `max_tokens` counts against a token limit, and how limits are shared.
 - Header names such as `x-ratelimit-*`, whether and how a provider returns `Retry-After`, and the meaning of status 529.
 - Quota-increase process, lead time and what evidence a provider asks for.
@@ -441,6 +457,7 @@ Then run a controlled load test in staging at 1.5x the expected peak. Confirm th
 - The `kubectl` binary was not run. That `deploy/NAME` reads one pod is not in the local Kubernetes docs; check `kubectl logs --help`. Pod labels such as `app=llm-gateway` are examples.
 - That `kubectl scale` on an HPA-controlled Deployment is overwritten within one sync period: the docs say the HPA manages `replicas`, the timing is not verified.
 - Whether `error.type` holds `429` in your instrumentation.
+- The curl 7.55 minimum for `-H @file` is from memory of the curl manual and was not re-read on 2026-11-25; the header-file block was not run. Check `curl --version` and the current curl manual.
 
 ### Environment
 
@@ -460,12 +477,12 @@ The 429 share stays unchanged after retries are slowed (the limit is too low or 
 
 ### Cleanup and rollback
 
-See the Rollback section: remove client retry overrides, scale back up in steps, resume suspended jobs one at a time and restore gateway limits from the saved state.
+Delete the token header files when the incident is over (`rm -rf -- "$AUTH_DIR"`). See the Rollback section: remove client retry overrides, scale back up in steps, resume suspended jobs one at a time and restore gateway limits from the saved state.
 
 ## Sources
 
 - [Prometheus documentation: querying](https://prometheus.io/docs/prometheus/latest/querying/basics/): the PromQL functions and `offset` modifier used in the queries.
 - [OpenTelemetry semantic conventions for generative AI](https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai): `error.type` and request attributes for model-call spans.
 - [Kubernetes documentation: Deployment, CronJob, Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/): rollout defaults, CronJob unsuspend behaviour and HPA ownership of replicas.
-- [RFC 6585: Additional HTTP Status Codes](https://www.rfc-editor.org/rfc/rfc6585): defines 429 Too Many Requests (not re-read here).
+- [RFC 6585: Additional HTTP Status Codes](https://www.rfc-editor.org/rfc/rfc6585): defines 429 Too Many Requests (read 2026-11-24).
 - [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110): defines `Retry-After` and 503 (not re-read here).

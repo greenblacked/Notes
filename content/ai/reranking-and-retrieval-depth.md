@@ -7,7 +7,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -46,8 +46,6 @@ Track candidate counts, pre/post ranking metrics, reranker latency and errors, c
 - Have latency, capacity, token budget, concurrency and provider failure paths been tested?
 - Is score interpretation cautious, output constrained, and the ranker version recorded?
 - Can operators fall back or abstain without widening access or losing incident visibility?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

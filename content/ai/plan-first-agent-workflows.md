@@ -8,7 +8,7 @@ tags:
   - delivery
   - reliability
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -112,7 +112,7 @@ For work that reaches a shared branch, make the plan a merge input. A simple Git
 ```yaml title=".gitlab-ci.yml"
 plan-drift:
   stage: test
-  image: registry.example.com/ci/toolbox@sha256:REPLACE_WITH_DIGEST # change: an image with git, bash and awk, pinned by digest
+  image: registry.example.com/ci/toolbox@sha256:<digest> # change: an image with git, bash and awk, pinned by digest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^agent\//'
   script:
@@ -173,8 +173,5 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI and Git beh
 
 ## Sources
 
-- Your coding agent's own documentation for plan or approval modes, editing a plan before approving, and what a delegated subagent receives. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [NIST SP 800-218, Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) — reviewing and approving changes before they are made, and recording the decision.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance framing for deciding where model output needs independent checks and human sign-off.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

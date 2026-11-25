@@ -8,7 +8,7 @@ tags:
   - reliability
   - team-process
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -144,8 +144,5 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the OWASP LLM Top 10 and 
 
 ## Sources
 
-- Your coding agent's and model provider's own documentation for per-subagent model settings, alias resolution, and batch and caching price modifiers. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): LLM06 Excessive Agency (human approval for high-impact actions, minimised permissions) and LLM10 Unbounded Consumption (rate limits, timeouts, cost-driven abuse).
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): governance framing for deciding where model output needs independent checks and human sign-off. Not read for this review.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

@@ -7,7 +7,7 @@ tags:
   - security
   - supply-chain
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -17,8 +17,6 @@ review-due: 2027-05-02
 When an agent installs a package, it delegates trust to a registry, publisher account, package version, transitive dependency graph, and build or install scripts. The dependency may execute code during installation, compile, test, or runtime. A model’s recommendation, popularity metric, lockfile, or successful test does not establish that the package is safe. This note is about package acquisition in agent workflows; broader model artifact integrity is covered by [[ai/model-supply-chain-verification]].
 
 Agent-generated dependency changes still require the review and provenance practices in [[ai/ai-generated-code-policy-and-provenance]].
-
-The owner’s [AI skills catalogue](https://ai.szolotov.com) provides reusable skills and workflows.
 
 ## Treat dependency changes as executable changes
 
@@ -61,7 +59,7 @@ Warning signs include unexpected install scripts, registry changes, sudden maint
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the SLSA and OWASP LLM Top 10 statements in this note, plus the Docker daemon privilege point; package-manager and Sigstore specifics were not available locally.
+Source-reviewed on 2026-11-02. Nothing was run. Scope: the SLSA and OWASP LLM Top 10 statements in this note, plus the Docker daemon privilege point; the npm audit and ignore-scripts statements were checked on 2026-11-24; other package-manager and Sigstore specifics were not checked.
 
 ### Sources checked
 
@@ -69,10 +67,11 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the SLSA and OWASP LLM To
 - [OWASP Top 10 for LLM Applications 2025, LLM03 Supply Chain](https://genai.owasp.org/llm-top-10/): third-party package vulnerabilities, weak model provenance, licensing risks, and mitigations such as vetting suppliers, SBOMs, vulnerability scanning and code signing for externally supplied code. Checked 2026-11-02 against owasp-llm commit 99f4395.
 - [OWASP Top 10 for LLM Applications 2025, LLM06 Excessive Agency](https://genai.owasp.org/llm-top-10/): excessive functionality, permissions and autonomy as root causes, and minimizing extensions and permissions. Checked 2026-11-02, commit 99f4395.
 - [Docker Engine security](https://docs.docker.com/engine/security/): the Docker daemon requires root privileges unless rootless mode is used, and access to the daemon should be limited to trusted users, which supports keeping host sockets out of the install sandbox. Checked 2026-11-02 against docker-docs commit 53581df.
+- [npm audit](https://docs.npmjs.com/cli/v11/commands/npm-audit/): the command submits a description of the project's configured dependencies to the default registry, and with `ignore-scripts` npm does not run package.json scripts, except that `npm run`, `npm test` and `npm start` still run the named script while skipping its pre- and post-scripts. Checked 2026-11-24 (page read).
 
 ### Not verified
 
-- `npm audit` behaviour (sending dependency descriptions to the default registry) and npm lifecycle-script or lockfile semantics: npm documentation was not available locally.
+- npm lockfile semantics and how other package managers disable lifecycle scripts were not checked.
 - Sigstore Cosign verification guidance: Sigstore documentation was not available locally.
 - The OWASP Top 10 for Agentic Applications 2026: not available locally, so it was removed from Sources; the LLM Top 10 2025 entries above are cited instead.
 - Ecosystem-specific claims about registry mirrors, pinning, and lifecycle-script disabling are engineering guidance and were not checked claim by claim.
@@ -80,7 +79,7 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the SLSA and OWASP LLM To
 
 ## Sources
 
-- [npm: `npm audit`](https://docs.npmjs.com/cli/v10/commands/npm-audit): audit behavior, registry interaction, and documented command options for npm CLI v10 documentation (not read; see Not verified).
+- [npm: `npm audit`](https://docs.npmjs.com/cli/v11/commands/npm-audit/): audit behaviour and registry interaction.
 - [SLSA specification](https://slsa.dev/spec/draft/): supply-chain threat model, levels, provenance and verification.
 - [Sigstore Cosign: Verifying signatures](https://docs.sigstore.dev/cosign/verifying/verify/): signature and attestation verification guidance (not read; see Not verified).
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/): supply chain (LLM03) and excessive agency (LLM06) context.

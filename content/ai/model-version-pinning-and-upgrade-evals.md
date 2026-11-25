@@ -9,7 +9,7 @@ tags:
   - delivery
   - audit
 created: 2026-10-21
-modified: 2026-11-01
+modified: 2026-11-25
 evidence: source-reviewed
 reviewed: 2026-11-01
 review-due: 2027-05-01
@@ -151,7 +151,7 @@ if __name__ == "__main__":
 ```yaml title=".gitlab-ci.yml (excerpt, not run in a pipeline)"
 check-models:
   stage: test
-  image: python:3-slim # change: pin your standard Python image by digest
+  image: python@sha256:<digest> # change: your standard Python image, pinned by digest
   script:
     - python3 -I scripts/check_models.py gateway/models.json gateway/model-catalogue.json
   rules:
@@ -403,4 +403,3 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the CI rule syntax, the r
 - [[production-change-checklist]]: the change process an upgrade follows.
 - [[rag-over-runbooks-for-on-call]]: re-indexing when the embedding model changes.
 - [[prompt-injection-test-harness-for-ci-agents]]: the safety suite in the upgrade eval.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

@@ -9,7 +9,7 @@ tags:
   - cost
   - reliability
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -47,8 +47,6 @@ A rise in rejected proposals is not necessarily a correctness issue, but may ind
 - Re-run acceptance tests after upgrades or material workload changes.
 
 The optimization is worthwhile only where saved target-model work exceeds the overhead and resource opportunity cost. It may be a strong fit for one model and traffic shape and a regression for another. Keep it an independently switchable optimization rather than making application correctness depend on it.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

@@ -8,7 +8,7 @@ tags:
   - supply-chain
   - audit
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -55,8 +55,6 @@ Capture lineage from source to derived dataset, and from the dataset to model/ev
 - Alert on freshness, volume, schema, and meaningful distribution changes.
 
 The tradeoff is between strict gates that can delay a release and permissive processing that may publish a defective dataset. Make critical checks blocking, give warning thresholds an owner and expiry, and rehearse recovery from a bad published batch.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

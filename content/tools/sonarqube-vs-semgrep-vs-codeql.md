@@ -8,14 +8,14 @@ tags:
   - security
   - ci-cd
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
 Static analysis tools look similar from the outside: run a scanner, get a list of findings. They differ in what they understand about code, how hard custom rules are to write, and how much triage they create. This note compares SonarQube, Semgrep and CodeQL for a team on GitLab CI and Jenkins. Quality-gate configuration is in [[sonarqube-quality-gates]] and is not repeated here.
 
 > [!info] Not checked against current releases
-> Versions, supported languages, editions, licence terms and prices were not checked when this note was written. Confirm them in the current documentation, especially CodeQL's terms for private repositories and Semgrep's edition split.
+> Versions, supported languages, editions, licence terms and prices were not checked when this note was written. Confirm them in the current documentation, especially CodeQL's terms for private repositories and Semgrep's edition split. The image name and the rule-registry behaviour were not checked.
 
 ## Criteria
 
@@ -92,7 +92,7 @@ GitLab CI example publishing SARIF as an artefact:
 ```yaml title=".gitlab-ci.yml"
 semgrep:
   stage: test
-  image: semgrep/semgrep:0.0.0 # pin a tested version
+  image: semgrep/semgrep@sha256:<digest> # the release you tested, by digest
   script:
     - semgrep scan --config p/ci --sarif --output semgrep.sarif --error
   artifacts:
@@ -101,6 +101,8 @@ semgrep:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 ```
+
+Replace `<digest>` with the digest of the Semgrep release you tested (for example `crane digest semgrep/semgrep:<version>`); it is not a literal. `--config p/ci` fetches registry rules at run time, so rule changes reach the job without a commit; pin a local rules file where that matters.
 
 SARIF (Static Analysis Results Interchange Format) is the common denominator: all three can emit or import it, so a single viewer or a dashboard can aggregate them. On Jenkins, archive the SARIF file and publish it with a warnings plugin, or send it to the platform you use.
 

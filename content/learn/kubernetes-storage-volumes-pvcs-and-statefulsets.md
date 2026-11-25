@@ -8,7 +8,7 @@ tags:
   - gke
   - reliability
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-25
 draft: false
 ---
 
@@ -260,6 +260,12 @@ kubectl get events -n "$NS" --sort-by=.lastTimestamp | tail -20
 
 Do these in the kind cluster `lab`. Names start with `k9-`. Check that `kubectl config current-context` prints `kind-lab` first.
 
+The commands below use the current namespace. Pin it first so the cleanup finds what you created:
+
+```bash
+kubectl config set-context kind-lab --namespace=default
+```
+
 > [!warning] Exercises are not verified
 > The commands and outputs were written from the Kubernetes documentation and the kind sources and were not run for this page. Output is illustrative. Image tags are examples; pin the ones you use. Read the "If you see something else" lines first.
 
@@ -451,6 +457,9 @@ Do these in the kind cluster `lab`. Names start with `k9-`. Check that `kubectl 
 
 5. **Retain versus Delete.** Make a class with `Retain` that uses the same provisioner, then delete a claim from each class.
 
+   > [!warning] This deletes a volume and its data
+   > `k9-data` uses a class with `reclaimPolicy: Delete`, so deleting the claim deletes the volume. That is the point of the exercise, and it is only safe in the kind lab. The commands name the context and namespace, so they fail instead of running against another cluster. They do not ask for confirmation: read them before you run them. On a real cluster, take a VolumeSnapshot or a disk snapshot and check it is ready before you delete a claim (see Snapshots and backups).
+
    ```bash
    kubectl create -f - <<'EOF'
    apiVersion: storage.k8s.io/v1
@@ -493,8 +502,8 @@ Do these in the kind cluster `lab`. Names start with `k9-`. Check that `kubectl 
    kubectl wait --for=condition=Ready pod/k9-keeper --timeout=120s
    KEEP_PV=$(kubectl get pvc k9-keep -o jsonpath='{.spec.volumeName}')
    DATA_PV=$(kubectl get pvc k9-data -o jsonpath='{.spec.volumeName}')
-   kubectl delete pod k9-keeper k9-writer
-   kubectl delete pvc k9-keep k9-data
+   kubectl --context kind-lab -n default delete pod k9-keeper k9-writer
+   kubectl --context kind-lab -n default delete pvc k9-keep k9-data
    sleep 10
    kubectl get pv "$KEEP_PV" "$DATA_PV"
    ```
@@ -506,7 +515,7 @@ Do these in the kind cluster `lab`. Names start with `k9-`. Check that `kubectl 
 
    ```bash
    kubectl get pv "$KEEP_PV" -o jsonpath='{.spec.local.path}{.spec.hostPath.path}{"\n"}'
-   kubectl delete pv "$KEEP_PV"
+   kubectl --context kind-lab delete pv "$KEEP_PV"
    ```
 
    The path is under the directory configured in the provisioner's ConfigMap (`kubectl -n local-path-storage get configmap local-path-config -o yaml`); to remove the data, `docker exec <node-name> rm -rf <that path>` on the node from the PV's `nodeAffinity`. Only do that in the lab.
@@ -527,6 +536,8 @@ Do these in the kind cluster `lab`. Names start with `k9-`. Check that `kubectl 
 
    ```bash
    kubectl config current-context        # must be your lab GKE cluster
+   GKE_CTX="$(kubectl config current-context)"   # used by the cleanup below
+   kubectl config set-context "$GKE_CTX" --namespace=default   # same namespace as the cleanup below
    kubectl get storageclass              # pick a class that shows ALLOWVOLUMEEXPANSION true
    SC_NAME="change-me"                   # Change: a class name from the list above that allows expansion
    kubectl create -f - <<EOF
@@ -574,23 +585,45 @@ Do these in the kind cluster `lab`. Names start with `k9-`. Check that `kubectl 
    Expected: the PV's driver is `pd.csi.storage.gke.io` and its `nodeAffinity` names one zone. After the patch, the claim's capacity and the filesystem size grow without restarting the Pod (if your class and driver support online expansion; the minimum disk size and the exact timing are not verified here).
    If you see something else: if the patch is forbidden, the class does not allow expansion; pick another. If the size grows in the claim but not in `df`, read `kubectl describe pvc k9-gke` for a resize condition that waits for the Pod.
 
-   Cleanup (deletes the disk, because the class's policy is normally `Delete`; check the PV's policy first):
+   Cleanup. This deletes the disk, because the class's policy is normally `Delete`. Check the PV's policy and the context first.
+
+   > [!warning] Deletes a billed disk and its data
+   > Run this only against the lab cluster saved in `GKE_CTX`. Nothing in this exercise is worth keeping; on a real cluster snapshot the disk first.
 
    ```bash
-   kubectl get pv "$PV" -o jsonpath='{.spec.persistentVolumeReclaimPolicy}{"\n"}'
-   kubectl delete pod k9-gke
-   kubectl delete pvc k9-gke
+   echo "${GKE_CTX:?}"                  # must be your lab GKE cluster
+   kubectl --context "${GKE_CTX:?}" get pv "${PV:?}" -o jsonpath='{.spec.persistentVolumeReclaimPolicy}{"\n"}'
+   ```
+
+   Stop here if the printed context is not your lab GKE cluster. Only then run the delete as a separate block:
+
+   ```bash
+   kubectl --context "${GKE_CTX:?}" -n default delete pod k9-gke
+   kubectl --context "${GKE_CTX:?}" -n default delete pvc k9-gke
    ```
 
 8. **Clean up the kind lab.**
 
+   > [!warning] Bulk delete by label
+   > `-l app=k9-db` deletes every claim with that label in the namespace. List them first with the first block, and stop if it shows anything other than the StatefulSet's claims `data-k9-db-0`, `data-k9-db-1` and `data-k9-db-2`. Both blocks pin the context and namespace.
+
    ```bash
-   kubectl delete -f k9-sts.yaml --ignore-not-found
-   kubectl delete pvc -l app=k9-db --ignore-not-found
-   kubectl delete pvc k9-typo k9-data k9-keep --ignore-not-found
-   kubectl delete pod k9-writer k9-keeper --ignore-not-found
-   kubectl delete storageclass k9-retain --ignore-not-found
-   kubectl get pvc,pv | grep k9 || echo "clean"
+   kubectl --context kind-lab -n default get pvc -l app=k9-db
+   ```
+
+   If the list shows only the `data-k9-db-*` claims (or nothing), run the deletes as a separate block:
+
+   ```bash
+   kubectl --context kind-lab -n default delete -f k9-sts.yaml --ignore-not-found
+   kubectl --context kind-lab -n default delete pvc -l app=k9-db --ignore-not-found
+   kubectl --context kind-lab -n default delete pvc k9-typo k9-data k9-keep --ignore-not-found
+   kubectl --context kind-lab -n default delete pod k9-writer k9-keeper --ignore-not-found
+   kubectl --context kind-lab delete storageclass k9-retain --ignore-not-found
+   if out="$(kubectl --context kind-lab get pvc,pv -A)"; then
+     printf '%s\n' "$out" | grep k9 || echo "clean"
+   else
+     echo "check failed: could not list claims and volumes" >&2
+   fi
    ```
 
    Expected: `clean`. The StatefulSet's claims must be deleted explicitly, which is the point of exercise 4.

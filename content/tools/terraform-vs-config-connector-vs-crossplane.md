@@ -9,14 +9,14 @@ tags:
   - gitops
   - kubernetes
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
 Once Argo CD manages everything inside the clusters, someone always asks why Google Cloud resources are not Kubernetes objects too. Config Connector and Crossplane make that possible: a bucket, a Pub/Sub topic or a Cloud SQL instance becomes a custom resource that a controller keeps in line with the cloud. [[0030-terraform-manages-gcp-infrastructure]] rejects both in one line each and keeps Terraform for Google Cloud, with [[0001-gitops-with-argocd]] for workloads. This note is the evidence behind that line. It compares the three on what goes wrong in production: what a reviewer can see before a change, what happens on delete, which identity acts, and how each fails.
 
 > [!info] Not checked against current releases
-> Written from the projects' documentation source and the `gcloud` 570.0.0 help text on 2026-10-21; not checked against the published documentation pages, so verify there. Not verified: Config Connector's current support status and whether the GKE add-on is the recommended install, its behaviour on Autopilot and its resource coverage; the accepted values of the `deletion-policy` annotation beyond `abandon`; the readiness condition names; a Crossplane ProviderConfig for GKE Workload Identity; the current Crossplane provider package versions and apiVersions. Confirm them in the current documentation before you build on them.
+> Written from the projects' documentation source and the `gcloud` 570.0.0 help text on 2026-10-21; not checked against the published documentation pages, so verify there. Not verified: Config Connector's current support status and whether the GKE add-on is the recommended install, its behaviour on Autopilot and its resource coverage; the accepted values of the `deletion-policy` annotation beyond `abandon`; the readiness condition names; a Crossplane ProviderConfig for GKE Workload Identity; the current Crossplane provider package versions and apiVersions. Confirm them in the current documentation before you build on them. The Crossplane paused-annotation behaviour was checked on 2026-11-24.
 
 ## Criteria
 
@@ -205,7 +205,7 @@ Each of those service accounts needs a Workload Identity binding to the controll
 - **Controller outage.** Nothing is reconciled while the controller is down; existing cloud resources keep running. Changes merged to Git queue up silently, so alert on the controller's readiness and on custom resources that are not ready.
 - **Bootstrap cycle.** The cluster that runs the controller is itself a Google Cloud resource. If the controller manages its own cluster, network or service accounts, losing the cluster loses the tool that would rebuild it. Foundations must come from outside the cluster.
 - **Large CRD sets in Argo CD.** The Config Connector GitOps guide says it ships over 250 CRDs, too big for client-side apply's last-applied annotation; enable `ServerSideApply=true` on the Application.
-- **Paused resources cannot be deleted.** A Crossplane resource with `crossplane.io/paused: "true"` cannot be deleted even with `kubectl delete`; unpause it first.
+- **Paused resources cannot be deleted.** The Crossplane managed resources page warns that Kubernetes and Crossplane can't delete a resource with the `crossplane.io/paused` annotation, even with `kubectl delete`. Only the value `"true"` pauses, and removing the annotation resumes reconciliation (checked 2026-11-24). Remove the annotation before deleting, and expect the delete to act on the cloud resource according to its deletion policy.
 - **Terraform's own failure modes.** Lost or corrupted state, a stale lock, or an apply of an unreviewed plan. [[terraform-module-and-state-layout]] covers state protection.
 
 ## Import and adoption
@@ -287,3 +287,4 @@ Revisit when a controller can show a cloud-side plan before merge, or when Confi
 - [terraform plan command](https://developer.hashicorp.com/terraform/cli/commands/plan)
 - [Argo CD sync options](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/)
 - [Argo CD app deletion](https://argo-cd.readthedocs.io/en/stable/user-guide/app_deletion/)
+- [Crossplane: managed resources (v2.3)](https://docs.crossplane.io/v2.3/managed-resources/managed-resources/): the `crossplane.io/paused` annotation and its delete warning, checked 2026-11-24.

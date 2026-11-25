@@ -9,11 +9,8 @@ tags:
   - on-call
   - incident-management
 created: 2026-10-19
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
-evidence: source-reviewed
-reviewed: 2026-11-02
-review-due: 2027-05-02
 ---
 
 Two jobs tempt teams to use a language model: "tell me what is in these logs" and "is this alert real?". Both can save minutes, and both can cost an hour if the answer is confident and wrong. This note describes a design where the model works on a small, counted, redacted sample, every claim links back to raw evidence, and the model can advise but never silence, page or resolve. The incident process itself is in [[ai-assisted-incident-response]].
@@ -196,7 +193,7 @@ The pager must never depend on the triage service. To turn it off, remove the `a
 
 ## Evidence
 
-Source-reviewed on 2026-11-02. Nothing was run. Scope: the gcloud and kubectl flags and the Prometheus-to-Alertmanager relationship; the Alertmanager receiver configuration and the triage design were not checked against a source.
+No evidence level is claimed. A review on 2026-11-02 checked the gcloud and kubectl flags and the Prometheus-to-Alertmanager relationship, but the Alertmanager receiver configuration and the Cloud Logging filter fields used by the scripts were not checked. Nothing was run.
 
 ### Sources checked
 
@@ -229,4 +226,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the gcloud and kubectl fl
 - [[securing-ai-agents-in-ci-and-cloud]]: access and egress rules for the triage service.
 - [[on-call-health]]: alert fatigue and load.
 - [[llm-api-cost-control]]: caps and a kill switch at the gateway.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

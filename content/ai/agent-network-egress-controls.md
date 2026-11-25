@@ -7,7 +7,7 @@ tags:
   - security
   - networking
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -15,8 +15,6 @@ draft: false
 ---
 
 An agent that can use a shell, browser, package manager, HTTP client, or tool server can potentially send data or reach services over the network. A prompt-level rule to “use only approved sites” cannot enforce that boundary. Egress control must be applied by the network path, workload platform, or managed proxy, with identity and policy outside the model. This note addresses outbound connectivity specifically; base runtime isolation is covered in [[ai/sandboxing-coding-agents-on-workstations-and-runners]].
-
-The owner’s [AI skills catalogue](https://ai.szolotov.com) provides reusable skills and workflows.
 
 ## Model the allowed destinations
 

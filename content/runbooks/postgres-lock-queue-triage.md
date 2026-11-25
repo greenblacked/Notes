@@ -8,7 +8,7 @@ tags:
   - reliability
   - observability
 created: 2026-11-22
-modified: 2026-11-22
+modified: 2026-11-25
 draft: false
 evidence: lab-tested
 reviewed: 2026-11-22
@@ -94,10 +94,10 @@ WHERE datname = current_database()
 ORDER BY pid;
 ```
 
-Expected shape, from the lab:
+The lab did not run this exact query. If it fails, drop `wait_event` and `xact_age`. Expected shape, from the lab: the lab output comes from a narrower query (no `wait_event` or `xact_age` columns, query text aliased `q`), see Lab run:
 
 ```text
- pid |        state        | wait_event_type | blocked_by |                    query
+ pid |        state        | wait_event_type | blocked_by |                    q
 -----+---------------------+-----------------+------------+------------------------------------------
  175 | idle in transaction | Client          | {}         | UPDATE accounts SET balance=balance-1 WH
  189 | active              | Lock            | {175}      | ALTER TABLE accounts ADD COLUMN note tex
@@ -152,7 +152,7 @@ SELECT pg_cancel_backend(189);   -- the pid of the waiting ALTER
 Expected, from the lab: the readers behind it disappear from `pg_stat_activity` immediately, and the holder is unchanged.
 
 ```text
- pid |        state        | wait_event_type | blocked_by |                    query
+ pid |        state        | wait_event_type | blocked_by |                    q
 -----+---------------------+-----------------+------------+------------------------------------------
  175 | idle in transaction | Client          | {}         | UPDATE accounts SET balance=balance-1 WH
 ```
@@ -240,6 +240,7 @@ Then confirm the application recovered, not just the database: the failing endpo
 - The `pg_monitor` and `pg_signal_backend` role names and their exact privileges were not exercised; the lab ran as the superuser.
 - Managed-provider differences (Cloud SQL, RDS, Azure) in `pg_cancel_backend` permissions and in which settings can be changed were not tested. Check the provider's documentation before relying on step 6 there.
 - The `transactionid` wait case in the troubleshooting table was not reproduced; it is the standard deadlock shape, not an observation from this run.
+- Step 2's full `SELECT` (with `wait_event` and `xact_age`) was not run as written; the lab used the narrower query recorded in [[postgres-lock-queue-lab]].
 - Behaviour behind a transaction-mode connection pooler (PgBouncer) was not tested; the session seen in `pg_stat_activity` may be the pooler's, not the client's.
 
 ### Environment
@@ -276,11 +277,15 @@ docker exec pg-lock-lab psql -U postgres -d lab -c "CREATE TABLE accounts (id in
 docker exec -d pg-lock-lab bash -c "(printf 'BEGIN;\nUPDATE accounts SET balance=balance-1 WHERE id=1;\n'; sleep 120) | psql -U postgres -d lab -q"
 docker exec -d pg-lock-lab psql -U postgres -d lab -c "SET lock_timeout='0'; ALTER TABLE accounts ADD COLUMN note text;"
 docker exec -d pg-lock-lab psql -U postgres -d lab -c "SELECT count(*) AS accounts FROM accounts;"
-# then steps 2, 3 and 4 of this runbook
+# the chain, read with the narrower query recorded in the lab note
+docker exec pg-lock-lab psql -U postgres -d lab -c \
+  "select pid, state, wait_event_type, pg_blocking_pids(pid) as blocked_by, left(regexp_replace(query,'\s+',' ','g'),40) as q from pg_stat_activity where datname='lab' and pid<>pg_backend_pid() order by pid"
 ```
 
+The chain was read with a narrower `pg_stat_activity` query than step 2's, recorded in [[postgres-lock-queue-lab]] (no `wait_event` or `xact_age` columns, `left(...,40)` for the query text, filtered on `datname='lab'`). The root query of step 3 and `pg_cancel_backend` of step 4 gave the results shown; the output is below and in the lab note.
+
 ```text
- pid |        state        | wait_event_type | blocked_by |                    query
+ pid |        state        | wait_event_type | blocked_by |                    q
 -----+---------------------+-----------------+------------+------------------------------------------
  175 | idle in transaction | Client          | {}         | UPDATE accounts SET balance=balance-1 WH
  189 | active              | Lock            | {175}      | ALTER TABLE accounts ADD COLUMN note tex

@@ -40,6 +40,7 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 - [[gke-cluster-autoscaler-not-scaling-up|Pods Pending and the GKE cluster autoscaler does not scale up]]: read the autoscaler's verdict, then rule out node pool and auto-provisioning limits, quota, zone stockouts, Pod IP exhaustion and Pod-side constraints.
 - [[pods-stuck-terminating-and-blocked-drains|Pods stuck in Terminating and node drains that never finish]]: classify a Pod stuck in Terminating, clear finalizers and dead-node Pods safely, and unblock drains held by PodDisruptionBudgets.
 - [[gke-cluster-credential-rotation|Rotate GKE cluster credentials and the control plane IP]]: run a two-phase credential rotation, refresh every client that holds the old CA or endpoint, and complete it without locking out CI or GitOps.
+- [[gke-node-pool-labels-update|Change GKE node pool labels without dropping the others]]: `--node-labels` replaces every user-set label on a pool; save the current set, merge, apply, check and restore.
 
 ## Infrastructure as code
 
@@ -70,6 +71,7 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 - [[cloud-sql-point-in-time-recovery|Recover from a bad data change with Cloud SQL point-in-time recovery]]: stop the damage, pin the timestamp, clone the PostgreSQL instance to just before the bad change, verify it, then repair rows or cut over.
 - [[gcs-deleted-object-recovery|Restore deleted or overwritten Cloud Storage objects]]: stop the cause, check soft delete and versioning, then restore deleted or overwritten objects or a deleted bucket with gcloud storage, and prove it.
 - [[alert-fired-but-nobody-was-paged|An alert fired but nobody was paged]]: trace a missed page hop by hop from the Prometheus rule through Alertmanager routing, silences and inhibition to the receiver, then prove the path end to end.
+- [[postgres-lock-queue-triage|Postgres lock queue triage]]: find the head of a blocking chain, cancel the session that restores service without losing a transaction, then remove the holder for good. Lab-tested with a narrower step 2 query than the one printed, from [[postgres-lock-queue-lab]].
 
 ## AI and inference
 
@@ -97,7 +99,9 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 5. **Rollback**: how to undo the change, or a statement that it cannot be undone.
 6. **Troubleshooting**: symptoms and fixes for failures that actually happened.
 
+A runbook that declares an evidence level also has one `## Evidence` section, with the subsections in [[writing-notes#The Evidence section]]: Sources checked, Not verified, Environment, Prerequisites, Expected results, Failure conditions, and Cleanup and rollback, plus a Lab run when it is `lab-tested`.
+
 > [!tip] Keep them true
-> A runbook that disagrees with the repository is worse than none. Each one says which files it was checked against; when those change, update the runbook and its `modified` date in the same pull request.
+> A runbook that disagrees with the system it describes is worse than none. Rated runbooks list their sources, with dates, in their Evidence section. Most runbooks here are unrated: they have no recorded review at an evidence level, so check each command against the docs for your versions first. The runbooks about this site name the repository files they were checked against; when those change, update the runbook and its `modified` date in the same pull request.
 
 Runbooks describe how to operate something; the reasoning behind the design lives in the [[adr/index|architecture decisions]] and the [[patterns/index|patterns]].

@@ -7,7 +7,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -48,8 +48,6 @@ Frequent failures are dimension mismatch, silent model alias movement, preproces
 - Are fusion weights, thresholds, cache keys and telemetry labeled by generation?
 - Can traffic be returned to a maintained old index while preserving current source updates?
 - Has retirement been delayed until a named owner accepts the quality and retention evidence?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

@@ -6,12 +6,14 @@
     "browse": [{ "slug": "runbooks/index", "label": "Runbooks" }],
     "featured": [
       "runbooks/tls-certificate-renewal",
-      "runbooks/leaked-credential-rotation",
-      "runbooks/terraform-state-recovery"
+      "runbooks/admission-webhook-certificate-expiry",
+      "runbooks/postgres-lock-queue-triage"
     ],
     "more": [
       "runbooks/kubernetes-pod-troubleshooting",
-      "runbooks/network-troubleshooting-dns-mtu-tls-load-balancers"
+      "runbooks/network-troubleshooting-dns-mtu-tls-load-balancers",
+      "runbooks/leaked-credential-rotation",
+      "runbooks/terraform-state-recovery"
     ]
   },
   {

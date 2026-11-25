@@ -8,7 +8,7 @@ tags:
   - gcp
   - security
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -256,6 +256,9 @@ For each hit:
 2. **Change the design** using the approaches above: drop the resource (service account key), move to the container-only model, or switch to `_wo` arguments.
 3. **Rotate** the secret after the change, so the value still sitting in old state versions is worthless.
 4. **Then clean up old state object versions** if your retention policy allows it, keeping enough history for recovery ([[terraform-state-recovery]]). Rotation is what makes the old copies harmless; deletion alone does not.
+
+> [!warning] Deleting state versions and key resources cannot be undone
+> Deleting noncurrent state object versions removes your recovery points, and removing a `google_service_account_key` resource deletes the key, so anything still using it stops working. Before deleting versions, list them (`gcloud storage ls --all-versions -l` on the state object, as in [[terraform-state-recovery]]) and confirm that the current state restores. Before removing a key resource, find where the key is used and switch that user to an attached identity or Workload Identity Federation first.
 
 ## Migrating a resource to a write-only argument
 

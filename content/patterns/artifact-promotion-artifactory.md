@@ -9,7 +9,7 @@ tags:
   - gitlab-ci
   - delivery
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-11-25
 draft: false
 ---
 
@@ -91,7 +91,7 @@ build-image:
   stage: build
   # your builder image with docker CLI and jf, pinned by tag and digest
   image: $BUILDER_IMAGE
-  services: [docker:dind]
+  services: ["docker:<tested-version>-dind@sha256:<digest>"]
   variables:
     DOCKER_HOST: tcp://docker:2376
     DOCKER_TLS_VERIFY: "1"
@@ -149,9 +149,11 @@ promote-prod:
       --status="released" --comment="Approved for production" --source-repo=docker-staging-local --copy=true
 ```
 
+Tag names are examples: look up the current tag, then pin its digest.
+
 Notes:
 
-- `build-image` uses `docker:dind`, which needs a privileged runner, the same setup as in [[gitlab-ci-pipeline-structure]]. `BUILDER_IMAGE` is your own image that contains both the Docker CLI and `jf`. The stock `docker:cli` image has no JFrog CLI, and because a custom image does not get the Docker client setup that the `docker` image entrypoint provides, the job sets `DOCKER_HOST`, `DOCKER_TLS_VERIFY` and `DOCKER_CERT_PATH` itself to reach the `dind` service over TLS (confirm the values against the GitLab docs for your runner's `dind` setup). Do not rely on a floating tag for it: pin `JFROG_CLI_IMAGE` and the scanner image by tag and digest, and let [[automated-dependency-updates]] keep them current.
+- `build-image` uses `docker:dind`, which needs a privileged runner, the same setup as in [[gitlab-ci-pipeline-structure]]. That conflicts with [[0015-no-privileged-image-builds-in-ci]]: privileged jobs have root-equivalent access to the node, so use this example only on runners that are already privileged and dedicated to builds, or move the build to the rootless form in [[buildkit-registry-cache-in-ci]]. `BUILDER_IMAGE` is your own image that contains both the Docker CLI and `jf`. The stock `docker:cli` image has no JFrog CLI, and because a custom image does not get the Docker client setup that the `docker` image entrypoint provides, the job sets `DOCKER_HOST`, `DOCKER_TLS_VERIFY` and `DOCKER_CERT_PATH` itself to reach the `dind` service over TLS (confirm the values against the GitLab docs for your runner's `dind` setup). Do not rely on a floating tag for it: pin `JFROG_CLI_IMAGE` and the scanner image by tag and digest, and let [[automated-dependency-updates]] keep them current.
 - `image-scan` runs against the image in the dev repo, which is the exact image `promote-staging` then copies. `promote-staging` lists `build-image`, `unit-test` and `image-scan` in `needs`, because a `needs` list replaces the stage barrier and only the listed jobs gate the promotion.
 - Running Docker builds in GitLab needs a Docker-capable runner or a daemonless builder; the `jf docker push` flow above assumes a Docker client with a daemon. With Kaniko or Buildx, push normally and then register the image with the build using the CLI's Docker build-info commands.
 - `--copy=true` copies rather than moves, which keeps the earlier stage's copy for audit. Moving makes dev cleaner. Pick one and apply it consistently.

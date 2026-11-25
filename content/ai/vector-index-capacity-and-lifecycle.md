@@ -7,7 +7,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -48,8 +48,6 @@ Capacity failures often look like relevance incidents: partial writes, rising la
 - Are growth and lag alerts tied to concrete scale, pause and recovery actions?
 - Are deletion, retention, backup and final retirement semantics documented and owner-approved?
 - Have current region, quota and service-tier constraints been checked immediately before a change?
-
-For broader AI practice resources, see [the owner's AI skills catalogue](https://ai.szolotov.com).
 
 ## Sources
 

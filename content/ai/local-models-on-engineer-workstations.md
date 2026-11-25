@@ -8,7 +8,7 @@ tags:
   - supply-chain
   - policy-as-code
 created: 2026-11-01
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -98,11 +98,22 @@ Bind to loopback. The MCP transport specification says local servers should bind
 # mapping to work; the host side of the mapping is what must be loopback.
 # Example limits only; size them for your machine.
 image_digest="${INFERENCE_IMAGE_DIGEST:?set the pinned image digest}"
+models_dir="${LOCAL_MODELS_DIR:?set the directory holding the verified weights}"
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges \
+  --read-only \
+  --tmpfs /tmp:rw,size=2g \
+  --env HOME=/tmp \
+  --pids-limit 512 \
   --cpus 8 --memory 32g \
+  -v "${models_dir}:/models:ro" \
   -p 127.0.0.1:8000:8000 \
   "registry.internal.example/inference-server@sha256:${image_digest}"
 ```
+
+These flags match the pod spec below: a non-root user, no capabilities, no privilege escalation, a read-only root filesystem with a size-capped scratch tmpfs, a process limit, and the weights mounted read-only. The server may need more writable paths (a compile or download cache); add a tmpfs for each rather than dropping `--read-only`. GPU access flags are out of scope here; add only what your runtime documents.
 
 Two further points from the inference server security guidance. The API key option covers only the routes under some path prefixes, and other sensitive endpoints on the same server need no key, so it is not a perimeter; if a server must be shared, put an authenticating proxy that allowlists routes in front of it. Inter-node traffic in multi-node setups is insecure by default and must sit on an isolated network, so do not cluster workstations on the office network. Docker documents that releases older than 28.0.0 let hosts on the same L2 segment reach ports published to localhost, so keep the container engine current. In rootless mode the `--cpus` and `--memory` flags are enforced only with cgroup v2 and systemd, and are otherwise ignored; check that `docker info` shows `systemd` as the Cgroup Driver on cgroup v2 (`none` means the flags are ignored). By default only the `memory` and `pids` controllers are delegated to non-root users, so before relying on `--cpus` check that `/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.controllers` lists `cpu`, or add `Delegate=cpu cpuset io memory pids` in `/etc/systemd/system/user@.service.d/delegate.conf` and run `sudo systemctl daemon-reload`. Anything shared beyond one user is the wrong shape for a workstation (see below).
 
@@ -125,7 +136,7 @@ spec:
       type: RuntimeDefault
   containers:
     - name: server
-      image: registry.internal.example/inference-server@sha256:<pinned-digest>
+      image: registry.internal.example/inference-server@sha256:<digest>
       args: ["--host", "127.0.0.1"]
       resources:
         requests:
@@ -214,6 +225,7 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the network exposure, dat
 
 ### Not verified
 
+- The hardening flags in the `docker run` example (`--cap-drop`, `--security-opt`, `--read-only`, `--tmpfs` options such as `size=`, `--pids-limit`, `--user`), including the exact `no-new-privileges` value syntax: the Docker `container run` reference was not read for this revision (checked against the published port behaviour above only).
 - Nothing was run: the fetch script, CI job and container and pod manifests were not executed.
 - That protecting the default branch is sufficient control for the promotion job; GitLab docs were read only for the rule syntax.
 - Which scanner supports which weight formats, and that a tensor-only format such as a tensor-only weight format cannot run code on load; check the scanner and format documentation.
@@ -231,5 +243,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the network exposure, dat
 - [Job rules | GitLab](https://docs.gitlab.com/ci/jobs/job_rules/): rules syntax used in the promotion job.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): governance framing; not reachable for review, see Not verified.
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/): threat framing for sensitive information disclosure, supply chain, model poisoning and unbounded consumption.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

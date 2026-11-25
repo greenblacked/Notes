@@ -8,7 +8,7 @@ tags:
   - runbooks
   - cost
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -49,8 +49,6 @@ When the primary appears healthy, verify stable success across representative tr
 - Owners approve each route; changes are auditable and reversible.
 
 Fallbacks must be reevaluated after a model, prompt, policy, or provider contract change. See [[model-provider-outage-runbook]] for incident execution and [[llm-api-cost-control]] for spending controls.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
 ## Sources
 

@@ -9,7 +9,7 @@ tags:
   - reliability
   - delivery
 created: 2026-10-16
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
@@ -113,10 +113,7 @@ spec:
       app.kubernetes.io/name: my-service
 ```
 
-- Create one for every multi-replica production service. Without it a node pool upgrade can evict all replicas on a node at once, or all replicas of a small service.
-- Use `maxUnavailable` or `minAvailable`, not both. For a single-replica workload a PDB that allows no disruption blocks drains and cluster upgrades indefinitely; either run two replicas or accept disruption.
-- PDBs do not protect against involuntary failures (node crash) or against your own Deployment rollout. Spread replicas with `topologySpreadConstraints` across zones to survive a zone failure.
-- Check them before an upgrade: `kubectl get pdb -A` and look for `ALLOWED DISRUPTIONS` of 0. See [[gke-cluster-upgrade]].
+Create one for every multi-replica production service. Sizing (`maxUnavailable` or `minAvailable`), the single-replica trap, the unhealthy-Pod eviction policy and the pre-upgrade audit are in [[pod-disruption-budgets-for-stateless-services]]; quorum workloads are in [[stateful-workloads-gke]]. PDBs do not cover your own rollout or a node crash: spread replicas with `topologySpreadConstraints`.
 
 ## Draining behind GCP load balancers
 

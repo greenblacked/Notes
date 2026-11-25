@@ -8,7 +8,7 @@ tags:
   - audit
   - security
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 aliases:
   - policy waivers
@@ -26,7 +26,7 @@ A waiver is a recorded, approved, time-boxed permission to break one policy for 
 ## Rules
 
 - **One waiver, one policy, one scope.** A waiver names the policy and the exact namespace, kind and object. No wildcards across teams.
-- **Every waiver expires.** The longest allowed period is 90 days. Renewal is a new request with a fresh approval, not an edit of the date by the owner.
+- **Every waiver expires.** The longest allowed period is 90 days (a proposed team default). This is the only place that sets it; other notes link here, and the CI checks that hard-code it must change with it. Renewal is a new request with a fresh approval, not an edit of the date by the owner.
 - **The requester cannot approve.** The approver is the policy owner or a security reviewer, never the person who benefits.
 - **A ticket is mandatory.** The reason and the plan to remove the need live in the ticket; the record links to it.
 - **Waivers live in Git.** The file is changed by merge request only, so history is the audit trail.

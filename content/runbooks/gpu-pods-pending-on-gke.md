@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - reliability
 created: 2026-11-01
-modified: 2026-11-02
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -19,7 +19,7 @@ review-due: 2027-05-01
 How to find out why model-serving or batch Pods that request `nvidia.com/gpu` stay `Pending` on GKE, and how to get them running without making capacity worse. A GPU Pod needs four things at once: a node that carries the accelerator, a Pod that tolerates that node's taints and matches its labels, a node that advertises free `nvidia.com/gpu` capacity, and a cloud that can create such a node when none is free. Each fails differently and leaves a different trace. Read the trace first, then fix the one thing that is wrong.
 
 > [!info] Scope and verification
-> The commands were not run against a live system and the note is not marked `verified`. Kubernetes behaviour was checked against the Kubernetes website sources and flags against the built-in `gcloud` help (SDK 570.0.0) on 2026-11-01. The Terraform provider documentation for the GKE cluster and node pool resources was read (commit c4248bd). No Google Cloud documentation page could be read. GKE-specific names (the exact taint and labels GKE sets, GPU quota names, stockout error text) are therefore listed as **not verified** below and in the Evidence section. Read each from your own cluster output before you rely on it.
+> The commands were not run against a live system and the note is not marked `verified`. Kubernetes behaviour was checked against the Kubernetes website sources and flags against the built-in `gcloud` help (SDK 570.0.0) on 2026-11-01. The Terraform provider documentation for the GKE cluster and node pool resources was read (commit c4248bd). No Google Cloud documentation page could be read during the review on 2026-11-01. On 2026-11-24, after the review, the GKE GPU page and the Compute Engine quotas page were read; what they confirm is said in steps 3, 5 and 6 and in Evidence. The other GKE-specific names (stockout error text, permission names) remain **not verified** below and in the Evidence section. Read each from your own cluster output before you rely on it.
 
 ## When to use
 
@@ -142,7 +142,7 @@ gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$L
   --format="yaml(config.accelerators,config.taints)"
 ```
 
-Read the taints from this output, not from memory: whatever taints the nodes carry, the Pod must tolerate each one. Compare the node taints with the Pod's tolerations directly:
+Read the taints from this output, not from memory: whatever taints the nodes carry, the Pod must tolerate each one. GKE's GPU page (read 2026-11-24) says GKE adds the taint `nvidia.com/gpu=present:NoSchedule` itself only when a GPU pool is added to a cluster that already has a non-GPU pool, and that GKE gives Pods that request GPUs the matching toleration through the `ExtendedResourceToleration` admission controller. Such Pods need no toleration of their own for that taint; they still need one for every other taint, such as a custom `dedicated` taint. Compare the node taints with the Pod's tolerations directly:
 
 ```bash
 kubectl get nodes -l "$POOL_LABEL" -o json \
@@ -249,14 +249,14 @@ If one node differs from the rest of the pool, treat it as a node fault: cordon 
 
 ### 5. Check the node selector and the accelerator label
 
-A Pod that selects a GPU type needs a node label that exists. The Kubernetes "Schedule GPUs" page shows the generic approach: label nodes by accelerator type, then select on that label from the Pod; the label key in its example is only an example. Select on a label you set yourself on the pool, and list what your nodes actually carry before you rely on it:
+A Pod that selects a GPU type needs a node label that exists. The Kubernetes "Schedule GPUs" page shows the generic approach: label nodes by accelerator type, then select on that label from the Pod; the label key in its example is only an example. Select on a label you set yourself on the pool, and list what your nodes actually carry before you rely on it. GKE also labels GPU nodes `cloud.google.com/gke-accelerator=<GPU type>`, for example `nvidia-tesla-t4` (GKE GPU page, read 2026-11-24).
 
 ```bash
 kubectl get nodes -l "$POOL_LABEL" --show-labels | tr ',' '\n' | sort -u | grep -iE 'accel|gpu|pool|zone'
 kubectl -n "$NS" get pod "$POD" -o jsonpath='{.spec.nodeSelector}{"\n"}{.spec.affinity.nodeAffinity}{"\n"}'
 ```
 
-If the selector asks for a label no node has (a typo, a value that differs by one character, or a label from another cloud), correct the Deployment. A label you set yourself with `--node-labels` is under your control; for example `workload=llm-inference`, set on the pool in Terraform and selected on in the Pod, survives a pool re-creation. The `gcloud` help for `node-pools update --node-labels` says the labels are applied to existing nodes in place, and that the flag replaces all user-set labels on the pool, so pass the existing ones again when you add one.
+If the selector asks for a label no node has (a typo, a value that differs by one character, or a label from another cloud), correct the Deployment. A label you set yourself with `--node-labels` is under your control; for example `workload=llm-inference`, set on the pool in Terraform and selected on in the Pod, survives a pool re-creation. Before adding or changing a label with `--node-labels`, follow [[gke-node-pool-labels-update]]: the flag replaces every user-set label on the pool.
 
 ### 6. No GPU is free and none can be created: capacity
 
@@ -273,21 +273,9 @@ gcloud compute regions describe "$REGION" --flatten=quotas \
   | awk 'NR==1 || /GPU/'
 ```
 
-The output has one row per quota metric. Which metric names exist for which GPU type, and whether Spot GPUs use separate preemptible metrics, is **not verified**; the `/GPU/` filter in the awk command is a guess at the naming. If it returns nothing for your type, print the whole table and read it. Quota can also exist per project and globally, outside this region view; whether a global GPU quota applies here is **not verified**. When usage equals the limit, a new node cannot be created, and the managed instance group records the failure:
+The output has one row per quota metric. The Compute Engine quotas page (read 2026-11-24) says GPU quota is regional and named per GPU type (for example `NVIDIA_T4_GPUS`), that Spot and preemptible GPUs count against a separate preemptible quota (for example `PREEMPTIBLE_NVIDIA_H100_GPUS`), and that projects also have a global `GPUs (all regions)` quota, which this regional view does not show. The `/GPU/` filter matches those names; if it returns nothing, print the whole table. (The GKE GPU page words it as quota "in your selected zone".)
 
-```bash
-gcloud container node-pools describe "$POOL" --cluster "$CLUSTER" --location "$LOCATION" \
-  --format="value(instanceGroupUrls)" | tr ';' '\n' > mig-urls.txt
-
-while read -r url; do
-  zone=$(echo "$url" | awk -F/ '{for(i=1;i<=NF;i++) if($i=="zones") print $(i+1)}')
-  echo "== $zone $(basename "$url")"
-  gcloud compute instance-groups managed list-errors "$(basename "$url")" --zone "$zone" --limit 10 \
-    --format="table(timestamp,error.code,error.message)"
-done < mig-urls.txt
-```
-
-Read the error code and message. A quota failure and a stockout look different, but the exact codes and wording for GPUs are **not verified** here; the generic runbook names two codes for regular machine types (`ZONE_RESOURCE_POOL_EXHAUSTED` for a stockout, `QUOTA_EXCEEDED` for quota), and they may also appear for GPUs. Treat them as likely, not guaranteed.
+When usage equals the limit, a new node cannot be created and the managed instance group records the failure. Read those errors with the loop in [[gke-cluster-autoscaler-not-scaling-up]], step 4, after changing the `POOL=general` line of that block to the GPU pool name. Pasted unchanged, the block reads the `general` pool's errors and resets `POOL` in your shell, so the later commands here that use `"$POOL"` would target `general`. Which error codes appear for GPUs is **not verified**; that runbook's codes for regular machine types (`ZONE_RESOURCE_POOL_EXHAUSTED`, `QUOTA_EXCEEDED`) are likely but not guaranteed.
 
 **The GPU type may not be offered in the zone.** Not every zone offers every accelerator type. Ask Compute Engine which zones list the type:
 
@@ -439,18 +427,21 @@ Source-reviewed on 2026-11-01. Nothing was run and no cluster or Google Cloud pr
 - [Resource Management for Pods and Containers | Kubernetes](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/): the API server restricts quantities of extended resources to whole numbers. Checked 2026-11-01, commit 491f14e.
 - [Admission Controllers Reference | Kubernetes](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/): `ExtendedResourceToleration` is disabled by default. Checked 2026-11-01, commit 491f14e.
 - Terraform provider for Google docs, commit c4248bd, `container_cluster.html.markdown` (`guest_accelerator` block; `type`, `count` and `gpu_partition_size` changes re-create the pool while `gpu_driver_installation_config` and `gpu_sharing_config` update in place; driver modes and the pre-1.30.1-gke.1156000 default; sharing strategies `TIME_SHARING` and `MPS`; `max_shared_clients_per_gpu`; `cluster_autoscaling.resource_limits`) and `container_node_pool.html.markdown` (autoscaling `max_node_count` per zone, `total_max_node_count`, `reservation_affinity`).
-- `gcloud container node-pools create --help` and `update --help` (SDK 570.0.0, checked 2026-11-02): `--node-labels` replaces all user-set Kubernetes labels on the pool's nodes and applies them in place on existing nodes for `update`, and the labels can be used in `nodeSelector`.
-- [Assigning Pods to Nodes | Kubernetes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): `nodeSelector` matches node labels. Checked 2026-11-02, commit 491f14e.
+- [Assigning Pods to Nodes | Kubernetes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/): `nodeSelector` matches node labels. Checked 2026-11-02, commit 491f14e (added 2026-11-02, after the review).
 - `gcloud` built-in help, SDK 570.0.0, checked 2026-11-01: `container node-pools create` and `update` (`--accelerator` with `type`, `count`, `gpu-driver-version` values `default`, `latest` and `disabled` and their stated defaults, `gpu-partition-size`, `gpu-sharing-strategy`, `max-shared-clients-per-gpu`; `--node-taints`, `--node-labels`, `--node-locations`, `--spot`, `--enable-autoscaling`, `--max-nodes` per zone, `--total-max-nodes`, `--reservation`, `--reservation-affinity`, `--flex-start`, `--enable-queued-provisioning`), `compute accelerator-types list` (zone filter), `compute regions describe`, `compute reservations list`, `compute instance-groups managed list-errors` (names the `compute.instanceGroupManagers.list` permission and Compute Viewer role), `container clusters update` (`--max-accelerator`).
+
+Checked after the review, on 2026-11-24 (not part of the 2026-11-01 review):
+
+- [Run GPUs in GKE Standard node pools](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/gpus): the `nvidia.com/gpu=present:NoSchedule` taint and when GKE adds it, the toleration through `ExtendedResourceToleration`, the `cloud.google.com/gke-accelerator` label, `gpu-driver-version` values and defaults, GPU quota required before creating GPU nodes. Checked 2026-11-24.
+- [Compute Engine quotas](https://docs.cloud.google.com/compute/quotas): GPU quota is regional, per-type and preemptible names, the global `GPUs (all regions)` quota. Checked 2026-11-24.
 
 ### Not verified
 
-- Everything that depends on Google Cloud documentation, which could not be read.
-- The exact taint, if any, that GKE puts on GPU node pools, and whether GKE adds a matching toleration to Pods that request GPUs (including whether GKE enables the `ExtendedResourceToleration` admission controller; upstream it is off by default).
+- Google Cloud documentation other than the two pages read on 2026-11-24.
 - The permission names `container.clusters.get`, `compute.regions.get` and `logging.logEntries.list`, and the exact permissions for node pool changes.
 - That node auto-provisioning will not create a GPU pool without an accelerator resource limit.
 - Whether an in-place update of driver or sharing settings replaces the nodes.
-- GPU quota metric names and how Spot or preemptible GPU quota is counted, whether a global GPU quota also applies, and the `GPU` filter in the quota command.
+- How a global GPU quota and the regional quota interact for one pool, and the error text when either is used up.
 - The error codes and message text for a GPU stockout or quota failure in the managed instance group; the two codes borrowed from the autoscaler runbook are not confirmed for GPUs.
 - How GKE reports driver installation status, the names of the driver and device plugin DaemonSets, and whether a driver version or node image combination is rejected.
 - Which machine types pair with which GPU types, and which zones offer which GPU type (the note uses `gcloud compute accelerator-types list` for that).
@@ -489,4 +480,5 @@ See Rollback. Remove temporary pools, on-demand fallbacks and the local `mig-url
 - [Admission Controllers Reference | Kubernetes](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/): `ExtendedResourceToleration` default.
 - Terraform provider for Google, `google_container_cluster` and `google_container_node_pool` documentation: `guest_accelerator` behaviour.
 - `gcloud` built-in help, SDK 570.0.0: `container node-pools create|update|describe`, `compute accelerator-types list`, `compute regions describe`, `compute reservations list`, `compute instance-groups managed list-errors`.
-- See also, not read for this note: [Run GPUs in GKE Standard node pools](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus), [GPU time-sharing in GKE](https://cloud.google.com/kubernetes-engine/docs/concepts/timesharing-gpus), [GPU quota and regions](https://cloud.google.com/compute/docs/gpus/gpu-regions-zones).
+- [Run GPUs in GKE Standard node pools](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/gpus): the GPU taint, toleration, label and quota facts used in steps 3, 5 and 6, read 2026-11-24.
+- See also, not read for this note: [GPU time-sharing in GKE](https://cloud.google.com/kubernetes-engine/docs/concepts/timesharing-gpus), [GPU quota and regions](https://cloud.google.com/compute/docs/gpus/gpu-regions-zones).

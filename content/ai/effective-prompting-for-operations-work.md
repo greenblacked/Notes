@@ -8,7 +8,7 @@ tags:
   - reliability
   - incident-management
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -197,11 +197,8 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the Kubernetes debugging,
 
 ## Sources
 
-- Your model or coding-agent provider's own documentation for prompting guidance. Not read for this note (see Not verified); tool-specific behaviour varies by tool and version, so check it there before copying any configuration.
 - [Google SRE Book: Postmortem culture](https://sre.google/sre-book/postmortem-culture/) - blameless framing for incident prompts and reviews.
 - [Kubernetes docs: Debug Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/) - starting with describe, state and restarts.
 - [Kubernetes docs: Debug Running Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/) - ephemeral debug containers are marked stable since v1.25, so check the feature against your cluster version (checked 2026-11-02 against kubernetes/website commit 491f14e).
 - [OWASP Top 10 for LLM Applications: LLM01 Prompt Injection](https://genai.owasp.org/llm-top-10/) - segregating untrusted content, least privilege, human approval.
 - [GitLab CI/CD job token](https://docs.gitlab.com/ci/jobs/ci_job_token/) - job token push default and permissions.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

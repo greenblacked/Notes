@@ -8,7 +8,7 @@ tags:
   - reliability
   - team-process
 created: 2026-11-01
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -62,16 +62,16 @@ Keep one manifest for the golden set and the synthetic extension, so a score alw
 set_version: 2026.11.1
 golden:
   path: golden/support-rag.jsonl
-  sha256: REPLACE_WITH_DIGEST # change: digest of the golden file
+  sha256: <digest> # change: digest of the golden file
 synthetic:
   path: synthetic/support-rag-2026.11.1.jsonl
-  sha256: REPLACE_WITH_DIGEST # change: digest of the synthetic file
+  sha256: <digest> # change: digest of the synthetic file
   generator:
     id: REPLACE_WITH_GENERATOR_ID # change: pinned model identifier or template name
-    prompt_sha256: REPLACE_WITH_DIGEST # change: digest of the generator prompt
+    prompt_sha256: <digest> # change: digest of the generator prompt
     seed: 1234
     params: { temperature: 0.7 }
-  seed_corpus_sha256: REPLACE_WITH_DIGEST # change: digest of the seed documents
+  seed_corpus_sha256: <digest> # change: digest of the seed documents
   data_owner_approval: REPLACE_WITH_TICKET # change: reference, required if any real text was used
   human_review: { sample_size: 100, agreement: REPLACE_WITH_VALUE } # change: record the measured value
 splits:
@@ -111,7 +111,7 @@ Run it on merge requests that touch the sets, as below, and again as the first s
 ```yaml title=".gitlab-ci.yml"
 eval-set-manifest:
   stage: test
-  image: registry.example.com/ci/toolbox@sha256:REPLACE_WITH_DIGEST # change: an image with bash, yq and coreutils, pinned by digest
+  image: registry.example.com/ci/toolbox@sha256:<digest> # change: an image with bash, yq and coreutils, pinned by digest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
@@ -146,7 +146,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: drift
-              image: registry.example.com/eval/drift@sha256:REPLACE_WITH_DIGEST # change: your image, pinned by digest
+              image: registry.example.com/eval/drift@sha256:<digest> # change: your image, pinned by digest
               resources:
                 requests: { cpu: 250m, memory: 512Mi }
                 limits: { cpu: "1", memory: 1Gi }
@@ -227,5 +227,3 @@ Source-reviewed on 2026-11-02. Nothing was run. The review covered the OpenTelem
 - [NIST AI 600-1, Generative AI Profile](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence) - expectations for evaluation and data provenance in generative AI; check current content.
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) - sensitive information disclosure and data poisoning risks for eval and training data; check current numbering.
 - [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/244465e/docs/gen-ai/gen-ai-events.md) - the evaluation result event and its attributes, at development stability.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

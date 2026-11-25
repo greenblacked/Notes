@@ -6,7 +6,7 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -14,8 +14,6 @@ review-due: 2027-05-01
 ---
 
 An agent tool exposes a capability through a model-mediated interface: search, message, query, or change a resource. Model-selected tools and arguments do not prove user authorization. The trusted service must evaluate the authenticated principal, object, action, and current policy. This is narrower than broad agent identity management in [[ai/securing-ai-agents-in-ci-and-cloud]].
-
-The owner’s [AI skills catalogue](https://ai.szolotov.com) provides reusable skills and workflows.
 
 ## Separate capability description from enforcement
 

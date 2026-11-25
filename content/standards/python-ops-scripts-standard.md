@@ -9,7 +9,7 @@ tags:
   - gitlab-ci
   - linux
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -425,7 +425,7 @@ python-lint-test:
 
 ## Exceptions
 
-A script that cannot meet a rule (a vendor SDK that forces a shell call, a tool that cannot run in hash-checking mode) records the rule, the reason, an owner and an expiry date (proposed default 90 days) through [[policy-exception-and-waiver-process]]. Service account key files and secrets in arguments are not accepted as exceptions.
+A script that cannot meet a rule (a vendor SDK that forces a shell call, a tool that cannot run in hash-checking mode) records the rule, the reason, an owner and an expiry date within the maximum set in [[policy-exception-and-waiver-process#Rules]]. Service account key files and secrets in arguments are not accepted as exceptions.
 
 ## Reviewer checklist
 

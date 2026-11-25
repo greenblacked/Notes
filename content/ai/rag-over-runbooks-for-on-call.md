@@ -9,7 +9,7 @@ tags:
   - incident-management
   - security
 created: 2026-10-19
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -179,4 +179,3 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the OWASP and GitLab stat
 - [[prompt-injection-test-harness-for-ci-agents]]: testing the injection cases.
 - [[securing-ai-agents-in-ci-and-cloud]]: access and egress controls for the service.
 - [[on-call-health]]: whether the assistant reduces load.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

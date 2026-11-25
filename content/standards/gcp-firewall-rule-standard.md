@@ -9,7 +9,7 @@ tags:
   - security
   - terraform
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -140,7 +140,7 @@ Egress denies break things quietly (a node cannot reach an API, a job hangs on D
 
 There is no native expiry field on a firewall rule. Expiry is our convention: an `expires=` date in the description, checked in two places.
 
-- **In CI,** the plan check fails when a rule's `expires` date is in the past or more than 90 days ahead (proposed default, matching the waiver maximum in [[policy-exception-and-waiver-process]]).
+- **In CI,** the plan check fails when a rule's `expires` date is in the past or later than the waiver maximum in [[policy-exception-and-waiver-process#Rules]] (90 days today).
 - **Daily,** a scheduled job lists live rules and opens a ticket for each rule that expires within 7 days, and for each that has expired. An expired rule is disabled by the platform team after the owner has been told, and deleted a week later.
 
 ## Terraform example
@@ -266,7 +266,7 @@ Check the resource arguments against the provider version you pin: some examples
 set -euo pipefail
 PLAN_JSON="${1:-plan.json}"          # terraform show -json tfplan > plan.json
 TODAY="$(date -u +%F)"
-MAX_EXPIRY="$(date -u -d '+90 days' +%F)"   # GNU date; on macOS: date -u -v+90d +%F
+MAX_EXPIRY="$(date -u -d '+90 days' +%F)"   # GNU date; on macOS: date -u -v+90d +%F # keep equal to the waiver maximum in policy-exception-and-waiver-process
 
 PROBLEMS="$(jq -r --arg today "$TODAY" --arg max "$MAX_EXPIRY" '
   .resource_changes[]
@@ -399,7 +399,7 @@ Exceptions (an internet-facing passthrough backend, a vendor appliance that need
 - [ ] Priority is in the right band and does not shadow or get shadowed by an existing rule (check the effective firewalls output).
 - [ ] Name follows the pattern; the description has `owner`, `ticket`, `reason` and `expires`.
 - [ ] Logging matches the logging table.
-- [ ] Temporary rules expire within 90 days.
+- [ ] Temporary rules expire within the waiver maximum ([[policy-exception-and-waiver-process#Rules]]).
 - [ ] A Connectivity Test result for the new path is in the merge request.
 - [ ] The rollback (disable) is written in the change record.
 

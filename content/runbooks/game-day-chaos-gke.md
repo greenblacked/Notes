@@ -9,14 +9,14 @@ tags:
   - reliability
   - incident-management
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
 A game day is a planned, bounded failure. You break one thing on purpose, with people watching, and learn whether your alerts, runbooks and rollbacks work. It is the calm counterpart to [[incident-response]]: the same skills, but you choose the time, the size and the stop condition. Run it before a real incident does it for you.
 
 > [!info] Scope and what is not verified
-> This note covers planning, running and reviewing one scoped experiment on GKE. The `kubectl` and `gcloud` commands are standard. The Chaos Mesh manifest was written from memory of the `chaos-mesh.org/v1alpha1` API and was not run. Check `kubectl explain podchaos.spec` against your installed CRDs for field names, actions, modes and which actions honour `duration`. Whether the Google SRE Workbook has a chapter on game days was not checked, so this note does not cite it. The note is not marked `verified`.
+> This note covers planning, running and reviewing one scoped experiment on GKE. The `kubectl` and `gcloud` commands are standard. The Chaos Mesh manifest was checked against the Chaos Mesh 2.8.8 documentation ([Simulate Pod faults](https://chaos-mesh.org/docs/simulate-pod-chaos-on-kubernetes/), [Define the scope](https://chaos-mesh.org/docs/define-chaos-experiment-scope/)) on 2026-11-24 but not run; check `kubectl explain podchaos.spec` against your installed version. Whether the Google SRE Workbook has a chapter on game days was not checked, so this note does not cite it. The note is not marked `verified`.
 
 ## When to use
 
@@ -154,7 +154,7 @@ spec:
       app.kubernetes.io/name: payments-api
 ```
 
-`mode: one` selects a single pod at random from those matching. `duration: 2m` ends the fault by itself. Not verified: the field names, the available modes, and whether your Chaos Mesh version supports `duration` for the action you choose (for example `pod-kill` is a one-off action, `pod-failure` lasts for the duration). Run `kubectl explain podchaos.spec` and a dry run in staging before the real one.
+`mode: one` selects a single pod at random from those matching. `duration: 2m` ends the fault by itself. The documentation lists `mode` values `one`, `all`, `fixed`, `fixed-percent` and `random-max-percent`; `duration` limits a `pod-failure` experiment, and without it the fault lasts until the experiment is paused or deleted; `pod-kill` is a one-off action that uses `gracePeriod` instead, and needs a controller to restart the Pod. `selector.namespaces` defaults to the experiment's own namespace. Do a dry run in staging before the real one.
 
 Apply it, then watch the pods and the rollout.
 

@@ -8,7 +8,7 @@ tags:
   - incident-management
   - on-call
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -50,32 +50,49 @@ Do not let the model state root causes or "this usually fixes it" without a link
 
 Run each command in an environment that matches production on the parts that change behaviour: Kubernetes minor version, Helm chart and Terraform provider versions, installed CLI versions, IAM shape. Record the transcript and keep it in version control with the runbook.
 
-A small harness makes the lab run repeatable. This sketch executes the steps from a tab-separated file and records the output. It refuses to start unless the current kubectl context is the named lab context, and it skips steps marked destructive unless `ALLOW_DESTRUCTIVE=yes` is set. The context check covers kubectl only: give other tools (cloud CLIs, Terraform) lab-only credentials in the same shell.
+A small harness makes the lab run repeatable. This sketch runs the steps from a tab-separated file and records the output. It decides by the cluster's API server URL, not its name: the context's server must be listed in a reviewed `lab-clusters.txt`. It then pins every step to that context through a private kubeconfig that holds nothing else, so a step that names another context fails. Destructive steps run only when `ALLOW_DESTRUCTIVE` is set to the lab context's own name. The pin covers kubectl only, and a hostile steps file can still set its own `KUBECONFIG`. Review the steps, and give other tools (cloud CLIs, Terraform) lab-only credentials in the same shell.
 
 ```bash title="verify-runbook.sh"
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# usage: verify-runbook.sh steps.tsv lab-context
+# usage: ALLOW_DESTRUCTIVE=<lab-context> verify-runbook.sh steps.tsv lab-context
 # steps.tsv: id<TAB>marker<TAB>command; use "-" for no marker, "#" starts a comment
+# lab-clusters.txt: one allowed lab API server URL per line, reviewed like code
 steps="$1"
 ctx="$2"
-allow_destructive="${ALLOW_DESTRUCTIVE:-no}"
+allowlist="${LAB_CLUSTERS_FILE:-lab-clusters.txt}"
 
-case "$ctx" in lab-*) ;; *) echo "refusing non-lab context: $ctx" >&2; exit 2 ;; esac
-current="$(kubectl config current-context)"
-if [[ "$current" != "$ctx" ]]; then
-  echo "current kubectl context is $current, expected $ctx" >&2
+case "$ctx" in lab-*) ;; *) echo "refusing non-lab context name: $ctx" >&2; exit 2 ;; esac
+
+# The server URL decides, not the name: a context called lab-x can point anywhere.
+server="$(kubectl config view --context "$ctx" --minify -o jsonpath='{.clusters[0].cluster.server}')"
+if [[ -z "$server" ]] || ! grep -qxF -- "$server" "$allowlist"; then
+  echo "context $ctx points at '$server', which is not in $allowlist" >&2
   exit 2
 fi
 
+# Destructive steps need the context name itself, so a stray ALLOW_DESTRUCTIVE=yes does nothing.
+allow_destructive=no
+[[ "${ALLOW_DESTRUCTIVE:-}" == "$ctx" ]] && allow_destructive=yes
+
+# Pin every step to the lab: a private kubeconfig holding only this context.
+# A step that names another context (kubectl --context prod) fails, because no such context exists here.
+umask 077
+work="$(mktemp -d)"
+trap 'rm -rf -- "$work"' EXIT
+kubectl config view --context "$ctx" --minify --flatten --raw > "$work/kubeconfig"
+export KUBECONFIG="$work/kubeconfig"
+[[ "$(kubectl config current-context)" == "$ctx" ]] || { echo "pinned kubeconfig is not on $ctx" >&2; exit 2; }
+
 mkdir -p transcripts
 out="transcripts/$(basename "$steps" .tsv)-$(date -u +%Y%m%dT%H%M%SZ).txt"
+echo "### context $ctx server $server destructive=$allow_destructive" | tee -a "$out"
 
 while IFS=$'\t' read -r id marker cmd; do
   [[ -z "$id" || "$id" == \#* ]] && continue
   if [[ "$marker" == *DESTRUCTIVE* || "$marker" == *DATA-LOSS* ]] && [[ "$allow_destructive" != yes ]]; then
-    echo "### $id SKIPPED (destructive; set ALLOW_DESTRUCTIVE=yes in a disposable lab)" | tee -a "$out"
+    echo "### $id SKIPPED (destructive; set ALLOW_DESTRUCTIVE=$ctx in a disposable lab)" | tee -a "$out"
     continue
   fi
   echo "### $id [$marker] $cmd" | tee -a "$out"
@@ -84,7 +101,7 @@ while IFS=$'\t' read -r id marker cmd; do
 done <"$steps"
 ```
 
-The marker field must not be empty, because `read` collapses consecutive tabs; that is why the format uses `-`. Steps run with your shell's credentials, so run the harness only from a session that cannot reach production.
+The marker field must not be empty, because `read` collapses consecutive tabs; that is why the format uses `-`. Steps run with your shell's credentials, so run the harness only from a session that cannot reach production. The pinned kubeconfig holds the lab credentials while the run lasts; it is created with `umask 077` and removed on exit.
 
 Whatever harness you use, record: date, tool versions, lab ID and the person who reviewed the output. Then compare the output to the expected-output line the model proposed; a mismatch is a defect in the runbook, not in the lab.
 
@@ -107,7 +124,7 @@ Add a lint check in CI so that the model cannot drop a warning when it rewrites 
 runbook-lint:
   stage: test
   # Any pinned image with find and awk; pin by digest, never a moving tag.
-  image: registry.example.com/ci/base:1.8.0@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  image: registry.example.com/ci/base:1.8.0@sha256:<digest>
   script:
     - |
       find runbooks -name '*.md' -exec awk '
@@ -173,7 +190,7 @@ Useful signals: steps that failed in the lab, game-day corrections per runbook, 
 - A rewrite for brevity that silently drops a `[DESTRUCTIVE]` marker or the preview step.
 - A step with no expected output or rollback, so the responder cannot tell if it worked.
 - A lab that differs from production, so a verified step fails in anger.
-- A lab harness that trusts a context name but runs against whatever cluster or cloud account the shell is pointed at.
+- A lab harness that trusts a context name, or an unscoped `ALLOW_DESTRUCTIVE=yes`, and runs against whatever cluster the name points at.
 - Stale procedures returned by retrieval with high confidence.
 - Invented root causes and "usually" lines with no incident behind them.
 - Transcripts containing secrets or customer data committed with the runbook.
@@ -212,6 +229,7 @@ Source-reviewed on 2026-11-02. Nothing was run. The review covered the Kubernete
 ### Not verified
 
 - Nothing was run: the harness script, the lint job and the examples are untested sketches.
+- The `kubectl config view` flags `--minify`, `--flatten`, `--raw` and `--context` (the kubectl reference page was fetched on 2026-11-24 but its option text was not returned), including whether `--minify` follows `--context` rather than the file's `current-context`. The script checks the result with `kubectl config current-context` and stops if it differs.
 - NIST SP 800-61 Rev. 3, the Google Cloud Well-Architected Framework, the Site Reliability Workbook and the chapter on Google DiRT in the Chaos Engineering book could not be read; they stay in Sources as background only, and no statement above depends on them.
 - GitLab CI keywords `image`, `stage` and `script`, the exact `rules:changes` path syntax and glob behaviour, and image pinning by digest: the keyword reference is not in the local GitLab docs.
 - The jsonpath output in the step 3 example (`true` when cordoned, empty when the field is unset): confirm in the lab run.
@@ -221,7 +239,7 @@ Source-reviewed on 2026-11-02. Nothing was run. The review covered the Kubernete
 
 ### Environment
 
-A lab cluster whose kubectl context name starts with `lab-` and matches production on Kubernetes, Helm and Terraform provider versions; see "Verify every command in a lab".
+A lab cluster whose kubectl context name starts with `lab-`, whose API server URL is listed in `lab-clusters.txt`, and which matches production on Kubernetes, Helm and Terraform provider versions; see "Verify every command in a lab".
 
 ### Prerequisites
 
@@ -233,7 +251,7 @@ Each step has a recorded transcript matching its expected-output line; destructi
 
 ### Failure conditions
 
-The harness refuses a non-lab context; a step output differs from its expected line, which is a runbook defect; a risky verb appears in an unmarked step and the lint job fails. See "Failure modes".
+The harness refuses a context whose name does not start with `lab-` or whose server is not in the allowlist; a step output differs from its expected line, which is a runbook defect; a risky verb appears in an unmarked step and the lint job fails. See "Failure modes".
 
 ### Cleanup and rollback
 
@@ -247,5 +265,3 @@ Run destructive steps only in a disposable lab and discard it afterwards; every 
 - [Google Cloud Well-Architected Framework: operational excellence](https://docs.cloud.google.com/architecture/framework/operational-excellence): incident management and operations practice (not read).
 - [The Site Reliability Workbook](https://research.google/pubs/the-site-reliability-workbook/): incident response and disaster recovery practice (not read).
 - [Chaos Engineering, chapter on Google DiRT](https://www.oreilly.com/library/view/chaos-engineering/9781492043850/): the game day framing of inducing failures in a controlled setting (not read; chapter number not checked).
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

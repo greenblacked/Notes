@@ -6,7 +6,7 @@ tags:
   - ai
   - cost
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -48,9 +48,6 @@ At request admission, record estimate ID, rate version, planned model, and ceili
 
 This estimator supports engineering controls and does not replace provider invoices, finance review, or contractual interpretation. See [[llm-api-cost-control]] for aggregate budget gates.
 
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
-
 ## Sources
 
 - [Agent Platform Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing): official example of rate dimensions; check current region and model prices.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).

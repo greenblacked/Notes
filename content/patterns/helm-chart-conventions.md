@@ -8,7 +8,7 @@ tags:
   - kubernetes
   - ci-cd
 created: 2026-10-16
-modified: 2026-10-16
+modified: 2026-11-24
 draft: false
 ---
 
@@ -295,6 +295,8 @@ spec:
       {{- include "my-service.selectorLabels" . | nindent 6 }}
 {{- end }}
 ```
+
+How to size the budget is in [[pod-disruption-budgets-for-stateless-services]]; this chart only decides whether the object exists.
 
 ## Secrets
 

@@ -7,7 +7,7 @@ tags:
   - security
   - audit
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -71,5 +71,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the published guidance th
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): agentic risk guidance for authority and human oversight; not read, see Not verified.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): governance, accountability and risk management; not read, see Not verified.
 - [Google Cloud Workflows documentation](https://cloud.google.com/workflows/docs): orchestration reference for explicit workflow transitions; not read, see Not verified.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

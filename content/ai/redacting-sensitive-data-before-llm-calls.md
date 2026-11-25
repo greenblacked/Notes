@@ -9,7 +9,7 @@ tags:
   - audit
   - observability
 created: 2026-10-21
-modified: 2026-11-01
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -105,8 +105,10 @@ set -euo pipefail
 PROJECT_ID="example-project"    # change: the project that holds the gateway
 LOCATION="europe-west4"         # change: the region your data may be processed in
 
-curl -sS --fail-with-body -X POST \
-  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+# The token goes to curl on stdin as a header file (printf is a shell builtin), not in argv.
+token="$(gcloud auth print-access-token)"
+printf 'Authorization: Bearer %s\n' "$token" | curl -sS --fail-with-body -X POST \
+  -H @- \
   -H "Content-Type: application/json" \
   "https://dlp.googleapis.com/v2/projects/${PROJECT_ID}/locations/${LOCATION}/content:deidentify" \
   -d @deidentify-request.json
@@ -368,4 +370,3 @@ Source-reviewed on 2026-11-01. No API call was made and the Python files were no
 - [[cloud-kms-key-management]]: keys for reversible tokenization.
 - [[structured-logging-conventions]]: field names for the allow-list and the audit line.
 - [[llm-observability-tracing-and-slos]]: why prompt content capture stays off in traces.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

@@ -6,7 +6,7 @@ tags:
   - ai
   - security
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -16,8 +16,6 @@ draft: false
 Delegated OAuth lets a tool act with a user’s authority instead of a shared identity. It can reduce confused-deputy risk, but the model may still request an unintended action and tokens may be over-scoped. Treat OAuth as an identity boundary, not a way to outsource consent to a conversational model. See [[ai/agent-tool-authorization-boundaries]] for capability checks.
 
 The general agent credential and runtime controls in [[ai/securing-ai-agents-in-ci-and-cloud]] still apply when a tool uses user delegation.
-
-The owner’s [AI skills catalogue](https://ai.szolotov.com) provides reusable skills and workflows.
 
 ## Choose the delegation model deliberately
 
@@ -74,7 +72,6 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the OAuth requirements th
 - RFC 9700 and RFC 8693 were not available locally, so their publication dates and the note's statements about them (current BCP status, token-exchange scope) were not checked.
 - The Google Cloud service account impersonation page and the AWS temporary credentials page were not available.
 - The statement that public clients cannot keep embedded secrets confidential, and the advice on nonce handling, sender-constrained tokens and revocation semantics, rest on the OAuth RFCs, which were not read; the MCP spec only states state, PKCE and redirect rules.
-- The owner's AI skills catalogue link was not checked.
 - Engineering guidance (keeping tokens out of model context, trusted confirmation UI, fail-closed behavior, audit metadata, test lists) is not stated by any local source and was not claim-checked.
 - Nothing was run.
 

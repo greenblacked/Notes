@@ -8,7 +8,7 @@ tags:
   - ci-cd
   - reliability
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -63,7 +63,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: run
-              image: registry.example.com/agent-jobs/dep-triage@sha256:REPLACE_WITH_DIGEST
+              image: registry.example.com/agent-jobs/dep-triage@sha256:<digest>
               command: ["/usr/local/bin/run-job.sh"]
               env:
                 - name: JOB_NAME
@@ -103,7 +103,7 @@ For GitLab CI, a pipeline schedule plus `rules:` and a `resource_group` gives th
 ```yaml title=".gitlab-ci.yml"
 agent-dep-triage:
   stage: agents
-  image: registry.example.com/agent-jobs/dep-triage@sha256:REPLACE_WITH_DIGEST
+  image: registry.example.com/agent-jobs/dep-triage@sha256:<digest>
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dep-triage"'
   resource_group: agent-dep-triage
@@ -230,5 +230,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the Kubernetes CronJob, J
 - [GitLab Docs: Pipeline schedules API](https://docs.gitlab.com/api/pipeline_schedules/) - pipeline schedules and schedule variables.
 - [GitLab Docs: Resource groups API](https://docs.gitlab.com/api/resource_groups/) - resource groups and process modes.
 - [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) - risk-based secure development practices behind the control framing (not read; see Not verified).
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

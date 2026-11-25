@@ -7,7 +7,7 @@ tags:
   - security
   - supply-chain
 created: 2026-10-26
-modified: 2026-10-26
+modified: 2026-11-24
 draft: false
 ---
 
@@ -60,4 +60,3 @@ For a suspected vulnerability or behavioral incident, preserve model digests, ru
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework): AI RMF 1.0 context and current revision notice, checked 2026-10-26.
 - [NIST AI 600-1, Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf): GenAI risk-management guidance.
 - [SLSA specification v1.1](https://slsa.dev/spec/v1.1/): provenance concepts for artifact supply chains.
-- [Owner’s AI skills catalogue](https://ai.szolotov.com): reusable AI skills and workflows.

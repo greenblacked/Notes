@@ -8,7 +8,7 @@ tags:
   - ci-cd
   - security
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-25
 draft: false
 ---
 
@@ -271,7 +271,7 @@ unclassified:
       - name: "lab-lib"
         defaultVersion: "v0.1.0"
         implicit: false
-        allowVersionOverride: true
+        allowVersionOverride: true # lab only: false in production, see the warning below
         retriever:
           modernSCM:
             scm:
@@ -280,7 +280,10 @@ unclassified:
                 credentialsId: "lab-lib-readonly"
 ```
 
-`allowVersionOverride: true` lets a Jenkinsfile choose a different version with `@Library('lab-lib@v0.2.0')`. If you set it to false, only the default applies, which is stricter and useful for a security-critical library.
+`allowVersionOverride: true` lets a Jenkinsfile choose a different version with `@Library('lab-lib@v0.2.0')`, and this lesson relies on it for per-pipeline pins and for the test pipeline below.
+
+> [!warning] Overrides load any ref of trusted code
+> With overrides on, any Jenkinsfile can load **any** branch or commit of a trusted library, and that code runs outside the sandbox. A branch pushed by anyone with write access to the library repository then runs as administrator code. In production, either protect every branch and tag of the library repository, or set `allowVersionOverride: false` and move the pin to `defaultVersion` through a reviewed JCasC change.
 
 ## Credentials in a library and in a pipeline
 

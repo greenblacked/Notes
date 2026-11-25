@@ -8,7 +8,7 @@ tags:
   - security
   - audit
 created: 2026-10-19
-modified: 2026-10-20
+modified: 2026-11-25
 evidence: source-reviewed
 reviewed: 2026-10-20
 review-due: 2027-04-20
@@ -73,6 +73,8 @@ The rule fields are `deniedPrincipals`, `exceptionPrincipals` (optional: princip
 
 > [!warning] A broad deny policy can lock out operators
 > A deny rule beats every allow policy, including Owner and break-glass roles. A deny with a wrong or too wide principal (for example all users, or a group your administrators belong to) can stop people from fixing the very thing it broke. Before attaching it: keep the principals to the agent group only, test in a sandbox project, name a break-glass group in `exceptionPrincipals` for any rule whose denied principals could include operators, and keep the rollback below in reach. Attaching at the organisation or a folder affects every project below it.
+
+The Secret Manager entry below is unconfirmed: check it against [Permissions supported in deny policies](https://cloud.google.com/iam/docs/deny-permissions-support) before use, and remove it if it is not listed.
 
 ```json title="agent-deny-policy.json"
 {
@@ -184,16 +186,36 @@ Use the agent account's email as the filter, which is one reason for one account
 Deny policies and bindings are reversible configuration:
 
 1. Keep them in Terraform. To roll back, revert the commit and apply.
-2. For an emergency, delete the deny policy and note the time; the allow policies still hold. Deletion is permanent and asynchronous, so export the policy file first:
+2. For an emergency, delete the deny policy and note the time; the allow policies still hold. Deletion is permanent and asynchronous, so the script exports the policy first and stops if the export is empty:
 
    ```bash title="delete-deny-policy.sh"
    set -euo pipefail
 
    PROJECT_ID="example-project"
-   gcloud iam policies delete agent-deny \
-     --attachment-point="cloudresourcemanager.googleapis.com/projects/${PROJECT_ID}" \
-     --kind=denypolicies
+   POLICY_ID="agent-deny"
+   ATTACHMENT_POINT="cloudresourcemanager.googleapis.com/projects/${PROJECT_ID}"
+   BACKUP="${POLICY_ID}-${PROJECT_ID}-$(date -u +%Y%m%dT%H%M%SZ).json"
+
+   # 1. Export the policy. Deletion is permanent, so stop if the export is empty.
+   gcloud iam policies get "${POLICY_ID}" \
+     --attachment-point="${ATTACHMENT_POINT}" \
+     --kind=denypolicies \
+     --format=json > "${BACKUP}"
+
+   if [[ ! -s "${BACKUP}" ]] || ! grep -q '"denyRule"' "${BACKUP}"; then
+     echo "export of ${POLICY_ID} is empty or has no deny rules; not deleting" >&2
+     exit 1
+   fi
+   echo "exported ${POLICY_ID} to ${BACKUP}"
+
+   # 2. Delete the policy.
+   gcloud iam policies delete "${POLICY_ID}" \
+     --attachment-point="${ATTACHMENT_POINT}" \
+     --kind=denypolicies \
+     --quiet
    ```
+
+   To restore it, create the policy again from the export with `gcloud iam policies create` and `--policy-file`. If the create call rejects server-set fields in the export (such as `name`, `uid`, `etag` or timestamps), keep only `displayName` and `rules`.
 
    To relax a rule instead of removing the whole policy, update the policy with a corrected file, or add the affected operators to `exceptionPrincipals` as a break-glass exception. Deny policies are read and updated with the same `gcloud iam policies` commands.
 
@@ -217,7 +239,8 @@ Corrections made on 2026-10-20: the Data Access log statement now says disabled 
 
 ### Not verified
 
-- Whether `secretmanager.googleapis.com/versions.access` is supported in deny policies.
+- Whether `secretmanager.googleapis.com/versions.access` is supported in deny policies; check [Permissions supported in deny policies](https://cloud.google.com/iam/docs/deny-permissions-support) before use.
+- `gcloud iam policies get` with `--format=json`, and whether `gcloud iam policies create` accepts that export unchanged as a policy file, were not checked.
 - The exact audit log method names for key creation and IAM policy changes were not checked.
 - No policy, binding, constraint, perimeter or impersonation call was applied or run; the `gcloud` commands are as documented, not as observed. The Policy Troubleshooter output was not seen.
 - The `resource.matchTag` tag format, the `principalSet://goog/group/` form for your identity setup, and numeric limits (the note quotes none) were not checked.
@@ -241,7 +264,7 @@ The create call is rejected (unsupported permission, wrong principal format or a
 
 ### Cleanup and rollback
 
-See the Rollback section. In short: delete or update the deny policy (permanent, asynchronous), use `exceptionPrincipals` for break-glass access, revert the Terraform commit, and delete the sandbox project when testing is finished. Do not run these against a production project to test them.
+See the Rollback section. In short: export, then delete or update the deny policy (deletion is permanent and asynchronous), use `exceptionPrincipals` for break-glass access, revert the Terraform commit, and delete the sandbox project when testing is finished. Do not run these against a production project to test them.
 
 ### Lab run
 
@@ -289,4 +312,3 @@ The other candidates in the list (changing IAM policies, deleting projects, disk
 - [[zero-trust-access-iap-and-vpc-service-controls]]: perimeters and access levels.
 - [[gcp-audit-logs-siem]]: sending audit logs to the SIEM.
 - [[ai-assisted-incident-response]]: read-only access for assistants during incidents.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

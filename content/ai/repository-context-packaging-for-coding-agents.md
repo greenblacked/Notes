@@ -7,7 +7,7 @@ tags:
   - security
   - ci-cd
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -55,9 +55,9 @@ Use a small, trusted context pack for routine code changes. Escalate to an archi
 
 ## Related
 
-- [Owner’s AI skills catalogue](https://ai.szolotov.com).
+- [[context-engineering-for-agents]]: assembling task context.
+- [[ai-docs-drift-and-verification]]: keeping the docs the agent reads correct.
 
 ## Sources
 
-- Your coding agent's own documentation for instruction files, their location, scope and precedence. The tool-specific behaviour this note gives as an example varies by tool and version; check it there before copying any configuration.
 - [OWASP Top 10 for Agentic Applications for 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/): agent-specific risk framing; use as a risk reference, not a substitute for local threat modeling.

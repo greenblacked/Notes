@@ -10,14 +10,14 @@ tags:
   - helm
   - gitlab-ci
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-25
 draft: false
 ---
 
 Most platform work does not end in the platform's own repositories. A new major version of the shared Helm library chart, a Terraform provider upgrade, a base image change, a Kubernetes API removal, a central CI template release: each one has to land in tens or hundreds of repositories owned by other teams, who have their own priorities. Without a method, these changes follow the same curve every time: a fast start with the eager teams, a long tail that stalls well short of done, and a deadline that slips because the last repositories belong to teams that never read the announcement. A campaign is the method for getting the tail done: one owner, a precise inventory, automation that does the work for teams, a visible board, a nudge ladder, and enforcement with exceptions at the end.
 
 > [!info] Scope and what is not verified
-> The GitLab API calls follow the GitLab documentation read on 2026-10-21; GitLab features differ by tier and version, so check yours. The Renovate options follow the Renovate configuration docs of the same date; Renovate changes often (for example `managerFilePatterns` replaced `fileMatch`), so check the docs for the version you run. The inventory, clone and merge request scripts were tested against sample repositories and a local mock of the GitLab API, not a live instance. The Renovate configuration and the Conftest policy were **not run**. GitLab API rate limits were **not checked**: keep the pauses and check the limits on your instance.
+> The GitLab API calls follow the GitLab documentation read on 2026-10-21; GitLab features differ by tier and version, so check yours. The repository files API takes a URL-encoded `file_path` and an optional `ref` (default `HEAD`); the script encodes both (checked 2026-11-24). The Renovate options follow the Renovate configuration docs of the same date; Renovate changes often (for example `managerFilePatterns` replaced `fileMatch`), so check the docs for the version you run. The inventory, clone and merge request scripts were tested against sample repositories and a local mock of the GitLab API, not a live instance. The Renovate configuration and the Conftest policy were **not run**. GitLab API rate limits were **not checked**: keep the pauses and check the limits on your instance.
 
 ## When work is a campaign
 
@@ -312,8 +312,10 @@ Standard library only.
 
 Input CSV columns: project (ID or full path), file (path of Chart.yaml in the repo).
 
-  GITLAB_URL=https://gitlab.example.com GITLAB_TOKEN=... \
-    python3 open_mrs.py targets.csv --chart platform-lib --to 3.0.0 --campaign PLAT-123 [--apply]
+  # The subshell keeps the token out of the parent shell's environment once the script ends.
+  ( read -rs GITLAB_TOKEN && export GITLAB_TOKEN   # paste the bot token; not echoed, not in history
+    GITLAB_URL=https://gitlab.example.com \
+      python3 open_mrs.py targets.csv --chart platform-lib --to 3.0.0 --campaign PLAT-123 [--apply] )
 """
 import argparse
 import csv
@@ -401,7 +403,11 @@ def main() -> int:
     if not token:
         print("export GITLAB_TOKEN (api scope, from a bot account)", file=sys.stderr)
         return 2
-    gl = GitLab(os.environ.get("GITLAB_URL", "https://gitlab.example.com"), token)
+    base_url = os.environ.get("GITLAB_URL", "https://gitlab.example.com")
+    if not base_url.startswith("https://"):
+        print("GITLAB_URL must start with https://: the token is sent with every request", file=sys.stderr)
+        return 2
+    gl = GitLab(base_url, token)
     branch = f"campaign/{args.campaign.lower()}-{args.chart}-{args.to}"
     failures = 0
 
@@ -412,7 +418,8 @@ def main() -> int:
             try:
                 default = gl.call("GET", f"projects/{pid}")["default_branch"]
                 fpath = urllib.parse.quote(path, safe="")
-                text = gl.call("GET", f"projects/{pid}/repository/files/{fpath}/raw?ref={default}", raw=True)
+                ref = urllib.parse.quote(default, safe="")  # branch names may hold /, #, &, +
+                text = gl.call("GET", f"projects/{pid}/repository/files/{fpath}/raw?ref={ref}", raw=True)
                 new_text, old = bump(text, args.chart, args.to)
                 if old == args.to:
                     print(f"SKIP {project}: already on {args.to}")
@@ -593,7 +600,7 @@ The shared library chart from [[helm-library-and-umbrella-charts]] gets a new ma
 
 - [GitLab: groups API](https://docs.gitlab.com/api/groups/) and [projects API](https://docs.gitlab.com/api/projects/): listing a group's projects, `include_subgroups`, `archived`, pagination limits.
 - [GitLab: REST API](https://docs.gitlab.com/api/rest/): pagination headers and namespaced path encoding.
-- [GitLab: commits API](https://docs.gitlab.com/api/commits/), [repository files API](https://docs.gitlab.com/api/repository_files/) and [merge requests API](https://docs.gitlab.com/api/merge_requests/): creating the branch, commit and merge request; the `force` warning.
+- [GitLab: commits API](https://docs.gitlab.com/api/commits/), [repository files API](https://docs.gitlab.com/api/repository_files/) and [merge requests API](https://docs.gitlab.com/api/merge_requests/): creating the branch, commit and merge request; the `force` warning; `file_path` encoding and `ref`, checked 2026-11-24.
 - [GitLab: search API](https://docs.gitlab.com/api/search/), [advanced search](https://docs.gitlab.com/user/search/advanced_search/) and [exact code search](https://docs.gitlab.com/user/search/exact_code_search/): code search tiers.
 - [Renovate: configuration options](https://docs.renovatebot.com/configuration-options/): `customManagers`, `packageRules`, `prConcurrentLimit`, `prHourlyLimit`, dependency dashboard.
 - [Renovate: self-hosted configuration](https://docs.renovatebot.com/self-hosted-configuration/): autodiscovery for running across a fleet.

@@ -7,7 +7,7 @@ tags:
   - security
   - team-process
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
 
@@ -59,6 +59,3 @@ When an instruction appears to cause unsafe behavior, disable or route around th
 
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — governance and lifecycle framing. NIST states AI RMF 1.0 is being revised; it was released in 2023.
 - [Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence) — NIST's AI RMF 1.0 companion profile, published 2024-07-26; confirm applicability for a given deployment.
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

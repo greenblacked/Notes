@@ -9,7 +9,7 @@ tags:
   - reliability
   - on-call
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 verified: 2026-10-17
 draft: false
 ---
@@ -480,7 +480,7 @@ An alert that pages must be **actionable** (a human can do something now), **urg
    alert-rules:
      stage: test
      image:
-       name: prom/prometheus:v2.45.3 # example tag, not verified: pin a release you have checked
+       name: prom/prometheus:<tested-version>@sha256:<digest> # change: a release you checked, pinned by digest
        entrypoint: [""]
      script:
        - promtool check rules rules.yml

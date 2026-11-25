@@ -6,7 +6,7 @@ tags:
   - standards
   - meta
 created: 2026-10-10
-modified: 2026-11-22
+modified: 2026-11-25
 verified: 2026-10-11
 draft: false
 ---
@@ -66,7 +66,7 @@ Home, section index, tags and All notes pages are not notes in this sense: they 
 
 - `verified` is a promise. Set it only to the day you actually compared the note with the system, document or command output it describes, and move it forward only after repeating that check. Leave it out when you have not checked; an old honest date is better than a fresh guess. It is not the same as `modified`, which records the last edit.
 - Write dates unquoted (`2026-10-11`). YAML reads them as dates, and the sheet handles quoted strings as well.
-- `status` is lowercase, as listed in [[adr/index#Lifecycle|the ADR lifecycle]]. It records the ADR's lifecycle in the source and is not shown on the site.
+- `status` is lowercase, as listed in [[adr/index#Lifecycle|the ADR lifecycle]]. It records the ADR's lifecycle in the source and is not rendered from the frontmatter: the status is listed by hand in the Status column of the [[adr/index|ADR index]] table, and a status change updates that row in the same change.
 
 ## Evidence levels
 

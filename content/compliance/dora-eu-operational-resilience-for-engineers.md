@@ -8,7 +8,7 @@ tags:
   - reliability
   - incident-management
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 aliases:
   - Digital Operational Resilience Act
@@ -74,6 +74,8 @@ Threat-led penetration testing (TLPT) applies to certain entities only, under sp
 ## ICT incident classification and reporting inputs
 
 Engineering's part is to record the facts the classification needs, as they happen. The classification criteria and thresholds, and the timelines and templates for initial, intermediate and final reports, come from the RTS and ITS. I do not state hours here; take them from the official texts.
+
+**Which clock applies.** For a financial entity in DORA's scope, DORA's incident reporting applies instead of NIS2 Article 23: NIS2 recital 28 names DORA as the sector-specific act for financial entities (read on EUR-Lex 2026-11-24). The hours for DORA's initial, intermediate and final reports come from the RTS and ITS and are not stated here. A personal-data breach also starts the GDPR Article 33 clock, tracked on the same timeline ([[nis2-basics-for-engineering-teams#NIS2 and GDPR side by side]]). A provider that is itself a NIS2 entity reports its own incidents under NIS2 ([[nis2-basics-for-engineering-teams]]).
 
 Fields to capture in the incident record:
 
@@ -143,4 +145,5 @@ DORA metrics (deployment frequency, lead time for changes, change failure rate, 
 ## Sources
 
 - EUR-Lex, [Regulation (EU) 2022/2554 (DORA)](https://eur-lex.europa.eu/eli/reg/2022/2554/oj).
+- EUR-Lex, [NIS2 text in HTML](https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX%3A32022L2555): recital 28 (DORA as sector-specific act), read 2026-11-24.
 - European Banking Authority, EIOPA and ESMA: DORA pages for the RTS and ITS; find the current pages on [eba.europa.eu](https://www.eba.europa.eu/), [eiopa.europa.eu](https://www.eiopa.europa.eu/) and [esma.europa.eu](https://www.esma.europa.eu/).

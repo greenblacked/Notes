@@ -9,7 +9,7 @@ tags:
   - policy-as-code
   - ci-cd
 created: 2026-10-21
-modified: 2026-11-02
+modified: 2026-11-25
 evidence: source-reviewed
 reviewed: 2026-11-02
 review-due: 2027-05-02
@@ -323,7 +323,7 @@ for f in "${failures[@]}"; do echo " - $f"; done
 ```yaml title="ci/validate-ladder.gitlab-ci.yml (illustrative, not run in a pipeline)"
 validate-ladder:
   stage: test
-  image: registry.example.com/platform/iac-toolbox@sha256:0000000000000000000000000000000000000000000000000000000000000000 # change: your toolbox image digest
+  image: registry.example.com/platform/iac-toolbox@sha256:<digest> # change: your toolbox image digest
   variables:
     K8S_VERSION: "" # change: set to the target Kubernetes version; the ladder script fails while it is empty
   script:
@@ -388,7 +388,7 @@ tests:
 
 The offline rungs pass, because the test uses the same wrong label (output illustrative, not run):
 
-```text
+```text title="Illustrative output, not a recorded run"
 $ promtool check rules alerts/checkout.rules.yml
 Checking alerts/checkout.rules.yml
   SUCCESS: 1 rules found
@@ -398,7 +398,7 @@ Unit Testing:  alerts/tests/checkout.test.yml
   SUCCESS
 ```
 
-The live rung fails, and a label query shows why:
+The live rung fails, and a label query shows why (output illustrative, not run):
 
 ```bash
 PROM_URL="https://prometheus.example.com"
@@ -408,7 +408,7 @@ curl -sS -G "$PROM_URL/api/v1/labels" \
   --data-urlencode 'match[]=http_requests_total{service="checkout"}' | jq -c '.data'
 ```
 
-```text
+```text title="Illustrative output, not a recorded run"
 []
 ["__name__","code","instance","job","method","service"]
 ```
@@ -478,4 +478,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the Kubernetes, Prometheu
 - [[helm-chart-ci-quality-gates]]: chart unit tests, schemas and chart-testing.
 - [[pod-security-admission]]: what the server-side dry run enforces.
 - [[securing-ai-agents-in-ci-and-cloud]]: keeping credentials away from jobs that handle generated changes.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

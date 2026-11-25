@@ -11,7 +11,7 @@ tags:
   - gke
   - supply-chain
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -79,7 +79,7 @@ variables:
 build-image:
   stage: build
   image:
-    name: moby/buildkit:rootless
+    name: moby/buildkit:<tested-version>-rootless@sha256:<digest> # a -rootless tag, pinned by digest
     entrypoint: [""]
   parallel:
     matrix:
@@ -122,6 +122,8 @@ create-index:
       dotenv: image.env
 ```
 
+Tag names are examples: look up the current tag, then pin its digest.
+
 Why it is built this way:
 
 - **One job per architecture** runs on a runner of that architecture, so every `RUN` executes natively and the build stays rootless ([[0015-no-privileged-image-builds-in-ci]]). Runner setup on GKE, including separate node pools, is in [[gitlab-runners-on-gke]]; the Arm fleet needs its own runner registration and tag.
@@ -147,7 +149,7 @@ spec:
     kubernetes.io/arch: ${arch}
   containers:
     - name: buildkit
-      image: moby/buildkit:rootless
+      image: moby/buildkit:<tested-version>-rootless@sha256:<digest> # a -rootless tag, pinned by digest
       command: ["cat"]
       tty: true
       env:

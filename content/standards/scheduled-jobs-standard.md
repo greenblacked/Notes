@@ -11,7 +11,7 @@ tags:
   - observability
   - reliability
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -81,6 +81,7 @@ metadata:
 spec:
   schedule: "17 2 * * *" # 02:17 UTC, off the hour on purpose
   timeZone: "Etc/UTC"
+  suspend: true # set to false in a second change, after the first manual run is checked
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 300 # proposed team default
   successfulJobsHistoryLimit: 3
@@ -129,6 +130,8 @@ spec:
 ```
 
 The image digest is a placeholder. Change the namespace, labels, runbook URL and registry to your own. If the job needs cloud access, give its ServiceAccount Workload Identity rather than a key, and set `automountServiceAccountToken` to what that setup requires. The rest of the Pod rules come from [[kubernetes-workload-baseline-standard]] and the labels from [[kubernetes-labels-and-annotations-standard]].
+
+The example job writes: `--apply` is its flag for a real run. Merge it suspended, start one Job by hand from the CronJob with `--apply` removed (the render, edit and apply steps under Backfill), check the output, then set `suspend: false` in a separate change. To roll back, set `suspend: true` again. Suspending does not stop a Job that has already started, so delete that Job if it must stop.
 
 Validate before merging:
 
@@ -399,7 +402,7 @@ A scheduled job that changes production on its own (cleanups, scaling, rotations
 
 ## Exceptions
 
-A job that cannot meet a rule (a vendor job without a deadline setting, a host job without a lock) records the rule, the reason, a compensating control, an owner and an expiry date (proposed default 90 days) through [[policy-exception-and-waiver-process]]. Missing alerts and an owner who is a single person are not accepted as exceptions.
+A job that cannot meet a rule (a vendor job without a deadline setting, a host job without a lock) records the rule, the reason, a compensating control, an owner and an expiry date within the maximum set in [[policy-exception-and-waiver-process#Rules]]. Missing alerts and an owner who is a single person are not accepted as exceptions.
 
 ## Reviewer checklist
 

@@ -7,9 +7,12 @@ tags:
   - security
   - cost
 created: 2026-10-26
-modified: 2026-11-01
+modified: 2026-11-24
 draft: false
 ---
+
+> [!info] Scope
+> Provider-managed prompt-prefix caching: what is reused, and the tenancy and data review it needs. Caching complete model outputs in your own application is in [[llm-caching-correctness-and-safety]].
 
 Prompt caching can reduce repeated processing and sometimes cost or latency by reusing a shared prefix. It does not mean the application may share prompts across users, nor does it establish privacy, data retention or zero-retention guarantees. Treat it as a provider feature with a data-flow and tenancy review, not as a generic HTTP cache. Cost controls are also discussed in [[llm-api-cost-control]].
 
@@ -48,8 +51,5 @@ Risks include cross-tenant content in a reusable prefix, a cache key reused acro
 
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/) — sensitive information disclosure and data leakage between users and tenants.
 - [NIST AI 600-1, Generative AI Profile](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence) — data privacy risks of generative AI systems and the controls for them.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

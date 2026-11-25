@@ -7,7 +7,7 @@ tags:
   - reliability
   - cost
 created: 2026-10-26
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -78,9 +78,6 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the security-risk framing
 
 ## Sources
 
-- Your model provider's own documentation for the provider-specific behaviour this note mentions (features, limits, pricing, data retention and terms change; check the current pages before relying on them).
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) — unbounded consumption and excessive agency risk context.
 - [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle) — request timeout and cancellation rules.
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) — monitoring and governance framing (not checked locally).
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).

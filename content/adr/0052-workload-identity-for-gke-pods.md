@@ -10,7 +10,7 @@ tags:
   - security
 status: accepted
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-25
 decided: 2026-10-21
 draft: false
 aliases:
@@ -250,23 +250,69 @@ kubectl get secrets --all-namespaces -o json \
       | "\(.metadata.namespace)/\(.metadata.name)"'
 ```
 
-From inside a Pod running as the workload's KSA, the metadata server must answer with a token, and the identity must not be the node's:
+From inside a Pod running as the workload's KSA, the metadata server must answer with a token, and the identity must not be the node's. Save the script as `wi-check.sh` and run it as `NAMESPACE=orders KSA=orders-api CURL_IMAGE='curlimages/curl@sha256:<digest>' bash wi-check.sh` (use your own namespace, KSA and the digest of the curl image you reviewed), not pasted into a shell, because it calls `exit`:
 
-```bash
-NAMESPACE="orders"
-KSA="orders-api"
+```bash title="wi-check.sh"
+set -euo pipefail
+NAMESPACE="${NAMESPACE:?set NAMESPACE to the workload namespace}"
+KSA="${KSA:?set KSA to the workload Kubernetes service account}"
+CURL_IMAGE="${CURL_IMAGE:?set CURL_IMAGE to the curl image digest reference you reviewed}"
 
-kubectl run wi-check --namespace "${NAMESPACE}" --rm -it --restart=Never \
-  --image=curlimages/curl:latest \
-  --overrides="{\"spec\":{\"serviceAccountName\":\"${KSA}\"}}" \
-  -- sh -c '
-    curl -sf -H "Metadata-Flavor: Google" \
-      http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email; echo
-    curl -sf -o /dev/null -w "token HTTP %{http_code}\n" -H "Metadata-Flavor: Google" \
-      http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token'
+# All three values go into the manifest below: accept only valid names and a digest reference.
+ns_re='^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+ksa_re='^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$' # service account names may contain dots
+img_re='^[a-z0-9.-]+(:[0-9]+)?(/[a-z0-9._-]+)+@sha256:[a-f0-9]{64}$'
+[[ "${NAMESPACE}" =~ ${ns_re} && "${KSA}" =~ ${ksa_re} ]] || { echo "invalid NAMESPACE or KSA" >&2; exit 2; }
+[[ "${CURL_IMAGE}" =~ ${img_re} ]] || { echo "CURL_IMAGE must be a digest reference" >&2; exit 2; }
+
+# The Pod runs as the workload's identity: run it only where you may act as that workload.
+# create, not apply: it stops if a Pod named wi-check already exists, so the cleanup below
+# can only ever remove the Pod this run created.
+kubectl create --namespace "${NAMESPACE}" -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: wi-check
+spec:
+  serviceAccountName: ${KSA}
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: wi-check
+      image: ${CURL_IMAGE}
+      command: ["sh", "-c"]
+      args:
+        - >-
+          curl -sf -H "Metadata-Flavor: Google"
+          http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email; echo;
+          curl -sf -o /dev/null -w "token HTTP %{http_code}\n" -H "Metadata-Flavor: Google"
+          http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits: { memory: 32Mi }
+EOF
+# Set only after the create succeeded: remove the Pod on every exit, including when it never produces logs.
+trap 'kubectl delete pod --namespace "${NAMESPACE}" wi-check --ignore-not-found --wait=false' EXIT
+
+rc=0
+kubectl wait --namespace "${NAMESPACE}" pod/wi-check \
+  --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s || rc=1
+if [ "${rc}" -ne 0 ]; then
+  kubectl describe pod --namespace "${NAMESPACE}" wi-check || true
+fi
+kubectl logs --namespace "${NAMESPACE}" wi-check || true
+exit "${rc}"
 ```
 
-Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. Pin the image by digest in real use. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
+Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. The Pod meets Pod Security `restricted` ([[0022-admission-policy-pod-security-vap-and-kyverno]]). It prints the token's HTTP status, never the token. The script deletes the Pod it created on exit and exits non-zero when the Pod fails or the wait times out; exit 0 only means the metadata server answered, so still compare the printed identity with the expected one (a Pod that is not on Workload Identity gets the node service account and `token HTTP 200`, and the script exits 0). If the wait fails, the script prints `kubectl describe pod` before it deletes the Pod: the Pod ended `Failed` (the metadata call was refused, so `curl -f` exited non-zero) or never started (image pull error, for example a digest that does not exist in the registry; a tag reference is refused by the script before the Pod is created). An admission denial, or an existing Pod named `wi-check`, fails at `kubectl create` instead. Where [[0002-artifactory-as-single-artifact-store]] and [[0038-kyverno-verifies-image-signatures-at-admission]] are enforced, use the same digest through the internal registry path, or the Pod is refused at admission. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
 
 ## References
 
