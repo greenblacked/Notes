@@ -82,7 +82,9 @@ Never set `plugin_cache_may_break_dependency_lock_file = true` in CI; the docs r
 
 ```yaml title=".gitlab-ci.yml (excerpt)"
 terraform-plan:
-  image: hashicorp/terraform:<tested-version>@sha256:<digest> # pin a tested tag by digest
+  image:
+    name: hashicorp/terraform:<tested-version>@sha256:<digest> # pin a tested tag by digest
+    entrypoint: [""] # the image entrypoint is terraform; clear it so the runner can start a shell
   variables:
     TF_CLI_CONFIG_FILE: "$CI_PROJECT_DIR/ci.terraformrc"
   script:
