@@ -186,7 +186,7 @@ You need Docker on the lab VM. All screens and output are illustrative; this les
 3. **Create a token and store it.** Generate a project analysis token (or the narrowest type your version offers) and save it:
 
    ```bash
-   ( umask 077; printf 'Token: ' >&2; IFS= read -rs t; printf '\n' >&2; [ -n "$t" ] || { echo "empty token" >&2; exit 1; }; : > ~/.lab-sonar-token; chmod 600 ~/.lab-sonar-token; printf '%s' "$t" > ~/.lab-sonar-token )
+   ( umask 077; printf 'Token: ' >&2; IFS= read -rs t; printf '\n' >&2; [ -n "$t" ] || { echo "empty token" >&2; exit 1; }; : > ~/.lab-sonar-token && chmod 600 ~/.lab-sonar-token && printf '%s' "$t" > ~/.lab-sonar-token )
    ```
 
    Expected: a file readable only by you, even if the file already existed with a wider mode (the command empties it and sets mode 600 before writing), and an `empty token` message instead of an empty file when you press Enter without typing. The prompt is printed with `printf` because `read -p` means something else in zsh; `read -rs` works in Bash and zsh (not run in zsh for this page).

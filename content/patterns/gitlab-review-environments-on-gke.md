@@ -461,8 +461,8 @@ DRY_RUN="${DRY_RUN:-true}"                # set to false once the output looks r
 MAX_DELETES="${MAX_DELETES:-20}"          # change: the most namespaces one run may delete
 deleted=0
 
-[[ "$MAX_DELETES" =~ ^[0-9]+$ && "$MAX_AGE_HOURS" =~ ^[0-9]+$ ]] \
-  || { echo "MAX_DELETES and MAX_AGE_HOURS must be whole numbers" >&2; exit 2; }
+[[ "$MAX_DELETES" =~ ^(0|[1-9][0-9]*)$ && "$MAX_AGE_HOURS" =~ ^(0|[1-9][0-9]*)$ ]] \
+  || { echo "MAX_DELETES and MAX_AGE_HOURS must be whole numbers without leading zeros" >&2; exit 2; }
 
 now_epoch="$(date -u +%s)"
 mr_json="$(mktemp)"
