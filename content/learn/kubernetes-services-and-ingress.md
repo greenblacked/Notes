@@ -7,7 +7,7 @@ tags:
   - kubernetes
   - networking
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -513,13 +513,14 @@ Do these in the kind cluster `lab`. Check `kubectl config current-context` print
    ```bash
    GATEWAY_CLASS="CHANGE-ME"   # change: a name from the list below, also set in gateway.yaml
    kubectl get gatewayclass
-   kubectl wait --for=condition=Accepted "gatewayclass/${GATEWAY_CLASS}" --timeout=60s
-   kubectl apply -f gateway.yaml
-   kubectl wait --for=condition=Programmed gateway/web-gateway --timeout=120s
+   kubectl wait --for=condition=Accepted "gatewayclass/${GATEWAY_CLASS}" --timeout=60s \
+     && kubectl apply -f gateway.yaml \
+     && kubectl wait --for=condition=Programmed gateway/web-gateway --timeout=120s
+   kubectl get gateway web-gateway
    kubectl get httproute web
    ```
 
-   Expected: the Gateway shows `PROGRAMMED` as `True` once the controller has set it up. On kind there is no cloud load balancer, so it may have no external address; reach it by running `kubectl port-forward` against the Service the controller created for the Gateway, then call it with `curl -H 'Host: web.example.com' http://127.0.0.1:8080/`.
+   Expected: the `kubectl wait` calls print `condition met`, and `kubectl get gateway web-gateway` shows `PROGRAMMED` as `True` once the controller has set it up. On kind there is no cloud load balancer, so it may have no external address; reach it by running `kubectl port-forward` against the Service the controller created for the Gateway, then call it with `curl -H 'Host: web.example.com' http://127.0.0.1:8080/`.
    If you see something else: if the `Accepted` wait times out, the controller for that class is not running or rejected it; read `kubectl describe gatewayclass "$GATEWAY_CLASS"` and do not apply the Gateway. `no matches for kind "Gateway"` means the CRDs are not installed. A Gateway stuck without `PROGRAMMED` points to a wrong `gatewayClassName` or a controller that is not running; read `kubectl describe gateway web-gateway` conditions. Which implementation to use and its install steps were not verified here: follow its own documentation for your version.
 
 9. **Clean up.**
@@ -529,7 +530,7 @@ Do these in the kind cluster `lab`. Check `kubectl config current-context` print
    kubectl delete -f web.yaml --ignore-not-found
    kubectl delete pod client --ignore-not-found
    kubectl delete namespace other --ignore-not-found
-   kubectl get gateway,httproute -A 2>/dev/null | grep -E 'web-gateway|web' || echo "no gateway objects left"
+   kubectl get gateway/web-gateway httproute/web 2>/dev/null || echo "no gateway objects left"
    ```
 
    Expected: the Gateway, Deployment, Service and Pods are removed, and the `other` namespace and everything in it with it. If you installed a Gateway API controller in exercise 8, uninstall it with its own documented steps. Remove the CRDs only on this lab cluster; on a shared cluster other teams' routes depend on them. If you skipped exercise 8, the first command can fail because the Gateway CRDs are not installed; skip it.
