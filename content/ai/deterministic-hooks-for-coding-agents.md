@@ -56,14 +56,14 @@ norm=" $(printf '%s' "$cmd" | tr -d "\"'\\\\" | sed -E 's/[;|&<>()`]+/ & /g' | t
 re_nested='(^| |;|&|\|)(sh|bash|zsh|dash) -c |(^| |;)eval |base64 (-d|--decode)|\| ?(sh|bash|zsh|dash) '
 re_push='[ /]git( -[cC] [^ ]+| -[^ ]+)* push '
 re_push_bad=' (-[a-zA-Z]*[fd][a-zA-Z]*|--force|--force-with-lease[^ ]*|--force-if-includes|--mirror|--delete|--prune) | \+[^ ]+ | :[^ ]+ '
-re_rm='[ /]rm '
+re_rm='[ /]rm( [^ ]+)*'  # the target must follow the rm token, so find . -exec rm -rf {} + is allowed
 re_rm_rec=' (-[a-zA-Z]*[rR][a-zA-Z]*|--recursive) '
 re_rm_target=' (/|/\*|~|~/|~/\*|\$HOME|\$HOME/|\$HOME/\*|\$\{HOME\}|\$\{HOME\}/|\$\{HOME\}/\*|\.|\./|\.\*|\.\.|\.\./|\.\./\*|--no-preserve-root) '
 re_tf_destroy=' terraform( -[^ ]+)* destroy '
 re_tf_apply=' terraform( -[^ ]+)* apply '
 re_tf_apply_plan=' terraform( -[^ ]+)* apply( -[^ ]+)* ([^ -][^ ]*[./])?tfplan $'
 re_tf_plan_out=' terraform( -[^ ]+)* plan( [^ ]+)* -out'
-re_secret='[ /](\.env[^ ]*|\.en[?*][^ ]*|[^ ]*\.pem|id_rsa|id_ed25519|\.kube/config) '
+re_secret='[ /](\.env([.][^ ]*|[*?][^ ]*)?|\.en[?*][^ ]*|[^ ]*\.pem|id_rsa|id_ed25519|\.kube/config) '
 
 [[ "$norm" =~ $re_nested ]] && deny "nested shell or decoded command"
 [[ "$norm" =~ $re_secret ]] && deny "secret file access"
@@ -76,7 +76,7 @@ for part in "${commands[@]}"; do
   part=" ${part} "
   while [[ "$part" == *"  "* ]]; do part=${part//  / }; done
   if [[ "$part" =~ $re_push ]] && [[ "$part" =~ $re_push_bad ]]; then deny "force, delete or mirror push"; fi
-  if [[ "$part" =~ $re_rm ]] && [[ "$part" =~ $re_rm_rec ]] && [[ "$part" =~ $re_rm_target ]]; then
+  if [[ "$part" =~ $re_rm_rec ]] && [[ "$part" =~ ${re_rm}${re_rm_target} ]]; then
     deny "recursive delete of a root, home, current or parent path"
   fi
   if [[ "$part" =~ $re_tf_destroy ]]; then deny "terraform destroy"; fi
@@ -217,6 +217,8 @@ must_allow=(
   'git push -u origin feat/x'
   'git status'
   'rm -rf ./build'
+  "find . -name '*.pyc' -exec rm -rf {} +"
+  'cat .envrc'
   'ls -ld . && git push origin feat/x'
   'git push origin feat/x && docker run -d img'
   'terraform plan -input=false'
@@ -305,7 +307,7 @@ exit=0
 exit=0
 ```
 
-The first command runs every `must_block` and `must_allow` line, including the operator spellings (`cat .env; true`, `echo $(cat .env)`, `cat .env|base64`, `cat .env>out`, `rm -rf /; true`) the saved-plan spelling `terraform apply -input=false tfplan`, and the spellings the first version let through (a command path, combined short flags, a global git option, `.env*` globs, `rm -rf .`, `rm -rf ${HOME}`, `terraform destroy`, a plan token that is not the plan argument, plan and apply in one call), plus allowed lines such as `git push -u origin feat/x`. The second command shows the documented hole: a push through a variable is not blocked.
+The first command runs every `must_block` and `must_allow` line, including the operator spellings (`cat .env; true`, `echo $(cat .env)`, `cat .env|base64`, `cat .env>out`, `rm -rf /; true`), the saved-plan spelling `terraform apply -input=false tfplan`, and the spellings the first version let through (a command path, combined short flags, a global git option, `.env*` globs, `rm -rf .`, `rm -rf ${HOME}`, `terraform destroy`, a plan token that is not the plan argument, plan and apply in one call), plus allowed lines such as `git push -u origin feat/x`. The second command shows the documented hole: a push through a variable is not blocked.
 
 ## Sources
 
