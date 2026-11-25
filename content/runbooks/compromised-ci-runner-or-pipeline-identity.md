@@ -41,7 +41,7 @@ Use something else for these cases:
 
 ## Preconditions
 
-- An admin token for the GitLab API, held by the responder, not by CI.
+- An admin token for the GitLab API, held by the responder, not by CI. Issue it for this incident with a short expiry.
 - A forensic bucket in a separate project.
 - Agreed role split per [[incident-response]].
 - The expected signing identity and issuer per repository, from [[image-signing-and-admission-verification]].
@@ -61,15 +61,15 @@ T0="2026-11-20T00:00:00Z"               # change: earliest credible compromise t
 CASE_DIR="$HOME/incident-ci-$(date -u +%Y%m%d)"
 mkdir -p "$CASE_DIR" && chmod 700 "$CASE_DIR"
 
-HDR_FILE="$CASE_DIR/.gitlab-header"
 umask 077
+HDR_FILE="$(mktemp)" # outside $CASE_DIR, which is archived and shared
 read -rs -p "GitLab admin token: " GL_TOKEN; echo
 printf 'PRIVATE-TOKEN: %s\n' "$GL_TOKEN" > "$HDR_FILE" # printf is a builtin: the token never appears in ps
 unset GL_TOKEN
 glapi() { curl --fail --silent --show-error --header @"$HDR_FILE" "$@"; }
 ```
 
-Source this file in the responder's bash shell. It sets no `set -e`, `set -u` or `pipefail` on purpose: those options persist in a sourced shell, and an expected non-zero exit later (`grep -F -f` with no match, a `jq` error, a 404 from `glapi`) would close the terminal mid-incident. Check the exit code of the commands that matter yourself. Delete `$HDR_FILE` at the end (see Rollback).
+Source this file in the responder's bash shell. It sets no `set -e`, `set -u` or `pipefail` on purpose: those options persist in a sourced shell, and an expected non-zero exit later (`grep -F -f` with no match, a `jq` error, a 404 from `glapi`) would close the terminal mid-incident. Check the exit code of the commands that matter yourself. Revoke the token and delete `$HDR_FILE` at the end (see Rollback). Before `$CASE_DIR` is uploaded anywhere, check it for `config.toml` copies you did not intend to share and for header files.
 
 ### 1. Stop new jobs on the runner
 
@@ -98,7 +98,7 @@ jq -r --arg t0 "$T0" '.[] | select(.created_at >= $t0 or .finished_at == null or
 
 - On GKE (Kubernetes executor): follow [[compromised-cloud-cluster-containment#Preserve evidence first]] for the runner manager pod and the job pods' node. Snapshot the node disk before any drain.
 - On a VM: snapshot the disk, then isolate it with a firewall rule. Do not stop it.
-- Copy the runner `config.toml` to the case directory. It contains the runner token, so keep it in `$CASE_DIR` (mode 700) only.
+- Copy the runner `config.toml` to the case directory. It contains the runner token and may hold registry credentials, so keep it in `$CASE_DIR` (mode 700) only and exclude it from any upload.
 
 ### 4. Revoke what the runner could reach
 
@@ -114,7 +114,11 @@ jq -r --arg t0 "$T0" '.[] | select(.created_at >= $t0 or .finished_at == null or
 | Pipeline trigger tokens (`glptt-`)    | If stored on the host                                | Revoke and reissue.                                                                                                                                                                                                                        |
 | WIF federation to GCP                 | Jobs exchange their ID token for GCP access          | Remove the `roles/iam.workloadIdentityUser` binding for the affected `principalSet` (save the policy first). See below, [[iam-groups-and-ci-workload-identity-federation]] and [[0026-keyless-ci-auth-with-workload-identity-federation]]. |
 | Artifactory access tokens or OIDC     | Used to publish                                      | Revoke tokens. Tighten the OIDC identity mapping. See [[artifactory-access-tokens-and-oidc-for-ci]].                                                                                                                                       |
+| Runner host identity                  | Node or manager service account, cache bucket access | Review and revoke the host's service account roles, cache-bucket access and any key. Issue a new identity for the rebuilt host.                                                                                                            |
+| Registry credentials in `config.toml` | Stored on the host                                   | Revoke and reissue every registry credential in the runner configuration, including pull secrets.                                                                                                                                          |
 | Signing keys (key-based cosign)       | If a job could read the key                          | Revoke and rotate the key. Publish the new public key to the admission policy.                                                                                                                                                             |
+
+Before removing the binding, search IAM policies across the organisation for the pool's `principal://` and `principalSet://` members (Cloud Asset Inventory policy search; check the current gcloud syntax). Save the result to `$CASE_DIR`. The pool principal may also hold roles granted directly on a project, bucket or repository, or may impersonate other service accounts, and those keep working after one binding is removed. Remove every match in scope.
 
 For WIF, save the policy, then remove the binding:
 
@@ -132,11 +136,15 @@ Removing the binding stops new token exchanges. It does not invalidate access to
 
 The runner token prefix is `glrt-` (`glrtr-` if the runner was made with a registration token). GitLab's token overview says to use the runners API to rotate or revoke a runner authentication token.
 
+### 4a. Sweep for what the stolen tokens created
+
+Review GitLab audit events from `T0` for every token in scope. List what was created or changed: access tokens, deploy keys, runners, webhooks, pipeline schedules, protected-branch and variable settings, pushes and tags on protected refs. Save the list to `$CASE_DIR` and remove what you cannot explain. A "known-good commit" below means one reviewed and merged before `T0`, or re-reviewed after it.
+
 ### 5. Decide which artifacts to trust
 
 A valid signature from inside the window proves nothing. Treat every artifact built by an in-scope job as untrusted until it is rebuilt.
 
-1. List the digests produced by the jobs in `jobs-in-window.tsv`, from Artifactory build info ([[artifactory-provenance-evidence]]) or the registry.
+1. Build the suspect set from data the runner cannot edit: the registry push or creation time at or after `T0` for every repository the CI identity can write to, and the transparency-log time of each signature. Artifactory build info and the registry listing for the jobs in `jobs-in-window.tsv` are a starting list, not the boundary: build info is written by the job, so a compromised runner can push an image and publish no build info, or attach it to another build.
 2. Block them:
    - Remove them from promotion.
    - Move them to a quarantine repository, or deny them at admission ([[image-signing-and-admission-verification]]).
@@ -157,13 +165,19 @@ while read -r IMAGE; do
 done < "$CASE_DIR/deployed-digests.txt" | tee "$CASE_DIR/verify-results.txt"
 ```
 
+- A signature verifying is not enough: a valid keyless signature made inside the window is the attacker's. Treat a signature as trusted only if its transparency-log entry is older than `T0`. Add a third result, `WINDOW  <image>`, for an image whose signature verifies but whose log time is at or after `T0` (read the log time from the verification output or the transparency log; the exact field is not verified), and add every `WINDOW` image to `suspect-digests.txt`.
+
 - `deployed-digests.txt` holds one `registry/repo@sha256:...` per line. Generate it with the command below, which keeps only first-party images and strips a `docker-pullable://` prefix some runtimes add. Change the registry prefix to your own; an `imageID` that is a bare `sha256:...` has no registry path, so look up its image name in the pod spec instead.
 
 ```bash
 REGISTRY_PREFIX="europe-docker.pkg.dev/example-project/" # change: your first-party registry or repository prefix
-kubectl get pods -A -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.imageID}{"\n"}{end}{end}' \
-  | sed 's#^docker-pullable://##' | grep -F "$REGISTRY_PREFIX" | sort -u > "$CASE_DIR/deployed-digests.txt"
+kubectl get pods -A -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.imageID}{"\n"}{end}{range .status.initContainerStatuses[*]}{.imageID}{"\n"}{end}{range .status.ephemeralContainerStatuses[*]}{.imageID}{"\n"}{end}{end}' \
+  | sed 's#^docker-pullable://##' | sort -u > "$CASE_DIR/all-digests.txt"
+awk -v p="$REGISTRY_PREFIX" 'index($0, p) == 1' "$CASE_DIR/all-digests.txt" > "$CASE_DIR/deployed-digests.txt"
+awk -v p="$REGISTRY_PREFIX" 'index($0, p) != 1' "$CASE_DIR/all-digests.txt" > "$CASE_DIR/other-digests.txt"
 ```
+
+Compare `other-digests.txt` with the expected platform and third-party list: a stolen deploy identity can start a workload from any registry, so images outside your prefix are reviewed, not dropped.
 
 - Check the SBOMs of suspect digests ([[sbom-generation-and-storage]]) for unexpected components.
 
@@ -172,7 +186,8 @@ kubectl get pods -A -o jsonpath='{range .items[*]}{range .status.containerStatus
 - Build a new runner host or node pool from the pinned image ([[gitlab-runners-on-gke]], [[jenkins-controller-and-agent-hardening]]).
 - Register a new runner with new tags.
 - Re-add WIF bindings with the narrowest attribute condition.
-- Rebuild every suspect artifact from a known-good commit on the clean runner, and redeploy by digest.
+- Before the first rebuild, empty the distributed runner cache bucket and any build-layer cache, use new cache keys, and purge proxy and dependency caches the CI identity could write to. A poisoned cache entry is otherwise restored into the first "clean" build.
+- Rebuild every suspect artifact from a known-good commit (step 4a) on the clean runner, and redeploy by digest.
 - Compare the old and new SBOMs.
 
 ### 7. Jenkins agents and controllers
@@ -185,7 +200,7 @@ kubectl get pods -A -o jsonpath='{range .items[*]}{range .status.containerStatus
 
 - The runner shows paused, then is deleted.
 - New jobs land only on the new runner.
-- `verify-results.txt` has no `FAIL` for first-party workloads. Images from kube-system, GKE and third parties are out of this check; review them separately if the pipeline could have pushed to their registries.
+- `verify-results.txt` has no `FAIL` and no `WINDOW` for first-party workloads, and no deployed digest was pushed or signed inside the window without being rebuilt. Images from kube-system, GKE and third parties are out of this check; review them separately if the pipeline could have pushed to their registries.
 - No digest from `suspect-digests.txt` runs: `grep -F -f suspect-digests.txt` over the step 5 pod listing returns nothing.
 - After the step 4 removals and once already-issued access tokens have expired, Cloud Audit Logs show no further use of the WIF principal; see [[gcp-audit-logs-siem]].
 
@@ -194,7 +209,7 @@ kubectl get pods -A -o jsonpath='{range .items[*]}{range .status.containerStatus
 - Un-pausing a runner (`paused=false`) is reversible, but do it only on a rebuilt host.
 - Deletion, token resets and rotations cannot be undone. The way back is reissue.
 - A WIF binding removal is restored from `sa-policy-before.json` with `add-iam-policy-binding` for the same member and role.
-- Delete `$HDR_FILE` (`rm -f "$CASE_DIR/.gitlab-header"`) when the incident closes.
+- Revoke the incident admin token, then delete `$HDR_FILE` (`rm -f -- "$HDR_FILE"`) when the incident closes.
 
 ## Troubleshooting
 
@@ -215,6 +230,8 @@ kubectl get pods -A -o jsonpath='{range .items[*]}{range .status.containerStatus
 - Artifactory quarantine mechanics.
 - `curl -H @file` minimum version.
 - The lifetime of access tokens already issued for a service account, and that they survive removal of the binding (stated from general IAM behaviour, not read today).
+- The field of the cosign or transparency-log output that carries the signature time.
+- The Cloud Asset Inventory IAM policy search syntax, and GitLab audit event coverage for each object type listed in step 4a.
 - Nothing was run.
 
 ## Related
