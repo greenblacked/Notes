@@ -10,7 +10,7 @@ tags:
   - gitlab-ci
   - security
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -415,7 +415,7 @@ stages: [validate, plan, apply]
 
 default:
   image:
-    name: hashicorp/terraform:1.x.y # Change: pin an exact tested version, ideally by digest.
+    name: hashicorp/terraform:<tested-version>@sha256:<digest> # Change: your tested version and its digest.
     entrypoint: [""]
 
 variables:

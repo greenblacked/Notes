@@ -11,7 +11,7 @@ tags:
   - ci-cd
   - cost
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -177,7 +177,7 @@ variables:
   GKE_PROJECT: review-project # change
 
 .review-auth:
-  image: registry.example.com/platform/deploy-tools:2026.10.1 # change: pinned image with gcloud, kubectl, helm, envsubst, jq
+  image: registry.example.com/platform/deploy-tools:<tested-version>@sha256:<digest> # change: your tested image and its digest (read it with `docker buildx imagetools inspect <image>:<tag>`); needs gcloud, kubectl, helm, envsubst, jq
   id_tokens:
     GCP_ID_TOKEN:
       aud: gcp-wif-my-org # must match allowed_audiences on the provider
@@ -445,7 +445,7 @@ The stop job is the main cleanup path, but it fails in known ways (see Troublesh
 GitLab's `stop_stale` API is not a replacement: it only accepts a cutoff at least one week in the past. The janitor below works from Kubernetes and the merge request API instead.
 
 > [!warning] The janitor deletes namespaces and everything in them
-> Run it with `DRY_RUN=true` first, against the review cluster only. The script refuses names that do not start with `review-` and stops after `MAX_DELETES` deletions in one run, so a bad label query cannot empty the cluster.
+> Run it with `DRY_RUN=true` first, against the review cluster only. The script refuses names that do not start with `review-` and stops after `MAX_DELETES` deletions in one run. The cap is per run: the scheduled job runs with `DRY_RUN=false`, so a bad label query can still remove up to `MAX_DELETES` namespaces on every schedule tick. The job then fails, so alert on a failed janitor job and read it before the next run.
 
 ```bash title="scripts/review-janitor.sh"
 #!/usr/bin/env bash
@@ -453,6 +453,7 @@ GitLab's `stop_stale` API is not a replacement: it only accepts a cutoff at leas
 # Runs in a scheduled pipeline on the default branch, authenticated to the review cluster.
 # Needs: kubectl, curl, jq; GITLAB_API_TOKEN (masked, protected; a project access token with read_api).
 set -euo pipefail
+umask 077
 
 GITLAB_URL="${CI_SERVER_URL:?}"            # set by GitLab
 MAX_AGE_HOURS="${MAX_AGE_HOURS:-120}"     # change: hard upper bound on any review copy
@@ -460,9 +461,15 @@ DRY_RUN="${DRY_RUN:-true}"                # set to false once the output looks r
 MAX_DELETES="${MAX_DELETES:-20}"          # change: the most namespaces one run may delete
 deleted=0
 
+[[ "$MAX_DELETES" =~ ^[0-9]+$ && "$MAX_AGE_HOURS" =~ ^[0-9]+$ ]] \
+  || { echo "MAX_DELETES and MAX_AGE_HOURS must be whole numbers" >&2; exit 2; }
+
 now_epoch="$(date -u +%s)"
 mr_json="$(mktemp)"
-trap 'rm -f "$mr_json"' EXIT
+hdr_file="$(mktemp)"
+trap 'rm -f "$mr_json" "$hdr_file"' EXIT
+# The token goes to curl from a file (mode 0600, removed on exit), not on its command line.
+printf 'PRIVATE-TOKEN: %s\n' "${GITLAB_API_TOKEN:?}" > "$hdr_file"
 
 kubectl get namespaces -l review.example.com/managed=true -o json \
   | jq -r '.items[] | [
@@ -481,7 +488,7 @@ kubectl get namespaces -l review.example.com/managed=true -o json \
       age_hours=$(( (now_epoch - created_epoch) / 3600 ))
 
       http_code="$(curl -sS -o "$mr_json" -w '%{http_code}' \
-        --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN:?}" \
+        --header @"$hdr_file" \
         "${GITLAB_URL}/api/v4/projects/${project_id}/merge_requests/${mr_iid}")"
 
       if [[ "$http_code" == "200" ]]; then
@@ -498,12 +505,12 @@ kubectl get namespaces -l review.example.com/managed=true -o json \
       (( age_hours > MAX_AGE_HOURS )) && reason="${reason:+$reason, }age ${age_hours}h"
 
       if [[ -n "$reason" ]]; then
+        (( deleted < MAX_DELETES )) || { echo "STOP: reached MAX_DELETES=$MAX_DELETES; check the label query" >&2; exit 1; }
         echo "delete $ns ($reason)"
         if [[ "$DRY_RUN" == "false" ]]; then
-          (( deleted < MAX_DELETES )) || { echo "STOP: reached MAX_DELETES=$MAX_DELETES; check the label query" >&2; exit 1; }
           kubectl delete namespace "$ns" --wait=false
-          deleted=$(( deleted + 1 ))
         fi
+        deleted=$(( deleted + 1 ))
       fi
     done
 ```
