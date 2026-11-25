@@ -76,6 +76,7 @@ set -Eeuo pipefail
 # Reads one JSON event on stdin and appends a minimal audit line.
 # Stores a keyed hash (HMAC-SHA256) of the command, not the command text. The key lives in a
 # file outside the log store, readable only by the audit writer; its path is the only argument.
+# The key file holds at least 32 bytes, for example from `openssl rand -hex 32`; a shorter key makes the hash step exit non-zero.
 : "${AUDIT_HMAC_KEY_FILE:?set AUDIT_HMAC_KEY_FILE to the HMAC key file}"
 event="$(cat)"
 tool="$(jq -r '.tool_name // "unknown"' <<<"$event")"
@@ -151,7 +152,7 @@ Source-reviewed on 2026-11-02. Nothing was run apart from a helper check of the 
 - The OWASP Logging Cheat Sheet and NIST SP 800-92 listed under Sources could not be read (not reachable); they are kept as background reading only and no statement in this note depends on their wording.
 - Where each agent tool stores its transcripts, in what format, for how long, and whether a bug-report flow uploads a transcript: tool documentation was not available. The hook event field names in the sample script are an assumption.
 - How long GitLab keeps job logs relative to artifacts: not stated in the pages read.
-- The flags and behaviour of a secret scanner such as gitleaks, and the `jq` details in the sample script. The Python `hmac` documentation was not re-read on 2026-11-24; the audit script ran once with a sample event on that date and printed an HMAC line.
+- The flags and behaviour of a secret scanner such as gitleaks, and the `jq` details in the sample script. The Python `hmac` documentation was not re-read on 2026-11-24; the audit script ran once with a sample event on that date and printed an HMAC line. The key-length check added on 2026-11-25 was tried only as a separate one-liner, not inside the script.
 - Engineering guidance, not documented claims: the transcript classification, lifecycle table, audit-record design, sharing steps, rotation-before-deletion and the failure modes. Retention periods are left to the compliance owner.
 - Nothing else was run: no pipeline and no real agent session.
 
