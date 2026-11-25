@@ -9,7 +9,7 @@ tags:
   - gcp
   - gke
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -149,7 +149,7 @@ gcloud iam service-accounts keys disable "$KEY_ID" --iam-account "$SA"
 gcloud iam service-accounts disable "$SA"
 ```
 
-Disabling a key does not revoke tokens already issued from it. Google's guidance for a compromised credential is to disable the service account (or add an IAM deny policy, or delete the account) and then **wait at least 60 minutes after disabling the service account** so that issued tokens expire. Wait longer if your organisation allows an extended token lifetime, up to 12 hours. Whether a disabled account's issued tokens stop working at once is not documented, so assume they keep working until they expire. Keep watching the audit log for the whole window. The full rule, shared with the other credential runbooks, is in [[leaked-credential-rotation#GCP service account key]].
+Disabling a key does not revoke tokens already issued from it. Google's guidance for a compromised credential is to disable the service account (or add an IAM deny policy, or delete the account) and then **wait at least 60 minutes after disabling the service account** so that issued tokens expire. Wait longer if your organisation allows an extended token lifetime, up to 12 hours. Google's two pages differ on whether a disabled account's issued tokens stop at once: the keys page says that to revoke a compromised short-lived credential you must disable or delete the service account, and that workloads using it immediately lose access, while the compromised-credentials page still requires the wait. Keep the conservative assumption that they keep working until they expire. Keep watching the audit log for the whole window. The full rule, shared with the other credential runbooks, is in [[leaked-credential-rotation#GCP service account key]].
 
 > [!danger] Deleting a key or service account is not reversible here
 > Disable first. A deleted key cannot be brought back, and deleting a service account breaks every workload and binding that still uses it. Delete only after the evidence is saved (`service-accounts.json`, `iam-policy.json` and the key list above) and the security lead agrees.
@@ -454,7 +454,7 @@ Corrections made on 2026-10-20: the manifest command was replaced by a rerun-saf
 - The full steps of the GKE "Mitigate security incidents" page, the current revision of NIST SP 800-61, and notification deadlines, which are not stated in this note.
 - That snapshots capture disk but not memory, and the rebuild-versus-clean criteria, which are judgement and not vendor statements.
 - The `date -u -v-15M` form on macOS was not run.
-- Whether tokens issued before a service account was disabled stop working immediately; the pages read on 2026-11-24 do not say.
+- Whether tokens issued before a service account was disabled stop working immediately. The keys page (read on 2026-11-25) says workloads lose access immediately, the compromised-credentials page requires a 60-minute wait, and the service-accounts-disable-enable page read on 2026-11-24 is silent; the note follows the conservative reading.
 - Every page not marked as read directly was reached through search excerpts only, because the lab could not fetch the vendor pages; no cluster, project, key or snapshot was touched.
 
 ### Environment
