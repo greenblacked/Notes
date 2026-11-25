@@ -104,8 +104,10 @@ def main(baseline_path, restored_path, k, threshold):
     missing = sorted(set(baseline) - set(restored))
     overlaps = []
     for qid, docs in baseline.items():
-        if qid in restored and docs[:k]:
-            overlaps.append(len(set(docs[:k]) & set(restored[qid][:k])) / len(docs[:k]))
+        base = list(dict.fromkeys(docs[:k]))
+        if qid in restored and base:
+            got = set(dict.fromkeys(restored[qid][:k]))
+            overlaps.append(len(set(base) & got) / len(base))
     mean = sum(overlaps) / len(overlaps) if overlaps else 0.0
     print(f"queries={len(baseline)} missing={len(missing)} mean_overlap@{k}={mean:.3f}")
     for qid in missing:
@@ -118,6 +120,8 @@ if __name__ == "__main__":
         sys.exit("usage: compare_retrieval.py baseline.jsonl restored.jsonl K THRESHOLD")
     sys.exit(main(sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4])))
 ```
+
+Duplicates (several chunks of one document) are collapsed before comparing, so the score is document-level.
 
 - Pick the threshold from two runs against production itself. Approximate indexes are not perfectly repeatable.
 - Then measure retrieval quality with [[retrieval-evaluation-metrics-and-thresholds]].
