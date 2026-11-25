@@ -50,7 +50,7 @@ NS="payments"           # change: from the alert
 POD="payments-api-7d9c" # change: from the alert
 CASE_DIR="$HOME/rt-alert-$(date -u +%Y%m%dT%H%M%SZ)"; mkdir -p "$CASE_DIR"; chmod 700 "$CASE_DIR"
 kubectl get pod "$POD" -n "$NS" -o yaml > "$CASE_DIR/pod.yaml"
-kubectl get pod "$POD" -n "$NS" -o jsonpath='{range .status.containerStatuses[*]}{.name}{"\t"}{.imageID}{"\n"}{end}'
+kubectl get pod "$POD" -n "$NS" -o jsonpath='{range .status.containerStatuses[*]}{.name}{"\t"}{.imageID}{"\n"}{end}{range .status.initContainerStatuses[*]}{.name}{"\t"}{.imageID}{"\n"}{end}{range .status.ephemeralContainerStatuses[*]}{.name}{"\t"}{.imageID}{"\n"}{end}'
 kubectl get events -n "$NS" --field-selector "involvedObject.name=$POD" -o yaml > "$CASE_DIR/events.yaml"
 kubectl logs "$POD" -n "$NS" --all-containers --timestamps > "$CASE_DIR/logs.txt"
 ```
@@ -60,15 +60,17 @@ Answer these and write the answers in the channel:
 - Is the image digest the one in the deploy record?
 - Did a person `kubectl exec` into the pod around that time?
 
-Query for exec activity:
+Query for exec, attach and debug-container activity. The filter matches the method-name stems, because `kubectl` versions can log an exec session under different method names:
 
 ```bash
 PROJECT="example-prod" # change
 gcloud logging read \
-  "protoPayload.methodName=\"io.k8s.core.v1.pods.exec.create\" AND protoPayload.resourceName:\"namespaces/${NS}/pods/${POD}\"" \
+  "(protoPayload.methodName:\"pods.exec\" OR protoPayload.methodName:\"pods.attach\" OR protoPayload.methodName:\"pods.ephemeralcontainers\") AND protoPayload.resourceName:\"namespaces/${NS}/pods/${POD}\"" \
   --project="$PROJECT" --freshness=2h --format=json > "$CASE_DIR/exec-audit.json"
 jq -r '.[] | [.timestamp, .protoPayload.authenticationInfo.principalEmail] | @tsv' "$CASE_DIR/exec-audit.json"
 ```
+
+An empty result is not evidence that nobody was in the pod. Exec over WebSocket may be logged under another method or as a Data Access log, which is off by default, and node-level access is not queried at all. Trust an empty result only after the same query has found one known exec you made yourself; otherwise record "no record" and classify as Unknown.
 
 ### 3. Decide
 
@@ -125,7 +127,7 @@ Triage is read-only. A rule exception is rolled back by reverting its MR. Contai
 ## Not verified
 
 - Falco JSON field names (`output_fields`, `k8s.ns.name`, `k8s.pod.name`, `container.image.repository`, `proc.cmdline`) and SCC finding categories and fields.
-- The GKE audit method name `io.k8s.core.v1.pods.exec.create`.
+- The GKE audit method names for exec, attach and ephemeral containers (the query matches the stems `pods.exec`, `pods.attach` and `pods.ephemeralcontainers`), and which log type records them.
 - `gcloud logging read --freshness`.
 - Whether exec events are Admin Activity or Data Access.
 
