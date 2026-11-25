@@ -35,7 +35,7 @@ Layer the controls: permission allow/deny rules first, a sandbox for filesystem 
 
 In the common design, a pre-tool-use hook is matched by tool name (for example a shell tool, or an edit/write tool), receives the call as JSON on stdin, and blocks it with a specific exit code, with stderr returned to the model. Check the current hooks documentation for the exact contract. The trap: other non-zero exit codes are usually non-blocking errors, so a guard that crashes fails open. Handle that explicitly.
 
-The guard below matches text. It normalises quotes, backslashes and spacing, and it catches common spellings (`git -C dir push --force`, `+main` and `:main` refspecs, `rm -fr /`, quoted paths). It cannot see through variables (`g=git; $g push -f`, `rm -rf $PWD`), aliases, functions or a script file the agent wrote first, and it matches only the spellings in its patterns: a glob that does not spell `.en` or `.env` (`cat .e*`), a space-separated option value such as `git --git-dir x push -f`, or a path that expands to a protected one are not caught. It checks each command separately (split at `;`, `|` and `&` only, so a substitution or redirection stays inside its command) and cannot know whether a plan file was reviewed. It reduces mistakes; it does not stop a determined or injected agent. The real control for pushes is server-side branch protection (no force-push, no deletion) in [[branching-and-merge-standard]]. For files and network, the real control is the sandbox in [[sandboxing-coding-agents-on-workstations-and-runners]]. For Terraform, the real control is the agent's identity: give it no credential that can apply (a plan-only role), and apply only in CI from a reviewed plan artifact, as in [[adr/0035-terraform-plan-policy-gate-and-ci-only-apply]] and [[agent-tool-authorization-boundaries]].
+The guard below matches text. It normalises quotes, backslashes and spacing, and it catches common spellings (`git -C dir push --force`, `+main` and `:main` refspecs, `rm -fr /`, quoted paths). It cannot see through variables (`g=git; $g push -f`, `rm -rf $PWD`), aliases, functions or a script file the agent wrote first, and it matches only the spellings in its patterns: a glob that does not spell `.en` or `.env` (`cat .e*`), a space-separated option value such as `git --git-dir x push -f`, or a path that expands to a protected one are not caught. It checks each command separately (split at `;`, `|` and `&` only, so a substitution or redirection stays inside its command). Newlines are not separators: a multi-line command is checked as one command, so it can be blocked for a flag that belongs to another line (for example `rm -rf build` followed by `git add .`), and only the Terraform apply rule re-checks the rest of such a command. The guard cannot know whether a plan file was reviewed. It reduces mistakes; it does not stop a determined or injected agent. The real control for pushes is server-side branch protection (no force-push, no deletion) in [[branching-and-merge-standard]]. For files and network, the real control is the sandbox in [[sandboxing-coding-agents-on-workstations-and-runners]]. For Terraform, the real control is the agent's identity: give it no credential that can apply (a plan-only role), and apply only in CI from a reviewed plan artifact, as in [[adr/0035-terraform-plan-policy-gate-and-ci-only-apply]] and [[agent-tool-authorization-boundaries]].
 
 ```bash
 #!/usr/bin/env bash
@@ -61,7 +61,7 @@ re_rm_rec=' (-[a-zA-Z]*[rR][a-zA-Z]*|--recursive) '
 re_rm_target=' (/|/\*|~|~/|~/\*|\$HOME|\$HOME/|\$HOME/\*|\$\{HOME\}|\$\{HOME\}/|\$\{HOME\}/\*|\.|\./|\.\*|\.\.|\.\./|\.\./\*|--no-preserve-root) '
 re_tf_destroy='[ /]terraform( -[^ ]+)* destroy '
 re_tf_apply='[ /]terraform( -[^ ]+)* apply '
-re_tf_apply_plan='[ /]terraform( -[^ ]+)* apply( -[^ ]+)* ([^ -][^ ]*[./])?tfplan( [0-9]+)?( [<>]+&?( [^ ]+)?)* $'  # a trailing redirection such as 2>&1 is allowed
+re_tf_apply_plan='[ /]terraform( -[^ ]+)* apply( -[^ ]+)* ([^ -][^ ]*[./])?tfplan(( [0-9]+)? [<>]+&?( [^ ]+)?)* $'  # a trailing redirection such as 2>&1 is allowed
 re_tf_plan_out='[ /]terraform( -[^ ]+)* plan( [^ ]+)* -out'
 re_secret='[ /](\.env([.][^ ]*|[*?][^ ]*)?|\.en[?*][^ ]*|[^ ]*\.pem|id_rsa|id_ed25519|\.kube/config) '
 
@@ -84,7 +84,12 @@ while IFS= read -r part; do
     deny "recursive delete of a root, home, current or parent path"
   fi
   if [[ "$part" =~ $re_tf_destroy ]]; then deny "terraform destroy"; fi
-  if [[ "$part" =~ $re_tf_apply ]] && ! [[ "$part" =~ $re_tf_apply_plan ]]; then deny "apply without a saved plan file"; fi
+  if [[ "$part" =~ $re_tf_apply ]]; then
+    [[ "$part" =~ $re_tf_apply_plan ]] || deny "apply without a saved plan file"
+    # A second apply in the same part (a newline-separated command) must have a plan file too.
+    rest=${part/"${BASH_REMATCH[0]}"/ }
+    ! [[ "$rest" =~ $re_tf_apply ]] || deny "apply without a saved plan file"
+  fi
 done <<<"$split"
 exit 0
 ```
@@ -221,6 +226,7 @@ must_block=(
   'terraform apply -auto-approve -var-file=prod.tfplan'
   'terraform plan -out=tfplan && terraform apply tfplan'
   'terraform apply -auto-approve; terraform apply tfplan'
+  $'terraform apply -auto-approve\nterraform apply tfplan'
 )
 must_allow=(
   'git push origin feat/x'
@@ -235,6 +241,9 @@ must_allow=(
   'terraform apply plan.tfplan'
   'terraform apply -input=false tfplan'
   'terraform apply tfplan 2>&1 | tee apply.log'
+  'terraform apply tfplan > apply.log 2>&1'
+  'terraform apply tfplan >> apply.log 2>&1'
+  'terraform apply tfplan > out.log 2> err.log'
   'ls -la'
 )
 for c in "${must_block[@]}"; do
@@ -302,6 +311,7 @@ Source-reviewed on 2026-11-02. Nothing was run, apart from a helper check on 202
 - The guard is a text guard; the bypasses listed in the guard section and under the canaries are known holes, not an exhaustive or tested list. Other spellings may pass.
 - That the Terraform rules match every spelling of `terraform` (wrapper scripts, a path containing a space, `tofu`, a `TF_CLI_ARGS` environment variable, a binary under another name): not tested.
 - The guard and its canaries ran with bash 5.2 and GNU sed on Linux only. Bash 3.2 and BSD sed on macOS were not run: the guard avoids `mapfile` and `\n` in the sed replacement, but run the canaries on each platform before relying on it there. Shell operators are padded with spaces, and commands are split only at `;`, `|` and `&`, so a command that hides the token from the matcher by other means (variables, aliases, encoded text) still passes.
+- Multi-line commands: newlines are squeezed into spaces and are not separators, so a multi-line command is checked as one command. Ordinary multi-line commands can be blocked wrongly (`rm -rf build` then `git add .`; `ls -ld .` then `git push origin feat/x`), and only the `terraform apply` rule re-checks the rest of the command. Not tested beyond the canaries.
 - Nothing else was run: the post-tool hook and the CI job were not executed.
 
 ### Lab run
@@ -318,7 +328,7 @@ exit=0
 exit=0
 ```
 
-The first command runs every `must_block` and `must_allow` line, including the operator spellings (`cat .env; true`, `echo $(cat .env)`, `cat .env|base64`, `cat .env>out`, `rm -rf /; true`), the saved-plan spellings `terraform apply -input=false tfplan` and `terraform apply tfplan 2>&1 | tee apply.log`, push and delete spellings with a command substitution or backticks, `/usr/bin/terraform destroy`, and the spellings the first version let through (a command path (also for `terraform`), combined short flags, a global git option, `.env*` globs, `rm -rf .`, `rm -rf ${HOME}`, `terraform destroy`, a plan token that is not the plan argument, plan and apply in one call), plus allowed lines such as `git push -u origin feat/x`. The second command shows the documented hole: a push through a variable is not blocked.
+The first command runs every `must_block` and `must_allow` line, including the operator spellings (`cat .env; true`, `echo $(cat .env)`, `cat .env|base64`, `cat .env>out`, `rm -rf /; true`), the saved-plan spellings `terraform apply -input=false tfplan` and `terraform apply tfplan 2>&1 | tee apply.log`, `terraform apply tfplan > apply.log 2>&1` (and the `>>` and `2> err.log` forms), the two-line `terraform apply -auto-approve` then `terraform apply tfplan`, push and delete spellings with a command substitution or backticks, `/usr/bin/terraform destroy`, and the spellings the first version let through (a command path (also for `terraform`), combined short flags, a global git option, `.env*` globs, `rm -rf .`, `rm -rf ${HOME}`, `terraform destroy`, a plan token that is not the plan argument, plan and apply in one call), plus allowed lines such as `git push -u origin feat/x`. The second command shows the documented hole: a push through a variable is not blocked.
 
 ## Sources
 
