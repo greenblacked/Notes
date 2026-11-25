@@ -512,12 +512,12 @@ Do these in the kind cluster `lab`. Check `kubectl config current-context` print
 
    ```bash
    GATEWAY_CLASS="CHANGE-ME"   # change: a name from the list below, also set in gateway.yaml
-   kubectl get gatewayclass
-   kubectl wait --for=condition=Accepted "gatewayclass/${GATEWAY_CLASS}" --timeout=60s \
-     && kubectl apply -f gateway.yaml \
-     && kubectl wait --for=condition=Programmed gateway/web-gateway --timeout=120s
-   kubectl get gateway web-gateway
-   kubectl get httproute web
+   kubectl --context kind-lab get gatewayclass
+   kubectl --context kind-lab wait --for=condition=Accepted "gatewayclass/${GATEWAY_CLASS}" --timeout=60s \
+     && kubectl --context kind-lab -n default apply -f gateway.yaml \
+     && kubectl --context kind-lab -n default wait --for=condition=Programmed gateway/web-gateway --timeout=120s
+   kubectl --context kind-lab -n default get gateway web-gateway
+   kubectl --context kind-lab -n default get httproute web
    ```
 
    Expected: the `kubectl wait` calls print `condition met`, and `kubectl get gateway web-gateway` shows `PROGRAMMED` as `True` once the controller has set it up. On kind there is no cloud load balancer, so it may have no external address; reach it by running `kubectl port-forward` against the Service the controller created for the Gateway, then call it with `curl -H 'Host: web.example.com' http://127.0.0.1:8080/`.
@@ -526,15 +526,18 @@ Do these in the kind cluster `lab`. Check `kubectl config current-context` print
 9. **Clean up.**
 
    ```bash
-   kubectl delete -f gateway.yaml --ignore-not-found
-   kubectl delete -f web.yaml --ignore-not-found
-   kubectl delete pod client --ignore-not-found
-   kubectl delete namespace other --ignore-not-found
-   left="$(kubectl get gateway/web-gateway httproute/web --ignore-not-found 2>/dev/null)"
-   [ -n "$left" ] && echo "$left" || echo "no gateway objects left"
+   kubectl --context kind-lab -n default delete -f gateway.yaml --ignore-not-found
+   kubectl --context kind-lab -n default delete -f web.yaml --ignore-not-found
+   kubectl --context kind-lab -n default delete pod client --ignore-not-found
+   kubectl --context kind-lab delete namespace other --ignore-not-found
+   if left="$(kubectl --context kind-lab -n default get gateway/web-gateway httproute/web --ignore-not-found 2>&1)"; then
+     [ -n "$left" ] && echo "$left" || echo "no gateway objects left"
+   else
+     echo "check failed: $left" >&2
+   fi
    ```
 
-   Expected: the Gateway, Deployment, Service and Pods are removed, and the `other` namespace and everything in it with it. If you installed a Gateway API controller in exercise 8, uninstall it with its own documented steps. Remove the CRDs only on this lab cluster; on a shared cluster other teams' routes depend on them. If you skipped exercise 8, the first command can fail because the Gateway CRDs are not installed; skip it.
+   Expected: the Gateway, Deployment, Service and Pods are removed, and the `other` namespace and everything in it with it. If you installed a Gateway API controller in exercise 8, uninstall it with its own documented steps. Remove the CRDs only on this lab cluster; on a shared cluster other teams' routes depend on them. If you skipped exercise 8, the first command and the final check fail because the Gateway CRDs are not installed; skip them.
    If you see something else: a namespace stuck in `Terminating` usually has a resource with a finalizer that is waiting on something; list what remains with `kubectl get all -n other`.
 
 ## Common mistakes

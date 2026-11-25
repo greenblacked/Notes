@@ -8,7 +8,7 @@ tags:
   - ci-cd
   - security
 created: 2026-10-19
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -271,7 +271,7 @@ unclassified:
       - name: "lab-lib"
         defaultVersion: "v0.1.0"
         implicit: false
-        allowVersionOverride: true
+        allowVersionOverride: true # lab only: false in production, see the warning below
         retriever:
           modernSCM:
             scm:

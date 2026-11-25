@@ -7,7 +7,7 @@ tags:
   - linux
   - security
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -419,12 +419,11 @@ Things to change and why: `ssh-users` must be a group that exists and contains y
 Always test before you reload, and keep your current session open while you try a second one:
 
 ```bash
-sudo sshd -t && echo "config OK"
-sudo systemctl reload ssh      # Ubuntu and Debian
-# sudo systemctl reload sshd   # RHEL, Rocky and Alma
+sudo sshd -t && sudo systemctl reload ssh      # Ubuntu and Debian
+# sudo sshd -t && sudo systemctl reload sshd   # RHEL, Rocky and Alma
 ```
 
-The unit is called `ssh` on Ubuntu and `sshd` on RHEL-family systems. `sshd -t` checks the syntax and exits non-zero on an error. A reload with a broken config can leave you unable to open new sessions, which is why you test first and keep the old session alive.
+The unit is called `ssh` on Ubuntu and `sshd` on RHEL-family systems. `sshd -t` checks the syntax and exits non-zero on an error, and the `&&` stops the reload when it does. A reload with a broken config can leave you unable to open new sessions, which is why you test first and keep the old session alive.
 
 > [!warning] Have a way in that does not use SSH
 > `sshd -t` checks syntax, not whether **you** can still log in: a wrong `AllowGroups` passes the test and locks you out. Before you reload, make sure you can reach a console that does not go through `sshd`: the window of your lab VM in its hypervisor (UTM, VirtualBox), or a cloud VM's serial console. IAP TCP forwarding and bastions still end at `sshd`, so they do not help here. The rollback is to remove the drop-in and reload:
@@ -562,8 +561,8 @@ Run these in the lab VM, never on a shared or production host. Some need `sudo`.
     KbdInteractiveAuthentication no
     AllowGroups ssh-users
     EOF
-    sudo sshd -t && sudo sshd -T | grep -E '^(permitrootlogin|passwordauthentication|allowgroups) '
-    sudo systemctl reload ssh
+    sudo sshd -t && sudo sshd -T | grep -E '^(permitrootlogin|passwordauthentication|allowgroups) ' \
+      && sudo systemctl reload ssh
     ```
 
     Expected: no output from `sshd -t`, then `permitrootlogin no`, `passwordauthentication no` and `allowgroups ssh-users`. A new session from the second terminal still works.

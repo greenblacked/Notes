@@ -306,7 +306,7 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
 
    > [!warning] Costs money
    >
-   > The bucket is billed while it exists. Delete it with: `gcloud storage rm --recursive --all-versions "gs://${BUCKET}" && gcloud iam service-accounts delete "$SA_EMAIL" --project="$PROJECT_ID" --quiet`.
+   > The bucket is billed while it exists. Delete it with: `gcloud storage rm --recursive --all-versions "gs://${BUCKET:?}" && gcloud iam service-accounts delete "${SA_EMAIL:?}" --project="$PROJECT_ID" --quiet`.
 
    ```bash
    gcloud iam service-accounts create "$SA_NAME" \
@@ -490,11 +490,11 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
 10. **Clean up.** Remove the grant, the bucket, the service account and the local files.
 
     ```bash
-    gcloud iam service-accounts remove-iam-policy-binding "$SA_EMAIL" \
+    gcloud iam service-accounts remove-iam-policy-binding "${SA_EMAIL:?}" \
       --member="user:${MY_ACCOUNT}" --role="roles/iam.serviceAccountTokenCreator" \
       --project="$PROJECT_ID"
-    gcloud storage rm --recursive --all-versions "gs://${BUCKET}"
-    gcloud iam service-accounts delete "$SA_EMAIL" --project="$PROJECT_ID" --quiet
+    gcloud storage rm --recursive --all-versions "gs://${BUCKET:?}"
+    gcloud iam service-accounts delete "${SA_EMAIL:?}" --project="$PROJECT_ID" --quiet
     rm -f hello.txt write-test.txt
     rm -rf ~/lab/tf-iam
     gcloud iam service-accounts list --project="$PROJECT_ID" --format='value(email)'

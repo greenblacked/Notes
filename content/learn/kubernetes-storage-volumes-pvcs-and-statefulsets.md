@@ -8,7 +8,7 @@ tags:
   - gke
   - reliability
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -458,7 +458,7 @@ kubectl config set-context kind-lab --namespace=default
 5. **Retain versus Delete.** Make a class with `Retain` that uses the same provisioner, then delete a claim from each class.
 
    > [!warning] This deletes a volume and its data
-   > `k9-data` uses a class with `reclaimPolicy: Delete`, so deleting the claim deletes the volume. That is the point of the exercise, and it is only safe in the kind lab. The commands name the context and namespace, so they fail instead of running against another cluster, and a server-side dry run shows what would go. On a real cluster, take a VolumeSnapshot or a disk snapshot and check it is ready before you delete a claim (see Snapshots and backups).
+   > `k9-data` uses a class with `reclaimPolicy: Delete`, so deleting the claim deletes the volume. That is the point of the exercise, and it is only safe in the kind lab. The commands name the context and namespace, so they fail instead of running against another cluster. They do not ask for confirmation: read them before you run them. On a real cluster, take a VolumeSnapshot or a disk snapshot and check it is ready before you delete a claim (see Snapshots and backups).
 
    ```bash
    kubectl create -f - <<'EOF'
@@ -503,7 +503,6 @@ kubectl config set-context kind-lab --namespace=default
    KEEP_PV=$(kubectl get pvc k9-keep -o jsonpath='{.spec.volumeName}')
    DATA_PV=$(kubectl get pvc k9-data -o jsonpath='{.spec.volumeName}')
    kubectl --context kind-lab -n default delete pod k9-keeper k9-writer
-   kubectl --context kind-lab -n default delete pvc k9-keep k9-data --dry-run=server
    kubectl --context kind-lab -n default delete pvc k9-keep k9-data
    sleep 10
    kubectl get pv "$KEEP_PV" "$DATA_PV"
@@ -592,26 +591,39 @@ kubectl config set-context kind-lab --namespace=default
    > Run this only against the lab cluster saved in `GKE_CTX`. Nothing in this exercise is worth keeping; on a real cluster snapshot the disk first.
 
    ```bash
-   echo "$GKE_CTX"                       # must be your lab GKE cluster
-   kubectl --context "${GKE_CTX:?}" get pv "$PV" -o jsonpath='{.spec.persistentVolumeReclaimPolicy}{"\n"}'
+   echo "${GKE_CTX:?}"                  # must be your lab GKE cluster
+   kubectl --context "${GKE_CTX:?}" get pv "${PV:?}" -o jsonpath='{.spec.persistentVolumeReclaimPolicy}{"\n"}'
+   ```
+
+   Stop here if the printed context is not your lab GKE cluster. Only then run the delete as a separate block:
+
+   ```bash
    kubectl --context "${GKE_CTX:?}" -n default delete pod k9-gke
-   kubectl --context "${GKE_CTX:?}" -n default delete pvc k9-gke --dry-run=server
    kubectl --context "${GKE_CTX:?}" -n default delete pvc k9-gke
    ```
 
 8. **Clean up the kind lab.**
 
    > [!warning] Bulk delete by label
-   > `-l app=k9-db` deletes every claim with that label in the namespace. The block lists them first and pins the context and namespace; stop if the list shows anything that does not start with `k9-`.
+   > `-l app=k9-db` deletes every claim with that label in the namespace. List them first with the first block, and stop if anything does not start with `k9-`. Both blocks pin the context and namespace.
+
+   ```bash
+   kubectl --context kind-lab -n default get pvc -l app=k9-db
+   ```
+
+   If every name starts with `k9-`, run the deletes as a separate block:
 
    ```bash
    kubectl --context kind-lab -n default delete -f k9-sts.yaml --ignore-not-found
-   kubectl --context kind-lab -n default get pvc -l app=k9-db
    kubectl --context kind-lab -n default delete pvc -l app=k9-db --ignore-not-found
    kubectl --context kind-lab -n default delete pvc k9-typo k9-data k9-keep --ignore-not-found
    kubectl --context kind-lab -n default delete pod k9-writer k9-keeper --ignore-not-found
    kubectl --context kind-lab delete storageclass k9-retain --ignore-not-found
-   kubectl --context kind-lab get pvc,pv -A | grep k9 || echo "clean"
+   if out="$(kubectl --context kind-lab get pvc,pv -A)"; then
+     printf '%s\n' "$out" | grep k9 || echo "clean"
+   else
+     echo "check failed: could not list claims and volumes" >&2
+   fi
    ```
 
    Expected: `clean`. The StatefulSet's claims must be deleted explicitly, which is the point of exercise 4.

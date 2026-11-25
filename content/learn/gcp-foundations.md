@@ -433,7 +433,7 @@ BUCKET="${PROJECT_ID}-gcp01"            # Bucket names are global; the project I
 
    > [!warning] Costs money
    >
-   > A small bucket stores data that is billed by size and time, plus operations. Delete it in the last exercise: `gcloud storage rm --recursive --all-versions "gs://${BUCKET}"`. Soft-deleted data can still bill during the retention period, which is why the lab bucket sets `--soft-delete-duration=0` (`0` turns soft delete off; the default is 7 days, per the `gcloud storage buckets create` reference, checked 2026-11-24).
+   > A small bucket stores data that is billed by size and time, plus operations. Delete it in the last exercise: `gcloud storage rm --recursive --all-versions "gs://${BUCKET:?}"`. Soft-deleted data can still bill during the retention period, which is why the lab bucket sets `--soft-delete-duration=0` (`0` turns soft delete off; the default is 7 days, per the `gcloud storage buckets create` reference, checked 2026-11-24).
 
    ```bash
    gcloud storage buckets create "gs://${BUCKET}" \
@@ -599,7 +599,7 @@ BUCKET="${PROJECT_ID}-gcp01"            # Bucket names are global; the project I
 10. **Clean up.** Remove the bucket and its versions, and the local files.
 
     ```bash
-    gcloud storage rm --recursive --all-versions "gs://${BUCKET}"
+    gcloud storage rm --recursive --all-versions "gs://${BUCKET:?}"
     rm -f hello.txt lifecycle.json
     gcloud storage buckets list --project="$PROJECT_ID" --format='value(name)'
     ```
