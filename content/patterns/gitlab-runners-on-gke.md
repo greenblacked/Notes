@@ -9,7 +9,7 @@ tags:
   - security
   - cost
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-25
 draft: false
 ---
 
@@ -312,7 +312,7 @@ default:
 build-image:
   stage: build
   image:
-    name: moby/buildkit:rootless@sha256:REPLACE_WITH_DIGEST # change: pin the digest you tested
+    name: moby/buildkit:<tested-version>-rootless@sha256:<digest> # change: the tested version and its digest
     entrypoint: [""]
   variables:
     BUILDKITD_FLAGS: --oci-worker-no-process-sandbox

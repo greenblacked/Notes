@@ -7,7 +7,7 @@ tags:
   - gcp
   - cost
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -661,4 +661,4 @@ To go deeper:
 - Google Cloud documentation, Cloud Billing: "Create, edit, or delete budgets and budget alerts" (https://docs.cloud.google.com/billing/docs/how-to/budgets), "View your cost reports" and "Export Cloud Billing data to BigQuery" (under https://docs.cloud.google.com/billing/docs/how-to/). Pricing pages for Cloud Storage and network (https://cloud.google.com/storage/pricing and https://cloud.google.com/vpc/network-pricing).
 - Google Cloud documentation, `gcloud storage buckets create` reference (https://docs.cloud.google.com/sdk/gcloud/reference/storage/buckets/create): the `--soft-delete-duration` default of 7 days and `0` to disable it, the default location `us`, and `--public-access-prevention`; checked 2026-11-24.
 - Checked in this environment: `gcloud` 570.0.0 on Linux, offline. Ran `gcloud config configurations create`, `list` (with `--filter`, `--sort-by` and the `value()`, `table()`, `csv[no-heading]()`, `yaml()` and `json()` formats), `activate` and `delete`, `gcloud config set` and `get`, and read `--help` for `storage buckets create`, `update`, `describe`, `list`, `storage rm`, `billing budgets create`, `projects create`, `projects update`, `auth login` and `auth application-default`. Nothing was run against a real project, bucket or billing account, so every cloud output is illustrative.
-- Not verified: all `docs.cloud.google.com` URLs (the host was not reachable from the writing environment, so the paths are unchecked and must be verified); storage class minimum durations and retrieval fees; external IPv4, Cloud NAT, GKE management fee and logging ingestion pricing; the `daysSinceNoncurrentTime` lifecycle field; whether `gcloud beta projects update --update-labels` is available on your version; the `--filter='-users:*'` unattached-disk idiom; and the `default` network that enabling Compute Engine may create.
+- Not verified: the other `docs.cloud.google.com` URLs (the host was not reachable from the writing environment, so the paths are unchecked and must be verified); storage class minimum durations and retrieval fees; external IPv4, Cloud NAT, GKE management fee and logging ingestion pricing; the `daysSinceNoncurrentTime` lifecycle field; whether `gcloud beta projects update --update-labels` is available on your version; the `--filter='-users:*'` unattached-disk idiom; and the `default` network that enabling Compute Engine may create.

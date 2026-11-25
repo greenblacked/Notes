@@ -8,7 +8,7 @@ tags:
   - gcp
   - ci-cd
 created: 2026-10-19
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -548,7 +548,7 @@ Use a scratch directory and the sandbox project. Steps with `plan` create nothin
 - **`ignore_changes = all`.** Why it bites: drift becomes invisible. Fix: the narrowest attribute, with a comment on who owns it.
 - **Using `create_before_destroy` on a resource with a fixed unique name.** Why it bites: the two objects collide. Fix: use it only where two can coexist.
 - **Applying in a test.** Why it bites: `command = apply` creates real resources and costs money. Fix: start with `plan`, apply only in a sandbox.
-- **Trusting the version numbers on this page.** Why it bites: features appeared in different versions. Fix: check the minimum Terraform versions for `optional()` and `replace_triggered_by` in the docs, and the ones for `terraform test`, mock providers and `removed` blocks (1.6.0, 1.7.0, 1.7.0) against the docs for newer changes for the version you pin.
+- **Trusting the version numbers on this page.** Why it bites: features appeared in different versions. Fix: check the minimum Terraform versions for `optional()` and `replace_triggered_by` in the docs. `terraform test` (1.6.0), mock providers (1.7.0) and `removed` blocks (1.7.0) were checked on 2026-11-24.
 
 ## Check your understanding
 

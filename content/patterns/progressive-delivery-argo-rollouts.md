@@ -9,7 +9,7 @@ tags:
   - prometheus
   - reliability
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 aliases:
   - canary deployments
@@ -21,7 +21,7 @@ Progressive delivery sends a new version to a small share of traffic, measures i
 > Written against Argo Rollouts as described in the official documentation at [argo-rollouts.readthedocs.io](https://argo-rollouts.readthedocs.io/en/stable/), Argo CD at [argo-cd.readthedocs.io](https://argo-cd.readthedocs.io/en/stable/) and Prometheus at [prometheus.io](https://prometheus.io/docs/). Metric names in the queries are examples and must match your own instrumentation.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: current Argo Rollouts CRD fields, the status of the traffic-router plugin for Gateway API, and the health behaviour Argo CD shows for Rollouts, and the maintenance status of the community ingress-nginx controller. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: current Argo Rollouts CRD fields, the status of the traffic-router plugin for Gateway API, and the health behaviour Argo CD shows for Rollouts. Check them before relying on them.
 
 ## When canaries pay off
 
