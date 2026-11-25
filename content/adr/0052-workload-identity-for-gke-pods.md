@@ -250,17 +250,20 @@ kubectl get secrets --all-namespaces -o json \
       | "\(.metadata.namespace)/\(.metadata.name)"'
 ```
 
-From inside a Pod running as the workload's KSA, the metadata server must answer with a token, and the identity must not be the node's:
+From inside a Pod running as the workload's KSA, the metadata server must answer with a token, and the identity must not be the node's. Save the script as `wi-check.sh` and run it as `NAMESPACE=orders KSA=orders-api CURL_IMAGE=curlimages/curl@sha256:<digest> bash wi-check.sh` (use your own namespace, KSA and the digest of the curl image you reviewed), not pasted into a shell, because it calls `exit`:
 
-```bash
+```bash title="wi-check.sh"
 set -euo pipefail
 NAMESPACE="${NAMESPACE:?set NAMESPACE to the workload namespace}"
 KSA="${KSA:?set KSA to the workload Kubernetes service account}"
 CURL_IMAGE="${CURL_IMAGE:?set CURL_IMAGE to the curl image digest reference you reviewed}"
 
-# Both names go into the manifest below: accept only valid Kubernetes names.
-re='^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
-[[ "${NAMESPACE}" =~ ${re} && "${KSA}" =~ ${re} ]] || { echo "invalid NAMESPACE or KSA" >&2; exit 2; }
+# All three values go into the manifest below: accept only valid names and a digest reference.
+ns_re='^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+ksa_re='^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$' # service account names may contain dots
+img_re='^[a-z0-9.-]+(:[0-9]+)?(/[a-z0-9._-]+)+@sha256:[a-f0-9]{64}$'
+[[ "${NAMESPACE}" =~ ${ns_re} && "${KSA}" =~ ${ksa_re} ]] || { echo "invalid NAMESPACE or KSA" >&2; exit 2; }
+[[ "${CURL_IMAGE}" =~ ${img_re} ]] || { echo "CURL_IMAGE must be a digest reference" >&2; exit 2; }
 
 # The Pod runs as the workload's identity: run it only where you may act as that workload.
 # create, not apply: it stops if a Pod named wi-check already exists, so the cleanup below
@@ -309,7 +312,7 @@ kubectl logs --namespace "${NAMESPACE}" wi-check || true
 exit "${rc}"
 ```
 
-Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. The Pod meets Pod Security `restricted` ([[0022-admission-policy-pod-security-vap-and-kyverno]]). It prints the token's HTTP status, never the token. The script deletes the Pod it created on exit and exits non-zero when the check fails, so a wrapper does not read a failure as a pass. If the wait fails, the script prints `kubectl describe pod` before it deletes the Pod: the Pod ended `Failed` (the metadata call was refused, so `curl -f` exited non-zero) or never started (image pull error, for example an unreplaced digest). An admission denial, or an existing Pod named `wi-check`, fails at `kubectl create` instead. Where [[0002-artifactory-as-single-artifact-store]] and [[0038-kyverno-verifies-image-signatures-at-admission]] are enforced, use the same digest through the internal registry path, or the Pod is refused at admission. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
+Expected: the pool form (`app-prod.svc.id.goog`) for a direct-grant workload, or the workload's own GSA for a linked one, and `token HTTP 200`. A `...-compute@developer.gserviceaccount.com` address or the node service account means the Pod is not on Workload Identity Federation. The Pod meets Pod Security `restricted` ([[0022-admission-policy-pod-security-vap-and-kyverno]]). It prints the token's HTTP status, never the token. The script deletes the Pod it created on exit and exits non-zero when the check fails, so a wrapper does not read a failure as a pass. If the wait fails, the script prints `kubectl describe pod` before it deletes the Pod: the Pod ended `Failed` (the metadata call was refused, so `curl -f` exited non-zero) or never started (image pull error, for example a digest that does not exist in the registry; a tag reference is refused by the script before the Pod is created). An admission denial, or an existing Pod named `wi-check`, fails at `kubectl create` instead. Where [[0002-artifactory-as-single-artifact-store]] and [[0038-kyverno-verifies-image-signatures-at-admission]] are enforced, use the same digest through the internal registry path, or the Pod is refused at admission. Symptoms and fixes are in the troubleshooting table of [[gke-workload-identity]].
 
 ## References
 
