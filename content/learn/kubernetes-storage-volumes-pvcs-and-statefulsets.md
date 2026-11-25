@@ -605,13 +605,13 @@ kubectl config set-context kind-lab --namespace=default
 8. **Clean up the kind lab.**
 
    > [!warning] Bulk delete by label
-   > `-l app=k9-db` deletes every claim with that label in the namespace. List them first with the first block, and stop if anything does not start with `k9-`. Both blocks pin the context and namespace.
+   > `-l app=k9-db` deletes every claim with that label in the namespace. List them first with the first block, and stop if it shows anything other than the StatefulSet's claims `data-k9-db-0`, `data-k9-db-1` and `data-k9-db-2`. Both blocks pin the context and namespace.
 
    ```bash
    kubectl --context kind-lab -n default get pvc -l app=k9-db
    ```
 
-   If every name starts with `k9-`, run the deletes as a separate block:
+   If the list shows only the `data-k9-db-*` claims (or nothing), run the deletes as a separate block:
 
    ```bash
    kubectl --context kind-lab -n default delete -f k9-sts.yaml --ignore-not-found
