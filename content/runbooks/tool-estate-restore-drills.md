@@ -379,7 +379,7 @@ gcloud compute disks delete "jenkins-home-drill-YYYYMMDD" --project="$PROJECT" -
 
 ## Not verified
 
-- That the isolation test reaches the same verdict on your dataplane: exit codes 28 and 7 as the blocked results, and the pod manifest under PSA `restricted`.
+- That the isolation test reaches the same verdict on your dataplane: only curl exit 28 (timeout) counts as blocked, so a dataplane that rejects connections (exit 7) fails the test even when the policy is enforced; and the pod manifest under PSA `restricted`.
 - The setting that makes a GKE cluster enforce NetworkPolicy.
 - How to set quiet-down on a restored `JENKINS_HOME` before first start.
 - Where Artifactory keeps its filestore configuration (database or file system) for your version, and whether a restored database can overwrite the scratch storage settings on first start.

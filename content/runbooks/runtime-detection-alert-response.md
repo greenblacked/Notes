@@ -117,12 +117,12 @@ Triage is read-only. A rule exception is rolled back by reverting its MR. Contai
 
 ## Troubleshooting
 
-| Symptom                           | Fix                                                                                                         |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Pod already gone                  | Use node-level evidence and audit logs. Ask why the workload restarted; a crash after an exploit is common. |
-| The exec query returns nothing    | Check the method name against a known exec into a non-suspect test pod, never the alerting pod. Data Access logs may be off.               |
-| Alert lacks pod fields            | The event was outside a container (node level). Treat the node as suspect.                                  |
-| Many identical alerts across pods | A rollout introduced the behaviour. Compare with the latest deploy before calling it an attack.             |
+| Symptom                           | Fix                                                                                                                          |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Pod already gone                  | Use node-level evidence and audit logs. Ask why the workload restarted; a crash after an exploit is common.                  |
+| The exec query returns nothing    | Check the method name against a known exec into a non-suspect test pod, never the alerting pod. Data Access logs may be off. |
+| Alert lacks pod fields            | The event was outside a container (node level). Treat the node as suspect.                                                   |
+| Many identical alerts across pods | A rollout introduced the behaviour. Compare with the latest deploy before calling it an attack.                              |
 
 ## Not verified
 

@@ -134,10 +134,10 @@ SHA_RE='^[0-9a-f]{40}$'
 [[ -f "$MANIFEST" ]] || { echo "run terraform init first: $MANIFEST is missing"; exit 1; }
 # Read the manifest into a variable so a jq failure stops the script.
 rows="$(jq -r '.Modules[] | select(.Key != "") | [.Key, .Source] | @tsv' "$MANIFEST")"
-# Pinned means: a query with exactly one parameter named ref (after percent-decoding), a 40-hex value,
-# and no other parameter whose decoded name contains "ref".
+# Pinned means: a query with exactly one parameter named ref (exact, lower-case, after percent-decoding), a 40-hex value,
+# and no other parameter whose decoded name contains "ref" in any case. A backslash in a name fails the check.
 pinned() {
-  local src="$1" query part name value refs=0 sha_ok=0
+  local src="$1" query part name decoded lower value refs=0 sha_ok=0
   local -a parts
   [[ "$src" == *\?* ]] || return 1
   query="${src#*\?}"; query="${query%%#*}"
@@ -145,11 +145,13 @@ pinned() {
   IFS='&' read -r -a parts <<< "$query"
   for part in "${parts[@]}"; do
     name="${part%%=*}"; value=""; [[ "$part" == *=* ]] && value="${part#*=}"
-    name="$(printf '%b' "${name//%/\\x}" | tr 'A-Z' 'a-z')"
-    if [[ "$name" == "ref" ]]; then
+    [[ "$name" != *\\* ]] || return 1 # a backslash would be expanded by printf %b below
+    decoded="$(printf '%b' "${name//%/\\x}")"
+    lower="$(printf '%s' "$decoded" | tr 'A-Z' 'a-z')"
+    if [[ "$decoded" == "ref" ]]; then
       refs=$((refs + 1))
       [[ "$value" =~ $SHA_RE ]] && sha_ok=1
-    elif [[ "$name" == *ref* ]]; then
+    elif [[ "$lower" == *ref* ]]; then
       return 1
     fi
   done
