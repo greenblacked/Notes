@@ -8,7 +8,7 @@ tags:
   - ci-cd
   - delivery
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -61,7 +61,7 @@ A label such as `agent-eligible` is a convenient trigger condition. In GitLab CI
 ```yaml title=".gitlab-ci.yml"
 agent-fix-upgrade:
   stage: remediate
-  image: registry.example.com/ci/agent-runner@sha256:REPLACE_WITH_DIGEST
+  image: registry.example.com/ci/agent-runner@sha256:<digest>
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /agent-eligible/ && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^renovate\//'
       when: manual
@@ -194,5 +194,3 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the GitLab CI trigger exa
 - [Renovate docs: FAQ](https://docs.renovatebot.com/faq) - separation of major and minor branches; not read, see Not verified.
 - [GitHub Docs: Dependabot pull request comment commands](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands) - ignoring versions via comments; not read, see Not verified.
 - [NIST SP 800-218: Secure Software Development Framework](https://csrc.nist.gov/pubs/sp/800/218/final) - risk-based practices behind the supply-chain framing; not read, see Not verified.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
