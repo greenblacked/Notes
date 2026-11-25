@@ -66,7 +66,7 @@ state = torch.load("/models/example-model/adapter.pt", weights_only=True)
 
 - Run this in the quarantine job described in [[model-supply-chain-verification]].
 - That job has no cloud or registry write credentials and no network beyond the fetch.
-- The script is an allow-list: it accepts safetensors weights plus JSON, text and tokenizer files, and fails on every other file, including pickles, code, native libraries and files with no suffix.
+- The script is an allow-list: it accepts safetensors weights plus JSON, text and tokenizer files, and fails on every other file, including pickles, code, native libraries and files with no suffix. Symbolic links and other special files also fail.
 - The script uses only the Python standard library, so nothing from the model repo is imported.
 - Run it with `python3 -I`.
 
@@ -80,6 +80,7 @@ Exit 0 with a SHA-256 manifest on stdout, or 1 with the problems on stderr.
 import hashlib
 import json
 import pathlib
+import stat
 import sys
 
 # Allow-list: weights as safetensors, JSON configuration, and text, tokenizer and licence files.
@@ -99,8 +100,14 @@ def sha256(path: pathlib.Path) -> str:
 
 def main(root: pathlib.Path) -> int:
     problems, manifest = [], {}
-    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+    for path in sorted(root.rglob("*")):
         rel = path.relative_to(root).as_posix()
+        mode = path.lstat().st_mode  # lstat: do not follow links
+        if stat.S_ISDIR(mode):
+            continue
+        if not stat.S_ISREG(mode):
+            problems.append(f"not a regular file (symbolic link or special file): {rel}")
+            continue
         suffix = path.suffix.lower()
         if suffix not in ALLOWED_SUFFIXES and path.name not in ALLOWED_NAMES:
             problems.append(f"file type not on the allow-list: {rel}")
@@ -218,7 +225,7 @@ spec:
    - Review them like any third-party dependency: imports, network calls, `subprocess`, `eval` or `exec`, file writes outside the cache.
    - Record the upstream SHA.
 3. Load with `trust_remote_code=True` and `revision=<full 40-character SHA>`, or from the vendored copy. Never from a branch.
-4. Run it in the same no-egress, no-token pod. The code then executes with no credentials to steal and nowhere to send anything. See [[code-execution-agent-sandboxing]] for the isolation model.
+4. Run it in the same no-egress, no-token pod. The code then has no platform credentials and no outbound network, provided the cluster enforces the egress policy (see the egress test in Validation). It still sees every prompt and controls every response, so review the code and compare outputs with your evaluation set. See [[code-execution-agent-sandboxing]] for the isolation model.
 5. Record the exception in [[policy-exception-and-waiver-process]] with an expiry.
 
 > [!warning] A flag in config is a remote code switch
@@ -231,9 +238,9 @@ The same rules apply to engineers pulling models locally. Their laptop holds Git
 ## Validation
 
 - `check_model_dir.py` exits 0 on the promoted directory.
-- `DEPLOY_REPO` is the path of your deploy repository. `grep -rniE -- "--trust-remote-code|trust_remote_code(=|:[[:space:]]*)(true|True)" "$DEPLOY_REPO"` returns nothing outside approved exceptions. It covers the flag, the Python argument and the YAML spelling.
+- `DEPLOY_REPO` is the path of your deploy repository. `grep -rniE -- "trust[_-]?remote[_-]?code" "$DEPLOY_REPO"` matches the bare words, so spacing, quoting, camel-case Helm keys and environment-variable spellings are all caught. Review every hit by hand: each must be false or an approved exception.
 - From a debug pod using the server's labels, outbound HTTPS fails.
-- Run `kubectl exec` into the server and `env | grep -c HF_TOKEN`. The output is `0`.
+- Run `kubectl exec` into the server and check that no variable name matches `HF_TOKEN|HUGGING_FACE_HUB_TOKEN` (`env | cut -d= -f1 | grep -cE 'HF_TOKEN|HUGGING_FACE_HUB_TOKEN'` prints `0`), and that `$HF_HOME/token` does not exist (`test ! -e "${HF_HOME:-$HOME/.cache/huggingface}/token"`).
 
 ## Rollback
 
@@ -247,7 +254,8 @@ The same rules apply to engineers pulling models locally. Their laptop holds Git
 - Whether `TRANSFORMERS_OFFLINE` is still honoured. Only `HF_HUB_OFFLINE` was read.
 - Whether `tokenizer_config.json`, `processor_config.json` or other files use keys other than `auto_map` to reference code.
 - How kernel-download libraries behave at load.
-- The script was not run. It checks file types and `auto_map` keys only; it does not inspect the contents of the JSON, text or safetensors files beyond that.
+- The default location of the Hugging Face token file (`$HF_HOME/token`) and the older `HUGGING_FACE_HUB_TOKEN` variable name, used in the Validation checks.
+- The script was run only on a small local test directory (Python 3.13: symbolic links, a broken link and a link to a directory all failed); it was not run on a real model repository. It checks file types and `auto_map` keys only; it does not inspect the contents of the JSON, text or safetensors files beyond that.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
