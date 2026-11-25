@@ -12,7 +12,7 @@ tags:
   - postgres
   - audit
 created: 2026-11-24
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -211,7 +211,7 @@ gcloud compute disks create "jenkins-home-drill-$(date -u +%Y%m%d)" \
 ```bash
 SONAR_URL="http://127.0.0.1:9000" # port-forward to the drill pod
 HDR_FILE="$(mktemp)"; chmod 600 "$HDR_FILE"
-read -rs -p "SonarQube admin token (drill instance): " T; echo
+printf 'SonarQube admin token (drill instance): ' >&2; stty -echo; IFS= read -r T; stty echo; echo >&2 # portable to bash and zsh
 printf 'Authorization: Bearer %s\n' "$T" > "$HDR_FILE"; unset T
 curl --fail -sS --header @"$HDR_FILE" "$SONAR_URL/api/system/status"
 curl --fail -sS --header @"$HDR_FILE" "$SONAR_URL/api/projects/search?ps=1" | jq '.paging.total'
@@ -255,18 +255,19 @@ backup_used: jenkins-home-20261124-0200 # the newest snapshot at drill time, not
 backup_taken_at: 2026-11-24T02:00:00Z
 previous_backup_at: 2026-11-23T02:00:00Z
 service_verified: 2026-11-24T10:12:00Z
-measured_rpo_minutes: 1440 # worst-case data loss: the observed interval between backup_taken_at and previous_backup_at
+measured_rpo_minutes: 420 # ADR 0051 field: age of the data restored, backup_taken_at to drill_started
+backup_interval_minutes: 1440 # worst-case data loss: backup_taken_at minus previous_backup_at
 measured_rto_minutes: 72 # drill_started to service_verified
 target_rpo_minutes: 720 # from the DR tier
 target_rto_minutes: 240
 run_by: sre-oncall # a role, not the runbook author
-result: fail # fail: RPO target missed
+result: fail # fail: worst-case RPO target missed
 defects:
   - "snapshot schedule is daily at 02:00; worst-case data loss is 24h, tier allows 12h (720 minutes)"
 cleanup_done: true
 ```
 
-`measured_rpo_minutes` is the data-loss window of the schedule: the gap between two consecutive backups, because a failure just before the next snapshot loses that whole gap. It is not the time you ran the drill. The RTO clock starts at `drill_started`. Here 1440 is above the 720 target, so the drill fails and the defect is the schedule.
+`measured_rpo_minutes` follows [[0051-backups-proven-by-quarterly-restore-drills]]: the age of the data restored, from `backup_taken_at` to `drill_started` (420 minutes here, within the 720 target). `backup_interval_minutes` is a separate, stricter check that this runbook adds: the gap between two consecutive backups, because a failure just before the next snapshot loses that whole gap. This runbook judges the tier on the worst-case interval, which is stricter than the ADR wording. Here 1440 is above the 720 target, so the drill fails and the defect is the schedule. The RTO clock starts at `drill_started`.
 
 Commit it where [[audit-evidence-collection-and-retention]] expects evidence. A miss or failure is an incident per ADR 0051.
 
@@ -282,10 +283,11 @@ Commit it where [[audit-evidence-collection-and-retention]] expects evidence. A 
 Cleanup removes only drill resources. The deletes are permanent.
 
 > [!warning] Delete only drill resources
-> Check each name contains `drill` before deleting.
+> Check each name contains `drill` before deleting, including the PersistentVolume.
 
 ```bash
 kubectl delete namespace restore-drill
+kubectl delete pv "<drill PV name>" # change: the pre-provisioned PV from step 1.3; it is cluster-scoped and survives the namespace
 gcloud compute disks delete "jenkins-home-drill-YYYYMMDD" --project="$PROJECT" --zone="$ZONE" # change: the drill disk name
 ```
 

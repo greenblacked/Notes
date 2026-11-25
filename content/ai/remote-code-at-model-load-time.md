@@ -8,7 +8,7 @@ tags:
   - supply-chain
   - kubernetes
 created: 2026-11-24
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 aliases:
   - trust_remote_code
@@ -66,12 +66,13 @@ state = torch.load("/models/example-model/adapter.pt", weights_only=True)
 
 - Run this in the quarantine job described in [[model-supply-chain-verification]].
 - That job has no cloud or registry write credentials and no network beyond the fetch.
+- The script is an allow-list: it accepts safetensors weights plus JSON, text and tokenizer files, and fails on every other file, including pickles, code, native libraries and files with no suffix.
 - The script uses only the Python standard library, so nothing from the model repo is imported.
 - Run it with `python3 -I`.
 
 ```python title="check_model_dir.py"
 #!/usr/bin/env python3
-"""Fail if a downloaded model directory could run code at load time.
+"""Fail unless a downloaded model directory holds only allow-listed file types.
 
 Usage: python3 -I check_model_dir.py /quarantine/example-model > manifest.json
 Exit 0 with a SHA-256 manifest on stdout, or 1 with the problems on stderr.
@@ -81,9 +82,11 @@ import json
 import pathlib
 import sys
 
-CODE_SUFFIXES = {".py", ".so", ".pyd", ".dylib", ".dll"}
-PICKLE_SUFFIXES = {".bin", ".pt", ".pth", ".ckpt", ".pkl", ".pickle"}
-SKIP_PREFIXES = (".git/", ".cache/")
+# Allow-list: weights as safetensors, JSON configuration, and text, tokenizer and licence files.
+# Anything else (pickles, .py, native libraries, .joblib, .npy, .h5, archives, files with
+# no suffix, and anything under .git/ or .cache/) fails. Extend it only after review.
+ALLOWED_SUFFIXES = {".safetensors", ".json", ".txt", ".md", ".model", ".tiktoken", ".jinja"}
+ALLOWED_NAMES = {"LICENSE", "NOTICE"}
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -98,13 +101,10 @@ def main(root: pathlib.Path) -> int:
     problems, manifest = [], {}
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
         rel = path.relative_to(root).as_posix()
-        if rel.startswith(SKIP_PREFIXES):
-            continue
         suffix = path.suffix.lower()
-        if suffix in CODE_SUFFIXES:
-            problems.append(f"executable code in the repository: {rel}")
-        if suffix in PICKLE_SUFFIXES:
-            problems.append(f"pickle-based weights, use safetensors: {rel}")
+        if suffix not in ALLOWED_SUFFIXES and path.name not in ALLOWED_NAMES:
+            problems.append(f"file type not on the allow-list: {rel}")
+            continue
         if suffix == ".json":
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
@@ -231,7 +231,7 @@ The same rules apply to engineers pulling models locally. Their laptop holds Git
 ## Validation
 
 - `check_model_dir.py` exits 0 on the promoted directory.
-- `grep -rn -- "--trust-remote-code\|trust_remote_code=True" <deploy repo>` returns nothing outside approved exceptions.
+- `DEPLOY_REPO` is the path of your deploy repository. `grep -rniE -- "--trust-remote-code|trust_remote_code(=|:[[:space:]]*)(true|True)" "$DEPLOY_REPO"` returns nothing outside approved exceptions. It covers the flag, the Python argument and the YAML spelling.
 - From a debug pod using the server's labels, outbound HTTPS fails.
 - Run `kubectl exec` into the server and `env | grep -c HF_TOKEN`. The output is `0`.
 
@@ -247,7 +247,7 @@ The same rules apply to engineers pulling models locally. Their laptop holds Git
 - Whether `TRANSFORMERS_OFFLINE` is still honoured. Only `HF_HUB_OFFLINE` was read.
 - Whether `tokenizer_config.json`, `processor_config.json` or other files use keys other than `auto_map` to reference code.
 - How kernel-download libraries behave at load.
-- The script was not run.
+- The script was not run. It checks file types and `auto_map` keys only; it does not inspect the contents of the JSON, text or safetensors files beyond that.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 

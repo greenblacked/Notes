@@ -1,6 +1,6 @@
 ---
 title: Compromised CI runner or pipeline identity
-description: Stop a compromised GitLab runner, Jenkins agent or CI identity, keep the evidence, revoke its credentials and decide which artifacts it built can still be trusted.
+description: Stop a compromised GitLab runner, Jenkins agent or CI identity, keep evidence, revoke its credentials and decide which artifacts it built can still be trusted.
 type: runbook
 tags:
   - runbooks
@@ -11,7 +11,7 @@ tags:
   - jenkins
   - supply-chain
 created: 2026-11-24
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -85,12 +85,12 @@ glapi --request PUT --form "paused=true" "$GITLAB_URL/api/v4/runners/$RUNNER_ID"
 ```bash
 glapi "$GITLAB_URL/api/v4/runners/$RUNNER_ID/jobs?per_page=100&order_by=id&sort=desc" \
   > "$CASE_DIR/runner-$RUNNER_ID-jobs.json"
-jq -r --arg t0 "$T0" '.[] | select(.created_at >= $t0)
+jq -r --arg t0 "$T0" '.[] | select(.created_at >= $t0 or .finished_at == null or .finished_at >= $t0)
   | [.id, .project.path_with_namespace, .ref, .commit.id, .user.username, .status] | @tsv' \
   "$CASE_DIR/runner-$RUNNER_ID-jobs.json" > "$CASE_DIR/jobs-in-window.tsv"
 ```
 
-- Page through results until a job is older than `T0`. The API supports keyset pagination.
+- The filter keeps jobs created before `T0` that were still running at `T0` or finished after it. Page through results until a job finished before `T0`. The API supports keyset pagination.
 - For each job in the window, record the project, ref, commit, triggering user and status. These rows define the artifact scope in step 5.
 - The field names in the `jq` filter must be checked against one real response first (see Not verified).
 
@@ -127,6 +127,8 @@ gcloud iam service-accounts remove-iam-policy-binding "$SA" \
 ```
 
 Copy the member string from `sa-policy-before.json`; do not retype it.
+
+Removing the binding stops new token exchanges. It does not invalidate access tokens already issued for the service account: they stay usable until they expire (check the current lifetime in the IAM documentation), so the audit-log check in Validation must cover that period. If the service account is used only by CI, disabling it is the faster stop; see [[leaked-credential-rotation]] for the wait before re-enabling.
 
 The runner token prefix is `glrt-` (`glrtr-` if the runner was made with a registration token). GitLab's token overview says to use the runners API to rotate or revoke a runner authentication token.
 
@@ -185,7 +187,7 @@ kubectl get pods -A -o jsonpath='{range .items[*]}{range .status.containerStatus
 - New jobs land only on the new runner.
 - `verify-results.txt` has no `FAIL` for first-party workloads. Images from kube-system, GKE and third parties are out of this check; review them separately if the pipeline could have pushed to their registries.
 - No digest from `suspect-digests.txt` runs: `grep -F -f suspect-digests.txt` over the step 5 pod listing returns nothing.
-- After the step 4 removals, Cloud Audit Logs show no further use of the WIF principal; see [[gcp-audit-logs-siem]].
+- After the step 4 removals and once already-issued access tokens have expired, Cloud Audit Logs show no further use of the WIF principal; see [[gcp-audit-logs-siem]].
 
 ## Rollback
 
@@ -212,6 +214,7 @@ kubectl get pods -A -o jsonpath='{range .items[*]}{range .status.containerStatus
 - Jenkins quiet-down and agent-disconnect steps.
 - Artifactory quarantine mechanics.
 - `curl -H @file` minimum version.
+- The lifetime of access tokens already issued for a service account, and that they survive removal of the binding (stated from general IAM behaviour, not read today).
 - Nothing was run.
 
 ## Related

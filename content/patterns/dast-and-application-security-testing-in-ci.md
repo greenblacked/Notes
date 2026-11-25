@@ -1,6 +1,6 @@
 ---
 title: DAST and application security testing in CI
-description: Run ZAP passive scans on every merge request's review app and active scans on a schedule against staging, gate on agreed rules and handle false positives in Git.
+description: Run ZAP passive scans on each merge request's review app and active scans on staging, gate on agreed rules and handle false positives in Git.
 type: pattern
 tags:
   - patterns
@@ -8,7 +8,7 @@ tags:
   - ci-cd
   - gitlab-ci
 created: 2026-11-24
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 aliases:
   - DAST
@@ -26,7 +26,7 @@ SAST reads code ([[sonarqube-quality-gates]], [[sonarqube-vs-semgrep-vs-codeql]]
 | Baseline (passive)    | The MR's review app ([[gitlab-review-environments-on-gke]]) | Every MR, after deploy        | Fails the MR on `FAIL` rules only |
 | API scan              | The review app's OpenAPI definition                         | Every MR that changes the API | Same rule file                    |
 | Full (active attacks) | A dedicated staging environment with test data              | Nightly, and before a release | Opens issues, does not block MRs  |
-| Production            | Baseline only, if at all                                    | Weekly                        | Report only                       |
+| Baseline (passive)    | Production, if at all                                       | Weekly                        | Report only                       |
 
 The baseline scan spiders for one minute by default, then runs passive checks only. ZAP's documentation says it runs no active attacks and is meant for CI.
 
@@ -108,7 +108,8 @@ dast-baseline:
 ## Authenticated scans
 
 - Use a dedicated test user that has no production data access, and rotate its password.
-- Pass the credentials through a masked, protected CI/CD variable read inside a ZAP context file (`-n`) and `-U`. Never put them in the command line or the rule file.
+- Pass the credentials through a masked (and hidden) CI/CD variable read inside a ZAP context file (`-n`) and `-U`. Never put them in the command line or the rule file.
+- Scope the variable to the review environment for the MR scan. A protected variable is exposed only to pipelines on protected branches and tags, so an MR pipeline from a feature branch would get an empty value. Use a protected variable only for the scheduled staging scan.
 - For review apps behind Cloudflare Access, give the scan a service token ([[cloudflare-access-service-tokens]]), added as a header via the context. Do not open the app to the internet.
 - Check the ZAP authentication docs for your version: they were not read for this note.
 
@@ -146,6 +147,7 @@ Deploy a review app that deliberately omits `X-Content-Type-Options`. The job mu
 
 - The `zap-full-scan.py` and `zap-api-scan.py` options.
 - ZAP authentication via context files.
+- GitLab variable behaviour for the masked, hidden, protected and environment-scoped settings described under Authenticated scans.
 - The rule IDs and names in the example.
 - Whether `/zap/wrk` exists and is writable in the image when no volume is mounted.
 - GitLab dotenv behaviour with `needs`.

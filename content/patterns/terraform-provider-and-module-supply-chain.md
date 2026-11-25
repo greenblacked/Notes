@@ -1,6 +1,6 @@
 ---
 title: Terraform provider and module supply chain
-description: Verify what Terraform pins - lock-file hashes from the origin registry, a provider mirror that cannot change them, read-only locks in CI and module sources pinned to commits.
+description: Verify what Terraform pins: origin-registry lock hashes, a mirror that cannot change them, read-only locks in CI and module sources pinned to commits.
 type: pattern
 tags:
   - patterns
@@ -9,7 +9,7 @@ tags:
   - security
   - ci-cd
 created: 2026-11-24
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -124,25 +124,31 @@ set -euo pipefail
 # Run after terraform init. Fails on Git module sources not pinned to a full commit SHA.
 MANIFEST=".terraform/modules/modules.json"
 SHA_RE='[?&]ref=[0-9a-f]{40}(&|$)'
+[[ -f "$MANIFEST" ]] || { echo "run terraform init first: $MANIFEST is missing"; exit 1; }
+# Read the manifest into a variable so a jq failure stops the script.
+rows="$(jq -r '.Modules[] | select(.Key != "") | [.Key, .Source] | @tsv' "$MANIFEST")"
 fail=0
 while IFS=$'\t' read -r key src; do
+  [[ -n "$key" ]] || continue
   case "$src" in
-    git::*|*.git*)
+    git::*|*.git*|github.com/*|bitbucket.org/*|hg::*)
       if [[ ! "$src" =~ $SHA_RE ]]; then
         echo "module '$key' is not pinned to a commit SHA: $src"
         fail=1
       fi
       ;;
   esac
-done < <(jq -r '.Modules[] | select(.Key != "") | [.Key, .Source] | @tsv' "$MANIFEST")
+done <<< "$rows"
 exit "$fail"
 ```
+
+HTTP archive sources and other source types are not covered by this check; review them by hand.
 
 Registry pins are checked in review. The manifest records the resolved version, not the constraint.
 
 ## Verify it works
 
-1. Change one `h1:` hash in a branch. CI `init` must fail with the checksum error.
+1. In a branch, replace every `h1:` and `zh:` line of one provider with wrong values. CI `init` must fail with the checksum error. Changing a single `h1:` line is not a valid test: Terraform accepts a package that matches at least one recorded checksum, and a `zh:` hash of the official package still matches.
 2. Change a module `ref` to a tag. `check-module-pins.sh` must fail.
 3. Remove the lock file in a branch. `-lockfile=readonly` must fail.
 
@@ -163,6 +169,7 @@ Registry pins are checked in review. The manifest records the resolved version, 
 ## Not verified
 
 - `terraform init -lockfile=readonly`.
+- The "Verify it works" tests were not run, and `check-module-pins.sh` was not run against a real `modules.json`.
 - `TF_CLI_CONFIG_FILE`, and the claim that an empty config file means direct installation.
 - The `.terraform/modules/modules.json` structure (`Modules`, `Key`, `Source`).
 - Artifactory's Terraform mirror URL layout.

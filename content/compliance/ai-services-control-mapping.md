@@ -1,13 +1,13 @@
 ---
 title: Control mapping for AI services - EU AI Act, SOC 2 and ISO 27001
-description: Map model gateways and agents to platform controls with stable IDs, the SOC 2 and ISO 27001 areas they evidence, and the EU AI Act dates and duties that apply to them.
+description: Map model gateways and agents to platform controls with stable IDs, the SOC 2 and ISO 27001 areas they evidence, and the EU AI Act dates and duties.
 type: guide
 tags:
   - compliance
   - ai
   - audit
 created: 2026-11-24
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 aliases:
   - EU AI Act
@@ -34,8 +34,6 @@ A model gateway and a set of agents are new systems inside the same audit scope 
 | December 2026   | The added prohibition on non-consensual sexual content and CSAM (by the AI Omnibus)           |
 | 2 December 2027 | High-risk systems in Annex III use cases (for example employment, education, law enforcement) |
 | 2 August 2028   | High-risk systems embedded in products (Annex I)                                              |
-
-Commentary on the Omnibus reports that the AI literacy duty was reworded, and that content-marking for generative systems already on the market before 2 August 2026 has until 2 December 2026. Confirm both against the consolidated text before relying on them.
 
 ## Where a platform team usually sits
 
@@ -87,7 +85,6 @@ Collect them once, per [[audit-evidence-collection-and-retention]].
 
 - The AI Act article text (Articles 4, 50 and 113, and Annex III wording). The EUR-Lex fetch returned no article text.
 - The amended article text of Regulation (EU) 2026/1744.
-- The secondary-source claims on Article 4 and the 2 December 2026 marking deadline.
 - ISO/IEC 42001 (page unreachable).
 - All ISO 27001:2022 Annex A numbers and SOC 2 family names in the table.
 - Which obligations apply to deployers as opposed to providers.

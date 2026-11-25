@@ -1,6 +1,6 @@
 ---
 title: Responding to a runtime detection alert
-description: Triage a Falco, Tetragon or Container Threat Detection finding on GKE in minutes, decide true or false positive, hand real ones to containment and tune the rest in Git.
+description: Triage a Falco, Tetragon or Container Threat Detection finding on GKE in minutes, judge true or false positive, hand off real ones and tune the rest in Git.
 type: runbook
 tags:
   - runbooks
@@ -10,7 +10,7 @@ tags:
   - kubernetes
   - gke
 created: 2026-11-24
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 

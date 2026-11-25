@@ -1,6 +1,6 @@
 ---
 title: Backup and disaster recovery for AI state
-description: What AI systems hold that must survive a disaster - vector indexes, model registry, prompts, gateway policy, eval sets and memory - and whether to back each up or rebuild it.
+description: What AI systems hold that must survive a disaster (indexes, registry, prompts, gateway policy, evals, memory) and whether to back each up or rebuild it.
 type: guide
 tags:
   - ai
@@ -8,7 +8,7 @@ tags:
   - gcp
   - postgres
 created: 2026-11-24
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
