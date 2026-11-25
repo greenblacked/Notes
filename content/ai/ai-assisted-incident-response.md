@@ -81,6 +81,7 @@ fail=0
 expect() {
   local want=$1 got; shift
   got="$(kubectl auth can-i "$@" -n "$NAMESPACE" --as "$SA" 2>/dev/null || true)"
+  got="${got%% *}"  # a denial can print "no - <reason>"; compare the first word only
   [[ "$got" == "$want" ]] || { echo "FAIL: can-i $* -> '$got' (want $want)" >&2; fail=1; }
 }
 
