@@ -187,9 +187,11 @@ set -euo pipefail
 STATE="gs://example-tfstate-prod/gke/default.tfstate"
 TARGET_GEN="1760000000000000"   # example value: the generation to restore, from the listing
 
-# Pre-check: list generations and record the live one (highest number) for the change ticket.
+# Pre-check: list generations for reference, then read the live one from the object's own metadata
+# (generation numbers might not increase, so never take the largest number) for the change ticket.
 gcloud storage ls --all-versions "$STATE"
-LIVE_GEN="$(gcloud storage ls --all-versions "$STATE" | sed -n 's/.*#//p' | sort -n | tail -n 1)"
+LIVE_GEN="$(gcloud storage objects describe "$STATE" --format='value(generation)')"
+: "${LIVE_GEN:?could not read the live generation; stop}"
 echo "live generation before rollback: ${LIVE_GEN}"
 
 # Keep a copy of the live state outside the working tree, owner-only (state can hold secrets).
@@ -198,7 +200,8 @@ BACKUP_DIR="$(mktemp -d)"
 gcloud storage cp "${STATE}#${LIVE_GEN}" "${BACKUP_DIR}/live-${LIVE_GEN}.tfstate"
 echo "live copy: ${BACKUP_DIR}/live-${LIVE_GEN}.tfstate"
 
-gcloud storage cp "${STATE}#${TARGET_GEN}" "$STATE"
+# Fails and changes nothing if the live object changed since LIVE_GEN was read.
+gcloud storage cp "${STATE}#${TARGET_GEN}" "$STATE" --if-generation-match="${LIVE_GEN}"
 
 # Post-check: 0 = no changes, 2 = changes (read the plan before anything else), 1 = error.
 set +e
@@ -210,7 +213,7 @@ echo "plan exit=${rc}"
 exit "${rc}"   # 0 or 2 is a result to read; 1 is an error
 ```
 
-Unfreeze only after the plan is understood. The copy in `${BACKUP_DIR}` holds the live state, which can contain secrets: delete it once the rollback is signed off (the replaced generation stays in the bucket as a noncurrent version). The overwrite is not conditional on the generation just recorded, so keep the freeze until the plan is read; a conditional copy with `--if-generation-match` is shown in [[gcs-deleted-object-recovery]] (flag checked with `--help` on 2026-10-21, not run). Full recovery cases are in [[terraform-state-recovery]].
+Unfreeze only after the plan is understood. The copy in `${BACKUP_DIR}` holds the live state, which can contain secrets: delete it once the rollback is signed off (the replaced generation stays in the bucket as a noncurrent version). The copy is conditional on the generation just recorded, so a write that lands in between makes it fail instead of being lost; keep the freeze until the plan is read anyway. The same flag is used in [[gcs-deleted-object-recovery]] (flag checked with `--help` on 2026-10-21, not run; it is not on the Cloud Storage versioned objects page, so check `--help` on your gcloud version). The live generation comes from the object's metadata because generation numbers might not increase for future versions (Cloud Storage object metadata page, checked 2026-11-25); that `--format='value(generation)'` prints the bare number was not verified here. Full recovery cases are in [[terraform-state-recovery]].
 
 ## When to choose which
 
@@ -236,3 +239,4 @@ Start with directories and shared modules. Introduce Terragrunt when the boilerp
 - [Terraform GCS backend](https://developer.hashicorp.com/terraform/language/backend/gcs)
 - [Terragrunt documentation](https://terragrunt.gruntwork.io/docs/)
 - [Cloud Storage: use versioned objects](https://docs.cloud.google.com/storage/docs/using-versioned-objects): listing and restoring generations, checked 2026-11-24.
+- [Cloud Storage: object metadata](https://docs.cloud.google.com/storage/docs/metadata#generation-number): generation numbers are unique per version but might not increase, checked 2026-11-25.

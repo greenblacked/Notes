@@ -16,7 +16,7 @@ draft: false
 [[terraform-vs-opentofu]] compares the two tools and has a short Migration section. This note extends that section into a procedure for a team whose state lives in a GCS bucket: what to check first, how to take a recoverable copy of state, how to move one workspace at a time behind gates, and how to go back. It assumes you have already decided to migrate. If you have not, read the comparison first.
 
 > [!info] Not checked against current releases
-> Version compatibility, state-format details, registry behaviour and command output were not checked when this note was written, and no migration was run to produce it. Confirm everything against the current OpenTofu migration guide and release notes, and rehearse on a copy of the state first. Checked on 2026-11-24: listing generations with `--all-versions` and restoring with `#GENERATION` (Cloud Storage versioned objects page), and the GCS backend's `<prefix>/<name>.tfstate` naming. Not verified: that `ls --all-versions` on a single object URL lists its generations, that the highest generation is always the live one, and that a no-op `tofu apply` of a saved plan writes a new state generation.
+> Version compatibility, state-format details, registry behaviour and command output were not checked when this note was written, and no migration was run to produce it. Confirm everything against the current OpenTofu migration guide and release notes, and rehearse on a copy of the state first. Checked on 2026-11-24: listing generations with `--all-versions` and restoring with `#GENERATION` (Cloud Storage versioned objects page), and the GCS backend's `<prefix>/<name>.tfstate` naming. Checked on 2026-11-25: generation numbers might not increase for future versions (Cloud Storage object metadata page), so the live generation is read from the live object's metadata and never taken as the largest number. Not verified: that `ls --all-versions` on a single object URL lists its generations, that `gcloud storage objects describe --format='value(generation)'` prints the bare number on your gcloud version (it is the form used in [[gcs-deleted-object-recovery]]; check the output once), that `--if-generation-match` is accepted by `gcloud storage cp` on your gcloud version (it is not on the versioned objects page; check `--help`), and that a no-op `tofu apply` of a saved plan writes a new state generation.
 
 ## Scope
 
@@ -71,16 +71,18 @@ umask 077
 BACKUP_DIR="${HOME}/tfstate-backups/${PREFIX}"
 mkdir -p "${BACKUP_DIR}"
 
-# --all-versions lists every generation as gs://...#GENERATION; the highest number is the live one.
-gcloud storage ls --all-versions "${STATE}"
-GEN="$(gcloud storage ls --all-versions "${STATE}" | sed -n 's/.*#//p' | sort -n | tail -n 1)"
+# The live object's own metadata gives its generation. Do not pick the largest number from the
+# version listing: generation numbers might not increase for future versions.
+gcloud storage ls --all-versions "${STATE}"   # for reference: every generation as gs://...#GENERATION
+GEN="$(gcloud storage objects describe "${STATE}" --format='value(generation)')"
+: "${GEN:?could not read the live generation; stop}"
 echo "live generation: ${GEN}"   # write this into the change ticket
 
 # Copy that exact generation, so the backup and the recorded number match.
 gcloud storage cp "${STATE}#${GEN}" "${BACKUP_DIR}/${WORKSPACE}-${GEN}.tfstate"
 ```
 
-The copy lands under `~/tfstate-backups`, outside the repository, readable only by you. For a team, keep it in an access-controlled bucket with its own retention rather than on a laptop, and delete the local copy once the migration is signed off. Write the generation number into the change ticket.
+The copy lands under `~/tfstate-backups`, outside the repository, readable only by you. For a team, keep it in an access-controlled bucket with its own retention rather than on a laptop, and delete the local copy, and `baseline.tfplan` with it, once the migration is signed off. Write the generation number into the change ticket.
 
 **Gate 1:** the backup file opens as JSON (`jq . "${BACKUP_DIR}/${WORKSPACE}-${GEN}.tfstate" > /dev/null`), and its `serial` matches `terraform state pull | jq .serial`.
 
@@ -89,7 +91,7 @@ The copy lands under `~/tfstate-backups`, outside the repository, readable only 
 ```bash
 terraform version
 terraform init
-terraform plan -detailed-exitcode -out=baseline.tfplan; echo "exit=$?"
+terraform plan -detailed-exitcode -out="${BACKUP_DIR:?run step 1 in this shell first}/baseline.tfplan"; echo "exit=$?"
 ```
 
 **Gate 2:** exit code 0. If it is 2, there are pending changes; apply or fix them first and restart. If it is 1, something is broken; stop.
@@ -121,10 +123,13 @@ tofu plan -detailed-exitcode; echo "exit=$?"
 A plain `tofu plan` does not write state. The first write happens at the first `apply` or `refresh`, so the cleanest first apply is a harmless one: a no-op, or a tiny reviewed change such as a label. Apply exactly the plan you reviewed, never a fresh interactive one:
 
 ```bash
-tofu plan -detailed-exitcode -out=migrate.tfplan; echo "exit=$?"
-tofu show migrate.tfplan    # read it: normally no changes, or only the reviewed label
-tofu apply migrate.tfplan   # applies only the saved plan, no new prompt
-rm -f migrate.tfplan        # a saved plan can hold sensitive values
+# Saved plans can hold sensitive values: keep them in the owner-only directory from step 1.
+umask 077
+: "${BACKUP_DIR:?set BACKUP_DIR as in step 1}"
+tofu plan -detailed-exitcode -out="${BACKUP_DIR}/migrate.tfplan"; echo "exit=$?"
+tofu show "${BACKUP_DIR}/migrate.tfplan"    # read it: normally no changes, or only the reviewed label
+tofu apply "${BACKUP_DIR}/migrate.tfplan"   # applies only the saved plan, no new prompt
+rm -f "${BACKUP_DIR}/migrate.tfplan"
 ```
 
 **Gate 5:** the apply succeeds, `tofu plan -detailed-exitcode` exits 0 afterwards, and the state's `terraform_version` field now reflects the new tool. List generations again with `gcloud storage ls -a "${STATE}"` and confirm a new generation appeared. If none appeared after a no-op apply (the backend may skip a write when the state content is unchanged; not confirmed), apply the tiny reviewed label change instead, then re-check this gate.
@@ -179,14 +184,18 @@ Rollback depends on whether OpenTofu has written to the state.
 **After OpenTofu has written (step 5 onwards).** Restore the state object to the generation you recorded, then return to the pinned Terraform:
 
 ```bash
-GEN=1760000000000000   # example value: use the generation recorded in step 1 (change ticket)
+: "${GEN:?set GEN to the generation recorded in step 1 (change ticket)}"
 
-# Pre-check: record the generation you are about to replace, so this step can be undone.
-gcloud storage ls --all-versions "${STATE}"
-CURRENT_GEN="$(gcloud storage ls --all-versions "${STATE}" | sed -n 's/.*#//p' | sort -n | tail -n 1)"
+# Pre-check: read the live generation from the object's own metadata, so this step can be undone.
+CURRENT_GEN="$(gcloud storage objects describe "${STATE}" --format='value(generation)')"
+: "${CURRENT_GEN:?could not read the live generation; do not restore}"
 echo "replacing live generation ${CURRENT_GEN} with ${GEN}"
+```
 
-gcloud storage cp "${STATE}#${GEN}" "${STATE}"
+Then restore with a precondition. It fails, and changes nothing, if the live object changed after the generation above was read:
+
+```bash
+gcloud storage cp "${STATE}#${GEN}" "${STATE}" --if-generation-match="${CURRENT_GEN}"
 
 # Undo, if needed: gcloud storage cp "${STATE}#${CURRENT_GEN}" "${STATE}"
 ```
@@ -226,3 +235,4 @@ The bucket's object versioning documentation explains generations and retention:
 - [Terraform GCS backend](https://developer.hashicorp.com/terraform/language/backend/gcs) (state object naming, versioning recommended; checked 2026-11-24)
 - [Cloud Storage object versioning](https://cloud.google.com/storage/docs/object-versioning)
 - [Cloud Storage: use versioned objects](https://docs.cloud.google.com/storage/docs/using-versioned-objects): listing and restoring generations, checked 2026-11-24.
+- [Cloud Storage: object metadata](https://docs.cloud.google.com/storage/docs/metadata#generation-number): generation numbers are unique per version but might not increase, checked 2026-11-25.
