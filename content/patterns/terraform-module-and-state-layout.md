@@ -9,7 +9,7 @@ tags:
   - gitlab-ci
   - ci-cd
 created: 2026-10-16
-modified: 2026-10-17
+modified: 2026-11-25
 draft: false
 ---
 
@@ -92,7 +92,7 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 6.0"
+      version = "~> 8.0" # current major on 2026-11-24; check the Registry
     }
   }
 }

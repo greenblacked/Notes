@@ -9,7 +9,7 @@ tags:
   - prometheus
   - reliability
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-25
 draft: false
 aliases:
   - canary deployments
@@ -21,7 +21,7 @@ Progressive delivery sends a new version to a small share of traffic, measures i
 > Written against Argo Rollouts as described in the official documentation at [argo-rollouts.readthedocs.io](https://argo-rollouts.readthedocs.io/en/stable/), Argo CD at [argo-cd.readthedocs.io](https://argo-cd.readthedocs.io/en/stable/) and Prometheus at [prometheus.io](https://prometheus.io/docs/). Metric names in the queries are examples and must match your own instrumentation.
 
 > [!note] Not verified
-> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: current Argo Rollouts CRD fields, the status of the traffic-router plugin for Gateway API, and the health behaviour Argo CD shows for Rollouts, and the maintenance status of the community ingress-nginx controller. Check them before relying on them.
+> The claims below were written from documentation knowledge and were not checked against a running system or the current docs: current Argo Rollouts CRD fields, the status of the traffic-router plugin for Gateway API, and the health behaviour Argo CD shows for Rollouts. Check them before relying on them.
 
 ## When canaries pay off
 
@@ -217,8 +217,8 @@ Add a latency metric next to the error metric for services where slow is as bad 
 
 ## Traffic routing options
 
-> [!warning] ingress-nginx retirement
-> The Kubernetes project announced the retirement of the community ingress-nginx controller, with best-effort maintenance ending around March 2026. Check its current status before adopting it. For new setups prefer the Gateway API plugin or a service mesh, and treat the NGINX examples here as a teaching shape.
+> [!warning] ingress-nginx is retired
+> Best-effort maintenance of the community ingress-nginx controller ended in March 2026, and its repository was archived on 2026-03-24; it gets no further releases or security fixes (Kubernetes blog, 2025-11-11, and the GitHub repository, checked 2026-11-24). For new setups use the Gateway API plugin or a service mesh, and treat the NGINX examples here as a teaching shape.
 
 | Router                     | How weights are applied                           | Notes                                                                                |
 | -------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------ |

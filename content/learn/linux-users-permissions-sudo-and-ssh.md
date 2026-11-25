@@ -7,7 +7,7 @@ tags:
   - linux
   - security
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-25
 draft: false
 ---
 
@@ -419,12 +419,21 @@ Things to change and why: `ssh-users` must be a group that exists and contains y
 Always test before you reload, and keep your current session open while you try a second one:
 
 ```bash
-sudo sshd -t && echo "config OK"
-sudo systemctl reload ssh      # Ubuntu and Debian
-# sudo systemctl reload sshd   # RHEL, Rocky and Alma
+sudo sshd -t && sudo systemctl reload ssh      # Ubuntu and Debian
+# sudo sshd -t && sudo systemctl reload sshd   # RHEL, Rocky and Alma
 ```
 
-The unit is called `ssh` on Ubuntu and `sshd` on RHEL-family systems. `sshd -t` checks the syntax and exits non-zero on an error. A reload with a broken config can leave you unable to open new sessions, which is why you test first and keep the old session alive.
+The unit is called `ssh` on Ubuntu and `sshd` on RHEL-family systems. `sshd -t` checks the syntax and exits non-zero on an error, and the `&&` stops the reload when it does. A reload with a broken config can leave you unable to open new sessions, which is why you test first and keep the old session alive.
+
+> [!warning] Have a way in that does not use SSH
+> `sshd -t` checks syntax, not whether **you** can still log in: a wrong `AllowGroups` passes the test and locks you out. Before you reload, make sure you can reach a console that does not go through `sshd`: the window of your lab VM in its hypervisor (UTM, VirtualBox), or a cloud VM's serial console. IAP TCP forwarding and bastions still end at `sshd`, so they do not help here. The rollback is to remove the drop-in and reload:
+>
+> ```bash
+> sudo rm -f /etc/ssh/sshd_config.d/00-hardening.conf
+> sudo sshd -t && sudo systemctl reload ssh   # sshd on RHEL-family systems
+> ```
+>
+> Run it from the session you kept open, or from that console.
 
 > [!warning] Check before relying on this
 > Not verified: recent Ubuntu releases start `sshd` by socket activation (`ssh.socket`), so changing the listening port needs the socket unit changed, not only `sshd_config`. Check with `systemctl status ssh.socket` on your release.
@@ -541,7 +550,7 @@ Run these in the lab VM, never on a shared or production host. Some need `sudo`.
     Expected: `hostname 198.51.100.21`, `user ubuntu`, `proxyjump bastion` and `identitiesonly yes`.
     If you see something else: if `hostname app-1` appears, the `Host app-1` block is missing or misspelled. `ssh -G` prints what the client would use without connecting.
 
-11. **Harden sshd safely.** Create the `ssh-users` group, add your user, write the drop-in, then test and reload. Keep your current terminal open and open a second one to test.
+11. **Harden sshd safely.** Create the `ssh-users` group, add your user, write the drop-in, then test and reload. Keep your current terminal open and open a second one to test. Before you start, open your VM's console (see the warning in Hardening sshd) and check you can log in there.
 
     ```bash
     sudo groupadd --system ssh-users
@@ -552,12 +561,14 @@ Run these in the lab VM, never on a shared or production host. Some need `sudo`.
     KbdInteractiveAuthentication no
     AllowGroups ssh-users
     EOF
-    sudo sshd -t && sudo sshd -T | grep -E '^(permitrootlogin|passwordauthentication|allowgroups) '
-    sudo systemctl reload ssh
+    sudo sshd -t && sudo sshd -T | grep -E '^(permitrootlogin|passwordauthentication|allowgroups) ' \
+      && sudo systemctl reload ssh
     ```
 
     Expected: no output from `sshd -t`, then `permitrootlogin no`, `passwordauthentication no` and `allowgroups ssh-users`. A new session from the second terminal still works.
     If you see something else: if `passwordauthentication yes` appears, another file set it first; look at `sudo grep -R PasswordAuthentication /etc/ssh/`. If `sshd -t` prints an error, fix it and do not reload. Remember `labuser` is not in `ssh-users`, so it can no longer log in; that proves `AllowGroups` works.
+
+    Rollback, if the second terminal cannot log in: from the open session or the console, run `sudo rm -f /etc/ssh/sshd_config.d/00-hardening.conf && sudo sshd -t && sudo systemctl reload ssh`, then try the second terminal again.
 
 When you finish, clean up: `sudo userdel -r labuser`, `sudo userdel -r myapp`, `sudo rm /etc/ssh/sshd_config.d/00-hardening.conf /etc/sudoers.d/10-appops`, `sudo rm -r /srv/shared`, then `sudo systemctl reload ssh` and `sudo groupdel team; sudo groupdel appops; sudo groupdel ssh-users`.
 
@@ -567,7 +578,7 @@ When you finish, clean up: `sudo userdel -r labuser`, `sudo userdel -r myapp`, `
 - **`chmod -R` or `chown -R` on a path built from a variable.** An empty variable turns it into `/`. Use `${VAR:?}` and `ls -ld` first, and use `find -type d` and `-type f` when files and directories need different modes.
 - **Editing sudoers with a normal editor.** One typo can end `sudo` for everyone. Always use `visudo`, and use `visudo -cf` to check a drop-in.
 - **A sudoers drop-in with a dot in its name.** `sudo` skips it without any warning. Name it `10-appops`, and check with `sudo -l -U <user>`.
-- **Reloading sshd with an untested config, or without a second session open.** If the new config is wrong or too strict you are locked out of a remote machine. Run `sshd -t`, keep one session open, and test with a new one.
+- **Reloading sshd with an untested config, or without a second session open.** If the new config is wrong or too strict you are locked out of a remote machine. Run `sshd -t`, keep one session open, and test with a new one. Know your out-of-band console before you start.
 - **Typing `yes` at a host key prompt without checking.** You trust whoever answered. Compare the fingerprint out of band, especially for production.
 - **Using `ssh -A` everywhere.** Anyone with root on the intermediate host can use your agent while you are connected. Use `ProxyJump`.
 - **Sharing a private key.** If a private key is copied, pasted into chat or committed, treat it as stolen and replace it; the steps are in [[runbooks/leaked-credential-rotation]].

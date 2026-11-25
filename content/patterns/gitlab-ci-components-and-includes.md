@@ -8,7 +8,7 @@ tags:
   - ci-cd
   - delivery
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
@@ -61,7 +61,7 @@ spec:
 ---
 docker-build-$[[ inputs.image_name ]]:
   stage: $[[ inputs.stage ]]
-  image: docker:cli
+  image: docker:<tested-version>-cli@sha256:<digest>
   script:
     - |
       if [ "$[[ inputs.push ]]" = "true" ]; then OUTPUT="--push"; else OUTPUT="--load"; fi
@@ -69,6 +69,8 @@ docker-build-$[[ inputs.image_name ]]:
   rules:
     - if: "$CI_COMMIT_BRANCH"
 ```
+
+Tag names are examples: look up the current tag, then pin its digest.
 
 The job needs a BuildKit or Docker daemon to talk to (a rootless BuildKit service, not privileged Docker-in-Docker); see [[buildkit-registry-cache-in-ci]]. The `push` input switches between `--push` and `--load`.
 
@@ -112,7 +114,7 @@ lint-components:
 
 release:
   stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  image: registry.gitlab.com/gitlab-org/release-cli:<tested-version>@sha256:<digest>
   rules:
     - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/'
   script: echo "Releasing $CI_COMMIT_TAG"
@@ -121,7 +123,9 @@ release:
     description: "See CHANGELOG.md"
 ```
 
-Pin that `release-cli` image by version in a real pipeline, not `latest`. Version and changelog automation is covered in [[release-versioning-and-changelog-automation]].
+Tag names are examples: look up the current tag, then pin its digest.
+
+Pin that `release-cli` image by version and digest in a real pipeline, not `latest`. Version and changelog automation is covered in [[release-versioning-and-changelog-automation]].
 
 ## Versioning, breaking changes and deprecation
 

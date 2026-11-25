@@ -9,7 +9,7 @@ tags:
   - security
   - reliability
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -317,6 +317,9 @@ suites:
       inspec_tests:
         - test/integration/default
 ```
+
+> [!warning] Privileged containers: disposable VM only
+> `privileged: true` gives the test container almost full access to the host kernel and devices. Run dokken only on a throwaway lab VM, never on a shared CI runner or your workstation's own Docker, and destroy the instances (`kitchen destroy`) when you finish.
 
 `multiple_converge` and `enforce_idempotency` are provisioner options (defaults 1 and false); together they turn "the second converge must change nothing" into a test that fails the build. They were documented for the Chef provisioners; check that the dokken provisioner you install honours them.
 

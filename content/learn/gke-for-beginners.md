@@ -10,7 +10,7 @@ tags:
   - security
   - cost
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
@@ -418,8 +418,8 @@ All output below is illustrative: names, versions, addresses and ages will diffe
          type: RuntimeDefault
      containers:
        - name: gcloud
-         # Example image: the Google Cloud CLI image. Check the tag exists and pin the one you use.
-         image: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+         # Example image: the Google Cloud CLI. Pin the version you tested and its digest (never :stable).
+         image: gcr.io/google.com/cloudsdktool/google-cloud-cli:<tested-version>@sha256:<digest>
          command: ["gcloud", "storage", "ls", "gs://$(BUCKET)"]
          env:
            - name: BUCKET

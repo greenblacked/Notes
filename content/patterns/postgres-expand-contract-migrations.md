@@ -9,7 +9,7 @@ tags:
   - delivery
   - ci-cd
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
@@ -211,6 +211,18 @@ Practical points:
 ## Contract in a later release
 
 When no running code reads `total`, and at least one full release cycle has passed without a rollback, remove it. This is its own migration and its own change.
+
+> [!danger] Point of no return
+> After `DROP COLUMN` the only way back is a restore or a point-in-time recovery (see Rollback per phase). Run the contract migration only when all three checks pass:
+>
+> 1. Only release N+2 or later runs anywhere, including batch jobs and rollback targets.
+> 2. The backfill is complete:
+>
+>    ```sql
+>    SELECT count(*) FROM orders WHERE total_cents IS NULL;   -- must be 0
+>    ```
+>
+> 3. A restore from the latest backup has been tested, and you have recorded its time.
 
 ```sql title="V20261107__contract_orders_total.sql"
 SET lock_timeout = '3s';

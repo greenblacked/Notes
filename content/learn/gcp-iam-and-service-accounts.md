@@ -7,7 +7,7 @@ tags:
   - gcp
   - security
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-25
 draft: false
 ---
 
@@ -306,7 +306,7 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
 
    > [!warning] Costs money
    >
-   > The bucket is billed while it exists. Delete it with: `gcloud storage rm --recursive --all-versions "gs://${BUCKET}" && gcloud iam service-accounts delete "$SA_EMAIL" --project="$PROJECT_ID" --quiet`.
+   > The bucket is billed while it exists. Delete it with: `gcloud storage rm --recursive --all-versions "gs://${BUCKET:?}" && gcloud iam service-accounts delete "${SA_EMAIL:?}" --project="$PROJECT_ID" --quiet`.
 
    ```bash
    gcloud iam service-accounts create "$SA_NAME" \
@@ -316,7 +316,7 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
    gcloud storage buckets create "gs://${BUCKET}" \
      --project="$PROJECT_ID" --location="$REGION" \
      --uniform-bucket-level-access --public-access-prevention \
-     --soft-delete-duration=0 # lab only: no retention of deleted objects (verify flag)
+     --soft-delete-duration=0 # lab only: 0 turns soft delete off (see GCP 01, exercise 6)
    printf 'hello\n' > hello.txt
    gcloud storage cp hello.txt "gs://${BUCKET}/hello.txt"
    ```
@@ -426,11 +426,11 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
 
    ```hcl title="main.tf"
    terraform {
-     required_version = ">= 1.5" # Change: the Terraform version you installed.
+     required_version = ">= 1.5" # Change: the Terraform version you installed. This exercise was not run, so the minimum is not tested.
      required_providers {
        google = {
          source  = "hashicorp/google"
-         version = "~> 6.0" # Change: pin the current major version from the Terraform Registry.
+         version = "~> 8.0" # Change: the current major version from the Terraform Registry.
        }
      }
    }
@@ -485,16 +485,16 @@ Expected: your project ID and your email. If `account=` is empty, run `gcloud au
 
    > [!warning] Check before relying on this
    >
-   > The provider major version on this page (`~> 6.0`, the same as in the Terraform lessons) was not checked against the Terraform Registry. Pin the current major version shown there and read the provider's upgrade guide when you change majors. `terraform` was not run for this exercise.
+   > On 2026-11-24 the current major version of `hashicorp/google` was 8, and the 7.0 and 8.0 upgrade guides list no breaking change for `google_service_account`. Check the Registry for the major version when you run this, and read the upgrade guide when you change majors. `terraform` was not run for this exercise.
 
 10. **Clean up.** Remove the grant, the bucket, the service account and the local files.
 
     ```bash
-    gcloud iam service-accounts remove-iam-policy-binding "$SA_EMAIL" \
+    gcloud iam service-accounts remove-iam-policy-binding "${SA_EMAIL:?}" \
       --member="user:${MY_ACCOUNT}" --role="roles/iam.serviceAccountTokenCreator" \
       --project="$PROJECT_ID"
-    gcloud storage rm --recursive --all-versions "gs://${BUCKET}"
-    gcloud iam service-accounts delete "$SA_EMAIL" --project="$PROJECT_ID" --quiet
+    gcloud storage rm --recursive --all-versions "gs://${BUCKET:?}"
+    gcloud iam service-accounts delete "${SA_EMAIL:?}" --project="$PROJECT_ID" --quiet
     rm -f hello.txt write-test.txt
     rm -rf ~/lab/tf-iam
     gcloud iam service-accounts list --project="$PROJECT_ID" --format='value(email)'
@@ -556,5 +556,6 @@ To go deeper:
 - Google Cloud documentation, "Service accounts overview" (https://docs.cloud.google.com/iam/docs/service-account-overview), "Best practices for using and managing service accounts" (https://docs.cloud.google.com/iam/docs/best-practices-for-using-and-managing-service-accounts) and "Service account impersonation" (https://docs.cloud.google.com/iam/docs/service-account-impersonation).
 - Google Cloud documentation, "Workload Identity Federation" (https://docs.cloud.google.com/iam/docs/workload-identity-federation) and "Create short-lived credentials for a service account" (https://docs.cloud.google.com/iam/docs/create-short-lived-credentials-direct).
 - Google Cloud documentation, "Restricting service accounts" for the organization policy constraints `iam.disableServiceAccountKeyCreation` and `iam.automaticIamGrantsForDefaultServiceAccounts` (https://docs.cloud.google.com/resource-manager/docs/organization-policy/restricting-service-accounts).
+- HashiCorp, `terraform-provider-google` releases (https://github.com/hashicorp/terraform-provider-google/releases) and the version 7 and version 8 upgrade guides (https://github.com/hashicorp/terraform-provider-google/blob/main/website/docs/guides/version_7_upgrade.html.markdown, https://github.com/hashicorp/terraform-provider-google/blob/main/website/docs/guides/version_8_upgrade.html.markdown), for the current major version and the upgrade notes; checked 2026-11-24.
 - Checked in this environment: `gcloud` 570.0.0, offline, by reading `--help` for `iam service-accounts create`, `keys list` (including `--managed-by`), `delete`, `undelete`, `add-iam-policy-binding`, `storage buckets add-iam-policy-binding`, `policy-troubleshoot iam`, `recommender recommendations list`, `auth print-access-token` and `projects get-iam-policy`. Nothing was run against a real project, so every cloud output is illustrative.
-- Not verified: the `docs.cloud.google.com` URLs (the host was not reachable from the writing environment, so the paths are unchecked); the default state of `iam.automaticIamGrantsForDefaultServiceAccounts` for new organizations; how long IAM changes take to propagate; the undelete window for service accounts; the Policy Troubleshooter and recommender output fields and the recommender ID; whether `allUsers` on a public-access-prevention bucket fails with the text described; the Terraform provider's current major version and the `terraform plan` attribute list; and that the default Compute Engine service account gets Editor in your project.
+- Not verified: the `docs.cloud.google.com` URLs (the host was not reachable from the writing environment, so the paths are unchecked); the default state of `iam.automaticIamGrantsForDefaultServiceAccounts` for new organizations; how long IAM changes take to propagate; the undelete window for service accounts; the Policy Troubleshooter and recommender output fields and the recommender ID; whether `allUsers` on a public-access-prevention bucket fails with the text described; the Registry page for the provider and the `terraform plan` attribute list; and that the default Compute Engine service account gets Editor in your project.

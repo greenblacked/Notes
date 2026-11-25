@@ -544,7 +544,7 @@ The app: a `frontend` (and a `stranger` that should get nowhere) in `k11-web`, a
 
 ## Next steps
 
-Next lesson: [[learn/kubernetes-jobs-and-cronjobs|Kubernetes 12: Jobs and CronJobs]]. Previous lesson: [[learn/kubernetes-scheduling-affinity-taints-and-draining|Kubernetes 10: Scheduling]].
+Next lesson: [[learn/kubernetes-jobs-and-cronjobs-basics|Kubernetes 12: Jobs and CronJobs]]. Previous lesson: [[learn/kubernetes-scheduling-affinity-taints-and-draining|Kubernetes 10: Scheduling]].
 
 To go deeper:
 

@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - delivery
 created: 2026-10-17
-modified: 2026-10-17
+modified: 2026-11-24
 draft: false
 ---
 
@@ -365,7 +365,7 @@ Run the smoke test on every merge to the stage branch, and the load test on a sc
 loadtest-smoke:
   stage: verify
   image:
-    name: grafana/k6:latest # CHANGE: pin a version and mirror it in Artifactory
+    name: grafana/k6:<tested-version>@sha256:<digest> # change: the version you tested, mirrored in Artifactory
     entrypoint: [""] # the image's entrypoint is k6; GitLab needs a shell
   rules:
     - if: '$CI_COMMIT_BRANCH == "stage"'
@@ -379,7 +379,7 @@ loadtest-smoke:
 loadtest-load:
   stage: verify
   image:
-    name: grafana/k6:latest # CHANGE: pin a version and mirror it in Artifactory
+    name: grafana/k6:<tested-version>@sha256:<digest> # change: the version you tested, mirrored in Artifactory
     entrypoint: [""] # the image's entrypoint is k6; GitLab needs a shell
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $LOADTEST == "true"'
@@ -394,6 +394,8 @@ loadtest-load:
     - k6 run -e BASE_URL="$BASE_URL" -e PROFILE="$PROFILE" -e PEAK_RPS="$PEAK_RPS" -e TEST_ID="$CI_PIPELINE_ID" loadtest/service.js
   timeout: 2h
 ```
+
+Tag names are examples: look up the current tag, then pin its digest.
 
 Do not use `latest` for the image in a real pipeline: pin a version and pull it through your registry proxy, as in [[artifact-promotion-artifactory]]. See [[gitlab-ci-pipeline-structure]] for where such a stage fits.
 

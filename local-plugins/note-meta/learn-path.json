@@ -70,7 +70,7 @@
         "kubernetes-storage-volumes-pvcs-and-statefulsets",
         "kubernetes-scheduling-affinity-taints-and-draining",
         "kubernetes-network-policies-from-zero",
-        "kubernetes-jobs-and-cronjobs"
+        "kubernetes-jobs-and-cronjobs-basics"
       ]
     },
     {
