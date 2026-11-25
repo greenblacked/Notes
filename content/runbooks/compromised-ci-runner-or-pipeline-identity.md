@@ -158,16 +158,17 @@ while read -r IMAGE; do
   if cosign verify "$IMAGE" \
       --certificate-identity="$EXPECTED_IDENTITY" \
       --certificate-oidc-issuer="$EXPECTED_ISSUER" > /dev/null 2>&1; then
-    echo "OK   $IMAGE"
+    # SIGNED is not "trusted": see the bullet below about the transparency-log time
+    echo "SIGNED $IMAGE"
   else
     echo "FAIL $IMAGE"
   fi
 done < "$CASE_DIR/deployed-digests.txt" | tee "$CASE_DIR/verify-results.txt"
 ```
 
-- A signature verifying is not enough: a valid keyless signature made inside the window is the attacker's. Treat a signature as trusted only if its transparency-log entry is older than `T0`. Add a third result, `WINDOW  <image>`, for an image whose signature verifies but whose log time is at or after `T0` (read the log time from the verification output or the transparency log; the exact field is not verified), and add every `WINDOW` image to `suspect-digests.txt`.
+- A signature verifying is not enough: a valid keyless signature made inside the window is the attacker's, so the loop prints `SIGNED`, not `OK`. Treat a `SIGNED` image as trusted only after you have recorded its transparency-log time in `$CASE_DIR/log-times.tsv` (image, log time) and found it earlier than `T0`. Add every image whose log time is at or after `T0`, or that you cannot read a log time for, to `suspect-digests.txt`. The loop does not check the time itself, and the exact field that carries it is not verified.
 
-- `deployed-digests.txt` holds one `registry/repo@sha256:...` per line. Generate it with the command below, which keeps only first-party images and strips a `docker-pullable://` prefix some runtimes add. Change the registry prefix to your own; an `imageID` that is a bare `sha256:...` has no registry path, so look up its image name in the pod spec instead.
+- `deployed-digests.txt` holds one `registry/repo@sha256:...` per line. Generate it with the command below, which writes first-party images to `deployed-digests.txt` and the rest to `other-digests.txt`, and strips a `docker-pullable://` prefix some runtimes add. Change the registry prefix to your own; an `imageID` that is a bare `sha256:...` has no registry path, so look up its image name in the pod spec instead.
 
 ```bash
 REGISTRY_PREFIX="europe-docker.pkg.dev/example-project/" # change: your first-party registry or repository prefix
@@ -200,7 +201,7 @@ Compare `other-digests.txt` with the expected platform and third-party list: a s
 
 - The runner shows paused, then is deleted.
 - New jobs land only on the new runner.
-- `verify-results.txt` has no `FAIL` and no `WINDOW` for first-party workloads, and no deployed digest was pushed or signed inside the window without being rebuilt. Images from kube-system, GKE and third parties are out of this check; review them separately if the pipeline could have pushed to their registries.
+- `verify-results.txt` has no `FAIL` for first-party workloads, every `SIGNED` image has a log time earlier than `T0` recorded in `log-times.tsv`, and no deployed digest was pushed or signed inside the window without being rebuilt. Images from kube-system, GKE and third parties are out of this check; review them separately if the pipeline could have pushed to their registries.
 - No digest from `suspect-digests.txt` runs: `grep -F -f suspect-digests.txt` over the step 5 pod listing returns nothing.
 - After the step 4 removals and once already-issued access tokens have expired, Cloud Audit Logs show no further use of the WIF principal; see [[gcp-audit-logs-siem]].
 

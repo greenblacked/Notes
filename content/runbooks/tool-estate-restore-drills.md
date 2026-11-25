@@ -154,11 +154,13 @@ Isolation test. Run it after applying the manifest and before any restore. It st
 ```bash title="isolation-test.sh"
 #!/usr/bin/env bash
 set -u
+trap 'kubectl delete pod -n restore-drill isolation-test --ignore-not-found --wait=false' EXIT
 : "${TEST_IMAGE:?set a test image pinned by digest that has curl and getent}"
 : "${PROD_GITLAB_HOST:?set the production GitLab host name}"
-: "${K8S_API_ADDR:?set the Kubernetes API address, host or IP}"
+: "${K8S_API_ADDR:?set the Kubernetes API address as host:port, for example 10.0.0.1:443}"
 : "${PUBLIC_HOST:?set a public host name that you control}"
 
+kubectl delete pod -n restore-drill isolation-test --ignore-not-found --wait=true
 kubectl apply -n restore-drill -f - <<POD
 apiVersion: v1
 kind: Pod
@@ -185,17 +187,18 @@ kubectl wait -n restore-drill --for=condition=Ready pod/isolation-test --timeout
 FAILED=0
 kubectl exec -n restore-drill isolation-test -- getent hosts "$PROD_GITLAB_HOST" > /dev/null \
   || { echo "DNS does not resolve: allow-dns is broken"; FAILED=1; }
+# each target is host:port; give PROD_GITLAB_HOST and PUBLIC_HOST without a port to test 443
 for TARGET in "$PROD_GITLAB_HOST" "$K8S_API_ADDR" "$PUBLIC_HOST"; do
   kubectl exec -n restore-drill isolation-test -- curl --silent --output /dev/null --max-time 5 "https://${TARGET}"
   RC=$?
-  # 28 = timed out, 7 = refused. Any other result (including 0) means the target may be reachable.
-  if [ "$RC" -eq 28 ] || [ "$RC" -eq 7 ]; then
+  # Only 28 (timed out) counts as blocked. 7 (refused) also means the address answered on that port,
+  # so the host is reachable even if nothing listens there. Any other result (including 0) also fails.
+  if [ "$RC" -eq 28 ]; then
     echo "blocked   $TARGET (curl exit $RC)"
   else
     echo "REACHABLE $TARGET (curl exit $RC)"; FAILED=1
   fi
 done
-kubectl delete pod -n restore-drill isolation-test --wait=false
 if [ "$FAILED" -ne 0 ]; then
   echo "Isolation test failed: do not start the drill."
   exit 1
@@ -208,7 +211,7 @@ Save the output in the drill record.
 - Responders reach the drill pods with `kubectl port-forward`, which does not go through the pod network.
 - Jenkins gets no allow rule. Its pods carry neither `drill-db-client` nor `drill-gcs-client`, so they keep deny-all plus DNS.
 - The scratch DB password goes into a Kubernetes Secret in `restore-drill`, created from a file, never from argv. Delete it with the namespace.
-- The network rule does not select a bucket: the Google endpoint above serves every bucket and every Google API. The limit is that no credential the pod can use is valid for production storage. That holds only if the drill GSA is the only Google credential in play, and a restored Artifactory brings its own: remote-repository and replication credentials in the database, and any key file or HMAC key in the storage configuration. Hence the production filestore precondition above and the storage check in step 2.5. Check that the VIP and DNS setup match your network.
+- The network rule does not select a bucket: the Google endpoint above serves every bucket and every Google API. The limit is that no credential the pod can use is valid for production storage. That holds only if the drill GSA is the only Google credential in play, and a restored Artifactory brings its own: remote-repository and replication credentials in the database, and any key file or HMAC key in the storage configuration. Hence the production filestore precondition above and the storage check in step 5 of section 2 (Artifactory). Check that the VIP and DNS setup match your network.
 - For Jenkins add a second control that does not depend on the network: put the controller in quiet-down before its first start, so nothing is scheduled even if a rule is wrong. How to do that on the restored disk (for example an init script in `init.groovy.d`) is not verified; check the Jenkins docs.
 - If the restored tool needs the identity provider to log in, use its local break-glass admin instead of opening egress.
 - PSA `restricted` may reject the vendor image's securityContext. If so, use `baseline` for the drill namespace only and note it.
@@ -259,7 +262,7 @@ gcloud compute disks create "jenkins-home-drill-$(date -u +%Y%m%d)" \
 
 1. Restore the database into a scratch instance. For Cloud SQL, use a clone at the backup time ([[cloud-sql-point-in-time-recovery]]). For self-managed Postgres, use `pg_restore` into an empty scratch database with `--no-owner`.
 2. Copy a **sample** of the filestore into the scratch bucket: the checksum paths of a list of reference artifacts (release builds, a Helm chart, a base image). Measure the full-copy throughput on that sample and extrapolate. Record honestly that the full copy was extrapolated.
-3. Before first start, restore the backed-up `master.key` and the other configuration files from the `etc` folder into the drill instance, then point the database settings and the filestore settings at the scratch DB and scratch bucket. Do not start Artifactory first and restore the key afterwards: the restored database secrets cannot be decrypted without the original key. The order is the one in JFrog's recovery article: import the database, copy the saved `etc` files including `master.key`, update the `database:` section of `system.yaml`, then start (read 2026-11-25; the article gives the `etc` path inconsistently, so confirm it for your installation). Restored configuration files may still name production storage, so review them for it.
+3. Before first start, restore the backed-up `master.key` and the other configuration files from the `etc` folder into the drill instance, then point the database settings and the filestore settings at the scratch DB and scratch bucket. Do not start Artifactory first and restore the key afterwards: the restored database secrets cannot be decrypted without the original key. The order is the one in JFrog's recovery article: import the database, copy the saved `etc` files including `master.key`, update the `database:` section of `system.yaml`, then start (read 2026-11-25; the article gives the `etc` path inconsistently, so confirm it for your installation). The copied `etc` folder is production's, so its `system.yaml` `database:` section and its filestore configuration (for example `binarystore.xml`) still name the production database and bucket. Change both to the scratch DB and bucket before the first start (step 4), and run `grep -rn` over the `etc` folder for the production bucket and database host names; it must find nothing.
 4. Start Artifactory at the production version, with service account `drill-artifactory` and the labels `drill-db-client` and `drill-gcs-client`, against the scratch DB and bucket, with GC and replication disabled in its config before first start.
 5. Read the effective storage configuration from the running drill instance and confirm it names the scratch bucket before any other check. If it does not, stop the pod. How storage configuration is split between the database and the file system differs by version; check the JFrog documentation for yours.
 6. Verify that each reference artifact downloads and its SHA-256 matches the build info record ([[artifactory-provenance-evidence]]). Then compare repository counts.
@@ -269,13 +272,14 @@ gcloud compute disks create "jenkins-home-drill-$(date -u +%Y%m%d)" \
 
 1. Restore the DB into a scratch database, as in step 2.1.
 2. Start SonarQube at the production version, with the label `drill-db-client` and no GCS label, `sonar.jdbc.url` set to the scratch DB and an empty data directory, so the search index is rebuilt from the database. Record the reindex time; it is part of RTO.
-3. Verify through the API. The token is read into a file, not argv:
+3. Verify through the API. The token is read into a file, not argv. Run the block as a script or in its own shell, so `umask 077` does not stay set in your session and a Ctrl-C stops it:
 
 ```bash
 SONAR_URL="http://127.0.0.1:9000" # port-forward to the drill pod
 umask 077
 HDR_FILE="$(mktemp)"
-trap 'stty echo; rm -f -- "$HDR_FILE"' EXIT INT TERM # restores echo and removes the header file after a failure or interrupt
+trap 'stty echo; rm -f -- "$HDR_FILE"' EXIT # restores echo and removes the header file on any exit
+trap 'exit 130' INT TERM # an interrupt stops the block instead of continuing with an empty token
 printf 'SonarQube admin token (drill instance): ' >&2; stty -echo; IFS= read -r T; stty echo; echo >&2 # portable to bash and zsh
 printf 'Authorization: Bearer %s\n' "$T" > "$HDR_FILE"; unset T
 curl --fail -sS --header @"$HDR_FILE" "$SONAR_URL/api/system/status"
@@ -311,7 +315,7 @@ Pass criteria:
 - Resource count plausible.
 - The file parses.
 
-The trap deletes `$DRILL_DIR` when the shell exits. Run the block in its own shell (or as a script) and read the output before it ends: state files hold secrets ([[secrets-out-of-terraform-state]]).
+The trap deletes `$DRILL_DIR` when the shell exits. Run the block in its own shell (or as a script), so `umask 077` does not stay set in your session and read the output before it ends: state files hold secrets ([[secrets-out-of-terraform-state]]).
 
 ### 5. Record the result
 
@@ -344,7 +348,7 @@ Commit it where [[audit-evidence-collection-and-retention]] expects evidence. A 
 - The isolation test passed before the restore and its output is in the drill record.
 - `kubectl get networkpolicy -n restore-drill` shows `deny-all` and exactly the four allow rules `allow-dns`, `allow-scratch-db`, `allow-scratch-gcs` and `allow-metadata-server`, each reviewed. No other egress rule exists.
 - The drill GSA has no role outside the scratch bucket. A bucket policy shows only bucket-level bindings, so also search IAM policies at organisation scope for the GSA and for its groups (Cloud Asset Inventory policy search; check the current gcloud syntax) and confirm the only result is the scratch bucket.
-- For Artifactory, the effective storage configuration of the drill instance named the scratch bucket (step 2.5).
+- For Artifactory, the effective storage configuration of the drill instance named the scratch bucket (step 5 of section 2, Artifactory).
 - No drill resource outlives the drill (see Rollback).
 
 ## Rollback

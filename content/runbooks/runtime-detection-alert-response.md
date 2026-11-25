@@ -70,7 +70,7 @@ gcloud logging read \
 jq -r '.[] | [.timestamp, .protoPayload.authenticationInfo.principalEmail] | @tsv' "$CASE_DIR/exec-audit.json"
 ```
 
-An empty result is not evidence that nobody was in the pod. Exec over WebSocket may be logged under another method or as a Data Access log, which is off by default, and node-level access is not queried at all. Trust an empty result only after the same query has found one known exec you made yourself; otherwise record "no record" and classify as Unknown.
+An empty result is not evidence that nobody was in the pod. Exec over WebSocket may be logged under another method or as a Data Access log, which is off by default, and node-level access is not queried at all. Trust an empty result only after the same method-name filter, with the resourceName of a non-suspect test pod, has found a known exec you made into that test pod. Never exec into the alerting pod to test the query. Otherwise record "no record" and classify as Unknown.
 
 ### 3. Decide
 
@@ -120,7 +120,7 @@ Triage is read-only. A rule exception is rolled back by reverting its MR. Contai
 | Symptom                           | Fix                                                                                                         |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Pod already gone                  | Use node-level evidence and audit logs. Ask why the workload restarted; a crash after an exploit is common. |
-| The exec query returns nothing    | Check the method name against one known exec in your audit logs. Data Access logs may be off.               |
+| The exec query returns nothing    | Check the method name against a known exec into a non-suspect test pod, never the alerting pod. Data Access logs may be off.               |
 | Alert lacks pod fields            | The event was outside a container (node level). Treat the node as suspect.                                  |
 | Many identical alerts across pods | A rollout introduced the behaviour. Compare with the latest deploy before calling it an attack.             |
 

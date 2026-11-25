@@ -141,6 +141,7 @@ pinned() {
   local -a parts
   [[ "$src" == *\?* ]] || return 1
   query="${src#*\?}"; query="${query%%#*}"
+  [[ -n "$query" ]] || return 1 # an empty array is an unbound variable under set -u on bash before 4.4
   IFS='&' read -r -a parts <<< "$query"
   for part in "${parts[@]}"; do
     name="${part%%=*}"; value=""; [[ "$part" == *=* ]] && value="${part#*=}"
