@@ -6,7 +6,7 @@ tags:
   - runbooks
   - reliability
 created: 2026-10-11
-modified: 2026-11-24
+modified: 2026-11-25
 verified: 2026-10-19
 draft: false
 ---
@@ -155,7 +155,7 @@ Stage recovers by merging a fix into `main` (stage redeploys). To remove it: `"$
 | Deploy production fails in the tag guard ("Tag ... points at ...", not a `vX.Y.Z` ref)  | The run was not started from a release tag, or the tag does not resolve to the commit being deployed. Re-run from the correct tag.                                                                                                                              |
 | Deploy production waits and never starts                                                | The `production` environment needs approval; approve it in the run.                                                                                                                                                                                             |
 | Cut release fails with "must be strictly greater than the latest tag"                   | Pick a higher `X.Y.Z`. Tags are never reused; if the failure came after the tag step, re-run only **Deploy production** from that tag.                                                                                                                          |
-| Run failed, unsure whether production is affected                                       | Run `$WRANGLER deployments status` and `curl -s https://notes.szolotov.com/version.txt`. The job log says either "rolled back", or "failed before it went live".                                                                                                |
+| Run failed, unsure whether production is affected                                       | Run `"$WRANGLER" deployments status` and `curl -s https://notes.szolotov.com/version.txt`. The job log says either "rolled back", or "failed before it went live".                                                                                              |
 
 The full setup, token permissions and the stage history are in `docs/deployment.md` in the repository. For how changes are decided and recorded, see [[adr/index|the architecture decisions]]. If a bad release becomes an incident, follow [[incident-response]]; the checks before any production release are in [[production-change-checklist]].
 

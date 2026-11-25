@@ -5,7 +5,7 @@ tags:
   - runbooks
   - meta
 created: 2026-10-11
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -99,6 +99,6 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 A runbook that declares an evidence level also has one `## Evidence` section, with the subsections in [[writing-notes#The Evidence section]]: Sources checked, Not verified, Environment, Prerequisites, Expected results, Failure conditions, and Cleanup and rollback, plus a Lab run when it is `lab-tested`.
 
 > [!tip] Keep them true
-> A runbook that disagrees with the system it describes is worse than none. Rated runbooks list their sources, with dates, in their Evidence section. Most runbooks here are unrated: nobody has checked them against current documentation, so check each command against the docs for your versions first. The runbooks about this site name the repository files they were checked against; when those change, update the runbook and its `modified` date in the same pull request.
+> A runbook that disagrees with the system it describes is worse than none. Rated runbooks list their sources, with dates, in their Evidence section. Most runbooks here are unrated: they have no recorded review at an evidence level, so check each command against the docs for your versions first. The runbooks about this site name the repository files they were checked against; when those change, update the runbook and its `modified` date in the same pull request.
 
 Runbooks describe how to operate something; the reasoning behind the design lives in the [[adr/index|architecture decisions]] and the [[patterns/index|patterns]].

@@ -8,7 +8,7 @@ tags:
   - gke
   - kubernetes
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -82,8 +82,6 @@ flowchart TD
 Run the checks in this order from a Pod in the same namespace as the failing client when you can. A check from your laptop proves little about in-cluster paths.
 
 ```bash
-set -euo pipefail
-
 NAMESPACE="default"  # change: namespace of the affected workload
 
 kubectl -n "$NAMESPACE" apply -f netdebug.yaml
@@ -117,8 +115,6 @@ What to look for:
 Symptom: small requests work, large ones hang. Typical causes are a lower MTU on a VPN, interconnect or overlay than on the hosts, with ICMP "fragmentation needed" messages blocked.
 
 ```bash
-set -euo pipefail
-
 NAMESPACE="default"            # change: namespace of the affected workload
 TARGET="10.20.0.15"            # change: destination IP on the failing path
 SIZES="1372 1400 1432 1452 1472"  # ICMP payload sizes to try; packet size = payload + 28
@@ -137,8 +133,6 @@ done
 Compare the result with the VPC network MTU:
 
 ```bash
-set -euo pipefail
-
 NETWORK="my-vpc"  # change: your VPC network name
 
 gcloud compute networks describe "$NETWORK" --format="value(name,mtu)"
@@ -149,8 +143,6 @@ VPC MTU defaults and the allowed range differ by network configuration and produ
 ### 4. TLS
 
 ```bash
-set -euo pipefail
-
 HOST="app.example.com"   # change: the hostname clients use
 IP="203.0.113.10"        # change: the load balancer or backend IP to test
 
@@ -177,8 +169,6 @@ What to look for:
 ### 5. Load balancer health checks
 
 ```bash
-set -euo pipefail
-
 BACKEND_SERVICE="my-backend-service"  # change: backend service name
 PROJECT_ID="my-project"               # change: your project ID
 
@@ -197,8 +187,6 @@ gcloud compute firewall-rules list --project "$PROJECT_ID" \
 For GKE:
 
 ```bash
-set -euo pipefail
-
 NAMESPACE="default"  # change: namespace of the Service or Ingress
 
 # Container-native load balancing uses network endpoint groups.
@@ -249,8 +237,6 @@ Also confirm the user-facing symptom is gone, not only the probe: run the origin
 Diagnosis makes no changes except a short-lived debug Pod. Remove it:
 
 ```bash
-set -euo pipefail
-
 NAMESPACE="default"  # change: namespace where you created the debug Pod
 
 kubectl -n "$NAMESPACE" delete pod netdebug --ignore-not-found

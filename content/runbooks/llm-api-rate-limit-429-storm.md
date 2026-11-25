@@ -8,7 +8,7 @@ tags:
   - reliability
   - cost
 created: 2026-11-01
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -121,7 +121,7 @@ curl -i -sS "$GATEWAY/v1/chat/completions" \
 Read, in this order:
 
 1. **The status line and body.** A JSON error body names a limit in words when the layer is cooperative. Note the exact message.
-2. **`Retry-After`.** Per RFC 9110 this response header tells the client how long to wait before another request, either as a number of seconds or as an HTTP date. The 429 status itself is defined in RFC 6585. A missing `Retry-After` does not mean "retry now"; it means the server did not say.
+2. **`Retry-After`.** This response header is meant to tell the client how long to wait before another request, as a number of seconds or an HTTP date (RFC 9110, cited as remembered and not re-read, see Evidence; check the current RFC). The 429 status itself is defined in RFC 6585. A missing `Retry-After` does not mean "retry now"; it means the server did not say.
 3. **Who added the headers.** Our gateway should add a stable marker, for example a `server` or `x-gateway-request-id` header, and a reason header or body field (this site's gateway uses `x-gateway-limit` with `key`, `team` or `global`). Headers from the provider typically carry the provider's own request id and may carry limit and remaining counters under provider-specific names, often `x-ratelimit-*`. The names and meaning are not verified here; read the provider's current API reference.
 4. **Compare with a direct call.** If your policy allows a test with a provider key from a safe host, call the provider directly with a tiny request (`curl -i -sS "$PROVIDER_CHAT_URL" -H "Authorization: Bearer $PROVIDER_TOKEN" ...`, with the path and auth scheme from the provider's API reference). If the direct call succeeds while the gateway path returns 429, the gateway (or something before it) is the limiter. If both fail, the provider is.
 

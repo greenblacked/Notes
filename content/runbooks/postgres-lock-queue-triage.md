@@ -8,7 +8,7 @@ tags:
   - reliability
   - observability
 created: 2026-11-22
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 evidence: lab-tested
 reviewed: 2026-11-22
@@ -94,7 +94,7 @@ WHERE datname = current_database()
 ORDER BY pid;
 ```
 
-Expected shape, from the lab:
+Expected shape, from the lab. The lab output comes from a narrower query (no `wait_event` or `xact_age` columns, query text aliased `q`), see Lab run:
 
 ```text
  pid |        state        | wait_event_type | blocked_by |                    q
