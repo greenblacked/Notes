@@ -15,7 +15,7 @@ draft: false
 An AI feature has state in places a normal backup plan does not list. Some of it is derived and cheap to rebuild. Some is derived but impossible to rebuild once an upstream model is retired. Some is the only copy. This note sorts it, says which DR tier it inherits ([[disaster-recovery-tiers-rpo-rto]]), and adds the checks a restore needs beyond "the row count matches". Drills follow [[0051-backups-proven-by-quarterly-restore-drills]] and [[tool-estate-restore-drills]].
 
 > [!info] Scope and verification
-> No vendor documentation was checked for this note. Managed vector database snapshot features differ by product and change often; read your product's backup page. The SQL and the comparison script were not run.
+> No vendor documentation was checked for this note. Managed vector database snapshot features differ by product and change often; read your product's backup page. The comparison script was run only on small sample JSONL files, not against a real retrieval service; the SQL was not run.
 
 ## Inventory: back up or rebuild
 
@@ -103,13 +103,16 @@ def main(baseline_path, restored_path, k, threshold):
     baseline, restored = load(baseline_path), load(restored_path)
     missing = sorted(set(baseline) - set(restored))
     overlaps = []
+    skipped = 0
     for qid, docs in baseline.items():
-        base = list(dict.fromkeys(docs[:k]))
-        if qid in restored and base:
-            got = set(dict.fromkeys(restored[qid][:k]))
-            overlaps.append(len(set(base) & got) / len(base))
+        base = set(docs[:k])
+        if not base:
+            skipped += 1
+        elif qid in restored:
+            got = set(restored[qid][:k])
+            overlaps.append(len(base & got) / len(base))
     mean = sum(overlaps) / len(overlaps) if overlaps else 0.0
-    print(f"queries={len(baseline)} missing={len(missing)} mean_overlap@{k}={mean:.3f}")
+    print(f"queries={len(baseline)} missing={len(missing)} skipped_empty={skipped} mean_overlap@{k}={mean:.3f}")
     for qid in missing:
         print(f"missing: {qid}")
     return 0 if not missing and mean >= threshold else 1
@@ -121,7 +124,7 @@ if __name__ == "__main__":
     sys.exit(main(sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4])))
 ```
 
-Duplicates (several chunks of one document) are collapsed before comparing, so the score is document-level.
+Duplicates (several chunks of one document) are collapsed before comparing, so the score is document-level. Queries with no baseline results are skipped and counted as `skipped_empty`; if every baseline query is empty, the mean is 0.0 and the script exits 1.
 
 - Pick the threshold from two runs against production itself. Approximate indexes are not perfectly repeatable.
 - Then measure retrieval quality with [[retrieval-evaluation-metrics-and-thresholds]].
@@ -151,7 +154,7 @@ Add AI state to the quarterly drill list:
 - pgvector `vector_dims()`.
 - Managed vector database snapshot features.
 - Whether hosted embedding models are available per region.
-- Neither script was run.
+- The comparison script was run only on small sample JSONL files, not against a real retrieval service or pgvector; the SQL was not run.
 
 The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
 
