@@ -9,7 +9,7 @@ tags:
   - ci-cd
   - reliability
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-24
 draft: false
 ---
 
@@ -171,7 +171,7 @@ Report monthly to the platform and team leads (all four are proposed measures; a
 
 ## Exceptions with expiry
 
-An update that cannot meet its deadline (a breaking change with no migration path, a vendor patch not yet released) gets a dated exception: the item, the reason, the compensating control (a network restriction, a WAF rule, a feature flag), the owner and an expiry date. The default maximum is 90 days (a proposed team default), renewable once with a plan. Holding a dependency at an old version or ignoring an update in the bot config requires an exception and a link to it in the config comment. Exceptions for security findings follow [[vulnerability-management-slas]].
+An update that cannot meet its deadline (a breaking change with no migration path, a vendor patch not yet released) gets a dated exception: the item, the reason, the compensating control (a network restriction, a WAF rule, a feature flag), the owner and an expiry date. Expiry and renewal follow [[policy-exception-and-waiver-process#Rules]]. Holding a dependency at an old version or ignoring an update in the bot config requires an exception and a link to it in the config comment. Exceptions for security findings follow [[vulnerability-management-slas]].
 
 ## Sources
 

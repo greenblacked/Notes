@@ -10,7 +10,7 @@ tags:
   - security
   - terraform
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 aliases:
   - data classification tags
@@ -30,7 +30,7 @@ PCI DSS and GDPR scope, customer-managed keys, data residency, retention and del
 - Define a small scheme (for example **public, internal, confidential, restricted**) and write down what each class requires: encryption, location, retention, access and logging. Here the classes and their handling rules are set by [[standards/data-classification-and-handling-standard]]; this note makes them machine-readable.
 - On GCP, create one **tag key** (`data-class`) at the organisation with one **tag value** per class, and bind values to **folders and projects**. Tags are inherited by descendants and can be referenced in **conditional org policies** and IAM conditions; labels cannot.
 - Control **who may bind** tags with IAM on the tag values, so that classification is a reviewed change, not something any project owner can flip.
-- In Kubernetes, require a **data-class label on every namespace** with an admission policy, and keep restricted namespaces on dedicated node pools.
+- In Kubernetes, require an **`example.com/data-class` label on every namespace** with an admission policy, and keep restricted namespaces on dedicated node pools.
 - Inventory everything by tag with **Cloud Asset Inventory**, and treat an unclassified project as a finding.
 
 ## An example scheme
@@ -419,7 +419,7 @@ kubectl --context "${CONTEXT}" get namespaces -L example.com/data-class
 
 ## Pitfalls
 
-- **Tags and labels confused.** A `data-class` label on a project does nothing for org policy; only the tag does. Pick one name and document which is authoritative.
+- **Tags and labels confused.** A `data-classification` label on a project does nothing for organisation policy; only the `data-class` tag does. The key for each system is fixed in [[standards/data-classification-and-handling-standard#Labelling]].
 - **Inheritance surprises.** A folder bound to `confidential` makes every project under it confidential unless the project carries its own binding. Whether a lower binding overrides the inherited value for the same key, and how conflicts resolve, is not verified here; check before relying on overrides.
 - **Deleting a value still in use.** The API refuses to delete a tag value that still has bindings, and a key that still has values. With `deletion_policy = "PREVENT"` Terraform refuses earlier, which is what you want.
 - **Resources that do not take tags.** Not every resource type supports tags, and some take them only at creation (Terraform notes that `resource_manager_tags` on an instance cannot be updated in place and forces re-creation). Classify at the project level and use resource-level tags only where needed.

@@ -9,14 +9,14 @@ tags:
   - reliability
   - observability
 created: 2026-10-21
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
 This note describes how to run asynchronous messaging on Pub/Sub for services on GKE: who owns topics and subscriptions, what delivery guarantees you actually get, how to make consumers safe under redelivery, how retries and dead-letter topics work, how to replay, how to scale consumers on backlog, and what to alert on. It is for platform and service engineers who are about to put a queue between two services and want the failure behaviour designed rather than discovered. Synchronous call patterns (timeouts, retries, load shedding) are in [[patterns/timeouts-retries-load-shedding]], and pod autoscaling in general in [[patterns/kubernetes-autoscaling]].
 
 > [!info] Scope and sources
-> Flags, field ranges and defaults for subscriptions, dead-letter and retry policies, snapshots and seek were read from the gcloud reference text and the Pub/Sub v1 API field descriptions. Monitoring metric names, the GKE external-metrics tutorial, KEDA scaler details (the `gcp-pubsub` deprecation is recorded in [[tools/keda-vs-hpa-external-metrics]]), quotas and prices were not checked against the current documentation; the pages under Sources are authoritative. Nothing here was run.
+> Flags, field ranges and defaults for subscriptions, dead-letter and retry policies, snapshots and seek were read from the gcloud reference text and the Pub/Sub v1 API field descriptions. Monitoring metric names, the GKE external-metrics tutorial, KEDA scaler details (the `gcp-pubsub` deprecation was re-checked against the KEDA 2.21 docs on 2026-11-24 and is recorded in [[tools/keda-vs-hpa-external-metrics]]), quotas and prices were not checked against the current documentation; the pages under Sources are authoritative. Nothing here was run.
 
 > [!note] Not verified
 > Check these before relying on them:
@@ -119,7 +119,7 @@ Topic encryption with a customer-managed key (`--topic-encryption-key`) and regi
 Scale consumers on work waiting, not on CPU: a consumer blocked on a slow database has low CPU and a growing backlog.
 
 - **HPA on an external metric** through a Cloud Monitoring metrics adapter, as in the GKE autoscaling-metrics tutorial, targeting undelivered messages per pod.
-- **KEDA** with the `prometheus` scaler against Managed Service for Prometheus, querying the subscription backlog; it can scale to zero. KEDA's own `gcp-pubsub` scaler is deprecated, so do not adopt it for new work. [[tools/keda-vs-hpa-external-metrics]] compares the two options and gives manifests for both.
+- **KEDA** with the `prometheus` scaler against Managed Service for Prometheus, querying the subscription backlog; it can scale to zero. KEDA's own `gcp-pubsub` scaler is marked deprecated ("This scaler is deprecated and won't receive any modification", KEDA 2.21 scaler page, read 2026-11-24), because it depends on Monitoring Query Language. KEDA's [Google Cloud deprecations post](https://keda.sh/blog/2025-09-15-gcp-deprecations/) says it stays while Google supports MQL and points to the `prometheus` scaler. Do not adopt it for new work. [[tools/keda-vs-hpa-external-metrics]] compares the two options and gives manifests for both.
 
 Keep `minReplicaCount` above zero for latency-sensitive consumers and use zero only for batch-like work. Bound `maxReplicaCount` by what the downstream can take: scaling consumers to clear a backlog can exhaust database connections ([[architecture/cloud-sql-postgres-platform-architecture]]). Pair scaling with a PodDisruptionBudget and graceful shutdown that stops pulling, finishes in-flight messages and then exits ([[patterns/pod-disruption-budgets-for-stateless-services]], [[patterns/zero-downtime-deployments-kubernetes]]).
 
