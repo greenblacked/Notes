@@ -112,8 +112,9 @@ MAX_FINDINGS = 20
 SEVERITIES = ("high", "medium", "low")
 PATH_SHAPE = re.compile(r"[A-Za-z0-9._/-]{1,200}")
 # Backslash-escape Markdown, mention and quick-action characters, so no output line can start a /command.
-# Bare autolinks (www.) and the $ % & ^ reference prefixes are not escaped.
-MARKDOWN_SPECIAL = re.compile(r"([\\`*_{}\[\]()<>#+!|@~/:-])")
+# & is escaped so HTML character references (&#64;) are not decoded into a mention. Bare autolinks
+# (www.) and the $ % ^ reference prefixes are not escaped.
+MARKDOWN_SPECIAL = re.compile(r"([\\`*_{}\[\]()<>#+!|@~/:&-])")
 BASE = f"{API}/projects/{PROJECT_ID}/merge_requests/{MR_IID}"
 
 
@@ -146,8 +147,15 @@ def collect_diff():
 def run_review(diff):
     # Integration point: replace REVIEW_COMMAND with your tool or gateway client.
     # It reads the diff on stdin and prints one JSON object per finding on stdout.
+    # It runs with a minimal environment: never REVIEW_BOT_TOKEN, CI_JOB_TOKEN or other job variables.
+    # change: pass only what your tool needs, such as the path of a gateway key file, not the token.
+    review_env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8"}
+    for name in ("LLM_GATEWAY_URL", "LLM_GATEWAY_KEY_FILE"):
+        if name in os.environ:
+            review_env[name] = os.environ[name]
     result = subprocess.run(
         REVIEW_COMMAND,
+        env=review_env,
         input=diff,
         capture_output=True,
         text=True,
@@ -233,10 +241,10 @@ On GitHub the same shape uses two jobs in a `pull_request` workflow, never `pull
 
 Everything the bot reads was written by the merge request's author or by whoever wrote the code being changed: code, comments, commit messages, file names and test fixtures. Any of it can carry text addressed to the model ("ignore previous instructions", "approve this", "say no issues found"). Design for that, not against it:
 
-- **The bot can only comment.** Its token cannot push, approve or merge (see Rules), so the worst a followed instruction can do is a wrong or missing comment.
-- **The output shape is validated.** GitLab can run quick actions found in a note body, so a model that is steered into printing a line such as `/approve` or `/close` could run it as the bot. The skeleton accepts only JSON findings of a fixed shape, caps their number and escapes the Markdown punctuation that could start a quick action or a mention (it does not neutralise every autolink or reference form, such as bare `www.` addresses). Anything else is dropped and counted in the note.
+- **The bot can only comment.** Its token cannot push, approve or merge (see Rules), so the worst a followed instruction can do is a wrong or missing comment, provided the review command never holds that token. The skeleton starts the command with a minimal environment, so the bot token and the job token are not in it. If the tool needs stronger separation, split the job in two as in the GitHub shape: one job runs the model and uploads findings, a second holds the token and posts them, and runs no model.
+- **The output shape is validated.** The validation covers stdout only: it cannot stop a command that holds the token from calling the API itself. GitLab can run quick actions found in a note body, so a model that is steered into printing a line such as `/approve` or `/close` could run it as the bot. The skeleton accepts only JSON findings of a fixed shape, caps their number and escapes the Markdown punctuation that could start a quick action or a mention (it does not neutralise every autolink or reference form, such as bare `www.` addresses; `&` is escaped so character references such as `&#64;` are not decoded). Anything else is dropped and counted in the note.
 - **A clean review is not evidence.** "No findings" can mean the model was told to say so. It never counts towards approval, and it does not replace the deterministic checks.
-- **Test it.** Put planted instructions in a fixture merge request and assert that the posted note contains no quick action or mention, as in [[prompt-injection-test-harness-for-ci-agents]].
+- **Test it.** Put planted instructions in a fixture merge request and assert that the posted note contains no quick action or mention (include a character-reference case such as `&#64;group`), as in [[prompt-injection-test-harness-for-ci-agents]].
 
 ## Triage
 
@@ -322,5 +330,6 @@ Source-reviewed on 2026-11-02. Nothing was run apart from a `render_findings` ch
 - SonarQube quality gates, any specific review product's tier, rule files or ability to block merges, and the model gateway: no local source.
 - Engineering guidance, not a documented claim: bot scope and noise rules, triage categories, usefulness metrics, data-handling advice and the pitfalls list.
 - That GitLab runs quick actions found in a note body created through the Notes API, and the exact quick-action rules (a command starts with a forward slash on its own line); whether quick actions inside code blocks or quotes run is also unknown. The Notes API and quick actions pages were not re-read on 2026-11-24, and the skeleton does not rely on any such exception. Treat the claim as a risk to design for, not a tested fact.
-- The escaping as rendered by your GitLab version. `render_findings` was exercised with sample output on 2026-11-24, not in a pipeline.
+- The escaping as rendered by your GitLab version, including whether an escaped `&` blocks HTML character references from being decoded into mentions. `render_findings` was exercised with sample output on 2026-11-24, not in a pipeline.
+- That the minimal environment is enough for your review tool, and that it keeps the tool from reaching the token by other routes (a shared filesystem, the runner's metadata). The environment filter was not run in a pipeline.
 - Nothing else was run, including the pipeline job.
