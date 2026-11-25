@@ -227,14 +227,14 @@ Keep the template minimal and readable, and pin job images by digest ([[patterns
 .agent-skill-checks:
   image: python@sha256:<digest> # change: the Python 3.12 slim image you have reviewed, pinned by digest
   script:
-    - pip install --no-cache-dir "pyyaml==6.0.2" # change: the version you have reviewed
+    - pip install --require-hashes --no-cache-dir -r ci-templates/requirements.txt # change: a requirements file with a hash for every package
     - python scripts/validate-manifests.py
   rules:
     - changes:
         - skills/**/*
 ```
 
-Note that `scripts/validate-manifests.py` must exist in the consuming project, or the template must fetch it from the shared repository at the same pinned tag. Jenkins teams do the equivalent with a shared library pinned to a tag.
+Note that `ci-templates/requirements.txt` must pin `pyyaml` with a hash for it and every dependency, and that `scripts/validate-manifests.py` must exist in the consuming project, or the template must fetch it from the shared repository at the same pinned tag. Jenkins teams do the equivalent with a shared library pinned to a tag.
 
 Treat anything you copy from any shared catalogue of skills or prompts as untrusted until your own review.
 

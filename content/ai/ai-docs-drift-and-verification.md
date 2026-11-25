@@ -61,9 +61,9 @@ docs-drift:
       fi
 ```
 
-`git status --porcelain` also catches new files that the generator created and nobody committed, which `git diff --exit-code` misses; `--ignored` adds files under ignored paths, which plain `git status` hides.
+`git status --porcelain` also catches new files that the generator created and nobody committed, which `git diff --exit-code` misses; `--ignored` adds files under ignored paths, which plain `git status` hides, so the job also fails on an ignored cache that the generator legitimately writes under `docs/reference`: write that cache elsewhere or delete it before the check.
 
-The generator script comes from the merge request, so this job runs code the change under review controls. Give it no variables, tokens or deploy credentials, and do not run it on a runner or in a pipeline type that receives protected variables (see [[securing-ai-agents-in-ci-and-cloud]]).
+The generator script comes from the merge request, so this job runs code the change under review controls. Give it no extra variables or deploy credentials, and do not run it on a runner or in a pipeline type that receives protected variables. GitLab always gives the job a job token, so keep that token's access to a short allowlist (see [[securing-ai-agents-in-ci-and-cloud]]).
 
 ## Failure modes and response
 

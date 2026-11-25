@@ -93,7 +93,7 @@ echo "VERIFIED commit=$sha" | tee -a "$log"
 
 Because it uses `set -Eeuo pipefail`, a failing stage stops the script, and the final `VERIFIED` line only prints if all stages passed. Strict mode does not cover every construct: a failure inside a process substitution such as `< <(git diff ...)` is not seen, so write the output to a file with a plain redirect, which `set -e` does check, read the NUL-separated names from it, and treat an empty change list as an error. A single entry point also means the agent, a hook and CI cannot disagree about what "done" is.
 
-This gate is defined in the branch it checks, so a change that edits `scripts/verify.sh`, `scripts/scan-secrets.sh`, the `Makefile` or `.gitlab-ci.yml` can make itself pass. Treat changes to those files as needing human sign-off (the detector below flags them), and require code-owner approval for them on the protected branch (check how your hosting plan enforces it). A gate is only as strong as the review of changes to the gate.
+This gate is defined in the branch it checks, so a change that edits `scripts/verify.sh`, `scripts/scan-secrets.sh`, the `Makefile` or `.gitlab-ci.yml` can make itself pass, and so can a change to `scripts/detect-test-weakening.sh` or to a CI file pulled in with `include:`. Treat changes to those files as needing human sign-off (the detector below flags them), and require code-owner approval for them on the protected branch (check how your hosting plan enforces it). The detector runs from the branch it checks, so it cannot catch an edit that disables its own copy: the real control is code-owner approval, or running the base branch's copy (for example `git show "$base":scripts/detect-test-weakening.sh | bash -s -- "$base"`). A gate is only as strong as the review of changes to the gate.
 
 For high-stakes changes add an independent reviewer whose job is to refute the result, ideally a separate agent or model with a fresh context that reads the final diff and tries to find what the author missed ([[independent-review-agents]]). A second reading of the diff is cheaper than an incident.
 
@@ -135,11 +135,15 @@ Treat any diff that deletes, skips or loosens tests, snapshots or lint rules in 
 set -Eeuo pipefail
 
 base="${1:-origin/main}"
-gate=(scripts/verify.sh scripts/scan-secrets.sh scripts/detect-test-weakening.sh Makefile .gitlab-ci.yml)
+gate=(
+  scripts/verify.sh scripts/scan-secrets.sh scripts/detect-test-weakening.sh Makefile
+  ':(glob)**/*.gitlab-ci.yml' ':(glob)ci-templates/**' ':(glob)**/*.mk' # add your other CI include files here
+)
 watched=(
   ':(glob)tests/**' ':(glob)**/*.test.*' ':(glob)**/__snapshots__/**'
   ':(glob)**/.eslintrc*' ':(glob)**/eslint.config.*' ':(glob)**/jest.config.*'
-  ':(glob)**/ruff.toml' ':(glob)**/pyproject.toml' ':(glob)**/pytest.ini' ':(glob)**/conftest.py'
+  ':(glob)**/ruff.toml' ':(glob)**/.ruff.toml' ':(glob)**/pyproject.toml' ':(glob)**/pytest.ini' ':(glob)**/conftest.py'
+  ':(glob)**/setup.cfg' ':(glob)**/tox.ini'
 )
 
 # A failing git diff (missing base, shallow clone) stops the script here: fail closed.
