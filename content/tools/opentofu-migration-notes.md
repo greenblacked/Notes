@@ -75,12 +75,13 @@ mkdir -p "${BACKUP_DIR}"
 # version listing: generation numbers might not increase for future versions.
 gcloud storage ls --all-versions "${STATE}"   # for reference: every generation as gs://...#GENERATION
 GEN="$(gcloud storage objects describe "${STATE}" --format='value(generation)')"
-: "${GEN:?could not read the live generation; stop}"
-echo "live generation: ${GEN}"   # write this into the change ticket
+echo "live generation: ${GEN:?could not read the live generation; stop}"   # write this into the change ticket
 
 # Copy that exact generation, so the backup and the recorded number match.
-gcloud storage cp "${STATE}#${GEN}" "${BACKUP_DIR}/${WORKSPACE}-${GEN}.tfstate"
+gcloud storage cp "${STATE}#${GEN:?}" "${BACKUP_DIR}/${WORKSPACE}-${GEN:?}.tfstate"
 ```
+
+Each command carries its own `:?` guard, because pasted into an interactive shell a failed guard line does not stop the lines after it.
 
 The copy lands under `~/tfstate-backups`, outside the repository, readable only by you. For a team, keep it in an access-controlled bucket with its own retention rather than on a laptop, and delete the local copy, and `baseline.tfplan` with it, once the migration is signed off. Write the generation number into the change ticket.
 
@@ -125,11 +126,10 @@ A plain `tofu plan` does not write state. The first write happens at the first `
 ```bash
 # Saved plans can hold sensitive values: keep them in the owner-only directory from step 1.
 umask 077
-: "${BACKUP_DIR:?set BACKUP_DIR as in step 1}"
-tofu plan -detailed-exitcode -out="${BACKUP_DIR}/migrate.tfplan"; echo "exit=$?"
-tofu show "${BACKUP_DIR}/migrate.tfplan"    # read it: normally no changes, or only the reviewed label
-tofu apply "${BACKUP_DIR}/migrate.tfplan"   # applies only the saved plan, no new prompt
-rm -f "${BACKUP_DIR}/migrate.tfplan"
+tofu plan -detailed-exitcode -out="${BACKUP_DIR:?set BACKUP_DIR as in step 1}/migrate.tfplan"; echo "exit=$?"
+tofu show "${BACKUP_DIR:?}/migrate.tfplan"    # read it: normally no changes, or only the reviewed label
+tofu apply "${BACKUP_DIR:?}/migrate.tfplan"   # applies only the saved plan, no new prompt
+rm -f "${BACKUP_DIR:?}/migrate.tfplan"
 ```
 
 **Gate 5:** the apply succeeds, `tofu plan -detailed-exitcode` exits 0 afterwards, and the state's `terraform_version` field now reflects the new tool. List generations again with `gcloud storage ls -a "${STATE}"` and confirm a new generation appeared. If none appeared after a no-op apply (the backend may skip a write when the state content is unchanged; not confirmed), apply the tiny reviewed label change instead, then re-check this gate.
@@ -184,20 +184,22 @@ Rollback depends on whether OpenTofu has written to the state.
 **After OpenTofu has written (step 5 onwards).** Restore the state object to the generation you recorded, then return to the pinned Terraform:
 
 ```bash
-: "${GEN:?set GEN to the generation recorded in step 1 (change ticket)}"
-
 # Pre-check: read the live generation from the object's own metadata, so this step can be undone.
 CURRENT_GEN="$(gcloud storage objects describe "${STATE}" --format='value(generation)')"
-: "${CURRENT_GEN:?could not read the live generation; do not restore}"
-echo "replacing live generation ${CURRENT_GEN} with ${GEN}"
+echo "replacing live generation ${CURRENT_GEN:?could not read the live generation; do not restore} with ${GEN:?set GEN to the generation recorded in step 1 (change ticket)}"
 ```
 
 Then restore with a precondition. It fails, and changes nothing, if the live object changed after the generation above was read:
 
 ```bash
-gcloud storage cp "${STATE}#${GEN}" "${STATE}" --if-generation-match="${CURRENT_GEN}"
+gcloud storage cp "${STATE}#${GEN:?}" "${STATE}" --if-generation-match="${CURRENT_GEN:?}"
+```
 
-# Undo, if needed: gcloud storage cp "${STATE}#${CURRENT_GEN}" "${STATE}"
+To undo the restore, read the generation it just wrote and use it as the precondition:
+
+```bash
+RESTORED_GEN="$(gcloud storage objects describe "${STATE}" --format='value(generation)')"
+gcloud storage cp "${STATE}#${CURRENT_GEN:?}" "${STATE}" --if-generation-match="${RESTORED_GEN:?}"
 ```
 
 Cloud Storage documents the `gs://BUCKET/OBJECT#GENERATION` form for restoring a noncurrent version; the replaced live version becomes noncurrent and stays in the bucket (checked 2026-11-24). Rehearse the restore in the scratch bucket. After the restore:
