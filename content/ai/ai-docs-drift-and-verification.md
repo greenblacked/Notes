@@ -7,7 +7,7 @@ tags:
   - reliability
   - ci-cd
 created: 2026-10-26
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -54,14 +54,16 @@ docs-drift:
   script:
     - ./scripts/gen-reference-docs.sh docs/reference
     - |
-      if [ -n "$(git status --porcelain -- docs/reference)" ]; then
-        git status --porcelain -- docs/reference
+      if [ -n "$(git status --porcelain --ignored -- docs/reference)" ]; then
+        git status --porcelain --ignored -- docs/reference
         echo "docs/reference is out of date: run scripts/gen-reference-docs.sh and commit the result" >&2
         exit 1
       fi
 ```
 
-`git status --porcelain` also catches new files that the generator created and nobody committed, which `git diff --exit-code` misses.
+`git status --porcelain` also catches new files that the generator created and nobody committed, which `git diff --exit-code` misses; `--ignored` adds files under ignored paths, which plain `git status` hides.
+
+The generator script comes from the merge request, so this job runs code the change under review controls. Give it no variables, tokens or deploy credentials, and do not run it on a runner or in a pipeline type that receives protected variables (see [[securing-ai-agents-in-ci-and-cloud]]).
 
 ## Failure modes and response
 

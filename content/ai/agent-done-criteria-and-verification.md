@@ -8,7 +8,7 @@ tags:
   - team-process
   - delivery
 created: 2026-10-27
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -67,6 +67,8 @@ base="${1:-origin/main}"
 log="${VERIFY_LOG:-verify.log}"
 sha=$(git rev-parse --short HEAD)
 : > "$log"
+list=$(mktemp)
+trap 'rm -f "$list"' EXIT
 
 run() { echo "+ $*" | tee -a "$log"; "$@" 2>&1 | tee -a "$log" | tail -n 15; }
 
@@ -75,18 +77,23 @@ run make test
 run ruff check .
 # Not `mapfile < <(git diff ...)`: a process substitution's exit status is lost, so a missing
 # base or a shallow clone would leave the list empty and the gate would pass unchecked.
-diff_out=$(git diff --name-only --diff-filter=d "$base"...HEAD)
-mapfile -t changed <<< "$diff_out"
-if [[ -z "$diff_out" ]]; then
+# NUL-separated names go through a file, so a failing git diff stops the script (set -e) and a
+# name with a newline or a leading dash stays one argument.
+git diff -z --name-only --diff-filter=d "$base"...HEAD > "$list"
+mapfile -d '' -t changed < "$list"
+if (( ${#changed[@]} == 0 )); then
   echo "no changed files against $base; refusing to report VERIFIED" | tee -a "$log" >&2
   exit 1
 fi
-run scripts/scan-secrets.sh "${changed[@]}"
+# `--` ends option parsing; your scanner must honour it (check), or pass paths another way.
+run scripts/scan-secrets.sh -- "${changed[@]}"
 
 echo "VERIFIED commit=$sha" | tee -a "$log"
 ```
 
-Because it uses `set -Eeuo pipefail`, a failing stage stops the script, and the final `VERIFIED` line only prints if all stages passed. Strict mode does not cover every construct: a failure inside a process substitution such as `< <(git diff ...)` is not seen, so capture the output with a plain command substitution, which `set -e` does check, and treat an empty change list as an error. A single entry point also means the agent, a hook and CI cannot disagree about what "done" is.
+Because it uses `set -Eeuo pipefail`, a failing stage stops the script, and the final `VERIFIED` line only prints if all stages passed. Strict mode does not cover every construct: a failure inside a process substitution such as `< <(git diff ...)` is not seen, so write the output to a file with a plain redirect, which `set -e` does check, read the NUL-separated names from it, and treat an empty change list as an error. A single entry point also means the agent, a hook and CI cannot disagree about what "done" is.
+
+This gate is defined in the branch it checks, so a change that edits `scripts/verify.sh`, `scripts/scan-secrets.sh`, the `Makefile` or `.gitlab-ci.yml` can make itself pass. Treat changes to those files as needing human sign-off (the detector below flags them), and require code-owner approval for them on the protected branch (check how your hosting plan enforces it). A gate is only as strong as the review of changes to the gate.
 
 For high-stakes changes add an independent reviewer whose job is to refute the result, ideally a separate agent or model with a fresh context that reads the final diff and tries to find what the author missed ([[independent-review-agents]]). A second reading of the diff is cheaper than an incident.
 
@@ -119,21 +126,36 @@ At least: build, unit tests for touched code, linter and formatter on changed fi
 
 When a check fails repeatedly the agent tends to keep editing. Set a local limit on attempts at the same check, then stop and report the failing output and hypotheses. The number is a policy choice, not a standard. Unbounded loops often end with weakened tests.
 
-Treat any diff that deletes, skips or loosens tests, snapshots or lint rules in the same change as a fix as a flag requiring human sign-off. A simple detector:
+Treat any diff that deletes, skips or loosens tests, snapshots or lint rules in the same change as a fix as a flag requiring human sign-off. The same goes for any change to the gate's own files. A simple detector, which covers only the paths it lists:
 
 ```bash title="scripts/detect-test-weakening.sh"
 #!/usr/bin/env bash
-# Sketch: fails when the diff deletes assertions or adds skips and lint suppressions.
+# Sketch: fails when the diff deletes assertions, adds skips and lint suppressions,
+# or touches the gate's own files. It covers only the paths listed below.
 set -Eeuo pipefail
 
 base="${1:-origin/main}"
+gate=(scripts/verify.sh scripts/scan-secrets.sh scripts/detect-test-weakening.sh Makefile .gitlab-ci.yml)
+watched=(
+  ':(glob)tests/**' ':(glob)**/*.test.*' ':(glob)**/__snapshots__/**'
+  ':(glob)**/.eslintrc*' ':(glob)**/eslint.config.*' ':(glob)**/jest.config.*'
+  ':(glob)**/ruff.toml' ':(glob)**/pyproject.toml' ':(glob)**/pytest.ini' ':(glob)**/conftest.py'
+)
+
 # A failing git diff (missing base, shallow clone) stops the script here: fail closed.
-diff_out=$(git diff -U0 "$base"...HEAD -- 'tests/**' '**/*.test.*' '.eslintrc*' 'ruff.toml')
-if printf '%s\n' "$diff_out" | grep -E '^-[^-].*(assert|expect)|^\+[^+].*(skip|xfail|\.only|noqa|eslint-disable)'; then
+gate_out=$(git diff --name-only "$base"...HEAD -- "${gate[@]}")
+if [[ -n "$gate_out" ]]; then
+  printf '%s\n' "$gate_out"
+  echo "Gate files changed: needs human sign-off" >&2
+  exit 1
+fi
+diff_out=$(git diff -U0 "$base"...HEAD -- "${watched[@]}")
+# The optional group lets a keyword start the line; it cannot match the +++ and --- file headers.
+if printf '%s\n' "$diff_out" | grep -E '^-([^-].*)?(assert|expect)|^\+([^+].*)?(skip|xfail|\.only|noqa|eslint-disable)'; then
   echo "Test or lint weakening detected: needs human sign-off" >&2
   exit 1
 fi
-echo "no test or lint weakening found"
+echo "no matches in the gate files or in: ${watched[*]}"
 ```
 
 ## Failure modes

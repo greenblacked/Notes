@@ -40,8 +40,10 @@ body_file="${3:?raw body file}"
 max_skew="${MAX_SKEW_SECONDS:-300}" # Slack's docs: reject requests more than five minutes old
 
 # Validate before arithmetic: bash evaluates (( )) operands as expressions,
-# so an unchecked header value could run commands.
-[[ "$ts" =~ ^[0-9]{1,12}$ ]] || { echo "bad timestamp" >&2; exit 1; }
+# so an unchecked value could run commands, and a leading zero is read as octal,
+# where an invalid number makes the stale check fail open. Both patterns forbid a leading zero.
+[[ "$ts" =~ ^[1-9][0-9]{9,11}$ ]] || { echo "bad timestamp" >&2; exit 1; }
+[[ "$max_skew" =~ ^[1-9][0-9]{0,4}$ ]] || { echo "bad MAX_SKEW_SECONDS" >&2; exit 1; }
 
 now="$(date +%s)"
 if (( now - ts > max_skew || ts - now > max_skew )); then

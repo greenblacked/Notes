@@ -7,7 +7,7 @@ tags:
   - reliability
   - audit
 created: 2026-10-26
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -90,9 +90,17 @@ def main(path: str, max_false_pass: float) -> int:
 
 
 if __name__ == "__main__":
+    usage = "usage: judge_agreement.py <labels.csv> <max-false-pass-rate, a fraction above 0 and below 1>"
     if len(sys.argv) != 3:
-        sys.exit("usage: judge_agreement.py <labels.csv> <max-false-pass-rate>")
-    sys.exit(main(sys.argv[1], float(sys.argv[2])))
+        sys.exit(usage)
+    try:
+        limit = float(sys.argv[2])
+    except ValueError:
+        sys.exit(usage)
+    # Rejects 10 (meant as 10 %), 1, inf and nan, which would let every input pass.
+    if not 0 < limit < 1:
+        sys.exit(usage)
+    sys.exit(main(sys.argv[1], limit))
 ```
 
 ```bash
