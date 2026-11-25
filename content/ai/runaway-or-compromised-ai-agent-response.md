@@ -9,8 +9,9 @@ tags:
   - on-call
   - gcp
 created: 2026-10-21
-modified: 2026-11-01
+modified: 2026-11-25
 draft: false
+destructive: true
 evidence: source-reviewed
 reviewed: 2026-11-01
 review-due: 2027-05-01
@@ -71,6 +72,12 @@ export K8S_SA="agent-review"                                        # change: th
 export GITLAB="https://gitlab.example.com/api/v4"
 export GL_PROJECT="platform%2Fexample-repo"                         # change: URL-encoded project path or numeric ID
 export BOT_USER="agent-review-bot"                                  # change: the bot user's username
+export GITOPS_TOOL="argocd"                                         # change: argocd, flux, or none if no controller deploys the agent
+export GITOPS_APP="ai-agent"                                        # change: the Argo CD Application or Flux Kustomization
+export ARGOCD_NS="argocd"                                           # change: where Argo CD Application objects live
+export ARGOCD_K8S_CONTEXT="${ARGOCD_K8S_CONTEXT:-$K8S_CONTEXT}"     # change: the cluster that holds the Application objects (a management cluster, if Argo CD runs there)
+export ARGOCD_SERVER="${ARGOCD_SERVER:-}"                           # change: the Argo CD server address, required when GITOPS_TOOL is argocd
+export GITOPS_NS="flux-system"                                      # change: the Flux Kustomization's namespace
 mkdir -p "evidence/$INCIDENT"
 printf 'Operator GitLab token: '; read -rs GL_TOKEN; echo; export GL_TOKEN
 ```
@@ -125,11 +132,34 @@ Record the current state first; it is both evidence and the rollback.
 ```bash title="scale-agent-to-zero.sh"
 set -euo pipefail
 
+# 1. Stop the controller first, or it scales the agent back up from Git.
+case "$GITOPS_TOOL" in
+  argocd)
+    : "${ARGOCD_SERVER:?set ARGOCD_SERVER so argocd acts on the intended server}"
+    kubectl --context="$ARGOCD_K8S_CONTEXT" -n "$ARGOCD_NS" get applications.argoproj.io "$GITOPS_APP" -o json \
+      > "evidence/$INCIDENT/gitops-before.json"
+    argocd --server "$ARGOCD_SERVER" app set "$GITOPS_APP" --sync-policy none
+    [[ -z "$(kubectl --context="$ARGOCD_K8S_CONTEXT" -n "$ARGOCD_NS" get applications.argoproj.io "$GITOPS_APP" -o jsonpath='{.spec.syncPolicy.automated}')" ]] \
+      || { echo "Application $GITOPS_APP still has automated sync; stop here" >&2; exit 1; }
+    ;;
+  flux)
+    kubectl --context="$K8S_CONTEXT" -n "$GITOPS_NS" get kustomizations.kustomize.toolkit.fluxcd.io "$GITOPS_APP" -o json \
+      > "evidence/$INCIDENT/gitops-before.json"
+    flux --context="$K8S_CONTEXT" suspend kustomization "$GITOPS_APP" -n "$GITOPS_NS"
+    [[ "$(kubectl --context="$K8S_CONTEXT" -n "$GITOPS_NS" get kustomizations.kustomize.toolkit.fluxcd.io "$GITOPS_APP" -o jsonpath='{.spec.suspend}')" == "true" ]] \
+      || { echo "Kustomization $GITOPS_APP is not suspended; stop here" >&2; exit 1; }
+    ;;
+  none) echo "no GitOps controller declared for the agent; confirm that with the platform owner" >&2 ;;
+  *) echo "GITOPS_TOOL must be argocd, flux or none" >&2; exit 2 ;;
+esac
+
+# 2. Record the current state: it is both evidence and the rollback.
 kubectl --context="$K8S_CONTEXT" -n "$AGENT_NS" get deploy,statefulset,cronjob,hpa \
   -l "$AGENT_SELECTOR" -o json > "evidence/$INCIDENT/workloads-before.json"
 jq -r '.items[] | select(.kind=="Deployment" or .kind=="StatefulSet")
   | "\(.kind) \(.metadata.name) \(.spec.replicas)"' "evidence/$INCIDENT/workloads-before.json"
 
+# 3. Scale to zero and suspend CronJobs.
 for w in $(kubectl --context="$K8S_CONTEXT" -n "$AGENT_NS" get deployment,statefulset -l "$AGENT_SELECTOR" -o name); do
   kubectl --context="$K8S_CONTEXT" -n "$AGENT_NS" scale "$w" --replicas=0
 done
@@ -139,10 +169,10 @@ for cj in $(kubectl --context="$K8S_CONTEXT" -n "$AGENT_NS" get cronjob -l "$AGE
 done
 ```
 
-- **Expected:** one `scaled` line per workload and one `patched` line per CronJob. Pods terminate gracefully within their `terminationGracePeriodSeconds`; the Deployments stay.
+- **Expected:** the suspend check passes (the script stops if the controller is still syncing), then one `scaled` line per workload and one `patched` line per CronJob. Pods terminate gracefully within their `terminationGracePeriodSeconds`; the Deployments stay.
 - **Verify:** `kubectl --context="$K8S_CONTEXT" -n "$AGENT_NS" get pods -l "$AGENT_SELECTOR"` returns no pods after the grace period, and stays empty for a few minutes.
-- **Watch out:** a GitOps controller or an autoscaler can scale it back up. Suspend the sync for the agent's application first (for example `flux suspend kustomization <name>` or `argocd app set <name> --sync-policy none`), and check whether an HPA or another controller targets the workload. The HPA page documents that an HPA stops adjusting a target whose replicas you set to 0 while its `minReplicas` is above 0, until you scale the target up again; check the HPA page for your version.
-- **Rollback:** scale each workload back to the replica count recorded in `workloads-before.json`, and set `suspend` back to `false` (step 6).
+- **Watch out:** the script suspends the GitOps sync first and stops if it did not take. `argocd app set` talks to the Argo CD server, so log in with an operator account before the incident. If the suspend step fails (a wrong server, an expired login), do not skip it: log in again, or patch the Application with `kubectl --context="$ARGOCD_K8S_CONTEXT"` to remove `.spec.syncPolicy.automated`, then run the check again before scaling. If a parent object manages the agent's Application or Kustomization (an app-of-apps with automated sync and self-heal, or a parent Flux Kustomization), it can re-apply the sync policy and undo the suspend: suspend the parent first, or the whole tree, and run the suspend check again after scaling. Also check whether an HPA or another controller targets the workload. The HPA page documents that an HPA stops adjusting a target whose replicas you set to 0 while its `minReplicas` is above 0, until you scale the target up again; check the HPA page for your version.
+- **Rollback:** scale each workload back to the count recorded in `workloads-before.json`, and set `suspend` back to `false` (step 6). Then restore the sync policy recorded in `gitops-before.json`: `argocd --server "$ARGOCD_SERVER" app set "$GITOPS_APP" --sync-policy automated`, adding `--self-heal` and `--auto-prune` only if they were set before; or `flux resume kustomization "$GITOPS_APP" -n "$GITOPS_NS"`.
 
 If you need the pods' memory or local files as evidence (an agent that may have written secrets to disk), copy what you need before scaling, as in the evidence section of [[compromised-cloud-cluster-containment]]; scaling to zero loses `emptyDir` data and process state.
 
@@ -363,6 +393,8 @@ terraform -chdir="infra/example" plan -detailed-exitcode -lock=false -input=fals
 echo "exit: $?"
 ```
 
+`-lock=false` is deliberate: the read-only identity cannot write the state lock, and a lock left by the agent's own run must not be force-unlocked before the evidence is saved. Without the lock, a concurrent apply can change the state under the plan, so stop the agent first (step 1) and treat the plan as a snapshot.
+
 Exit code `0` means no differences, `2` means differences, `1` means an error (check `terraform plan -help` for your version). A difference is something to explain, not proof of the agent's work. A clean plan does not prove nothing changed: resources outside Terraform, and data inside resources, need the audit logs from step 3. If the state file itself was written, compare its object versions in the state bucket (`gcloud storage ls --all-versions` on the state object) before touching it, and follow your state recovery procedure ([[terraform-plan-policy-checks]] covers plan JSON for the comparison).
 
 #### 5c. Cluster and cloud resources
@@ -376,7 +408,7 @@ Re-enable only when the cause is understood and fixed. "The agent looped" is not
 1. **Fix the cause:** a cap, a tool removed from the allowlist, an untrusted input removed from the agent's reach, a narrower token. Add the failing case to the injection test harness ([[prompt-injection-test-harness-for-ci-agents]]) so CI catches it next time.
 2. **Issue new credentials** with narrower scopes and expiries: a new GitLab token, a new gateway key, reviewed RBAC from the GitOps source.
 3. **Re-enable the service account:** `gcloud iam service-accounts enable "$AGENT_SA" --project="$PROJECT"`, then `describe` shows `disabled` empty or `False`.
-4. **Scale back** to the recorded replica counts, one workload at a time, and set `suspend: false` on the CronJobs. Resume the GitOps sync.
+4. **Scale back** to the recorded replica counts, one workload at a time, and set `suspend: false` on the CronJobs. Resume the GitOps sync with the settings recorded in `gitops-before.json` (step 1c rollback).
 5. **Turn the gateway switch back on** for the agent, ideally with a lower temporary budget.
 6. **Watch** token rate, tool calls, audit log writes and the egress log for at least one full working cycle of the agent.
 
@@ -413,15 +445,15 @@ The incident is contained when all of these hold:
 
 ## Rollback of this runbook's actions
 
-| Step                     | Undo                                                                             |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| Gateway kill switch      | Turn it back on                                                                  |
-| Pipelines cancelled      | Nothing to undo; start fresh pipelines after recovery, do not retry old ones     |
-| Workloads scaled to zero | Scale to the counts in `workloads-before.json`; unsuspend CronJobs; resume sync  |
-| Service account disabled | `gcloud iam service-accounts enable`, unless Google disabled it                  |
-| GitLab tokens revoked    | Not reversible; issue new, narrower tokens                                       |
-| RBAC bindings deleted    | Restore from GitOps or the saved `agent-bindings.json`                           |
-| Reverts                  | Revert the revert through a reviewed merge request, if the change was legitimate |
+| Step                     | Undo                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Gateway kill switch      | Turn it back on                                                                                             |
+| Pipelines cancelled      | Nothing to undo; start fresh pipelines after recovery, do not retry old ones                                |
+| Workloads scaled to zero | Scale to the counts in `workloads-before.json`; unsuspend CronJobs; restore sync as in `gitops-before.json` |
+| Service account disabled | `gcloud iam service-accounts enable`, unless Google disabled it                                             |
+| GitLab tokens revoked    | Not reversible; issue new, narrower tokens                                                                  |
+| RBAC bindings deleted    | Restore from GitOps or the saved `agent-bindings.json`                                                      |
+| Reverts                  | Revert the revert through a reviewed merge request, if the change was legitimate                            |
 
 ## Evidence
 
@@ -449,9 +481,10 @@ Source-reviewed on 2026-11-01. Nothing was run. Scope: the Kubernetes, GitLab, G
 
 - Nothing was run. No command, API call or expected output shown was executed.
 - Google Cloud documentation was not reachable: whether access tokens already issued survive a service-account disable, re-enabling an account Google disabled, the guidance to disable before deleting, Cloud Audit Log names and which are on by default, Data Access log defaults (including the BigQuery exception), logging of impersonation and token creation, the `roles/logging.privateLogViewer` requirement, the `k8s_cluster` resource type and the `principalEmail` form for Kubernetes ServiceAccounts, and Workload Identity binding behaviour.
-- Terraform: the local copy has no documentation, so the `plan` flags (`-detailed-exitcode`, `-lock=false`, `-input=false`, `-chdir`) and exit codes were not checked.
+- Terraform: the local copy has no documentation, so the `plan` flags (`-detailed-exitcode`, `-lock=false`, `-input=false`, `-chdir`) and exit codes were not checked; the HashiCorp page was not read on 2026-11-24 either.
 - Kubernetes: that a ServiceAccount subject without a namespace in a RoleBinding means the binding's namespace (the RBAC page was not found to state it).
 - GitLab: that a revoked token returns 401, the exact behaviour of the 429 limit on other endpoints, and the CI/GitOps sync-suspend commands (`flux suspend`, `argocd app set`), which belong to other tools.
+- The `flux --context` global flag, the Argo CD Application field path `.spec.syncPolicy.automated` read with kubectl, `argocd app set --self-heal` and `--auto-prune`, the `argocd --server` global flag (check `argocd --help` for your version), and the Flux `.spec.suspend` behaviour: none was read on 2026-11-24. The fully qualified resource names `applications.argoproj.io` and `kustomizations.kustomize.toolkit.fluxcd.io` were not checked against the CRDs of a live cluster. The containment script itself was syntax-checked only.
 - Your gateway's kill switch, audit log and fields; GitLab edition-specific audit events.
 - Engineering guidance, not a documented claim: the stop, contain, preserve, measure, revert, recover order, severity starting points, roles, evidence handling, and the postmortem questions.
 
@@ -497,4 +530,3 @@ See the Rollback of this runbook's actions section and step 6: re-enable only af
 - [[gcp-iam-guardrails-for-agent-service-accounts]]: narrow service accounts and audit alerts.
 - [[kubernetes-rbac-for-ai-agents]]: narrow Roles for agent ServiceAccounts.
 - [[sandboxing-coding-agents-on-workstations-and-runners]]: limiting agents on laptops and runners.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

@@ -9,7 +9,7 @@ tags:
   - observability
   - audit
 created: 2026-10-21
-modified: 2026-11-01
+modified: 2026-11-25
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-01
@@ -23,7 +23,7 @@ Sooner or later someone asks for "an MCP server for Prometheus", or for pipeline
 > Specification revision checked: **2026-07-28**, against the specification repository on 2026-11-01 (see Evidence). MCP changes quickly between revisions (transports, authorization, schema dialect), so read the current revision before building, and record in your server's README which revision it targets. Examples are for read-mostly tools over Prometheus, a CI system and an artifact repository. No SDK is used or named: the code is plain Python standard library for the validation logic, and you wire it into whichever SDK you choose.
 
 > [!note] Not verified
-> No server was built or run for this note. Only the `validate` function of `promql_tool.py` was exercised locally against a handful of sample queries; the Prometheus call was not run. The claims about the MCP specification and Prometheus were checked against the documentation sources listed under Evidence. The GKE parts (Workload Identity, internal load balancers and Gateways, Secret Manager) depend on Google Cloud documentation that was not available for this review and are unverified. The identity model (caller identity versus service identity) is design guidance, not a quotation from the specification. Details are in the Not verified list under Evidence.
+> No server was built or run for this note. Only the `validate` function of `promql_tool.py` and the error mapping in `run` were exercised locally against a handful of sample queries; the Prometheus call was not run. The claims about the MCP specification and Prometheus were checked against the documentation sources listed under Evidence. The GKE parts (Workload Identity, internal load balancers and Gateways, Secret Manager) depend on Google Cloud documentation that was not available for this review and are unverified. The identity model (caller identity versus service identity) is design guidance, not a quotation from the specification. Details are in the Not verified list under Evidence.
 
 ## What to expose
 
@@ -68,8 +68,11 @@ The server-side half, independent of any SDK. It re-checks every limit the schem
 
 ```python title="promql_tool.py"
 """Validation and execution for the promql_query_range tool (standard library only)."""
+import http.client
 import json
+import logging
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
@@ -89,6 +92,8 @@ RANGES = re.compile(r"\[[^\]]*\]")
 NUMBERS = re.compile(r"(?<![a-zA-Z0-9_:])\d[0-9a-zA-Z_.]*")
 IDENT = re.compile(r"[a-zA-Z_:][a-zA-Z0-9_:]*")
 SELECTOR_START = re.compile(r"([a-zA-Z_:][a-zA-Z0-9_:]*)?\s*\{")  # the name (if any) before each {
+ERROR_TYPE = re.compile(r"[a-z_]{1,32}")
+log = logging.getLogger("promql_tool")
 
 
 def metric_names(query: str) -> set:
@@ -155,11 +160,29 @@ def run(args: dict) -> dict:
     body = urllib.parse.urlencode(params).encode()
     request = urllib.request.Request(f"{PROMETHEUS_URL}/api/v1/query_range", data=body, method="POST",
                                      headers={"Content-Type": "application/x-www-form-urlencoded"})
-    with urllib.request.urlopen(request, timeout=15) as response:
-        payload = json.load(response)
-    if payload.get("status") != "success":
-        raise ToolError(f"prometheus error: {payload.get('errorType', 'unknown')}")
-    series = payload["data"]["result"]
+    # Details go to the server log; the model gets a short fixed message, never the URL,
+    # the exception text or the upstream body (they hold internal addresses).
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            payload = json.load(response)
+    except urllib.error.HTTPError as exc:  # before URLError: HTTPError is a subclass of it
+        log.warning("prometheus returned HTTP %s", exc.code)
+        if exc.code in (400, 422):  # the documented codes for a bad or unexecutable query
+            try:
+                error_type = str(json.load(exc).get("errorType", ""))
+            except (ValueError, OSError, AttributeError):
+                error_type = ""
+            raise ToolError(f"query rejected: {error_type if ERROR_TYPE.fullmatch(error_type) else 'unknown'}") from None
+        raise ToolError("upstream unavailable") from None
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as exc:  # connection, timeout, invalid JSON, truncated or malformed HTTP
+        log.warning("prometheus call failed: %s", exc)
+        raise ToolError("upstream unavailable") from None
+    if not isinstance(payload, dict) or payload.get("status") != "success":
+        raise ToolError("upstream returned an error")
+    try:
+        series = payload["data"]["result"]
+    except (KeyError, TypeError):
+        raise ToolError("upstream returned an unexpected response") from None
     return {"series": series[:MAX_SERIES], "series_total": len(series),
             "truncated": len(series) > MAX_SERIES}
 ```
@@ -169,7 +192,7 @@ Design points:
 - **The Prometheus API does the heavy lifting safely only within its own limits.** `query_range` accepts `query`, `start`, `end`, `step` and an optional `timeout`, which defaults to and is capped by the server's `--query.timeout` (or by the `query_max_duration` option when the `query-cost` feature flag is enabled and that option is set); the server also has `--query.max-samples` and `--query.max-concurrency`. In the documentation checked, the defaults are `2m`, `50000000` and `20`; check the values for your version, and set the tool's limits well inside them so one agent cannot use up the query capacity on-call depends on. Point the tool at a query frontend or a replica rather than the primary if you have one ([[multi-tenant-prometheus-architecture]]).
 - **The allowlist is crude on purpose.** The metric-name check is a cheap filter, not a PromQL parser; it rejects anything it does not understand. If you need more, parse with a real PromQL parser in the server, and keep the allowlist anyway. High-cardinality metrics are a separate risk ([[prometheus-high-cardinality-triage]]).
 - **Bounded output, and say so.** Return `truncated: true` and the total count rather than silently cutting (`query_range` also takes an optional `limit` parameter for the maximum number of returned series, which you can pass in addition to your own cap; check that your Prometheus version supports it); a model that does not know data is missing draws confident wrong conclusions.
-- **Errors are data.** Return short, fixed error messages. Never return upstream stack traces, internal URLs or tokens in an error.
+- **Errors are data.** Return short, fixed error messages. `urlopen` raises `URLError` and `HTTPError` whose text includes the upstream address, so `run` catches them, logs the detail on the server and raises a fixed `ToolError`. `from None` keeps the original exception out of the chain in case your SDK serialises causes. For the documented 400 and 422 responses it passes on only Prometheus's `errorType`, and only if it is a short lowercase word. Never return upstream stack traces, internal URLs or tokens in an error.
 - **Same pattern for every tool.** For a CI tool: validate `project` against the caller's allowed projects, accept only a ref name pattern, return the failed job names and a bounded, redacted tail of the log. For an artifact tool: allowlisted repositories, a path pattern, metadata only (no download URLs with embedded credentials).
 
 ## Transports: stdio or remote HTTP
@@ -224,12 +247,13 @@ spec:
       labels: { app: mcp-platform-tools }
     spec:
       serviceAccountName: mcp-platform-tools
+      automountServiceAccountToken: false # the server calls Prometheus, not the Kubernetes API
       securityContext:
         runAsNonRoot: true
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: server
-          image: example.com/platform/mcp-platform-tools@sha256:0000000000000000000000000000000000000000000000000000000000000000 # change: your image, pinned by digest
+          image: example.com/platform/mcp-platform-tools@sha256:<digest> # change: your image, pinned by digest
           ports:
             - { name: http, containerPort: 8080 }
           env:
@@ -276,6 +300,7 @@ spec:
 - Expose it through an internal load balancer or an internal Gateway, never a public one; the options and their annotations are in [[edge-and-ingress-cloudflare-gclb-gateway-api]] (GKE-specific; not verified here, check the current Google Cloud docs).
 - The pod is written to meet the restricted Pod Security profile (non-root, `RuntimeDefault` seccomp, no privilege escalation, all capabilities dropped; `readOnlyRootFilesystem` is extra hardening, not required by the profile) ([[pod-security-admission]]); the `/healthz` path is your server's own, not part of MCP.
 - Upstream tokens come from Secret Manager through the pattern in [[secrets-architecture-gcp-and-gke]], each scoped read-only to what the tools need (Google Cloud-specific; not verified here, check the current docs).
+- The pod does not mount a Kubernetes API token: the server never calls the Kubernetes API, and a token in the pod would be one more credential for an injected request to reach. If you use Workload Identity for Google APIs, confirm in a test cluster that your setup works with automounting off before you roll it out (not verified here).
 - Egress is limited by NetworkPolicy here and by the cluster egress controls in [[kubernetes-network-policies]].
 
 ## Tool output is untrusted input to the model
@@ -338,7 +363,7 @@ Log a hash of arguments that can hold sensitive data (the query text, free-text 
 
 ## Evidence
 
-Reviewed on 2026-11-01 against local checkouts of the primary documentation. Nothing was run beyond the helper `validate` function.
+Reviewed on 2026-11-01 against local checkouts of the primary documentation. Nothing was run beyond the helper `validate` function and, on 2026-11-24, the error handling in `run` against a local test server.
 
 ### Sources checked
 
@@ -349,6 +374,7 @@ Reviewed on 2026-11-01 against local checkouts of the primary documentation. Not
 - [MCP key changes, revision 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/changelog) and [revision 2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26/changelog): structured tool output and OAuth resource server classification; Streamable HTTP replacing HTTP+SSE. Checked 2026-11-01, commit d0e246e.
 - [MCP tools, revision 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/server/tools): `inputSchema`, `outputSchema`, annotations must be considered untrusted unless from trusted servers. Checked 2026-11-01, commit d0e246e.
 - [Prometheus HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/): `query_range` parameters (`query`, `start`, `end`, `step`, `timeout`, `limit`), POST with form encoding, `status` and `errorType` fields, `timeout` capped by `--query.timeout`. Checked 2026-11-01, `prometheus` repository commit ef78ff6.
+- [Prometheus HTTP API, errors](https://prometheus.io/docs/prometheus/latest/querying/api/): invalid requests that reach the handlers return `400` (missing or incorrect parameters), `422` (expression cannot be executed) or `503` (timeout or abort) with a JSON body whose `errorType` and `error` fields are set when `status` is `error`. Checked 2026-11-24.
 - [Prometheus command-line flags](https://prometheus.io/docs/prometheus/latest/command-line/prometheus/): `--query.timeout` (2m), `--query.max-concurrency` (20), `--query.max-samples` (50000000). Checked 2026-11-01, commit ef78ff6.
 - [Kubernetes Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/): restricted profile requirements used by the manifest. Checked 2026-11-01, `website` repository commit 491f14e.
 - [Kubernetes Network Policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) and [Namespaces](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/): `policyTypes`, `namespaceSelector`, `kubernetes.io/metadata.name` label, egress restriction also blocks DNS. Checked 2026-11-01, commit 491f14e.
@@ -358,7 +384,8 @@ Reviewed on 2026-11-01 against local checkouts of the primary documentation. Not
 - Everything that depends on Google Cloud or GKE documentation: Workload Identity for the service identity, internal load balancers and Gateways, Secret Manager usage.
 - The Security best practices page (token passthrough, confused deputy, session hijacking detail) was not available locally; only the authorization security considerations that summarise it were checked.
 - The MCP and Prometheus values above describe the documentation at the commits named; check the current docs for your version, especially the `limit` parameter and flag defaults.
-- The `promql_tool.py` behaviour beyond `validate`, the manifest applied to a real cluster, the NetworkPolicy behaviour under a specific CNI, and the Rollback steps were not run.
+- That Workload Identity Federation for GKE works with `automountServiceAccountToken: false`, and that the GKE metadata server obtains a ServiceAccount token from the Kubernetes API server (the GKE page fetch on 2026-11-24 was not completed). The error mapping in `run` was exercised against a local test server on 2026-11-24, not against Prometheus; errors before the endpoint can return other non-2xx codes, which `run` maps to "upstream unavailable".
+- The `promql_tool.py` behaviour beyond `validate` and the error mapping, the manifest applied to a real cluster, the NetworkPolicy behaviour under a specific CNI, and the Rollback steps were not run.
 - Design guidance (caller versus service identity, per-tool flags, audit line fields, test list) is not a specification claim.
 
 ### Environment
@@ -399,4 +426,3 @@ Re-enable the tool flag, restore the previous image digest through Git, and issu
 - [[kubernetes-rbac-for-ai-agents]]: the same least-privilege idea inside the cluster.
 - [[llm-api-cost-control]]: the gateway and its audit line.
 - [[llm-observability-tracing-and-slos]]: tracing tool calls.
-- [the owner's AI skills catalogue](https://ai.szolotov.com): reusable agent skills and workflows.

@@ -8,7 +8,7 @@ tags:
   - delivery
   - reliability
 created: 2026-10-27
-modified: 2026-11-02
+modified: 2026-11-24
 draft: false
 evidence: source-reviewed
 reviewed: 2026-11-02
@@ -116,27 +116,36 @@ Allowed: bumping `apiVersion` where the schema is identical, or moving a field e
 
 Validate with kubeconform using the target version's schemas, not the current cluster's. Run it on rendered Helm output as well as raw manifests, and include CRD schemas for custom resources, since built-in schemas will not cover them.
 
+```bash title="ci/k8s-upgrade-validate.sh"
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+TARGET_KUBE_VERSION="${TARGET_KUBE_VERSION:?set TARGET_KUBE_VERSION}"
+TARGET_KUBE_VERSION="${TARGET_KUBE_VERSION#v}"
+mkdir -p rendered
+helm template app charts/app -f charts/app/values-prod.yaml --kube-version "$TARGET_KUBE_VERSION" > rendered/app.yaml
+# Add -schema-location entries for your CRD schemas; -strict and unknown kinds fail otherwise.
+kubeconform -strict -summary -kubernetes-version "$TARGET_KUBE_VERSION" rendered/app.yaml
+pluto detect-files -d rendered/ --target-versions "k8s=v${TARGET_KUBE_VERSION}" --ignore-deprecations
+```
+
 ```yaml title=".gitlab-ci.yml"
 k8s-upgrade-validate:
   stage: test
-  # Pin the tools image by digest; the image must provide bash for pipefail.
+  # Pin the tools image by digest; it must provide bash.
   image: registry.example.com/ci/k8s-tools@sha256:<digest>
   variables:
     TARGET_KUBE_VERSION: "$K8S_TARGET_VERSION"
   script:
-    - set -Eeuo pipefail
-    - export TARGET_KUBE_VERSION="${TARGET_KUBE_VERSION#v}"
-    - mkdir -p rendered
-    - helm template app charts/app -f charts/app/values-prod.yaml --kube-version "$TARGET_KUBE_VERSION" > rendered/app.yaml
-    # Add -schema-location entries for your CRD schemas; -strict and unknown kinds fail otherwise.
-    - kubeconform -strict -summary -kubernetes-version "$TARGET_KUBE_VERSION" rendered/app.yaml
-    - pluto detect-files -d rendered/ --target-versions "k8s=v${TARGET_KUBE_VERSION}" --ignore-deprecations
+    - bash ci/k8s-upgrade-validate.sh
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $K8S_TARGET_VERSION
       changes:
         - charts/**/*
         - manifests/**/*
 ```
+
+The shell options live in the script, not in `script:`. GitLab fails the job when a script command exits non-zero, but how options set in one `script:` line carry over to later lines and to the runner's own commands is not documented here, and the image's shell may not support `pipefail`. A script file with its own shebang behaves the same locally and in CI.
 
 Treat these as two separate gates. kubeconform catches schema errors, not semantic ones, and the scanner catches removed APIs, not malformed fields. Flag syntax above is illustrative; check each tool's current docs.
 
@@ -226,7 +235,7 @@ Source-reviewed on 2026-11-02. Nothing was run. The review covered the Kubernete
 - Pluto, kubent and kubeconform flags, output formats, exit codes and schema options; the kubent stale-annotation false positive (only the annotation itself was confirmed above).
 - GKE behaviour: deprecation insights, the auto-upgrade pause and resume, maintenance exclusions, and rollback options. Google Cloud documentation was not available.
 - The CNCF post and the kube-no-trouble issue listed in Sources were not read.
-- The GitLab CI snippet is illustrative and was not checked against GitLab documentation.
+- How the runner's generated script handles `set` options from `script:` lines, and that a non-zero exit from a `script` command fails the job (the GitLab script and runner shell pages were not read on 2026-11-24); the job and the script were not run.
 - General engineering guidance (detector-first workflow, task limits, staged rollout, rollback preparation, review checklist) is not stated by a source.
 - Nothing was run.
 
@@ -236,5 +245,3 @@ Source-reviewed on 2026-11-02. Nothing was run. The review covered the Kubernete
 - [GKE deprecations](https://docs.cloud.google.com/kubernetes-engine/docs/deprecations) - GKE-specific deprecation notes, deprecation insights and the auto-upgrade pause behaviour.
 - [CNCF: detecting and dealing with deprecated APIs](https://www.cncf.io/blog/2020/09/01/kubernetes-how-to-automatically-detect-and-deal-with-deprecated-apis-2/) - why to combine static and live detection (2020, tool advice is dated).
 - [kube-no-trouble issue 276](https://github.com/doitintl/kube-no-trouble/issues/276) - the last-applied-configuration false positive.
-
-The owner's AI skills catalogue is at [ai.szolotov.com](https://ai.szolotov.com).
