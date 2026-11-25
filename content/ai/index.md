@@ -5,7 +5,7 @@ tags:
   - ai
   - meta
 created: 2026-10-17
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 
@@ -234,6 +234,8 @@ Classify risk, review providers and contracts, keep an inventory, and control da
 - [[model-region-selection-and-data-residency|Selecting model regions and controlling data residency]]: choose inference locations using a documented data-flow, service-capability, latency, resilience, and residency review.
 - [[llm-change-management-and-release-gates|Change management and release gates for LLM systems]]: control changes to models, prompts, tools, data, and providers with staged evaluation and observable rollback criteria.
 - [[decommissioning-ai-model-integrations|Decommissioning AI model integrations]]: retire an LLM integration with owner approval, dependency discovery, data-lifecycle review, and verified service closure.
+- [[remote-code-at-model-load-time|Remote code at model load time]]: how a model artifact runs code when it is loaded (trust_remote_code, auto_map, pickle weights, custom ops) and how to load models with no code path.
+- [[backup-and-dr-for-ai-state|Backup and disaster recovery for AI state]]: what AI systems hold that must survive a disaster (indexes, registry, prompts, gateway policy, evals, memory) and whether to back each up or rebuild it.
 
 The owner's agent skills and workflows live in [the owner's AI skills catalogue](https://ai.szolotov.com).
 

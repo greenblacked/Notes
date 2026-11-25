@@ -22,6 +22,7 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[gitlab-runners-on-gke|GitLab runners on GKE with the Kubernetes executor]]: run GitLab CI jobs as short-lived Pods on GKE with isolated namespaces, spot and on-demand node pools, a Cloud Storage cache and no privileged containers.
 - [[jenkins-controller-and-agent-hardening|Jenkins controller and agent hardening]]: harden a Jenkins controller and its Kubernetes pod agents with zero executors, configuration as code, scoped credentials, reviewed script approvals and auditable production approvals.
 - [[secret-scanning-pre-commit-and-ci|Secret scanning in pre-commit hooks and CI]]: layer gitleaks in a pre-commit hook, a GitLab merge request job and a scheduled history scan, with baselines, reasoned allowlists and a clear hand-off to rotation.
+- [[dast-and-application-security-testing-in-ci|DAST and application security testing in CI]]: run ZAP passive scans on every merge request's review app and active scans on a schedule against staging, gate on agreed rules and handle false positives in Git.
 - [[release-versioning-and-changelog-automation|Release versioning and changelog automation]]: derive versions and changelogs from Conventional Commits, and choose between a release merge request model and release on push, with configuration, linting and token handling.
 - [[helm-chart-ci-quality-gates|Helm chart CI quality gates]]: layered CI checks for Helm charts, from lint and a values matrix to unit tests, schema validation, kubeconform and chart-testing on changed charts only.
 - [[test-sharding-flaky-tests|Test sharding and flaky-test management in CI]]: split test suites by timing history on GitLab CI and Jenkins, retry only infrastructure failures, and run a quarantine process with owners and deadlines.
@@ -68,6 +69,7 @@ A pattern is a repeatable solution to a recurring problem, with enough detail to
 - [[terraform-gcp-iam-member-binding-policy|GCP IAM in Terraform without lockouts: member, binding and policy resources]]: when to use the google_*_iam_member, _binding and _policy resources, how to stop them fighting, and how to keep the Terraform identity from locking itself out.
 - [[terraform-importing-existing-gcp-resources|Adopting existing GCP resources with Terraform import blocks]]: bring existing Cloud resources under Terraform management with a reviewed import-only plan and a clean follow-up plan.
 - [[secrets-out-of-terraform-state|Keeping secrets out of Terraform state]]: design Terraform on GCP so passwords and keys never land in state or plan files, protect the state bucket anyway, and clean up secrets that are already there.
+- [[terraform-provider-and-module-supply-chain|Terraform provider and module supply chain]]: verify what Terraform pins - lock-file hashes from the origin registry, a provider mirror that cannot change them, read-only locks in CI and module sources pinned to commits.
 
 ## Data
 

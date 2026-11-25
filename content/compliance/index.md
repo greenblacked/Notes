@@ -5,7 +5,7 @@ tags:
   - compliance
   - meta
 created: 2026-10-17
-modified: 2026-10-21
+modified: 2026-11-24
 draft: false
 ---
 
@@ -63,6 +63,7 @@ These notes cover how a DevOps platform produces evidence for the controls it is
 - [[iso-27001-annex-a-for-platform-teams|ISO 27001 Annex A controls for platform teams]]: which ISO/IEC 27001:2022 Annex A controls a platform team owns, who owns each, and the Git, CI, GKE and Terraform evidence behind them.
 - [[nis2-basics-for-engineering-teams|NIS2 basics for engineering teams]]: what the NIS2 Directive asks of engineering teams: Article 21 risk measures and Article 23 reporting, mapped to evidence a platform already has.
 - [[dora-eu-operational-resilience-for-engineers|DORA (EU regulation) for engineering teams: ICT operational resilience]]: what the EU DORA regulation asks of ICT engineering at financial entities and their ICT providers, kept separate from DORA delivery metrics.
+- [[ai-services-control-mapping|Control mapping for AI services - EU AI Act, SOC 2 and ISO 27001]]: map model gateways and agents to platform controls with stable IDs, the SOC 2 and ISO 27001 areas they evidence, and the EU AI Act dates and duties that apply to them.
 
 ## Related elsewhere
 
