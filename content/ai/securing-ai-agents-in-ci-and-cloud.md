@@ -80,7 +80,7 @@ The job runs only for merge request pipelines whose source project is the target
 ```yaml title=".gitlab-ci.yml"
 ai-agent-review:
   stage: test
-  image: registry.example.com/ci/agent-runner:1.4.2 # change: your own image, pinned by tag or digest
+  image: registry.example.com/ci/agent-runner@sha256:<digest> # change: your own image, pinned by digest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID'
   timeout: 10 minutes
@@ -102,7 +102,7 @@ ai-agent-review:
 
 ai-agent-post:
   stage: .post
-  image: registry.example.com/ci/poster:1.0.0 # change: a small image with curl and jq, no agent, no repository code
+  image: registry.example.com/ci/poster@sha256:<digest> # change: a small image with curl and jq, no agent, no repository code
   needs:
     - job: ai-agent-review
       artifacts: true
@@ -119,10 +119,13 @@ ai-agent-post:
     # POSTER_TOKEN: masked project access token with the api scope and the Reporter role
     # (a bot that can comment but not push or merge), scoped to the ai-comment-poster
     # environment so the agent job does not receive it.
+    # The token goes to curl on stdin as a header file (printf is a shell builtin), so it never
+    # appears in the process arguments; the request body therefore comes from a file.
     - |
-      jq -Rs '{body: .}' review.md | curl --fail --silent --show-error \
-        --header "PRIVATE-TOKEN: $POSTER_TOKEN" --header "Content-Type: application/json" \
-        --data @- "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
+      jq -Rs '{body: .}' review.md > note.json
+      printf 'PRIVATE-TOKEN: %s\n' "$POSTER_TOKEN" | curl --fail --silent --show-error \
+        --header @- --header "Content-Type: application/json" \
+        --data @note.json "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
 ```
 
 Pitfalls to check against your GitLab version: protected variables are only exposed to pipelines on protected branches and tags. The current CI/CD variables page says merge request pipelines can optionally access protected variables. The Merge request pipelines page documents a project setting introduced in GitLab 18.1, "Control access to protected variables and runners": merge request pipelines can reach protected variables and runners only when the source and target branches are both protected, the user triggering the pipeline has push or merge access to the target branch, and both branches are in the same project; pipelines from forks never can. Maintainers and Owners change it under Settings > CI/CD > Variables > "Access protected resources in merge request pipelines" > "Allow merge request pipelines to access protected variables and runners". The page states no default, so check the checkbox in your project. Treat an agent job on a merge request between two protected branches as able to receive protected variables unless that checkbox is cleared: clear it in a project that runs agent jobs, or keep the agent jobs off those merge requests. Do not rely on one behaviour; keep deploy secrets out of any project where an agent job runs, and check the page for your version. Masking only hides a value in job logs and is not a guarantee against a malicious job reading it; hidden variables cannot be revealed in the UI after saving but can still be used by jobs. Neither replaces keeping the secret away from the job. The agent token is an unprotected, masked variable that any pipeline in the project can read, which is acceptable only because it is read-only. Keep the poster token out of the agent job: scope `POSTER_TOKEN` to the `ai-comment-poster` environment only, so the agent job does not receive it. Environment scoping is not a hard boundary, because a branch author in the same project can still change `.gitlab-ci.yml`, so the token must stay limited to commenting (Reporter role, `api` scope). `CI_MERGE_REQUEST_SOURCE_PROJECT_ID` is a documented predefined variable for merge request pipelines; still test the rule with a real fork on your instance. The job token (`CI_JOB_TOKEN`) is a separate credential: by default a project's job token allowlist contains only the project itself, and adding a project or group to the allowlist lets that project's jobs reach yours, so keep the allowlist short and do not disable it.
