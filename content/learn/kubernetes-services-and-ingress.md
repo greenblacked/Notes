@@ -530,7 +530,8 @@ Do these in the kind cluster `lab`. Check `kubectl config current-context` print
    kubectl delete -f web.yaml --ignore-not-found
    kubectl delete pod client --ignore-not-found
    kubectl delete namespace other --ignore-not-found
-   kubectl get gateway/web-gateway httproute/web 2>/dev/null || echo "no gateway objects left"
+   left="$(kubectl get gateway/web-gateway httproute/web --ignore-not-found 2>/dev/null)"
+   [ -n "$left" ] && echo "$left" || echo "no gateway objects left"
    ```
 
    Expected: the Gateway, Deployment, Service and Pods are removed, and the `other` namespace and everything in it with it. If you installed a Gateway API controller in exercise 8, uninstall it with its own documented steps. Remove the CRDs only on this lab cluster; on a shared cluster other teams' routes depend on them. If you skipped exercise 8, the first command can fail because the Gateway CRDs are not installed; skip it.
