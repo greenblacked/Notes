@@ -43,7 +43,7 @@ Jenkins is a self-hosted automation server whose behaviour is assembled from plu
 
 Jenkins Declarative Pipeline is Groovy with a fixed structure; scripted pipelines allow arbitrary code. Reuse is through Shared Libraries (see [[jenkins-shared-libraries]]). The power is real, and so is the risk: Groovy in a Jenkinsfile can do anything, runs in a sandbox with approval friction, and is hard to lint and test.
 
-GitLab pipelines are YAML. Reuse is through `include`, `extends`, hidden jobs and CI/CD components. The model is less expressive but much easier to review and validate (`glab ci lint`, the CI Lint API). Conventions for structuring this are in [[gitlab-ci-pipeline-structure]]. The build jobs below use Docker-in-Docker, which needs a privileged runner, so run them only on runners reserved for trusted code. As written, merge request pipelines build the image but do not push it; the push job runs only on the protected default branch (see the limit below the example). GitLab's Docker-in-Docker page says to always pin a specific image version; a digest pins it exactly.
+GitLab pipelines are YAML. Reuse is through `include`, `extends`, hidden jobs and CI/CD components. The model is less expressive but much easier to review and validate (`glab ci lint`, the CI Lint API). Conventions for structuring this are in [[gitlab-ci-pipeline-structure]]. The push job below uses Docker-in-Docker, which needs a privileged runner, and a privileged job is root on the runner host or node, so it runs only on a runner reserved for trusted code: a protected runner, selected by `tags:`, that picks up jobs from protected branches and tags only (check the runner documentation for your GitLab version). Merge request branches carry unreviewed Dockerfiles and CI files, so they must not reach that runner. Build merge request images with an unprivileged builder instead (see [[kaniko-vs-buildkit-vs-cloud-build]]), or, if they must use Docker-in-Docker, give them a runner dedicated to the project with one job per VM or node, its own node pool and no credentials beyond the job's own. The push job runs only on the protected default branch (see the limit below the example). GitLab's Docker-in-Docker page says to always pin a specific image version; a digest pins it exactly.
 
 ```yaml title=".gitlab-ci.yml"
 stages: [build, test, deploy]
@@ -61,16 +61,10 @@ stages: [build, test, deploy]
     DOCKER_TLS_VERIFY: "1"
     DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
 
-# Merge request pipelines build but do not push.
-build-mr:
-  extends: .docker-build
-  script:
-    - docker build -t "local/build:$CI_COMMIT_SHORT_SHA" .
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-
+# Merge request pipelines do not use this job: they build with an unprivileged builder.
 build-push:
   extends: .docker-build
+  tags: [dind-protected]   # example tag: use the tag of your protected, trusted-code runner
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
@@ -80,11 +74,11 @@ build-push:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"
 ```
 
-Replace each `<version>` and `<digest>` with the image version you tested and its digest; they are not literals.
+Replace each `<version>` and `<digest>` with the image version you tested and its digest; they are not literals. Replace the runner tag with the tag of your own protected runner.
 
 The TLS settings only work if the job and the Docker-in-Docker service share `/certs/client`: with the Kubernetes executor the runner must mount an emptyDir at `/certs/client`, and with the Docker executor `/certs/client` must be listed in the runner's volumes, as the Docker-in-Docker page describes. Without it the job fails to connect rather than falling back to an insecure connection. This was not run here.
 
-The merge request job does not push, but a merge request pipeline uses the `.gitlab-ci.yml` of the merge request branch, so its author could add a push job, and `CI_REGISTRY_PASSWORD` is available to every job. Enforcing the rule needs a registry-side control (container registry protection rules or protected container tags; check what your GitLab version and tier offer), not this file alone.
+The job definition is not the control; the runner assignment and the registry-side rule are. A merge request pipeline uses the `.gitlab-ci.yml` of the merge request branch, so its author could add a push job, and `CI_REGISTRY_PASSWORD` is available to every job. Enforcing the rule needs a registry-side control (container registry protection rules or protected container tags; check what your GitLab version and tier offer), not this file alone.
 
 ## Plugins versus built-ins
 

@@ -19,7 +19,7 @@ draft: false
 > As of 2026-10-21, per each project's repository: the **Flyway** engine is open source under Apache-2.0, and Redgate's Flyway Community and Enterprise editions are separate products, "not part of the Flyway open source project". **Liquibase** Community is under the Functional Source License (FSL-1.1-ALv2), with a commercial edition called Liquibase Secure; it was under Apache-2.0 before, so the licence depends on the version. **Atlas**'s repository is Apache-2.0, but the terms of the distributed binary and which features need a login or a paid plan were not verified. Licence terms are a procurement question: record the decision in [[devops-vendor-and-licence-management]].
 
 > [!info] Not checked against current releases
-> Not checked against the tools' own documentation sites; verify there. Facts were taken from their repositories, the PostgreSQL documentation source and the Cloud SQL Auth Proxy README on 2026-10-21. Not verified: Flyway command names and settings (`info`, `validate`, `migrate`, `baseline`, `repair`, `clean`, `cleanDisabled`, `validateOnMigrate`, the `flyway_schema_history` table) and which features need a paid edition; Liquibase's `update-sql`, `status`, `release-locks`, its `DATABASECHANGELOG` and `DATABASECHANGELOGLOCK` tables and which commands are paid; Atlas's `atlas.sum` file, any dry-run flag, and which analyzers need a login; GitLab CI keyword details; and Cloud SQL IAM database user setup. Run each tool's `--help` and read its docs before relying on a flag. Checked on 2026-11-24 against the official pages: each tool's non-transactional setting, GitLab protected environments and deployment approvals (Premium and Ultimate), and that Cloud SQL point-in-time recovery requires automated backups. Not verified: that `gcloud auth login --cred-file` accepts the workload identity federation config the way the job uses it (the gcloud reference page could not be fetched in this pass; read it and run the step once by hand), the exact output of `gcloud sql instances describe --format="yaml(settings.backupConfiguration)"` that the pre-check greps (run it once by hand). Also checked on 2026-11-24: Flyway's `flyway.postgresql.transactional.lock` page (default `true`, set it to `false` for `CREATE INDEX CONCURRENTLY`, the CLI, env and config forms above). The script configuration page says settings are simple key-value pairs, so `executeInTransaction=false` is the form used here. Not verified: flyway/flyway issue 3682 reports an indefinite hang with `CREATE INDEX CONCURRENTLY` and a reporter who still hung with only `executeInTransaction=false`, and it was not checked which Flyway versions honour the lock setting. Run V42 once against a non-production database with the exact Flyway version in `MIGRATE_IMAGE` before production.
+> Not checked against the tools' own documentation sites; verify there. Facts were taken from their repositories, the PostgreSQL documentation source and the Cloud SQL Auth Proxy README on 2026-10-21. Not verified: Flyway command names and settings (`info`, `validate`, `migrate`, `baseline`, `repair`, `clean`, `cleanDisabled`, `validateOnMigrate`, the `flyway_schema_history` table) and which features need a paid edition; Liquibase's `update-sql`, `status`, `release-locks`, its `DATABASECHANGELOG` and `DATABASECHANGELOGLOCK` tables and which commands are paid; Atlas's `atlas.sum` file, any dry-run flag, and which analyzers need a login; GitLab CI keyword details; and Cloud SQL IAM database user setup. Run each tool's `--help` and read its docs before relying on a flag. Checked on 2026-11-24 against the official pages: each tool's non-transactional setting, GitLab protected environments and deployment approvals (Premium and Ultimate), and that Cloud SQL point-in-time recovery requires automated backups. Not verified: that `gcloud auth login --cred-file` accepts the workload identity federation config the way the job uses it (the gcloud reference page was not read; read it and run the step once by hand), and that `gcloud sql instances describe --format='value(...)'` prints `True` for the two backup fields the pre-check compares (run it once by hand; anything else fails the job closed). Also checked on 2026-11-24: Flyway's `flyway.postgresql.transactional.lock` page (default `true`, set it to `false` for `CREATE INDEX CONCURRENTLY`, the CLI, env and config forms above). The script configuration page says settings are simple key-value pairs, so `executeInTransaction=false` is the form used here. Not verified: flyway/flyway issue 3682 reports an indefinite hang with `CREATE INDEX CONCURRENTLY` and a reporter who still hung with only `executeInTransaction=false`, and it was not checked which Flyway versions honour the lock setting. Checked on 2026-11-25 against GitLab's ID token authentication page: the claims `ref_type`, `ref_protected`, `environment` and `environment_protected` exist, and the last two are present only when the job declares an environment. Not verified: the Google workload identity federation attribute mapping and condition syntax, and the `principalSet` form with `attribute.environment`, used in the identity-binding paragraph (check Google's workload identity federation pages); that `psql` is in `MIGRATE_IMAGE`; and that `gcloud` honours `CLOUDSDK_CONFIG` as the job uses it. Run V42 once against a non-production database with the exact Flyway version in `MIGRATE_IMAGE` before production.
 
 ## Criteria
 
@@ -269,6 +269,9 @@ migrate:production:
   script:
     - set -eo pipefail
     - CRED_DIR="$(mktemp -d)"
+    - trap 'rm -rf "${CRED_DIR}"' EXIT
+    # Keep gcloud's login state inside the job's temporary directory, not in the home directory.
+    - export CLOUDSDK_CONFIG="${CRED_DIR}/gcloud"
     - echo "${GCP_ID_TOKEN}" > "${CRED_DIR}/id_token"
     - gcloud iam workload-identity-pools create-cred-config
       projects/123456789012/locations/global/workloadIdentityPools/ci-prod/providers/gitlab
@@ -280,13 +283,14 @@ migrate:production:
     - gcloud auth login --cred-file="${CRED_DIR}/wif.json" --quiet
     # Pre-check: refuse to migrate unless automated backups and point-in-time recovery are on.
     - |
-      gcloud sql instances describe "${CLOUDSQL_INSTANCE}" --project="${CLOUDSQL_PROJECT}" \
-        --format="yaml(settings.backupConfiguration)" > "${CRED_DIR}/backup.yaml"
-      cat "${CRED_DIR}/backup.yaml"
-      grep -Eq '^ +enabled: true$' "${CRED_DIR}/backup.yaml" ||
-        { echo "ERROR: automated backups are off for ${CLOUDSQL_INSTANCE}"; exit 1; }
-      grep -Eq '^ +pointInTimeRecoveryEnabled: true$' "${CRED_DIR}/backup.yaml" ||
-        { echo "ERROR: point-in-time recovery is off for ${CLOUDSQL_INSTANCE}"; exit 1; }
+      BACKUPS="$(gcloud sql instances describe "${CLOUDSQL_INSTANCE}" --project="${CLOUDSQL_PROJECT}" \
+        --format='value(settings.backupConfiguration.enabled)')"
+      PITR="$(gcloud sql instances describe "${CLOUDSQL_INSTANCE}" --project="${CLOUDSQL_PROJECT}" \
+        --format='value(settings.backupConfiguration.pointInTimeRecoveryEnabled)')"
+      echo "automated backups: ${BACKUPS}, point-in-time recovery: ${PITR}"
+      # Each field is read by its full path; an empty or changed value fails the job.
+      [ "${BACKUPS}" = "True" ] || { echo "ERROR: automated backups are not confirmed on for ${CLOUDSQL_INSTANCE}"; exit 1; }
+      [ "${PITR}" = "True" ] || { echo "ERROR: point-in-time recovery is not confirmed on for ${CLOUDSQL_INSTANCE}"; exit 1; }
     # Start the proxy as the migrator identity, private IP, fixed port, with the admin endpoint.
     - cloud-sql-proxy --auto-iam-authn --private-ip --port 5432 --quitquitquit
       "${INSTANCE_CONNECTION_NAME}" > "${CRED_DIR}/proxy.log" 2>&1 &
@@ -296,9 +300,11 @@ migrate:production:
     - export FLYWAY_ARGS="-url=jdbc:postgresql://127.0.0.1:5432/${DB_NAME} -user=${DB_IAM_USER} -locations=filesystem:${MIGRATIONS_DIR}"
     - flyway ${FLYWAY_ARGS} info
     - flyway ${FLYWAY_ARGS} validate
-    # Record the restore point: the last moment before this migration writes anything.
+    # Record the restore point from the database clock, not the runner's: the last moment before this migration writes anything.
     - |
-      echo "restore point (UTC) for ${CLOUDSQL_INSTANCE}, ${CI_COMMIT_TAG}: $(date -u +%Y-%m-%dT%H:%M:%SZ)" |
+      DB_NOW="$(psql "host=127.0.0.1 port=5432 dbname=${DB_NAME} user=${DB_IAM_USER}" -Atc "SELECT date_trunc('second', now() AT TIME ZONE 'UTC')")"
+      : "${DB_NOW:?could not read the database time}"
+      echo "restore point (UTC, database clock) for ${CLOUDSQL_INSTANCE}, ${CI_COMMIT_TAG}: ${DB_NOW}" |
         tee restore-point.txt
     - flyway ${FLYWAY_ARGS} migrate
     - flyway ${FLYWAY_ARGS} info
@@ -307,12 +313,16 @@ migrate:production:
 
 `123456789012`, `ci-prod`, `orders-prod` and the account names are examples; use the pool, provider and service account from your WIF setup. The `deploy` stage that bumps the image digest runs after this job, so the new code only arrives once the expand step has landed. Keep the migrator identity separate from the application's runtime identity: only it holds DDL rights.
 
-The tag alone never migrates production. `when: manual` makes a person start the job, and `allow_failure: false` keeps the deploy stage waiting. That is a gate only if the right people are the only ones who can start it.
+The tag alone never migrates production. `when: manual` makes a person start the job, and `allow_failure: false` keeps the deploy stage waiting. That is a gate only if the right people are the only ones who can start it, and only if the identity binding says so: the job definition is not the control; the identity binding is. Any job in the project can request an ID token with the same `aud`, so which pipelines can impersonate `orders-migrator` is decided by the workload identity federation provider and the IAM binding, not by `when: manual` or `environment:` in this file. With a provider condition on `project_path` and `ref_protected` alone, every job on every protected ref gets the migrator identity, and a person who can create `v*` tags can tag a commit whose `.gitlab-ci.yml` has neither. Bind it to the environment:
+
+- Map `assertion.ref_type`, `assertion.ref_protected`, `assertion.environment` and `assertion.environment_protected` in the provider, and add `assertion.ref_protected == 'true' && assertion.ref_type == 'tag' && assertion.environment_protected == 'true'` to its attribute condition.
+- Grant `roles/iam.workloadIdentityUser` on `orders-migrator` only to the `principalSet` for `attribute.environment/production` of the `ci-prod` pool (the form is `principalSet://iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/ci-prod/attribute.environment/production`, with the example project number). A job then gets the identity only if it declares `environment: production`, and on Premium or Ultimate declaring it is what triggers the approval.
+- On the Free tier there are no protected environments or approval rules, so drop `environment_protected` from the condition: the people allowed to create `v*` tags are the whole gate.
 
 - **Premium or Ultimate:** protect the `production` environment, list the database owners under Allowed to deploy, and add a deployment approval rule. GitLab then blocks every job that deploys to the environment until it is approved.
 - **Free:** restrict who may create `v*` tags with protected tags.
 
-The pre-check needs only `cloudsql.instances.get`, which the Cloud SQL Client role holds according to the proxy README above. It fails the job when automated backups or point-in-time recovery are off; PITR requires automated backups anyway. `restore-point.txt` records the time just before `migrate`. Copy it into the change record: it is the target for point-in-time recovery in the Rollback section below. An on-demand backup needs more rights than the migrator should have; if you want one, take it in a separate job with its own identity.
+The pre-check needs only `cloudsql.instances.get`, which the Cloud SQL Client role holds according to the proxy README above. It fails the job when automated backups or point-in-time recovery are off or cannot be read; PITR requires automated backups anyway. `restore-point.txt` records the database's own time just before `migrate`. Copy it into the change record: it is the target for point-in-time recovery in the Rollback section below; restore to a time shortly before it, not exactly at it. The job expects an ephemeral, per-job container: the `trap` removes the temporary directory and gcloud's login state with it, but a shared or reused filesystem still deserves a check. An on-demand backup needs more rights than the migrator should have; if you want one, take it in a separate job with its own identity.
 
 ## Validation
 
@@ -388,6 +398,7 @@ Every production migration is a production change: apply [[production-change-che
 - [Cloud SQL Auth Proxy repository](https://github.com/GoogleCloudPlatform/cloud-sql-proxy) (`--auto-iam-authn`, `--private-ip`, `--quitquitquit`, user naming, read 2026-10-21)
 - [PostgreSQL: CREATE INDEX](https://www.postgresql.org/docs/current/sql-createindex.html)
 - [PostgreSQL: client connection defaults](https://www.postgresql.org/docs/current/runtime-config-client.html) (`lock_timeout`, `statement_timeout`)
+- [GitLab: ID token authentication](https://docs.gitlab.com/ci/secrets/id_token_authentication/): ID token claims, checked 2026-11-25.
 - [Flyway: script configuration](https://documentation.red-gate.com/fd/reference/script-configuration) and [executeInTransaction](https://documentation.red-gate.com/fd/execute-in-transaction-224919715.html): per-file `.conf`, default true, checked 2026-11-24.
 - [Flyway: PostgreSQL transactional lock](https://documentation.red-gate.com/fd/reference/configuration/flyway-namespace/flyway-postgresql-namespace/flyway-postgresql-transactional-lock-setting): default `true`, set `false` for `CREATE INDEX CONCURRENTLY`, checked 2026-11-24.
 - [Liquibase: SQL format](https://docs.liquibase.com/concepts/sql-format.html): `runInTransaction:false` on the changeset line and the partial-failure warning, checked 2026-11-24.
