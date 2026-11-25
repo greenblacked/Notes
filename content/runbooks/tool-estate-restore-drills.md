@@ -19,7 +19,7 @@ draft: false
 [[0051-backups-proven-by-quarterly-restore-drills]] says a backup counts only after a timed restore. Its component list covers GKE, Cloud SQL, Cloud Storage, Terraform state and keys. The CI tools are missing, and they are what you need first after a disaster. This runbook drills each of them into an isolated copy and records the measured RPO and RTO. Targets come from [[disaster-recovery-tiers-rpo-rto]]; the backup design is in [[backup-architecture-gke-cloud-sql-gcs]].
 
 > [!info] Scope and verification
-> None of the commands were run for this note, and none were checked against vendor documentation on 2026-11-24. Check each tool's backup and restore page for your version before the first drill. The procedure (isolate, restore, verify content, time it, record it) is the part this note fixes.
+> None of the commands were run for this note. Only the Artifactory `master.key` and restore-order claim was checked against vendor documentation (2026-11-25, see Sources); nothing else was. Check each tool's backup and restore page for your version before the first drill. The procedure (isolate, restore, verify content, time it, record it) is the part this note fixes.
 
 > [!danger] A restored CI tool is a live copy of production
 > A restored Jenkins still has its cloud configuration, credentials and schedules, and can start builds that deploy to production. A restored Artifactory can run garbage collection against storage it is pointed at. A restored SonarQube can post to merge requests. Restore only into the isolated namespace below, where egress is limited to the scratch database and scratch bucket, and never point a drill copy at production storage or databases.
@@ -41,6 +41,10 @@ This runbook is not for a real recovery. Use the tool runbooks, and [[terraform-
 - A scratch project or bucket for copied data, with access limited like production. Restored data may contain personal data; delete it after the drill ([[pci-dss-and-gdpr-for-devops-logs-and-data]]).
 - Image digests of the production versions, because a drill restores onto the same version.
 - A budget owner. Snapshots, disks and clones cost money.
+- The cluster enforces NetworkPolicy. A GKE cluster without Dataplane V2 or network policy enforcement accepts the objects below and enforces none of them. Check the current GKE docs for the setting your cluster needs, and pass the isolation test below before any restore. If the test connects anywhere, the drill does not start.
+- Access to the drill is limited to the drill runner for its duration, at the level of production tool administration: RBAC on `restore-drill` (`exec`, `port-forward`, reading Secrets) and IAM on the drill disk and snapshot. The restored copies hold production credentials. Remove this access in Rollback. Do not use the Jenkins script console during a drill: it decrypts every stored credential.
+- The production filestore bucket accepts only the production workload identity: no service-account keys and no HMAC keys exist for it. If you cannot show that, put the scratch project in a VPC Service Controls perimeter that excludes production.
+- Artifactory only: `master.key` and the other configuration files from the Artifactory `etc` folder are backed up securely, apart from the database backup and with access limited like production secrets. Without the original `master.key` the restored database secrets cannot be decrypted. JFrog's recovery article lists the `etc` folder, including `master.key`, as a backup item (read 2026-11-25).
 
 ```yaml title="restore-drill-isolation.yaml"
 apiVersion: v1
@@ -145,11 +149,67 @@ spec:
         - { protocol: TCP, port: METADATA_PORT } # change: the port from the same docs
 ```
 
+Isolation test. Run it after applying the manifest and before any restore. It starts a throwaway pod with no drill labels, so only `deny-all` and `allow-dns` apply to it, and checks that the production GitLab host, the Kubernetes API address and a public address are unreachable while DNS still resolves.
+
+```bash title="isolation-test.sh"
+#!/usr/bin/env bash
+set -u
+: "${TEST_IMAGE:?set a test image pinned by digest that has curl and getent}"
+: "${PROD_GITLAB_HOST:?set the production GitLab host name}"
+: "${K8S_API_ADDR:?set the Kubernetes API address, host or IP}"
+: "${PUBLIC_HOST:?set a public host name that you control}"
+
+kubectl apply -n restore-drill -f - <<POD
+apiVersion: v1
+kind: Pod
+metadata:
+  name: isolation-test
+spec:
+  serviceAccountName: drill
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile: { type: RuntimeDefault }
+  containers:
+    - name: test
+      image: ${TEST_IMAGE}
+      command: ["sleep", "300"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: [ALL] }
+POD
+kubectl wait -n restore-drill --for=condition=Ready pod/isolation-test --timeout=120s || exit 1
+
+FAILED=0
+kubectl exec -n restore-drill isolation-test -- getent hosts "$PROD_GITLAB_HOST" > /dev/null \
+  || { echo "DNS does not resolve: allow-dns is broken"; FAILED=1; }
+for TARGET in "$PROD_GITLAB_HOST" "$K8S_API_ADDR" "$PUBLIC_HOST"; do
+  kubectl exec -n restore-drill isolation-test -- curl --silent --output /dev/null --max-time 5 "https://${TARGET}"
+  RC=$?
+  # 28 = timed out, 7 = refused. Any other result (including 0) means the target may be reachable.
+  if [ "$RC" -eq 28 ] || [ "$RC" -eq 7 ]; then
+    echo "blocked   $TARGET (curl exit $RC)"
+  else
+    echo "REACHABLE $TARGET (curl exit $RC)"; FAILED=1
+  fi
+done
+kubectl delete pod -n restore-drill isolation-test --wait=false
+if [ "$FAILED" -ne 0 ]; then
+  echo "Isolation test failed: do not start the drill."
+  exit 1
+fi
+```
+
+Save the output in the drill record.
+
 - The Artifactory pod gets its Workload Identity token from the GKE metadata server on the node, so `allow-metadata-server` is needed next to `allow-scratch-gcs`. Without it the pod cannot authenticate to the scratch bucket. Take the address and port from the GKE Workload Identity docs, not from this note ([[kubernetes-network-policies]], [[gke-workload-identity]]).
 - Responders reach the drill pods with `kubectl port-forward`, which does not go through the pod network.
 - Jenkins gets no allow rule. Its pods carry neither `drill-db-client` nor `drill-gcs-client`, so they keep deny-all plus DNS.
 - The scratch DB password goes into a Kubernetes Secret in `restore-drill`, created from a file, never from argv. Delete it with the namespace.
-- The Google endpoint above reaches all of that API, but the drill GSA is authorised only on the scratch bucket, so that is the effective limit. Check that the VIP and DNS setup match your network.
+- The network rule does not select a bucket: the Google endpoint above serves every bucket and every Google API. The limit is that no credential the pod can use is valid for production storage. That holds only if the drill GSA is the only Google credential in play, and a restored Artifactory brings its own: remote-repository and replication credentials in the database, and any key file or HMAC key in the storage configuration. Hence the production filestore precondition above and the storage check in step 2.5. Check that the VIP and DNS setup match your network.
+- For Jenkins add a second control that does not depend on the network: put the controller in quiet-down before its first start, so nothing is scheduled even if a rule is wrong. How to do that on the restored disk (for example an init script in `init.groovy.d`) is not verified; check the Jenkins docs.
 - If the restored tool needs the identity provider to log in, use its local break-glass admin instead of opening egress.
 - PSA `restricted` may reject the vendor image's securityContext. If so, use `baseline` for the drill namespace only and note it.
 
@@ -182,7 +242,8 @@ gcloud compute disks create "jenkins-home-drill-$(date -u +%Y%m%d)" \
 4. Start the controller pinned to the production image digest, with:
    - service account `drill`;
    - zero executors on the built-in node;
-   - agents unable to connect (no egress, no agent Service).
+   - agents unable to connect (no egress, no agent Service);
+   - quiet-down set before first start (see the isolation notes above).
 5. Confirm `secrets/master.key` was restored. Without it no credential decrypts ([[jenkins-core-and-plugin-upgrade-rollback]]).
 6. Verify content:
    - the job count matches production;
@@ -198,9 +259,11 @@ gcloud compute disks create "jenkins-home-drill-$(date -u +%Y%m%d)" \
 
 1. Restore the database into a scratch instance. For Cloud SQL, use a clone at the backup time ([[cloud-sql-point-in-time-recovery]]). For self-managed Postgres, use `pg_restore` into an empty scratch database with `--no-owner`.
 2. Copy a **sample** of the filestore into the scratch bucket: the checksum paths of a list of reference artifacts (release builds, a Helm chart, a base image). Measure the full-copy throughput on that sample and extrapolate. Record honestly that the full copy was extrapolated.
-3. Start Artifactory at the production version, with service account `drill-artifactory` and the labels `drill-db-client` and `drill-gcs-client`, against the scratch DB and bucket, with GC and replication disabled in its config before first start.
-4. Verify that each reference artifact downloads and its SHA-256 matches the build info record ([[artifactory-provenance-evidence]]). Then compare repository counts.
-5. For Artifactory SaaS: record the vendor's stated backup and RPO from the vendor review ([[vendor-soc2-report-review-for-devops-saas]]), and drill only the export of your configuration. See [[artifactory-outage-cache-fallback]] for the outage path.
+3. Before first start, restore the backed-up `master.key` and the other configuration files from the `etc` folder into the drill instance, then point the database settings and the filestore settings at the scratch DB and scratch bucket. Do not start Artifactory first and restore the key afterwards: the restored database secrets cannot be decrypted without the original key. The order is the one in JFrog's recovery article: import the database, copy the saved `etc` files including `master.key`, update the `database:` section of `system.yaml`, then start (read 2026-11-25; the article gives the `etc` path inconsistently, so confirm it for your installation). Restored configuration files may still name production storage, so review them for it.
+4. Start Artifactory at the production version, with service account `drill-artifactory` and the labels `drill-db-client` and `drill-gcs-client`, against the scratch DB and bucket, with GC and replication disabled in its config before first start.
+5. Read the effective storage configuration from the running drill instance and confirm it names the scratch bucket before any other check. If it does not, stop the pod. How storage configuration is split between the database and the file system differs by version; check the JFrog documentation for yours.
+6. Verify that each reference artifact downloads and its SHA-256 matches the build info record ([[artifactory-provenance-evidence]]). Then compare repository counts.
+7. For Artifactory SaaS: record the vendor's stated backup and RPO from the vendor review ([[vendor-soc2-report-review-for-devops-saas]]), and drill only the export of your configuration. See [[artifactory-outage-cache-fallback]] for the outage path.
 
 ### 3. SonarQube: database restore
 
@@ -210,12 +273,14 @@ gcloud compute disks create "jenkins-home-drill-$(date -u +%Y%m%d)" \
 
 ```bash
 SONAR_URL="http://127.0.0.1:9000" # port-forward to the drill pod
-HDR_FILE="$(mktemp)"; chmod 600 "$HDR_FILE"
+umask 077
+HDR_FILE="$(mktemp)"
+trap 'stty echo; rm -f -- "$HDR_FILE"' EXIT INT TERM # restores echo and removes the header file after a failure or interrupt
 printf 'SonarQube admin token (drill instance): ' >&2; stty -echo; IFS= read -r T; stty echo; echo >&2 # portable to bash and zsh
 printf 'Authorization: Bearer %s\n' "$T" > "$HDR_FILE"; unset T
 curl --fail -sS --header @"$HDR_FILE" "$SONAR_URL/api/system/status"
 curl --fail -sS --header @"$HDR_FILE" "$SONAR_URL/api/projects/search?ps=1" | jq '.paging.total'
-rm -f "$HDR_FILE"
+rm -f -- "$HDR_FILE"; trap - EXIT INT TERM
 ```
 
 4. Compare `paging.total` with production, and confirm the quality gate of one reference project.
@@ -227,7 +292,9 @@ Read-only against production. Copy, never overwrite. See [[terraform-state-recov
 ```bash
 STATE_BUCKET="example-tfstate-prod"  # change
 STATE_PATH="network/default.tfstate" # change: one root module's state
+umask 077
 DRILL_DIR="$(mktemp -d)"
+trap 'rm -rf -- "$DRILL_DIR"' EXIT # also runs when a gcloud call fails; state files hold secrets
 gcloud storage ls --all-versions "gs://${STATE_BUCKET}/${STATE_PATH}"
 GEN="1732406400000000"               # change: a generation from the listing, about one day old
 gcloud storage cp "gs://${STATE_BUCKET}/${STATE_PATH}#${GEN}" "$DRILL_DIR/restored.tfstate"
@@ -244,7 +311,7 @@ Pass criteria:
 - Resource count plausible.
 - The file parses.
 
-Delete `$DRILL_DIR` afterwards: state files hold secrets ([[secrets-out-of-terraform-state]]).
+The trap deletes `$DRILL_DIR` when the shell exits. Run the block in its own shell (or as a script) and read the output before it ends: state files hold secrets ([[secrets-out-of-terraform-state]]).
 
 ### 5. Record the result
 
@@ -274,8 +341,10 @@ Commit it where [[audit-evidence-collection-and-retention]] expects evidence. A 
 ## Validation
 
 - Every system in scope has a record for the quarter with `result: pass`, or an open defect with an owner.
+- The isolation test passed before the restore and its output is in the drill record.
 - `kubectl get networkpolicy -n restore-drill` shows `deny-all` and exactly the four allow rules `allow-dns`, `allow-scratch-db`, `allow-scratch-gcs` and `allow-metadata-server`, each reviewed. No other egress rule exists.
-- The drill GSA has no role outside the scratch bucket: `gcloud storage buckets get-iam-policy gs://<production-bucket>` does not list it.
+- The drill GSA has no role outside the scratch bucket. A bucket policy shows only bucket-level bindings, so also search IAM policies at organisation scope for the GSA and for its groups (Cloud Asset Inventory policy search; check the current gcloud syntax) and confirm the only result is the scratch bucket.
+- For Artifactory, the effective storage configuration of the drill instance named the scratch bucket (step 2.5).
 - No drill resource outlives the drill (see Rollback).
 
 ## Rollback
@@ -292,6 +361,7 @@ gcloud compute disks delete "jenkins-home-drill-YYYYMMDD" --project="$PROJECT" -
 ```
 
 - Delete scratch DB clones and the scratch bucket.
+- Remove the temporary RBAC on `restore-drill` and the IAM on the drill disk and snapshot granted for the drill, and make sure no copy of `master.key` remains in the drill instance or on the drill runner's machine.
 - Production is untouched by design. If anything in production changed during the drill, that is an incident.
 
 ## Troubleshooting
@@ -305,6 +375,12 @@ gcloud compute disks delete "jenkins-home-drill-YYYYMMDD" --project="$PROJECT" -
 
 ## Not verified
 
+- That the isolation test reaches the same verdict on your dataplane: exit codes 28 and 7 as the blocked results, and the pod manifest under PSA `restricted`.
+- The setting that makes a GKE cluster enforce NetworkPolicy.
+- How to set quiet-down on a restored `JENKINS_HOME` before first start.
+- Where Artifactory keeps its filestore configuration (database or file system) for your version, and whether a restored database can overwrite the scratch storage settings on first start.
+- Which files in the Artifactory `etc` folder to copy beyond `master.key`, and the exact path (JFrog's article is inconsistent about it).
+- The Cloud Asset Inventory IAM policy search syntax for the drill GSA.
 - All vendor restore procedures: Jenkins handbook, JFrog backup docs (DB plus filestore, GC and replication settings), and SonarQube backup and reindex behaviour.
 - SonarQube `api/system/status` and `api/projects/search` responses and Bearer auth.
 - `gcloud compute disks create --source-snapshot` and the `gs://...#generation` copy syntax.
@@ -321,7 +397,8 @@ gcloud compute disks delete "jenkins-home-drill-YYYYMMDD" --project="$PROJECT" -
 
 ## Sources
 
-No vendor page was read for this version of the note; see Not verified. Read before the first drill:
+One vendor page was read for this version of the note; the rest are in Not verified. Read before the first drill:
 
+- [JFrog, how to back up and recover the Artifactory database](https://jfrog.com/help/r/artifactory-how-to-backup-and-recover-artifactory-database): the `etc` folder holds `master.key` and must be backed up, and the restore order is database import, copy the saved `etc` files, update the `database:` section of `system.yaml`, then start. Read 2026-11-25.
 - [Jenkins handbook, backing up](https://www.jenkins.io/doc/book/system-administration/backing-up/): to read. It is already cited in [[jenkins-core-and-plugin-upgrade-rollback]].
 - The JFrog Artifactory and SonarQube backup documentation for your version: to read.
