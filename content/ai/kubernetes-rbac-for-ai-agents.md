@@ -236,13 +236,22 @@ umask 077
 NAMESPACE="ai-agents"
 SA="agent-reader"
 DURATION="1h"                            # change: the length of one agent run, no longer
-DIR="${AGENT_CRED_DIR:-$(mktemp -d)}"   # a private directory for this run only
+BASE="${AGENT_CRED_DIR:-${TMPDIR:-/tmp}}"   # change: where run directories go; it must already exist
+[[ -d "$BASE" ]] || { echo "$BASE is not an existing directory" >&2; exit 1; }
+# Always a fresh 0700 directory inside BASE, so an existing file or symlink named token or ca.crt
+# cannot be reused. Resolve it to an absolute path before it goes into the kubeconfig.
+DIR="$(mktemp -d "${BASE%/}/agent-creds.XXXXXX")"
+DIR="$(cd "$DIR" && pwd -P)"
+# The values below go into YAML inside double quotes: refuse characters that would break the quoting.
+SAFE_PATH='^/[A-Za-z0-9._/+@-]+$'
+[[ "$DIR" =~ $SAFE_PATH ]] || { echo "unsupported characters in $DIR" >&2; exit 1; }
 
 # --flatten embeds a file-based certificate-authority as data, so both CA forms end up here.
 SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
 CA_DATA="$(kubectl config view --minify --flatten --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')"
-if [[ -z "$SERVER" || -z "$CA_DATA" ]]; then
-  echo "current context has no server or no cluster CA; refusing to write an unverified kubeconfig" >&2
+SAFE_URL='^https://[^[:space:]"\\]+$'
+if [[ -z "$SERVER" || -z "$CA_DATA" || ! "$SERVER" =~ $SAFE_URL ]]; then
+  echo "current context has no https server or no cluster CA; refusing to write an unverified kubeconfig" >&2
   exit 1
 fi
 printf '%s' "$CA_DATA" | base64 -d > "$DIR/ca.crt"
@@ -256,24 +265,24 @@ kind: Config
 clusters:
   - name: agent-cluster
     cluster:
-      server: ${SERVER}
-      certificate-authority: ${DIR}/ca.crt
+      server: "${SERVER}"
+      certificate-authority: "${DIR}/ca.crt"
 users:
-  - name: ${SA}
+  - name: "${SA}"
     user:
-      tokenFile: ${DIR}/token
+      tokenFile: "${DIR}/token"
 contexts:
   - name: agent
     context:
       cluster: agent-cluster
-      user: ${SA}
+      user: "${SA}"
 current-context: agent
 KUBECONFIG
 
 echo "$DIR/agent.kubeconfig"
 ```
 
-The token never appears in a process argument list or in shell history. `kubectl config set-credentials --token=...` would put it in both, so the kubeconfig is written as a file whose `tokenFile` points at the token. A context that skips TLS verification has no CA to copy, and the script refuses it rather than write an insecure kubeconfig. Delete `$DIR` when the run ends. Deleting it does not revoke the token; see Rollback.
+The token never appears in a process argument list or in shell history. `kubectl config set-credentials --token=...` would put it in both, so the kubeconfig is written as a file whose `tokenFile` points at the token. A context that skips TLS verification has no CA to copy, and the script refuses it rather than write an insecure kubeconfig. The script always creates a fresh `0700` directory inside `AGENT_CRED_DIR` (or the temporary directory) and writes absolute paths into the kubeconfig: client tools resolve a relative file reference in a kubeconfig against the kubeconfig's own location, not the current directory, so a relative path would break; absolute paths avoid the question. Delete `$DIR` when the run ends. Deleting it does not revoke the token; see Rollback.
 
 The person or CI job that runs this needs `create` on `serviceaccounts/token` for that one ServiceAccount; grant it with a Role scoped by `resourceNames: ["agent-reader"]`, not cluster-wide. A token can also be bound to an object with `--bound-object-kind` and `--bound-object-name`, so it stops working when that object is deleted; the docs list Pod, Secret and Node (node-bound tokens GA in v1.33+) as supported kinds, so check which your version accepts.
 
@@ -395,6 +404,8 @@ Corrections made in this review: the aggregation risk comes from a labelled Clus
 - That the API groups and resource names in the role (for example `policy` and `events.k8s.io`) match your cluster version.
 - How quickly deleting a RoleBinding takes effect.
 - The `kubectl config view` flags `--minify`, `--flatten` and `--raw`, that `--flatten` exposes a file-based CA under `certificate-authority-data` to the jsonpath query (inferred from "self-contained output"), and that the kubeconfig field `tokenFile` points to a file with a bearer token that is re-read periodically. The kubectl and kubeconfig reference pages were fetched on 2026-11-24, but the fetch did not return their option text.
+- That kubectl resolves relative file references in a kubeconfig against the kubeconfig file's location (the reason the script writes absolute paths): not read in the Kubernetes documentation for this note, and not run.
+- That the `BASE`, `mktemp -d` and quoting changes in `agent-kubeconfig.sh` produce a kubeconfig that kubectl accepts: not run against a cluster.
 - None of the scripts or manifests were run against a cluster; `agent-kubeconfig.sh` passed a shell syntax check only.
 
 ### Environment

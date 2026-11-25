@@ -9,7 +9,7 @@ tags:
   - linux
   - gitlab-ci
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 evidence: source-reviewed
 reviewed: 2026-11-01
 review-due: 2027-05-01
@@ -224,7 +224,11 @@ IN_SANDBOX="/run/agent"   # where the launcher mounts SESSION_DIR, read-only
 SERVER="$(kubectl --context="$CTX" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
 CA_DATA="$(kubectl --context="$CTX" config view --minify --flatten --raw \
   -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')"
-[[ -n "$SERVER" && -n "$CA_DATA" ]] || { echo "no server or cluster CA for $CTX; refusing" >&2; exit 1; }
+SAFE_URL='^https://[^[:space:]"\\]+$'
+[[ -n "$CA_DATA" && "$SERVER" =~ $SAFE_URL ]] || { echo "no https server or no cluster CA for $CTX; refusing" >&2; exit 1; }
+# NS and SA go into YAML inside double quotes: refuse anything but a Kubernetes name.
+SAFE_NAME='^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$'
+[[ "$NS" =~ $SAFE_NAME && "$SA" =~ $SAFE_NAME ]] || { echo "unsupported characters in NS or SA" >&2; exit 1; }
 printf '%s' "$CA_DATA" | base64 -d > "$SESSION_DIR/ca.crt"
 
 # The token goes straight to a file, never into a variable or an argument.
@@ -236,18 +240,18 @@ kind: Config
 clusters:
   - name: sandbox
     cluster:
-      server: ${SERVER}
-      certificate-authority: ${IN_SANDBOX}/ca.crt
+      server: "${SERVER}"
+      certificate-authority: "${IN_SANDBOX}/ca.crt"
 users:
   - name: agent
     user:
-      tokenFile: ${IN_SANDBOX}/k8s-token
+      tokenFile: "${IN_SANDBOX}/k8s-token"
 contexts:
   - name: sandbox
     context:
       cluster: sandbox
       user: agent
-      namespace: ${NS}
+      namespace: "${NS}"
 current-context: sandbox
 EOF
 ```
@@ -411,7 +415,8 @@ Source-reviewed on 2026-11-01. Nothing was run. The review covered the documente
 - Engineering guidance, not a documented claim: the isolation-level ranking, the rollout and rollback approach, and the trade-offs section.
 - No performance figures are given because none were measured.
 - That `XDG_RUNTIME_DIR` is a tmpfs on a given host, that `--flatten` exposes a file-based CA as `certificate-authority-data`, that the kubeconfig `tokenFile` field works as described, how Google Cloud revokes or expires a short-lived access token (the credential pages were not read on 2026-11-24), and that the `EXIT` trap removes the directory on TERM, INT and HUP inside the launcher.
-- Nothing was run: every command, script and expected output in the note is unexecuted.
+- That the quoted YAML values and the `NS`, `SA` and server checks in the Kubernetes token script yield a kubeconfig that kubectl accepts; the script was syntax-checked with `bash -n` on 2026-11-25 and not run.
+- Nothing else was run: every command, script and expected output in the note is unexecuted.
 
 ## Sources
 
