@@ -457,6 +457,7 @@ Checked after the review, on 2026-11-24:
 - The `kubectl` binary was not run. That `deploy/NAME` reads one pod is not in the local Kubernetes docs; check `kubectl logs --help`. Pod labels such as `app=llm-gateway` are examples.
 - That `kubectl scale` on an HPA-controlled Deployment is overwritten within one sync period: the docs say the HPA manages `replicas`, the timing is not verified.
 - Whether `error.type` holds `429` in your instrumentation.
+- The curl 7.55 minimum for `-H @file` is from memory of the curl manual and was not re-read on 2026-11-25; the header-file block was not run. Check `curl --version` and the current curl manual.
 
 ### Environment
 
