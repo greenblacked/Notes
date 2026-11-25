@@ -98,7 +98,7 @@ The second job holds the token. It is defined in `.gitlab-ci.yml` on the protect
 ```yaml title=".gitlab-ci.yml"
 apply-agent-patch:
   stage: remediate
-  image: registry.example.com/ci/base@sha256:REPLACE_WITH_DIGEST
+  image: registry.example.com/ci/base@sha256:<digest>
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $PATCH_BRANCH'
   environment:
@@ -143,7 +143,7 @@ apply-agent-patch:
 
 agent-commit-guard:
   stage: test
-  image: registry.example.com/ci/base@sha256:REPLACE_WITH_DIGEST
+  image: registry.example.com/ci/base@sha256:<digest>
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^renovate\//'
   needs: []
