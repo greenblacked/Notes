@@ -271,8 +271,10 @@ A helper check, not part of the evidence level. Host: Ubuntu 24.04.5 LTS, `pytho
 ```python title="egress_check.py"
 ALLOW = {"llm-gateway.example.com:443"}
 
+
 def decide(target):
     return "ALLOW" if target.lower() in ALLOW else "DENY"
+
 
 for t in [
     "llm-gateway.example.com:443",
