@@ -538,6 +538,7 @@ kubectl config set-context kind-lab --namespace=default
    ```bash
    kubectl config current-context        # must be your lab GKE cluster
    GKE_CTX="$(kubectl config current-context)"   # used by the cleanup below
+   kubectl config set-context "$GKE_CTX" --namespace=default   # same namespace as the cleanup below
    kubectl get storageclass              # pick a class that shows ALLOWVOLUMEEXPANSION true
    SC_NAME="change-me"                   # Change: a class name from the list above that allows expansion
    kubectl create -f - <<EOF
@@ -592,10 +593,10 @@ kubectl config set-context kind-lab --namespace=default
 
    ```bash
    echo "$GKE_CTX"                       # must be your lab GKE cluster
-   kubectl --context "$GKE_CTX" get pv "$PV" -o jsonpath='{.spec.persistentVolumeReclaimPolicy}{"\n"}'
-   kubectl --context "$GKE_CTX" -n default delete pod k9-gke
-   kubectl --context "$GKE_CTX" -n default delete pvc k9-gke --dry-run=server
-   kubectl --context "$GKE_CTX" -n default delete pvc k9-gke
+   kubectl --context "${GKE_CTX:?}" get pv "$PV" -o jsonpath='{.spec.persistentVolumeReclaimPolicy}{"\n"}'
+   kubectl --context "${GKE_CTX:?}" -n default delete pod k9-gke
+   kubectl --context "${GKE_CTX:?}" -n default delete pvc k9-gke --dry-run=server
+   kubectl --context "${GKE_CTX:?}" -n default delete pvc k9-gke
    ```
 
 8. **Clean up the kind lab.**
