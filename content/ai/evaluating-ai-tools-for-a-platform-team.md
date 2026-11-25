@@ -109,11 +109,17 @@ as_tool=(sudo -n -u bakeoff-tool --)
 # Kill whatever the tool left running as its uid: timeout stops only the adapter's main process, and
 # a leftover process could read the check script or change the work tree during the check.
 stop_tool_processes() {
-  local attempt
+  local attempt pg
   for attempt in 1 2 3; do
     "${as_tool[@]}" pkill -KILL -u bakeoff-tool || true
     sleep 1
-    "${as_tool[@]}" pgrep -u bakeoff-tool >/dev/null || return 0
+    pg=0
+    "${as_tool[@]}" pgrep -u bakeoff-tool >/dev/null || pg=$?
+    case "$pg" in
+      0) ;;                                   # processes remain: try again
+      1) return 0 ;;                          # none left
+      *) echo "harness fault: pgrep failed with status $pg" >&2; return 1 ;;
+    esac
   done
   echo "harness fault: processes of the tool user are still running" >&2
   return 1
@@ -131,6 +137,8 @@ trap cleanup EXIT
 # Work outside the harness checkout, in a fresh clone of the target repository, owned by the tool user.
 # Use one runner per tool, or one job or container per run (the stronger option): the uid, its /tmp
 # files and any survivor of the kill above are otherwise shared with the next tool and task.
+# The kill above takes every process of the uid, so run one bake-off job at a time on the runner
+# (concurrent = 1) or give each job its own uid; a second job on the same uid would be killed.
 work="$("${as_tool[@]}" mktemp -d)"
 tool_home="$("${as_tool[@]}" mktemp -d)"
 check_home="$("${as_tool[@]}" mktemp -d)"
