@@ -9,7 +9,7 @@ tags:
   - kubernetes
   - gcp
 created: 2026-10-21
-modified: 2026-11-24
+modified: 2026-11-25
 draft: false
 ---
 

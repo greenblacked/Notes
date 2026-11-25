@@ -210,7 +210,7 @@ echo "plan exit=${rc}"
 exit "${rc}"   # 0 or 2 is a result to read; 1 is an error
 ```
 
-Unfreeze only after the plan is understood. The copy in `${BACKUP_DIR}` holds the live state, which can contain secrets: delete it once the rollback is signed off (the replaced generation stays in the bucket as a noncurrent version). The overwrite is not conditional on the generation just recorded, so keep the freeze until the plan is read; a conditional copy (an if-generation-match option in `gcloud storage cp`) was not checked against the current reference. Full recovery cases are in [[terraform-state-recovery]].
+Unfreeze only after the plan is understood. The copy in `${BACKUP_DIR}` holds the live state, which can contain secrets: delete it once the rollback is signed off (the replaced generation stays in the bucket as a noncurrent version). The overwrite is not conditional on the generation just recorded, so keep the freeze until the plan is read; a conditional copy with `--if-generation-match` is shown in [[gcs-deleted-object-recovery]] (flag checked with `--help` on 2026-10-21, not run). Full recovery cases are in [[terraform-state-recovery]].
 
 ## When to choose which
 

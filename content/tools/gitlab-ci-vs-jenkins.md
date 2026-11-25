@@ -43,7 +43,7 @@ Jenkins is a self-hosted automation server whose behaviour is assembled from plu
 
 Jenkins Declarative Pipeline is Groovy with a fixed structure; scripted pipelines allow arbitrary code. Reuse is through Shared Libraries (see [[jenkins-shared-libraries]]). The power is real, and so is the risk: Groovy in a Jenkinsfile can do anything, runs in a sandbox with approval friction, and is hard to lint and test.
 
-GitLab pipelines are YAML. Reuse is through `include`, `extends`, hidden jobs and CI/CD components. The model is less expressive but much easier to review and validate (`glab ci lint`, the CI Lint API). Conventions for structuring this are in [[gitlab-ci-pipeline-structure]]. The build jobs below use Docker-in-Docker, which needs a privileged runner, so run them only on runners reserved for trusted code. Merge request pipelines build the image but never push it; only the protected default branch pushes. GitLab's Docker-in-Docker page says to always pin a specific image version; a digest pins it exactly.
+GitLab pipelines are YAML. Reuse is through `include`, `extends`, hidden jobs and CI/CD components. The model is less expressive but much easier to review and validate (`glab ci lint`, the CI Lint API). Conventions for structuring this are in [[gitlab-ci-pipeline-structure]]. The build jobs below use Docker-in-Docker, which needs a privileged runner, so run them only on runners reserved for trusted code. As written, merge request pipelines build the image but do not push it; the push job runs only on the protected default branch (see the limit below the example). GitLab's Docker-in-Docker page says to always pin a specific image version; a digest pins it exactly.
 
 ```yaml title=".gitlab-ci.yml"
 stages: [build, test, deploy]
@@ -84,7 +84,7 @@ Replace each `<version>` and `<digest>` with the image version you tested and it
 
 The TLS settings only work if the job and the Docker-in-Docker service share `/certs/client`: with the Kubernetes executor the runner must mount an emptyDir at `/certs/client`, and with the Docker executor `/certs/client` must be listed in the runner's volumes, as the Docker-in-Docker page describes. Without it the job fails to connect rather than falling back to an insecure connection. This was not run here.
 
-The merge request job does not push, but a merge request pipeline uses the `.gitlab-ci.yml` of the merge request branch, so its author could add a push job, and `CI_REGISTRY_PASSWORD` is available to every job. Enforcing the rule needs a registry-side control (container registry protection rules or protected tags; check what your GitLab version and tier offer), not this file alone.
+The merge request job does not push, but a merge request pipeline uses the `.gitlab-ci.yml` of the merge request branch, so its author could add a push job, and `CI_REGISTRY_PASSWORD` is available to every job. Enforcing the rule needs a registry-side control (container registry protection rules or protected container tags; check what your GitLab version and tier offer), not this file alone.
 
 ## Plugins versus built-ins
 
