@@ -22,7 +22,7 @@ draft: false
 > None of the commands were run for this note, and none were checked against vendor documentation on 2026-11-24. Check each tool's backup and restore page for your version before the first drill. The procedure (isolate, restore, verify content, time it, record it) is the part this note fixes.
 
 > [!danger] A restored CI tool is a live copy of production
-> A restored Jenkins still has its cloud configuration, credentials and schedules, and can start builds that deploy to production. A restored Artifactory can run garbage collection against storage it is pointed at. A restored SonarQube can post to merge requests. Restore only into the isolated namespace below, with no egress, and never point a drill copy at production storage or databases.
+> A restored Jenkins still has its cloud configuration, credentials and schedules, and can start builds that deploy to production. A restored Artifactory can run garbage collection against storage it is pointed at. A restored SonarQube can post to merge requests. Restore only into the isolated namespace below, where egress is limited to the scratch database and scratch bucket, and never point a drill copy at production storage or databases.
 
 ## When to use
 
@@ -35,7 +35,9 @@ This runbook is not for a real recovery. Use the tool runbooks, and [[terraform-
 ## Preconditions
 
 - The drill runner is not the runbook author (ADR 0051).
-- The scratch GKE namespace `restore-drill` exists, with a default-deny ingress and egress NetworkPolicy ([[0020-default-deny-network-policies]]) and no Workload Identity mapping on its service accounts ([[gke-workload-identity]]).
+- The scratch GKE namespace `restore-drill` exists, with a default-deny ingress and egress NetworkPolicy ([[0020-default-deny-network-policies]]), plus the narrow drill-only allow rules below. The `drill` service account has no Workload Identity mapping. Only `drill-artifactory` maps to a drill-only Google service account ([[gke-workload-identity]]).
+- A drill-only Google service account (for example `restore-drill-artifactory@example-drill-project.iam.gserviceaccount.com`, change) with `roles/storage.objectUser` on the scratch bucket only. It has no role in production projects and no access to production buckets or instances.
+- The scratch database reachable on a private IP (Cloud SQL private IP, or a Postgres VM in the scratch project). Record its IP and port for the allow rule.
 - A scratch project or bucket for copied data, with access limited like production. Restored data may contain personal data; delete it after the drill ([[pci-dss-and-gdpr-for-devops-logs-and-data]]).
 - Image digests of the production versions, because a drill restores onto the same version.
 - A budget owner. Snapshots, disks and clones cost money.
@@ -64,9 +66,72 @@ metadata:
   namespace: restore-drill
 automountServiceAccountToken: false
 # No iam.gke.io/gcp-service-account annotation: the drill pods get no Google identity.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: drill-artifactory
+  namespace: restore-drill
+  annotations:
+    # change: the drill-only GSA, never one that exists in production
+    iam.gke.io/gcp-service-account: restore-drill-artifactory@example-drill-project.iam.gserviceaccount.com
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: restore-drill
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scratch-db
+  namespace: restore-drill
+spec:
+  podSelector:
+    matchLabels:
+      drill-db-client: "true" # set on the Artifactory and SonarQube pods only
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.20.30.40/32 # change: the scratch DB private IP
+      ports:
+        - { protocol: TCP, port: 5432 } # change if the DB port differs
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scratch-gcs
+  namespace: restore-drill
+spec:
+  podSelector:
+    matchLabels:
+      drill-gcs-client: "true" # set on the Artifactory pod only
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 199.36.153.4/30 # change: your Google APIs endpoint (restricted.googleapis.com VIP with Private Google Access)
+      ports:
+        - { protocol: TCP, port: 443 }
 ```
 
 - Responders reach the drill pods with `kubectl port-forward`, which does not go through the pod network.
+- Jenkins gets no allow rule. Its pods carry neither `drill-db-client` nor `drill-gcs-client`, so they keep deny-all plus DNS.
+- The scratch DB password goes into a Kubernetes Secret in `restore-drill`, created from a file, never from argv. Delete it with the namespace.
+- The Google endpoint above reaches all of that API, but the drill GSA is authorised only on the scratch bucket, so that is the effective limit. Check that the VIP and DNS setup match your network.
 - If the restored tool needs the identity provider to log in, use its local break-glass admin instead of opening egress.
 - PSA `restricted` may reject the vendor image's securityContext. If so, use `baseline` for the drill namespace only and note it.
 
@@ -115,14 +180,14 @@ gcloud compute disks create "jenkins-home-drill-$(date -u +%Y%m%d)" \
 
 1. Restore the database into a scratch instance. For Cloud SQL, use a clone at the backup time ([[cloud-sql-point-in-time-recovery]]). For self-managed Postgres, use `pg_restore` into an empty scratch database with `--no-owner`.
 2. Copy a **sample** of the filestore into the scratch bucket: the checksum paths of a list of reference artifacts (release builds, a Helm chart, a base image). Measure the full-copy throughput on that sample and extrapolate. Record honestly that the full copy was extrapolated.
-3. Start Artifactory at the production version against the scratch DB and bucket, with GC and replication disabled in its config before first start.
+3. Start Artifactory at the production version, with service account `drill-artifactory` and the labels `drill-db-client` and `drill-gcs-client`, against the scratch DB and bucket, with GC and replication disabled in its config before first start.
 4. Verify that each reference artifact downloads and its SHA-256 matches the build info record ([[artifactory-provenance-evidence]]). Then compare repository counts.
 5. For Artifactory SaaS: record the vendor's stated backup and RPO from the vendor review ([[vendor-soc2-report-review-for-devops-saas]]), and drill only the export of your configuration. See [[artifactory-outage-cache-fallback]] for the outage path.
 
 ### 3. SonarQube: database restore
 
 1. Restore the DB into a scratch database, as in step 2.1.
-2. Start SonarQube at the production version, with `sonar.jdbc.url` set to the scratch DB and an empty data directory, so the search index is rebuilt from the database. Record the reindex time; it is part of RTO.
+2. Start SonarQube at the production version, with the label `drill-db-client` and no GCS label, `sonar.jdbc.url` set to the scratch DB and an empty data directory, so the search index is rebuilt from the database. Record the reindex time; it is part of RTO.
 3. Verify through the API. The token is read into a file, not argv:
 
 ```bash
@@ -168,26 +233,30 @@ Delete `$DRILL_DIR` afterwards: state files hold secrets ([[secrets-out-of-terra
 ```yaml title="evidence/restore-drills/drill-jenkins-20261124.yaml"
 system: jenkins # jenkins | artifactory | sonarqube | terraform-state
 drill_started: 2026-11-24T09:00:00Z
-backup_used: jenkins-home-20261123-0200
-backup_taken_at: 2026-11-23T02:00:00Z
+backup_used: jenkins-home-20261124-0200 # the newest snapshot at drill time, not an older one
+backup_taken_at: 2026-11-24T02:00:00Z
+previous_backup_at: 2026-11-23T02:00:00Z
 service_verified: 2026-11-24T10:12:00Z
-measured_rpo_minutes: 1860 # drill_started minus backup_taken_at, i.e. the age of data restored
+measured_rpo_minutes: 1440 # worst-case data loss: the observed interval between backup_taken_at and previous_backup_at
 measured_rto_minutes: 72 # drill_started to service_verified
-target_rpo_minutes: 1440 # from the DR tier
+target_rpo_minutes: 720 # from the DR tier
 target_rto_minutes: 240
 run_by: sre-oncall # a role, not the runbook author
 result: fail # fail: RPO target missed
 defects:
-  - "snapshot schedule is daily at 02:00; tier needs 12h"
+  - "snapshot schedule is daily at 02:00; worst-case data loss is 24h, tier allows 12h (720 minutes)"
 cleanup_done: true
 ```
+
+`measured_rpo_minutes` is the data-loss window of the schedule: the gap between two consecutive backups, because a failure just before the next snapshot loses that whole gap. It is not the time you ran the drill. The RTO clock starts at `drill_started`. Here 1440 is above the 720 target, so the drill fails and the defect is the schedule.
 
 Commit it where [[audit-evidence-collection-and-retention]] expects evidence. A miss or failure is an incident per ADR 0051.
 
 ## Validation
 
 - Every system in scope has a record for the quarter with `result: pass`, or an open defect with an owner.
-- `kubectl get networkpolicy -n restore-drill` still shows `deny-all`.
+- `kubectl get networkpolicy -n restore-drill` shows `deny-all` and exactly the three allow rules `allow-dns`, `allow-scratch-db` and `allow-scratch-gcs`, each reviewed. No other egress rule exists.
+- The drill GSA has no role outside the scratch bucket: `gcloud storage buckets get-iam-policy gs://<production-bucket>` does not list it.
 - No drill resource outlives the drill (see Rollback).
 
 ## Rollback
@@ -221,6 +290,7 @@ gcloud compute disks delete "jenkins-home-drill-YYYYMMDD" --project="$PROJECT" -
 - `gcloud compute disks create --source-snapshot` and the `gs://...#generation` copy syntax.
 - Terraform state JSON field names.
 - PSA `restricted` compatibility of the vendor images.
+- The drill allow rules: the Google APIs endpoint range, the Workload Identity binding and whether Artifactory's GCS filestore works through it, and Cloud SQL private IP connectivity from the cluster.
 
 ## Related
 
