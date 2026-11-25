@@ -122,36 +122,90 @@ tool_env=(
 )
 check_env=(PATH=/usr/local/bin:/usr/bin:/bin HOME="$tool_home" LANG=C.UTF-8)
 
+# Run a command inside the work directory, as the tool user. The directory is mode 0700 and owned
+# by that user, so the cd has to happen in the tool user's process, not in the job shell.
+# Exit status 97 means the harness could not enter the directory: a harness fault, not a tool failure.
+in_work=(sh -c 'cd "$1" || exit 97; shift; exec "$@"' sh "$work")
+
 # Canaries: fail the run, not just the task, if the tool could reach the job token.
+# Each file and /proc canary has a positive control that plants a known value and must find it,
+# so a canary that cannot fire fails the run instead of passing silently.
+control="canary-control-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+
+# sudo closes every descriptor above stderr, so a <(...) pattern file would not exist for grep:
+# the pattern goes on stdin. Exit 0 = found, 1 = not found, anything else = the canary itself broke.
+files_hit() {
+  local rc=0
+  printf '%s\n' "$1" | "${as_tool[@]}" grep -rqF -f - -- "$HARNESS" "$work" "$tool_home" || rc=$?
+  return "$rc"
+}
+# Count the /proc/*/environ lines that contain the value. The first stage is allowed to exit non-zero
+# (cat fails on environ files the tool user cannot read), and there is no -q, so grep reads all input.
+# grep runs as the job user, so the process substitution is fine here.
+proc_hits() {
+  { "${as_tool[@]}" sh -c 'cat /proc/[0-9]*/environ 2>/dev/null' || true; } \
+    | tr '\0' '\n' | { grep -cF -f <(printf '%s\n' "$1") || true; }
+}
+
 if ! "${as_tool[@]}" env -i "${tool_env[@]}" /bin/sh -c 'test -z "${CI_JOB_TOKEN:-}" && ! env | grep -q "^CI_"'; then
   echo "canary: the tool environment still holds CI variables" >&2; exit 1
 fi
-if "${as_tool[@]}" grep -rqsF -f <(printf '%s\n' "$CI_JOB_TOKEN") "$HARNESS" "$work" "$tool_home"; then
-  echo "canary: the job token is readable in files the tool can reach" >&2; exit 1
+
+# Positive control for the file canary: a known value in a file the tool user owns must be found.
+printf '%s\n' "$control" | "${as_tool[@]}" tee "$tool_home/canary-control" >/dev/null
+rc=0; files_hit "$control" || rc=$?
+if [[ "$rc" -ne 0 ]]; then
+  echo "canary: the file canary cannot find a planted value (rc=$rc); it would not catch the token" >&2; exit 1
 fi
+"${as_tool[@]}" rm -f -- "$tool_home/canary-control"
+
+rc=0; files_hit "$CI_JOB_TOKEN" || rc=$?
+case "$rc" in
+  1) ;;
+  0) echo "canary: the job token is readable in files the tool can reach" >&2; exit 1 ;;
+  *) echo "canary: the file check failed to run (rc=$rc); fix permissions on the harness checkout" >&2; exit 1 ;;
+esac
+
+# Positive control for the /proc canary: a process running as the tool user holds a known value in
+# its environment, and the same read as the tool user must find it.
+"${as_tool[@]}" env "CANARY_CONTROL=$control" sleep 30 &
+control_pid=$!
+sleep 1
+n=$(proc_hits "$control")
+kill "$control_pid" 2>/dev/null || true
+if [[ "$n" -eq 0 ]]; then
+  echo "canary: the /proc canary cannot find a planted value; it would not catch the token" >&2; exit 1
+fi
+
 # The token stays in the job shell's /proc/<pid>/environ; the tool user must not be able to read it.
-if "${as_tool[@]}" sh -c 'cat /proc/[0-9]*/environ 2>/dev/null' | tr '\0' '\n' \
-   | grep -qF -f <(printf '%s\n' "$CI_JOB_TOKEN"); then
+n=$(proc_hits "$CI_JOB_TOKEN")
+if [[ "$n" -ne 0 ]]; then
   echo "canary: the job token is readable from /proc/*/environ as the tool user" >&2; exit 1
 fi
 
 started=$(date +%s)
-(cd "$work" && "${as_tool[@]}" env -i "${tool_env[@]}" timeout 900 "$HARNESS/adapters/${TOOL}.sh" "$HARNESS/tasks/${TASK_ID}/prompt.txt") \
-  || echo "tool exited non-zero"
+tool_rc=0
+"${as_tool[@]}" env -i "${tool_env[@]}" "${in_work[@]}" timeout 900 "$HARNESS/adapters/${TOOL}.sh" "$HARNESS/tasks/${TASK_ID}/prompt.txt" \
+  || tool_rc=$?
+if [[ "$tool_rc" -eq 97 ]]; then echo "harness fault: could not enter the work directory" >&2; exit 1; fi
+[[ "$tool_rc" -eq 0 ]] || echo "tool exited with status ${tool_rc} (124 means the time limit)"
 tool_seconds=$(( $(date +%s) - started ))
 
 # change: fetch-check is your command that pulls the check script from outside the job workspace; it runs only after the tool step.
 fetch-check "$TASK_ID" > "$HARNESS/check.sh"
 # The checks run the tool's code, so they get the same empty environment.
-if (cd "$work" && "${as_tool[@]}" env -i "${check_env[@]}" bash "$HARNESS/check.sh"); then tests=pass; else tests=fail; fi
+check_rc=0
+"${as_tool[@]}" env -i "${check_env[@]}" "${in_work[@]}" bash "$HARNESS/check.sh" || check_rc=$?
+if [[ "$check_rc" -eq 97 ]]; then echo "harness fault: could not enter the work directory" >&2; exit 1; fi
+if [[ "$check_rc" -eq 0 ]]; then tests=pass; else tests=fail; fi
 jq -cn --arg tool "$TOOL" --arg task "$TASK_ID" --arg tests "$tests" \
-  --argjson tool_seconds "$tool_seconds" --argjson total "$(( $(date +%s) - started ))" \
-  '{tool: $tool, task: $task, tests: $tests, tool_seconds: $tool_seconds, seconds_to_check_done: $total}' \
+  --argjson tool_exit "$tool_rc" --argjson tool_seconds "$tool_seconds" --argjson total "$(( $(date +%s) - started ))" \
+  '{tool: $tool, task: $task, tests: $tests, tool_exit: $tool_exit, tool_seconds: $tool_seconds, seconds_to_check_done: $total}' \
   >> "$HARNESS/results.jsonl"
 "${as_tool[@]}" rm -rf -- "$work" "$tool_home"
 ```
 
-The `tasks/` directory holds only `repo-url`, `start-commit` and `prompt.txt` while the tool runs. Keep known-good diffs and check scripts out of the job workspace: the script fetches the check only after the tool step. The tool works in a clone outside the harness checkout, and both the tool and the checks run as a separate unprivileged user under `env -i` with an explicit allowlist, so `CI_JOB_TOKEN` and the project variables are not in their environment. `env -i` alone is not enough: it empties only the tool's own environment, while the job shell's environment block, token and project variables included, stays readable through `/proc/<ancestor>/environ` by any process with the same uid, and `unset` in the parent does not change it. Yama `ptrace_scope=1` does not stop that read. So the adapter runs as a different uid, or in a separate job or container that never receives `CI_JOB_TOKEN`. Three canaries fail the run if the token is still reachable from the tool's environment, from files, or from `/proc/*/environ`. The job token stays valid while the job runs. File-type CI/CD variables are written to a temporary file that the variable points to, and any process running as the job user can read that file, which the separate user also covers when the file is not group-readable. So define no file-type variables for this job other than the gateway key, and give the gateway key its own narrow budget ([[llm-api-cost-control]]). If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
+The `tasks/` directory holds only `repo-url`, `start-commit` and `prompt.txt` while the tool runs. Keep known-good diffs and check scripts out of the job workspace: the script fetches the check only after the tool step. The tool works in a clone outside the harness checkout, and both the tool and the checks run as a separate unprivileged user under `env -i` with an explicit allowlist, so `CI_JOB_TOKEN` and the project variables are not in their environment. `env -i` alone is not enough: it empties only the tool's own environment, while the job shell's environment block, token and project variables included, stays readable through `/proc/<ancestor>/environ` by any process with the same uid, and `unset` in the parent does not change it. Yama `ptrace_scope=1` does not stop that read. So the adapter runs as a different uid, or in a separate job or container that never receives `CI_JOB_TOKEN`. Three canaries fail the run if the token is still reachable from the tool's environment, from files, or from `/proc/*/environ`. The file and `/proc` canaries each have a positive control that plants a known value and must find it, so a canary that cannot fire stops the run. The file canary reads its pattern from stdin because `sudo` closes descriptors above stderr, and the `/proc` canary does not let `cat`'s exit status decide the result. The `cd` into the work directory happens inside the tool user's process, because the directory is private to that user, and `results.jsonl` records the tool's exit status so a tool that never started is not scored as a failed task. The job token stays valid while the job runs. File-type CI/CD variables are written to a temporary file that the variable points to, and any process running as the job user can read that file, which the separate user also covers when the file is not group-readable. So define no file-type variables for this job other than the gateway key, and give the gateway key its own narrow budget ([[llm-api-cost-control]]). If the target repository is private, use a read-only credential that is not stored in the clone's remote URL.
 
 Each adapter is a thin script that feeds the prompt to the tool non-interactively; write them once and review them like production code.
 
@@ -225,6 +279,7 @@ Source-reviewed on 2026-11-02. Nothing was run. Scope: the checkable statements 
 - That stripping the token from the harness checkout's remote URL removes every on-disk copy the runner writes. The file canary checks the harness, work and home directories only, not other runner paths.
 - That `CI_SERVER_URL` and `CI_PROJECT_PATH` are set in your runner version (not re-read on 2026-11-24).
 - The canary, the `sudo` user switch and `env -i` behaviour were not run in a pipeline. That `/proc/<pid>/environ` of same-uid processes is readable and that Yama `ptrace_scope=1` does not restrict it comes from kernel and Yama documentation that was not re-read for this note.
+- The revised `run-task.sh` (stdin pattern for the file canary, the `/proc` count, the positive controls, the in-process `cd` and the exit-status record) was not run in this note's revision. That `sudo` closes descriptors above stderr and that `cat` exits non-zero on unreadable `environ` files are reported behaviour from a reviewer's reproduction, not from documentation read for this note.
 - Nothing was run.
 
 ## Sources
