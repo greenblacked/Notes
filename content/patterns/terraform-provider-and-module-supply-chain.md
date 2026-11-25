@@ -1,6 +1,6 @@
 ---
 title: Terraform provider and module supply chain
-description: Verify what Terraform pins: origin-registry lock hashes, a mirror that cannot change them, read-only locks in CI and module sources pinned to commits.
+description: "Verify what Terraform pins: origin-registry lock hashes, a mirror that cannot change them, read-only locks in CI and module sources pinned to commits."
 type: pattern
 tags:
   - patterns

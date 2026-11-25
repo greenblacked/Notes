@@ -109,7 +109,7 @@ dast-baseline:
 
 - Use a dedicated test user that has no production data access, and rotate its password.
 - Pass the credentials through a masked (and hidden) CI/CD variable read inside a ZAP context file (`-n`) and `-U`. Never put them in the command line or the rule file.
-- Scope the variable to the review environment for the MR scan. A protected variable is exposed only to pipelines on protected branches and tags, so an MR pipeline from a feature branch would get an empty value. Use a protected variable only for the scheduled staging scan.
+- Scope the variable to the review environment for the MR scan, and make `dast-baseline` name that environment so it receives the value: GitLab exposes an environment-scoped variable only to jobs whose `environment` matches. Add `environment: { name: review/$CI_COMMIT_REF_SLUG, action: verify }` to the job (use the same name as the deploy job); `action: verify` does not create a deployment. A protected variable is exposed only to pipelines on protected branches and tags, so an MR pipeline from a feature branch would get an empty value. Use a protected variable only for the scheduled staging scan.
 - For review apps behind Cloudflare Access, give the scan a service token ([[cloudflare-access-service-tokens]]), added as a header via the context. Do not open the app to the internet.
 - Check the ZAP authentication docs for your version: they were not read for this note.
 

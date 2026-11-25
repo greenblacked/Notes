@@ -5,7 +5,7 @@ tags:
   - runbooks
   - meta
 created: 2026-10-11
-modified: 2026-11-01
+modified: 2026-11-25
 draft: false
 ---
 
@@ -84,6 +84,9 @@ A runbook is a procedure written for the moment you have to do the thing: releas
 ## This site
 
 - [[cloudflare-workers-deploy-and-rollback|Deploy and roll back on Cloudflare Workers]]: release a version, verify it, check what is live, roll back or roll forward, and fix the failures seen in real runs.
+- [[compromised-ci-runner-or-pipeline-identity|Compromised CI runner or pipeline identity]]: stop a compromised GitLab runner, Jenkins agent or CI identity, keep evidence, revoke its credentials and decide which artifacts it built can still be trusted.
+- [[runtime-detection-alert-response|Responding to a runtime detection alert]]: triage a Falco, Tetragon or Container Threat Detection finding on GKE in minutes, judge true or false positive, hand off real ones and tune the rest in Git.
+- [[tool-estate-restore-drills|Restore drills for Jenkins, Artifactory, SonarQube and Terraform state]]: timed, isolated restore drills for the CI tool estate that record measured RPO and RTO without letting the restored copy touch production.
 
 ## Structure every runbook follows
 

@@ -5,7 +5,7 @@ tags:
   - ai
   - meta
 created: 2026-10-17
-modified: 2026-11-01
+modified: 2026-11-25
 draft: false
 ---
 
@@ -234,6 +234,8 @@ Classify risk, review providers and contracts, keep an inventory, and control da
 - [[model-region-selection-and-data-residency|Selecting model regions and controlling data residency]]
 - [[llm-change-management-and-release-gates|Change management and release gates for LLM systems]]
 - [[decommissioning-ai-model-integrations|Decommissioning AI model integrations]]
+- [[remote-code-at-model-load-time|Remote code at model load time]]
+- [[backup-and-dr-for-ai-state|Backup and disaster recovery for AI state]]
 
 The owner's agent skills and workflows live in [the owner's AI skills catalogue](https://ai.szolotov.com).
 

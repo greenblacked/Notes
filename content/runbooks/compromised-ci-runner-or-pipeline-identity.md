@@ -90,7 +90,7 @@ jq -r --arg t0 "$T0" '.[] | select(.created_at >= $t0 or .finished_at == null or
   "$CASE_DIR/runner-$RUNNER_ID-jobs.json" > "$CASE_DIR/jobs-in-window.tsv"
 ```
 
-- The filter keeps jobs created before `T0` that were still running at `T0` or finished after it. Page through results until a job finished before `T0`. The API supports keyset pagination.
+- The filter keeps jobs created before `T0` that were still running at `T0` or finished after it. Page until the jobs' `created_at` is older than `T0` minus the longest job timeout on that runner (or page the whole list if it is small), because an older, longer job can still have been running at `T0`. The API supports keyset pagination.
 - For each job in the window, record the project, ref, commit, triggering user and status. These rows define the artifact scope in step 5.
 - The field names in the `jq` filter must be checked against one real response first (see Not verified).
 

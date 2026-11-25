@@ -164,7 +164,7 @@ spec:
           args:
             - --model
             - /models/example-model # change: the promoted copy; never a Hub repo ID
-            # Do not add --trust-remote-code. A model that needs it goes through the review below.
+            # Do not add the remote-code flag here. A model that needs it goes through the review below.
           env:
             - name: HF_HUB_OFFLINE
               value: "1"
