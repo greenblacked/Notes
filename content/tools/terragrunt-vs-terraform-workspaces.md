@@ -8,14 +8,14 @@ tags:
   - gcp
   - ci-cd
 created: 2026-10-19
-modified: 2026-10-19
+modified: 2026-11-25
 draft: false
 ---
 
 Running the same Terraform code for dev, stage and prod raises the same question in every team: how do you keep three states apart without copying code? Three answers exist: CLI workspaces, separate directories, and a wrapper such as Terragrunt. This note compares them for GCP with a GCS backend. The general layout rules are in [[terraform-module-and-state-layout]]; its "Workspaces or directories" section has the decision table, which this note does not repeat.
 
 > [!info] Not checked against current releases
-> Terragrunt and Terraform behaviour, command syntax and defaults were not checked when this note was written. Confirm them in the current documentation.
+> Terragrunt and Terraform behaviour, command syntax and defaults were not checked when this note was written. Confirm them in the current documentation. The generation listing and `#GENERATION` restore form were checked against the Cloud Storage versioned objects page on 2026-11-24; the Terraform GCS backend page does not name the lock object, so check for a held lock with your CI's running jobs or the lock error itself.
 
 ## Short answer
 
@@ -175,16 +175,47 @@ Plan only what changed and run each plan with the credentials of that environmen
 
 ## Rollback via bucket object versioning
 
-Enable object versioning on every state bucket. To roll back a state file, list the generations, copy the wanted generation over the live object, and plan to confirm no unexpected diff:
+Enable object versioning on every state bucket; the Terraform GCS backend documentation recommends it for state recovery. Rolling back a state file means copying an older generation over the live object, so freeze first: pause the pipeline for that root module, announce the freeze, and confirm no run holds the state lock.
+
+> [!warning] This overwrites the live state
+> Record the current live generation before the copy, so the rollback itself can be undone. Rolling back state does not roll back real infrastructure; it only changes what Terraform believes.
 
 ```bash title="state-rollback.sh"
-gcloud storage ls -a gs://example-tfstate-prod/gke/default.tfstate
-gcloud storage cp "gs://example-tfstate-prod/gke/default.tfstate#<generation>" \
-  gs://example-tfstate-prod/gke/default.tfstate
-terraform plan -detailed-exitcode
+#!/usr/bin/env bash
+# Run from the root module directory, during a freeze. Overwrites the live state object.
+set -euo pipefail
+STATE="gs://example-tfstate-prod/gke/default.tfstate"
+TARGET_GEN="1760000000000000"   # example value: the generation to restore, from the listing
+
+# Pre-check: list generations for reference, then read the live one from the object's own metadata
+# (generation numbers might not increase, so never take the largest number) for the change ticket.
+gcloud storage ls --all-versions "$STATE"
+LIVE_GEN="$(gcloud storage objects describe "$STATE" --format='value(generation)')"
+: "${LIVE_GEN:?could not read the live generation; stop}"
+echo "live generation before rollback: ${LIVE_GEN}"
+
+# Keep a copy of the live state outside the working tree, owner-only (state can hold secrets).
+umask 077
+BACKUP_DIR="$(mktemp -d)"
+gcloud storage cp "${STATE}#${LIVE_GEN}" "${BACKUP_DIR}/live-${LIVE_GEN}.tfstate"
+echo "live copy: ${BACKUP_DIR}/live-${LIVE_GEN}.tfstate"
+
+# Fails and changes nothing if the live object changed since LIVE_GEN was read.
+gcloud storage cp "${STATE}#${TARGET_GEN}" "$STATE" --if-generation-match="${LIVE_GEN}"
+RESTORED_GEN="$(gcloud storage objects describe "$STATE" --format='value(generation)')"
+echo "restored as generation ${RESTORED_GEN:?could not read the restored generation}; record it in the change ticket"
+
+# Post-check: 0 = no changes, 2 = changes (read the plan before anything else), 1 = error.
+set +e
+terraform plan -detailed-exitcode -lock-timeout=60s
+rc=$?
+set -e
+# Undo: gcloud storage cp "${STATE}#${LIVE_GEN}" "$STATE" --if-generation-match="<RESTORED_GEN printed above>"
+echo "plan exit=${rc}"
+exit "${rc}"   # 0 or 2 is a result to read; 1 is an error
 ```
 
-Rolling back state does not roll back real infrastructure; it only changes what Terraform believes. Details are in [[terraform-state-recovery]].
+Unfreeze only after the plan is understood. The copy in `${BACKUP_DIR}` holds the live state, which can contain secrets: delete it once the rollback is signed off (the replaced generation stays in the bucket as a noncurrent version). The copy is conditional on the generation just recorded, so a write that lands in between makes it fail instead of being lost; keep the freeze until the plan is read anyway. The same flag is used in [[gcs-deleted-object-recovery]] (flag checked with `--help` on 2026-10-21, not run; it is not on the Cloud Storage versioned objects page, so check `--help` on your gcloud version). The live generation comes from the object's metadata because generation numbers might not increase for future versions (Cloud Storage object metadata page, checked 2026-11-25); that `--format='value(generation)'` prints the bare number was not verified here. Full recovery cases are in [[terraform-state-recovery]].
 
 ## When to choose which
 
@@ -209,3 +240,5 @@ Start with directories and shared modules. Introduce Terragrunt when the boilerp
 - [Terraform workspaces](https://developer.hashicorp.com/terraform/language/state/workspaces)
 - [Terraform GCS backend](https://developer.hashicorp.com/terraform/language/backend/gcs)
 - [Terragrunt documentation](https://terragrunt.gruntwork.io/docs/)
+- [Cloud Storage: use versioned objects](https://docs.cloud.google.com/storage/docs/using-versioned-objects): listing and restoring generations, checked 2026-11-24.
+- [Cloud Storage: object metadata](https://docs.cloud.google.com/storage/docs/metadata#generation-number): generation numbers are unique per version but might not increase, checked 2026-11-25.
