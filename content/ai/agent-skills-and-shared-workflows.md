@@ -234,7 +234,7 @@ Keep the template minimal and readable, and pin job images by digest ([[patterns
         - skills/**/*
 ```
 
-Note that `ci-templates/requirements.txt` must pin `pyyaml` with a hash for it and every dependency, and that `scripts/validate-manifests.py` must exist in the consuming project, or the template must fetch it from the shared repository at the same pinned tag. Jenkins teams do the equivalent with a shared library pinned to a tag.
+Note that both `ci-templates/requirements.txt` (with a hash for `pyyaml` and every dependency) and `scripts/validate-manifests.py` must exist in the consuming project, because `include: project:` brings only the YAML; otherwise the template must fetch them from the shared repository at the same pinned tag. Jenkins teams do the equivalent with a shared library pinned to a tag.
 
 Treat anything you copy from any shared catalogue of skills or prompts as untrusted until your own review.
 

@@ -97,7 +97,7 @@ if __name__ == "__main__":
         limit = float(sys.argv[2])
     except ValueError:
         sys.exit(usage)
-    # Rejects 10 (meant as 10 %), 1, inf and nan, which would let every input pass.
+    # Rejects 10 (meant as 10 %), 1 and inf, which would let every input pass, and nan, which would fail every input.
     if not 0 < limit < 1:
         sys.exit(usage)
     sys.exit(main(sys.argv[1], limit))
