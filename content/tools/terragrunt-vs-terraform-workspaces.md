@@ -202,13 +202,15 @@ echo "live copy: ${BACKUP_DIR}/live-${LIVE_GEN}.tfstate"
 
 # Fails and changes nothing if the live object changed since LIVE_GEN was read.
 gcloud storage cp "${STATE}#${TARGET_GEN}" "$STATE" --if-generation-match="${LIVE_GEN}"
+RESTORED_GEN="$(gcloud storage objects describe "$STATE" --format='value(generation)')"
+echo "restored as generation ${RESTORED_GEN:?could not read the restored generation}; record it in the change ticket"
 
 # Post-check: 0 = no changes, 2 = changes (read the plan before anything else), 1 = error.
 set +e
 terraform plan -detailed-exitcode -lock-timeout=60s
 rc=$?
 set -e
-# Undo: gcloud storage cp "${STATE}#${LIVE_GEN}" "$STATE"
+# Undo: gcloud storage cp "${STATE}#${LIVE_GEN}" "$STATE" --if-generation-match="<RESTORED_GEN printed above>"
 echo "plan exit=${rc}"
 exit "${rc}"   # 0 or 2 is a result to read; 1 is an error
 ```

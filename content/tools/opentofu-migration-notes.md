@@ -193,12 +193,14 @@ Then restore with a precondition. It fails, and changes nothing, if the live obj
 
 ```bash
 gcloud storage cp "${STATE}#${GEN:?}" "${STATE}" --if-generation-match="${CURRENT_GEN:?}"
+RESTORED_GEN="$(gcloud storage objects describe "${STATE}" --format='value(generation)')"
+echo "restored as generation ${RESTORED_GEN:?could not read the restored generation}; write ${CURRENT_GEN} and ${RESTORED_GEN} into the change ticket"
 ```
 
-To undo the restore, read the generation it just wrote and use it as the precondition:
+Record the restored generation now, right after the copy. To undo the restore later, use only the two values in the ticket: the undo fails and changes nothing if anything wrote the state after the restore, instead of overwriting that write.
 
 ```bash
-RESTORED_GEN="$(gcloud storage objects describe "${STATE}" --format='value(generation)')"
+# Set CURRENT_GEN and RESTORED_GEN from the change ticket, never by re-reading the live object.
 gcloud storage cp "${STATE}#${CURRENT_GEN:?}" "${STATE}" --if-generation-match="${RESTORED_GEN:?}"
 ```
 
